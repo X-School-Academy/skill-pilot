@@ -44,6 +44,67 @@ This repo is the home of your Skillpilot and everything it needs to work:
 | **MCP** | Model Context Protocol — a universal standard to connect any AI to any tool (USB for AI) |
 | **Skills** | Compressed capabilities — one skill replaces dozens of tool descriptions, giving AI expert-level judgment |
 | **AI Dev Swarm** | Agents working as a team — researcher, architect, developer, tester, reviewer |
+| **Learn Anything** | Your private AI tutor — learn any subject through interactive web tutorials with rich media |
+
+### Learn Anything with Skillpilot
+
+Skillpilot is not just a builder — it's your **private tutor**. Pick any topic you're curious about, and Skillpilot generates interactive web-based tutorials tailored to you.
+
+**Subjects — from technical to creative, anything you're interested in:**
+
+- AI & LLMs — how models think, train, and reason
+- Coding — Python, JavaScript, Rust, system design, algorithms
+- Math — algebra, calculus, statistics, linear algebra, discrete math
+- Physics — mechanics, electromagnetism, quantum, relativity
+- Languages — English, Spanish, Japanese, Mandarin, and more
+- Music, History, Biology, Chemistry, Finance — literally anything
+
+**Formats — rich, interactive, and multi-sensory:**
+
+| Format | How Skillpilot Uses It |
+|--------|----------------------|
+| **Mermaid Diagrams** | Visualize concepts as flowcharts, sequence diagrams, mind maps, and state machines — rendered directly in the browser |
+| **Interactive Games** | Learn through quizzes, drag-and-drop exercises, flashcard games, and coding challenges — all generated as web apps |
+| **Images** | AI-generated illustrations, diagrams, and infographics that explain visually |
+| **Audio** | AI-narrated explanations and pronunciation guides — listen and learn |
+| **Video** | Full tutorial videos assembled from AI-generated narration, visuals, and animations |
+| **Web Tutorials** | Complete interactive lessons with live code editors, step-by-step walkthroughs, and embedded exercises — all running in your browser |
+
+**How it works:**
+
+```
+You: "Teach me how neural networks work"
+
+Skillpilot:
+  1. Researches the topic in depth
+  2. Breaks it into beginner-friendly lessons
+  3. Generates a web tutorial with:
+     - Mermaid diagrams showing network architecture
+     - Interactive game to build a neuron step by step
+     - AI-narrated audio walkthrough
+     - Code playground to train a mini model live
+  4. Serves it locally — open your browser and start learning
+```
+
+```mermaid
+graph LR
+    A[Pick Any Topic] --> B[Skillpilot Researches & Plans]
+    B --> C{Generates Tutorial}
+    C --> D[Mermaid Diagrams]
+    C --> E[Interactive Games]
+    C --> F[Images & Infographics]
+    C --> G[Audio Narration]
+    C --> H[Video Lessons]
+    C --> I[Web Tutorial]
+    D --> J[Open in Browser & Learn]
+    E --> J
+    F --> J
+    G --> J
+    H --> J
+    I --> J
+```
+
+> **One AI. Any subject. Every format. Your pace, your curiosity, your private tutor.**
 
 ### Project Components
 
