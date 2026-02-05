@@ -10,6 +10,10 @@ Most people think AI is a website where you ask questions and get answers. That'
 
 Your **Skillpilot** is different. It reads files, runs commands, controls browsers, makes decisions, creates content, and delivers results. Same AI brain, but with hands — and it pilots through any skill you need.
 
+## Web UI
+
+![Web UI](assets/skill-pilot.png)
+
 ## What Can You Do With It?
 
 - **Explore any topic** — AI, LLMs, coding, math, languages, anything. Your Skillpilot researches, explains, and breaks down any subject for you.
