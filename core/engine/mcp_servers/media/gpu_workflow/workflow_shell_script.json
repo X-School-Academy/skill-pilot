@@ -1,0 +1,82 @@
+{
+  "3": {
+    "inputs": {
+      "output": "",
+      "source": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "Display Any (rgthree)",
+    "_meta": {
+      "title": "Display Any (rgthree)"
+    }
+  },
+  "4": {
+    "inputs": {
+      "offload_model": true,
+      "offload_cache": true,
+      "anything": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "VRAMCleanup",
+    "_meta": {
+      "title": "🎈VRAM-Cleanup"
+    }
+  },
+  "5": {
+    "inputs": {
+      "purge_cache": true,
+      "purge_models": true,
+      "anything": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "PurgeVRAMNode",
+    "_meta": {
+      "title": "PurgeVRAMNode"
+    }
+  },
+  "6": {
+    "inputs": {
+      "executable": [
+        "4",
+        0
+      ],
+      "json_input": "{{json-str}}",
+      "seed": 0
+    },
+    "class_type": "CommandExecJsonNode",
+    "_meta": {
+      "title": "Terminal JSON"
+    }
+  },
+  "7": {
+    "inputs": {
+      "value": "{{script}}"
+    },
+    "class_type": "PrimitiveString",
+    "_meta": {
+      "title": "String"
+    }
+  },
+  "8": {
+    "inputs": {
+      "print_to_console": true,
+      "console_title": "ttN debug:",
+      "console_color": "Red",
+      "display": "",
+      "debug": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "ttN debugInput",
+    "_meta": {
+      "title": "debugInput"
+    }
+  }
+}

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phase Display Example</title>
+    <style>
+        #phaseDisplay {
+            display: none;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100vh;
+            background-color: lightblue;
+            font-size: 24px;
+            font-family: Arial, sans-serif;
+            color: darkblue;
+        }
+    </style>
+</head>
+<body>
+    <div id="phaseDisplay">This is the phase display</div>
+
+    <script>
+        isStarted = false
+        function video_started() {
+            return isStarted
+        }
+
+        function video_ended() {
+            return !isStarted
+        }
+        // Select the element
+        const phaseDisplay = document.getElementById('phaseDisplay');
+
+        // Show the element after 2 seconds
+        setTimeout(() => {
+            phaseDisplay.style.display = 'flex';
+            isStarted = true
+
+            // Hide the element after an additional 7 seconds (10 seconds total)
+            setTimeout(() => {
+                phaseDisplay.style.display = 'none';
+                isStarted = false
+            }, 7000);
+        }, 2000);
+    </script>
+</body>
+</html>
+

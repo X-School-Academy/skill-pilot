@@ -1,0 +1,98 @@
+flowchart LR
+    subgraph S04_SUB["04-tech-research Subtasks"]
+        direction TB
+        S04_PROP["1. Approve Stage Proposal"]
+        S04_README["2. Create ALL Research READMEs"]
+        S04_APR{{"User Approval<br/>(All READMEs)"}}
+
+        subgraph TOPIC_LOOP["3. For Each Research Topic"]
+            direction TB
+            T_EXEC["Execute Research"]
+            T_CODE["Write PoC Code"]
+            T_TEST["Write Tests"]
+            T_RES["Document Results"]
+            T_NEXT["Next Topic"]
+
+            T_EXEC --> T_CODE
+            T_CODE --> T_TEST
+            T_TEST --> T_RES
+            T_RES --> T_NEXT
+        end
+
+        S04_PROP --> S04_README
+        S04_README --> S04_APR
+        S04_APR -->|Approved| TOPIC_LOOP
+    end
+
+    subgraph S06_SUB["06-ux Subtasks"]
+        direction TB
+        S06_PROP["1. Approve Stage Proposal"]
+        S06_FILES["2. Create Stage Files<br/>(incl. mockup/README.md)"]
+        S06_APR{{"User Approval"}}
+        S06_CHECK{"Has design-ui-mockup/?"}
+
+        subgraph MOCKUP_FLOW["3. Create Mockup Files"]
+            direction TB
+            M_FILES["Create HTML/CSS/JS"]
+            M_CSS["styles.css"]
+            M_NAV["navigation.js"]
+            M_PAGES["page1.html, page2.html, ..."]
+
+            M_FILES --> M_CSS
+            M_FILES --> M_NAV
+            M_FILES --> M_PAGES
+        end
+
+        S06_PROP --> S06_FILES
+        S06_FILES --> S06_APR
+        S06_APR -->|Approved| S06_CHECK
+        S06_CHECK -->|Yes| MOCKUP_FLOW
+        S06_CHECK -->|No| S06_DONE["Done"]
+    end
+
+    subgraph S09_SUB["09-devops Subtasks"]
+        direction TB
+        S09_PROP["1. Create Proposal<br/>(README.md)"]
+        S09_FILES["2. Create Stage Files"]
+        S09_EXEC["3. Execute Tasks<br/>(if any)"]
+        S09_PROP --> S09_FILES --> S09_EXEC
+    end
+
+    subgraph S10_SUB["10-sprints Subtasks"]
+        direction TB
+        PLAN["Create Development Plan"]
+        SPRINT["Create Sprint Folders"]
+
+        subgraph BACKLOG["Each Backlog"]
+            direction LR
+            DEV["/dev"]
+            REV["/review"]
+            TST["/test"]
+            DEV --> REV --> TST
+        end
+
+        PLAN --> SPRINT
+        SPRINT --> BACKLOG
+    end
+
+    subgraph S11_SUB["11-deployment Subtasks"]
+        direction TB
+        S11_PROP["1. Create Proposal<br/>(README.md)"]
+        S11_FILES["2. Create Stage Files"]
+        S11_EXEC["3. Execute Tasks<br/>(if any)"]
+        S11_PROP --> S11_FILES --> S11_EXEC
+    end
+
+    subgraph S99_SUB["99-archive / restore"]
+        direction TB
+        ARCH["Archive Project"]
+        RST["Restore Project"]
+    end
+
+    %% Styling
+    classDef approval fill:#FFC107,stroke:#FF8F00,color:#000
+    classDef process fill:#2196F3,stroke:#1565C0,color:#fff
+    classDef decision fill:#9C27B0,stroke:#6A1B9A,color:#fff
+
+    class S04_APR,S06_APR approval
+    class S06_CHECK decision

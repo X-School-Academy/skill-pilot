@@ -1,0 +1,237 @@
+{
+  "course": [
+    {
+      "id": 1,
+      "title": "How can you look like as a senior developer in your first day to learn coding",
+      "content": [
+        "Your First Project: Hello World Flutter Project",
+        "Finish Your First Development Task as per the Figma Design",
+        "Integer and String in Flutter",
+        "Flutter UI Basic: Color, Scaffold, AppBar, Text, Button, Icon",
+        "You Second Task as per the Figma Design"
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Computer Language Basic",
+      "content": [
+        "How the Computer Works: the CPU, Memory and Storage",
+        "Integer, Float, Char, String and Color Data Type in Computer Memory",
+        "Computer Instructions, C/C++ and Different Programming Languages",
+        "What is Syntax in Computer Programming, and Dart Syntax",
+        "Dart vs Javascript, NodeJs, TypeScript, Kotlin, Swift and Python",
+        "Basic Data Type in Dart",
+        "Dart Codes Flow Control",
+        "Dart Functions",
+        "Dart Object and Class"
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Different Platforms",
+      "content": [
+        "Operating system: Windows, Linux, and Mac, iOS, Android, ChromeOS/Web",
+        "Web Applications, Desktop Applications and Cloud Applications",
+        "Virtual Box Setup - Your First Virtual Machine",
+        "Flutter Setup and Run Your First Flutter Application Locally",
+        "VS Code Setup for Flutter Project"
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Troubleshooting or Problem Resolve Skills",
+      "content": [
+        "Keywords Search",
+        "Codes Reconstruction",
+        "Read Source Codes for Understanding Library"
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Network and Cloud",
+      "content": [
+        "Computer, Device, Server and Cloud",
+        "Different Network Protocols & Network Services",
+        "Docker & Setup",
+        "Git & Github Account Setup",
+        "Dart vs TypeScript & Javascript",
+        "HTML, XML, JSON",
+        "TCP and HTTP, and Your First Rest API with TypeScript",
+        "Async & Await in Dart and Network Communication"
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Frameworks and Packages",
+      "content": [
+        "Flutter vs React & React Native",
+        "Flutter Package Management",
+        "NodeJs Package Management",
+        "Your First React Website"
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Flutter UI Widget and Layout",
+      "content": [
+        "Figma Auto Layout",
+        "HTML/CSS/React Flex Layout",
+        "Flutter Flex Layout",
+        "Flutter UI Widget Basic"
+      ]
+    },
+    {
+      "id": 8,
+      "title": "The Sign Up and Login Screen of Your First App",
+      "content": [
+        "Finish the Flutter app UI as the Figma Design",
+        "Flutter Navigation and Routing",
+        "Flutter State Management"
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Works with AWS",
+      "content": [
+        "The Three Major Cloud Service Provider in the Market",
+        "Setup Your First AWS Cloud Service",
+        "AWS Amplify Authentication Setup",
+        "Regular Expression and User Data Validation",
+        "Link your App's UI and AWS Amplify Authentication SDK"
+      ]
+    },
+    {
+      "id": 10,
+      "title": "GraphQL API and Database",
+      "content": [
+        "What is XML Web Service, Rest API and GraphQL API",
+        "Understand GraphQL with NodeJs Express",
+        "SQL Language with MySQL",
+        "PHP & phpMyAdmin for MySQL Administration",
+        "Data Search Algorithms and Database Index",
+        "SQL Injection and Cross Site Scripting Hacking",
+        "NoSQL with MongoDB",
+        "AWS AppSync GraphQL API"
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Build Your Personal Blog Website with NextJs",
+      "content": [
+        "CMS and Strapi Setup",
+        "Using NextJs to build a Blog Website",
+        "AWS EC2 Instance setup",
+        "UDP, DNS and Domain",
+        "Apache & Let's Encrypt SSL/TLS Certificates",
+        "Publish Your Blog Website to AWS"
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Artificial intelligence (AI) Development",
+      "content": [
+        "What is Machine Learning?",
+        "TensorFlow & PyTorch",
+        "Dart vs Python",
+        "Build Your Smart Reply API with TensorFlow & Python",
+        "Deploy your AI Engine to AWS Lambda"
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Flutter Android Native Codes",
+      "content": [
+        "Android Studio Setup",
+        "Google Play Account Setup",
+        "Dart vs Kotlin ",
+        "Gradle",
+        "Process, Threads and Coroutines",
+        "Threads, Lock and Deadlock",
+        "Flutter Isolates and Threads"
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Flutter iOS Native Codes",
+      "content": [
+        "Xcode Setup",
+        "Apple Developer Account Setup",
+        "Dart vs Swift ",
+        "CocoaPods"
+      ]
+    },
+    {
+      "id": 15,
+      "title": "Dart FFI and C/C++ ",
+      "content": [
+        "Dart and C/C++ ",
+        "CMake Basic"
+      ]
+    },
+    {
+      "id": 16,
+      "title": "Build a Private Chat App for Your Family or Friends",
+      "content": [
+        "What is End-to-End Encryption",
+        "OpenSSL, AES, Public Key and Private Key",
+        "Build the Chat UI with Flutter",
+        "Exchange Your Authentication Code by QR Image Scan ",
+        "Real Time Chat Message by AWS AppSync subscription",
+        "Add Push Notification to Your Chat App  "
+      ]
+    },
+    {
+      "id": 17,
+      "title": "Image, Video, File Support for Live Chat",
+      "content": [
+        "FFmpeg for Image and Video Convert and Compress ",
+        "Image, Video Pick Up and Process",
+        "File Pick Up",
+        "AWS S3 Cloud Storage"
+      ]
+    },
+    {
+      "id": 18,
+      "title": "Google Maps and Real Time GEO Location",
+      "content": [
+        "GEO Coordinates and Google Maps",
+        "MySQL Spatial Data Support and Query",
+        "Get Your Real time GEO Location by Your Phone's GPS",
+        "Add Google Maps UI and Show Your Family Phone's Real Time Location by the Figma Design"
+      ]
+    },
+    {
+      "id": 19,
+      "title": "Home Security Video Monitoring ",
+      "content": [
+        "H264, MP4 and RTSP Streaming",
+        "VLC Video Player and RTSP Camera ",
+        "WebRTC and P2P Video Playing",
+        "Add Security Camera List and Player UI by the Figma Design",
+        "Add RTSP Security Camera Support to Your App",
+        "Add Haicam End-to-End Encryption Security Camera Support by WebRTC"
+      ]
+    },
+    {
+      "id": 20,
+      "title": "Local Video Real time Analysis by AI",
+      "content": [
+        "OpenCV with Python",
+        "Video Motion Detection by OpenCV",
+        "Video Human Detection by TensorFlow",
+        "Audio Detection for Human Voice",
+        "Real Time Camera Alarm Push Notification to Your Mobile App"
+      ]
+    },
+    {
+      "id": 21,
+      "title": "Voice Assistance for Your Smart Home",
+      "content": [
+        "Google Assistant Development",
+        "Amazon Alexa Development",
+        "Find Your Phone by Alarm Sound with Your Voice",
+        "Show Your Camera on Google TV or Fire TV by Voice"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,189 @@
+/**
+ * AI Provider Configuration
+ * 
+ * This file defines the available LLM, TTS, and Image generation providers.
+ * 
+ * LLM Configuration:
+ * - id: Unique identifier for the provider.
+ * - name: Display name.
+ * - bin: The binary/command to execute.
+ * - model: (Optional) Specifies the model to use. 
+ *          - If string: Appends ["--model", value] to the command arguments.
+ *          - If array: Appends all elements directly to the command arguments (e.g., ["-m", "model-name"]).
+ * - args: Arguments containing the "{{prompt}}" placeholder.
+ * - sandbox-args: Arguments applied when sandbox mode is enabled.
+ * - auto-args: Arguments applied when auto-allow is enabled.
+ * - network-args: Arguments applied when network access is enabled.
+ * - env: (Optional) Extra environment variables passed to the bin process, overwriting any
+ *        existing env vars with the same name. Values support ${VAR} placeholder substitution
+ *        from the current environment (e.g. "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}").
+ * - disabled: (Optional) Set to true to exclude this provider from selection and listings.
+ *             Defaults to false when omitted.
+ */
+{
+  // Default provider selection used when no explicit provider is requested.
+  default: {
+    llm: 'claude',
+    tts: 'openai',
+    image: 'openai',
+  },
+
+  // LLM CLI providers.
+  llm: [
+    // claude usage: claude -p --settings {ROOT-SKILL-PILOT}/config/claude-sandbox-settings.json
+    /*
+    ANTHROPIC_BASE_URL
+    ANTHROPIC_AUTH_TOKEN
+    ANTHROPIC_API_KEY="" # Important: Must be explicitly empty
+    */
+    {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      'sandbox-args': ['--settings', 'claude-sandbox-settings.json'],
+      'auto-args': ['--dangerously-skip-permissions'],
+      'network-args': [],
+      args: [
+        '--include-partial-messages',
+        '--output-format=stream-json',
+        '--verbose',
+        '--print',
+        '{{prompt}}',
+      ],
+      "env": {},
+      'exit-session': 'ctrl+c\nctrl+c',
+    },
+    /*
+    # Using OpenAI codex with ENV vars below for any openai compatible api 
+    OPENAI_API_KEY
+    OPENAI_BASE_URL
+    codex --model gpt-5.2
+    */
+    {
+      id: 'codex',
+      name: 'OpenAI Codex',
+      bin: 'codex',
+      'sandbox-args': ['--sandbox', 'workspace-write'],
+      'auto-args': ['--ask-for-approval', 'never'],
+      'network-args': ['--config', 'sandbox_workspace_write.network_access=true'],
+      args: [
+        'exec',
+        '--json',
+        '{{prompt}}',
+      ],
+      'exit-session': 'ctrl+c\nctrl+c',
+    },
+    {
+      id: 'gemini',
+      name: 'Gemini CLI',
+      bin: 'gemini',
+      'sandbox-args': ['-s'],
+      'auto-args': ['--yolo'],
+      'network-args': [],
+      args: [
+        '--output-format',
+        'stream-json',
+        '-p',
+        '{{prompt}}',
+      ],
+      model: 'auto-gemini-3',
+      'exit-session': 'ctrl+c\nctrl+c',
+    },
+    // opencode usage: OPENCODE_CONFIG={ROOT-SKILL-PILOT}/config/opencode-yolo.json opencode
+    // update opencode.json with the appropriate permissions and settings
+    // opencode is no sandbox model, so be cautious when using it and ensure you have the necessary safeguards in place
+    {
+      id: 'opencode',
+      name: 'OpenCode CLI',
+      bin: 'opencode',
+      args: ['--format', 'json', 'run', '{{prompt}}'],
+      'terminal-args': ['--prompt', '{{prompt}}'],
+      'exit-session': 'ctrl+c\nctrl+c',
+      env:{
+        'OPENAI_API_KEY': '',
+        'OPENAI_BASE_URL': ''
+      }
+    },
+    // Claude Code via Claude-compatible API endpoint (disabled by default — configure env vars to enable)
+    {
+      id: 'claude-compat',
+      name: 'claude Compat',
+      bin: 'claude',
+      model: 'model-name',
+      disabled: true,
+      'sandbox-args': ['--settings', 'claude-sandbox-settings.json'],
+      'auto-args': ['--dangerously-skip-permissions'],
+      'network-args': [],
+      args: [
+        '--include-partial-messages',
+        '--output-format=stream-json',
+        '--verbose',
+        '--print',
+        '{{prompt}}',
+      ],
+      env: {
+        'ANTHROPIC_BASE_URL': '${ANTHROPIC_BASE_URL}',
+        'ANTHROPIC_AUTH_TOKEN': '${ANTHROPIC_AUTH_TOKEN}',
+        'ANTHROPIC_API_KEY': '',
+      },
+      'exit-session': 'ctrl+c\nctrl+c',
+    },
+    // OpenAI Codex via OpenAI-compatible API endpoint (disabled by default — configure env vars to enable)
+    {
+      id: 'codex-compat',
+      name: 'OpenAI Compat',
+      bin: 'codex',
+      model: 'model-name',
+      disabled: true,
+      'sandbox-args': ['--sandbox', 'workspace-write'],
+      'auto-args': ['--ask-for-approval', 'never'],
+      'network-args': ['--config', 'sandbox_workspace_write.network_access=true'],
+      args: [
+        'exec',
+        '--json',
+        '{{prompt}}',
+      ],
+      env: {
+        'OPENAI_API_KEY': '${OPENAI_API_KEY}',
+        'OPENAI_BASE_URL': '${OPENAI_BASE_URL}',
+      },
+      'exit-session': 'ctrl+c\nctrl+c',
+    },
+
+  ],
+
+  // Text-to-speech providers.
+  tts: [
+    {
+      id: 'openai',
+      name: 'OpenAI TTS',
+      model: 'gpt-audio',
+      format: 'wav',
+      voice: 'alloy',
+    },
+    {
+      id: 'gemini',
+      name: 'Gemini TTS',
+      model: 'gemini-2.5-flash-preview-tts',
+      format: 'wav',
+      voice: 'Kore',
+    },
+  ],
+
+  // Image generation providers.
+  image: [
+    {
+      id: 'openai',
+      name: 'OpenAI Image',
+      model: 'gpt-image-1',
+      size: '1024x1536',
+      quality: 'low',
+    },
+    {
+      id: 'gemini',
+      name: 'Gemini Image',
+      model: 'imagen-4.0-generate-001',
+      number_of_images: 1,
+    },
+  ],
+}

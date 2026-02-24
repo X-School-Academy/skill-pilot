@@ -1,0 +1,170 @@
+{
+  "1": {
+    "inputs": {
+      "video": "WanVideo2_1_InfiniteTalk_00001-audio (1).mp4",
+      "force_rate": 0,
+      "custom_width": 0,
+      "custom_height": 0,
+      "frame_load_cap": 0,
+      "skip_first_frames": 0,
+      "select_every_nth": 1,
+      "format": "AnimateDiff"
+    },
+    "class_type": "VHS_LoadVideo",
+    "_meta": {
+      "title": "api-input-video-1"
+    }
+  },
+  "2": {
+    "inputs": {
+      "frame_rate": 16,
+      "loop_count": [
+        "6",
+        0
+      ],
+      "filename_prefix": "api-outut-video-raw",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "api-video-1"
+    }
+  },
+  "3": {
+    "inputs": {
+      "filename_prefix": "api-output-audio",
+      "quality": "V0",
+      "audioUI": "",
+      "audio": [
+        "1",
+        2
+      ]
+    },
+    "class_type": "SaveAudioMP3",
+    "_meta": {
+      "title": "api-audio-save"
+    }
+  },
+  "4": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "scale_by": 2,
+      "image": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "ImageScaleBy",
+    "_meta": {
+      "title": "Upscale Image By"
+    }
+  },
+  "5": {
+    "inputs": {
+      "frame_rate": 16,
+      "loop_count": 0,
+      "filename_prefix": "api-output-video-upscale",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": true,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "4",
+        0
+      ],
+      "audio": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "api-video-2"
+    }
+  },
+  "6": {
+    "inputs": {
+      "Number": "1"
+    },
+    "class_type": "Int",
+    "_meta": {
+      "title": "api-input-int-fps"
+    }
+  },
+  "7": {
+    "inputs": {
+      "filename_prefix": "screenshot",
+      "images": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "8": {
+    "inputs": {
+      "start_index": 0,
+      "num_frames": 1,
+      "images": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "GetImageRangeFromBatch",
+    "_meta": {
+      "title": "Get Image or Mask Range From Batch"
+    }
+  },
+  "10": {
+    "inputs": {
+      "audio": "audio-x-1.mp3",
+      "start_time": 0,
+      "duration": 0
+    },
+    "class_type": "VHS_LoadAudioUpload",
+    "_meta": {
+      "title": "Load Audio (Upload)🎥🅥🅗🅢"
+    }
+  },
+  "11": {
+    "inputs": {
+      "text": "hello"
+    },
+    "class_type": "Text Multiline",
+    "_meta": {
+      "title": "Text Multiline"
+    }
+  },
+  "13": {
+    "inputs": {
+      "output_file_path": "",
+      "file_name": "result",
+      "file_extension": "txt",
+      "overwrite": true,
+      "text": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "easy saveText",
+    "_meta": {
+      "title": "Save Text"
+    }
+  }
+}

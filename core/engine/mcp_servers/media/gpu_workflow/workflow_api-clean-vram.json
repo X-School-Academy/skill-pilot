@@ -1,0 +1,40 @@
+{
+  "1": {
+    "inputs": {
+      "purge_cache": true,
+      "purge_models": true,
+      "anything": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "PurgeVRAMNode",
+    "_meta": {
+      "title": "PurgeVRAMNode"
+    }
+  },
+  "2": {
+    "inputs": {
+      "a": 0,
+      "b": 1,
+      "operation": "add"
+    },
+    "class_type": "easy mathInt",
+    "_meta": {
+      "title": "Math Int"
+    }
+  },
+  "4": {
+    "inputs": {
+      "output": "",
+      "input": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "Display Int (rgthree)",
+    "_meta": {
+      "title": "Display Int (rgthree)"
+    }
+  }
+}

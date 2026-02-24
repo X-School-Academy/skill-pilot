@@ -1,0 +1,36 @@
+{
+  // ─── Security policies ───────────────────────────────────────────────────────
+  security: {
+    schedules: { sandbox: true, auto: true, network: true },
+    newSession: { sandbox: false, auto: false, network: true },
+    remoteBot: { sandbox: true, auto: true, network: false },
+    devSwarm: { sandbox: true, auto: true, network: true },
+    skillAgent: { sandbox: true, auto: true, network: true },
+  },
+
+  // ─── Service endpoints ───────────────────────────────────────────────────────
+  services: {
+    // Core engine – FastAPI / uvicorn HTTP+WebSocket API server
+    engine: {
+      host: "127.0.0.1",
+      port: 3001,
+    },
+
+    // WebUI – Next.js development server
+    webui: {
+      host: "127.0.0.1",
+      port: 3000,
+    },
+
+    // Live Avatar – standalone WebRTC streaming server (live_chat.py)
+    // Use ws:// for local connections, wss:// when TLS-terminated upstream.
+    live_avatar: {
+      server_url: "ws://127.0.0.1:8008",
+    },
+
+    // Camera Hub – Haicam P2P WebRTC camera server
+    camera: {
+      server_url: "ws://127.0.0.1:8081",
+    },
+  },
+}

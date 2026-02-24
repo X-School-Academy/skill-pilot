@@ -1,0 +1,11 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": false,
+    "network": {
+      "allowedDomains": ["*"],
+      "allowAllUnixSockets": true
+    }
+  }
+}

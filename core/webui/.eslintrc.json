@@ -1,0 +1,14 @@
+{
+  "extends": ["next/core-web-vitals"],
+  "rules": { 
+    "react/no-unescaped-entities": 0,
+    "@next/next/no-html-link-for-pages": 0,
+    "react/no-children-prop": 0,
+    "@next/next/no-img-element": "off",
+    "@next/next/no-before-interactive-script-outside-document": "off",
+    "@next/next/next-script-for-ga": "off",
+    "jsx-a11y/alt-text": "off",
+    "react-hooks/exhaustive-deps": "off",
+    "import/no-anonymous-default-export": "off"
+  }
+}

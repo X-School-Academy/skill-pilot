@@ -1,0 +1,9 @@
+
+.code-input{
+}
+.code-input::placeholder{
+    color: #ccc
+}
+.code-input:focus{
+    border: none
+}

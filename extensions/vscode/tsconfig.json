@@ -1,0 +1,25 @@
+{
+	"compilerOptions": {
+		"module": "commonjs",
+		"target": "es6",
+		"outDir": "dist",
+		"lib": [
+			"es6",
+			"dom"
+		],
+		"baseUrl": "./src",
+		"sourceMap": true,
+		"paths" : {
+			"*": ["*"],
+		},
+		"strict": false,   /* enable all strict type-checking options */
+		"jsx": "react-jsx",
+		"noUnusedParameters": false,  /* Report errors on unused parameters. */
+		"noEmitHelpers": true,
+		"importHelpers": true,
+	},
+	"exclude": [
+		"node_modules",
+		".vscode-test"
+	]
+}

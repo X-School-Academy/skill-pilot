@@ -1,0 +1,13 @@
+requests
+torch
+tqdm
+opencv-python
+numpy
+
+basicsr-fixed
+facexlib>=0.2.5
+lmdb
+pyyaml
+scipy
+tb-nightly
+yapf

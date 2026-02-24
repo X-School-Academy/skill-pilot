@@ -1,0 +1,9 @@
+# MCP skill description overrides.
+# The key is the generated skill-id (directory name).
+# When present, sync uses this description instead of the MCP tool's original description.
+# Format:
+# skill-id: >
+#   Short and clear description text.
+
+context7-resolve-library-id: >
+  Resolve a package or product name to the best matching Context7 library ID before calling query-docs.

@@ -1,0 +1,72 @@
+flowchart TB
+    subgraph INPUT["1. User Input"]
+        UI[/"User Ideas"/]
+        IR["/ideas-refine<br/>(using ideas-template.md)"]
+        IM["ideas.md"]
+    end
+
+    subgraph STAGE_PATTERN["2. Stage Pattern (All Stages)"]
+        direction TB
+        SP1["Step 1: Create Proposal<br/>(README.md)"]
+        APR1{{"User Approval"}}
+        SP2["Step 2: Create Stage Files"]
+        APR2{{"User Approval"}}
+        SUB["Step 3: Execute Subtasks<br/>(if any)"]
+    end
+
+    subgraph STAGES["3. Development Stages"]
+        direction TB
+        S00["00-init-ideas ★"]
+        S01["01-market-research"]
+        S02["02-personas"]
+        S03["03-mvp"]
+        S04["04-tech-research"]
+        S05["05-prd ★"]
+        S06["06-ux"]
+        S07["07-architecture"]
+        S08["08-tech-specs ★"]
+        S09["09-devops"]
+        S10["10-sprints ★"]
+        S11["11-deployment"]
+        S99["99-archive"]
+    end
+
+    %% Input Flow
+    UI --> IR
+    IR --> IM
+    IM --> S00
+
+    %% Stage Pattern Flow
+    SP1 --> APR1
+    APR1 -->|Approved| SP2
+    SP2 --> APR2
+    APR2 -->|Approved| SUB
+
+    %% Stage Flow
+    S00 --> S01
+    S01 --> S02
+    S02 --> S03
+    S03 --> S04
+    S04 --> S05
+    S05 --> S06
+    S06 --> S07
+    S07 --> S08
+    S08 --> S09
+    S09 --> S10
+    S10 --> S11
+    S11 --> S99
+
+    %% Styling
+    classDef required fill:#4CAF50,stroke:#2E7D32,color:#fff
+    classDef skippable fill:#2196F3,stroke:#1565C0,color:#fff
+    classDef input fill:#FF9800,stroke:#E65100,color:#fff
+    classDef pattern fill:#9C27B0,stroke:#6A1B9A,color:#fff
+    classDef approval fill:#FFC107,stroke:#FF8F00,color:#000
+    classDef archive fill:#607D8B,stroke:#37474F,color:#fff
+
+    class S00,S05,S08,S10 required
+    class S01,S02,S03,S04,S06,S07,S09,S11 skippable
+    class UI,IR,IM input
+    class SP1,SP2,SUB pattern
+    class APR1,APR2 approval
+    class S99 archive

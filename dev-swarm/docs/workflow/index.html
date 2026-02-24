@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dev-Swarm Development Workflow</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        h1 {
+            font-size: 2.5rem;
+            color: #fff;
+            margin-bottom: 0.5rem;
+        }
+        h2 {
+            font-size: 1.5rem;
+            color: #fff;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+        }
+        .subtitle {
+            color: #9e9e9e;
+            font-size: 1.1rem;
+        }
+        .section {
+            margin-bottom: 3rem;
+        }
+        .diagram-container {
+            background: #fff;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            margin-bottom: 1.5rem;
+            overflow: auto;
+        }
+        .diagram-container img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+        .legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+        }
+        .legend-color {
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+        }
+        .color-required { background: #4CAF50; }
+        .color-skippable { background: #2196F3; }
+        .color-input { background: #FF9800; }
+        .color-pattern { background: #9C27B0; }
+        .color-approval { background: #FFC107; }
+        .color-archive { background: #607D8B; }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+        }
+        .info-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        .info-card h3 {
+            color: #fff;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        th {
+            color: #9e9e9e;
+            font-weight: 500;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+        td {
+            color: #e0e0e0;
+        }
+        code {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.9rem;
+        }
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-yes { background: #4CAF50; color: #fff; }
+        .badge-no { background: #607D8B; color: #fff; }
+        .workflow-steps {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .step {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 1rem;
+            flex: 1;
+            min-width: 200px;
+        }
+        .step-number {
+            display: inline-block;
+            width: 28px;
+            height: 28px;
+            background: #9C27B0;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 28px;
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+        .step h4 {
+            color: #fff;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+        }
+        .step p {
+            color: #9e9e9e;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Dev-Swarm Development Workflow</h1>
+            <p class="subtitle">AI-Driven Software Development Lifecycle</p>
+        </header>
+
+        <!-- Main Workflow Section -->
+        <section class="section">
+            <h2>1. Main Workflow</h2>
+
+            <div class="workflow-steps">
+                <div class="step">
+                    <h4><span class="step-number">1</span> User Input</h4>
+                    <p>Write raw ideas and requirements</p>
+                </div>
+                <div class="step">
+                    <h4><span class="step-number">2</span> Refine Ideas</h4>
+                    <p>Run <code>/ideas-refine</code> using template</p>
+                </div>
+                <div class="step">
+                    <h4><span class="step-number">3</span> ideas.md</h4>
+                    <p>Structured project definition</p>
+                </div>
+                <div class="step">
+                    <h4><span class="step-number">4</span> Development Stages</h4>
+                    <p>Progress through stages 00-11, then archive to 99</p>
+                </div>
+            </div>
+
+            <section class="legend">
+                <div class="legend-item">
+                    <div class="legend-color color-required"></div>
+                    <span>Required Stages (★)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color color-skippable"></div>
+                    <span>Skippable Stages</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color color-input"></div>
+                    <span>User Input</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color color-pattern"></div>
+                    <span>Stage Pattern</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color color-approval"></div>
+                    <span>User Approval</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color color-archive"></div>
+                    <span>Archive</span>
+                </div>
+            </section>
+
+            <div class="diagram-container">
+                <img src="images/dev-swarm-workflow.svg" alt="Dev-Swarm Main Workflow Diagram">
+            </div>
+        </section>
+
+        <!-- Stage Pattern Section -->
+        <section class="section">
+            <h2>2. Stage Pattern (All Stages)</h2>
+
+            <div class="workflow-steps">
+                <div class="step">
+                    <h4><span class="step-number">1</span> Create Proposal</h4>
+                    <p>Generate README.md with stage goals and file selection</p>
+                </div>
+                <div class="step">
+                    <h4><span class="step-number">→</span> User Approval</h4>
+                    <p>Wait for user to approve the proposal</p>
+                </div>
+                <div class="step">
+                    <h4><span class="step-number">2</span> Create Files</h4>
+                    <p>Generate all approved stage files</p>
+                </div>
+                <div class="step">
+                    <h4><span class="step-number">→</span> User Approval</h4>
+                    <p>Wait for user to approve the files</p>
+                </div>
+                <div class="step">
+                    <h4><span class="step-number">3</span> Execute Subtasks</h4>
+                    <p>Run stage-specific subtasks (if any)</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Stage Subtasks Section -->
+        <section class="section">
+            <h2>3. Stage Subtasks</h2>
+            <p style="color: #9e9e9e; margin-bottom: 1rem;">Some stages have special subtasks that go beyond the standard proposal → files pattern.</p>
+
+            <div class="diagram-container">
+                <img src="images/stage-subtasks.svg" alt="Stage Subtasks Diagram">
+            </div>
+        </section>
+
+        <!-- Sprint Workflow Section -->
+        <section class="section">
+            <h2>4. Sprint Workflow (Stage 10)</h2>
+
+            <div class="workflow-steps">
+                <div class="step">
+                    <h4><span class="step-number">1</span> Create Sprints</h4>
+                    <p>Generate SPRINT-XX folders with backlogs</p>
+                </div>
+                <div class="step">
+                    <h4><span class="step-number">2</span> Development</h4>
+                    <p>Implement backlog features (<code>/dev</code>)</p>
+                </div>
+                <div class="step">
+                    <h4><span class="step-number">3</span> Review</h4>
+                    <p>Code review and quality check (<code>/review</code>)</p>
+                </div>
+                <div class="step">
+                    <h4><span class="step-number">4</span> Test</h4>
+                    <p>Run tests and verify (<code>/test</code>)</p>
+                </div>
+            </div>
+
+            <div class="diagram-container">
+                <img src="images/sprint-workflow.svg" alt="Sprint Workflow Diagram">
+            </div>
+        </section>
+
+        <!-- Reference Tables -->
+        <section class="section">
+            <h2>5. Reference</h2>
+
+            <div class="info-grid">
+                <div class="info-card">
+                    <h3>Development Stages</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Stage</th>
+                                <th>Name</th>
+                                <th>Required</th>
+                                <th>Special Subtasks</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>00</td>
+                                <td>init-ideas</td>
+                                <td><span class="badge badge-yes">★</span></td>
+                                <td>-</td>
+                            </tr>
+                            <tr>
+                                <td>01</td>
+                                <td>market-research</td>
+                                <td><span class="badge badge-no">Skip</span></td>
+                                <td>Web research, competitor analysis</td>
+                            </tr>
+                            <tr>
+                                <td>02</td>
+                                <td>personas</td>
+                                <td><span class="badge badge-no">Skip</span></td>
+                                <td>-</td>
+                            </tr>
+                            <tr>
+                                <td>03</td>
+                                <td>mvp</td>
+                                <td><span class="badge badge-no">Skip</span></td>
+                                <td>MoSCoW/RICE prioritization</td>
+                            </tr>
+                            <tr>
+                                <td>04</td>
+                                <td>tech-research</td>
+                                <td><span class="badge badge-no">Skip</span></td>
+                                <td>Create ALL READMEs → approval → execute each</td>
+                            </tr>
+                            <tr>
+                                <td>05</td>
+                                <td>prd</td>
+                                <td><span class="badge badge-yes">★</span></td>
+                                <td>-</td>
+                            </tr>
+                            <tr>
+                                <td>06</td>
+                                <td>ux</td>
+                                <td><span class="badge badge-no">Skip</span></td>
+                                <td>Files + mockup/README → approval → mockup files</td>
+                            </tr>
+                            <tr>
+                                <td>07</td>
+                                <td>architecture</td>
+                                <td><span class="badge badge-no">Skip</span></td>
+                                <td>Create diagrams (C4, etc.)</td>
+                            </tr>
+                            <tr>
+                                <td>08</td>
+                                <td>tech-specs</td>
+                                <td><span class="badge badge-yes">★</span></td>
+                                <td>-</td>
+                            </tr>
+                            <tr>
+                                <td>09</td>
+                                <td>devops</td>
+                                <td><span class="badge badge-no">Skip</span></td>
+                                <td>Proposal → files → execute (if any)</td>
+                            </tr>
+                            <tr>
+                                <td>10</td>
+                                <td>sprints</td>
+                                <td><span class="badge badge-yes">★</span></td>
+                                <td>Sprint dev/review/test cycles</td>
+                            </tr>
+                            <tr>
+                                <td>11</td>
+                                <td>deployment</td>
+                                <td><span class="badge badge-no">Skip</span></td>
+                                <td>Proposal → files → execute (if any)</td>
+                            </tr>
+                            <tr>
+                                <td>99</td>
+                                <td>archive</td>
+                                <td>-</td>
+                                <td>Single action</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="info-card">
+                    <h3>Commands Reference</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Command</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>/ideas-refine</code></td>
+                                <td>Refine ideas.md using template</td>
+                            </tr>
+                            <tr>
+                                <td><code>/stage [n]</code></td>
+                                <td>Start stage n (0-11, 99)</td>
+                            </tr>
+                            <tr>
+                                <td><code>/skip [n]</code></td>
+                                <td>Skip stage n (create SKIP.md)</td>
+                            </tr>
+                            <tr>
+                                <td><code>/sprint [name]</code></td>
+                                <td>Process all backlogs in a sprint</td>
+                            </tr>
+                            <tr>
+                                <td><code>/backlog [name]</code></td>
+                                <td>Process single backlog (dev+review+test)</td>
+                            </tr>
+                            <tr>
+                                <td><code>/dev [name]</code></td>
+                                <td>Development phase only</td>
+                            </tr>
+                            <tr>
+                                <td><code>/review [name]</code></td>
+                                <td>Review phase only</td>
+                            </tr>
+                            <tr>
+                                <td><code>/test [name]</code></td>
+                                <td>Test phase only</td>
+                            </tr>
+                            <tr>
+                                <td><code>/stage restore [name]</code></td>
+                                <td>Restore from 99-archive</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h3 style="margin-top: 2rem;">Backlog Types</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>FEATURE-*</code></td>
+                                <td>New feature implementation</td>
+                            </tr>
+                            <tr>
+                                <td><code>CHANGE-*</code></td>
+                                <td>Modification to existing feature</td>
+                            </tr>
+                            <tr>
+                                <td><code>BUG-*</code></td>
+                                <td>Bug fix</td>
+                            </tr>
+                            <tr>
+                                <td><code>IMPROVE-*</code></td>
+                                <td>Improvement or optimization</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </div>
+</body>
+</html>

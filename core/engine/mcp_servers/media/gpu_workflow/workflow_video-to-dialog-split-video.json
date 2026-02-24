@@ -1,0 +1,148 @@
+{
+  "230": {
+    "inputs": {
+      "width": [
+        "245",
+        0
+      ],
+      "height": [
+        "246",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "keep_proportion": "crop",
+      "pad_color": "0, 0, 0",
+      "crop_position": "left",
+      "divisible_by": 16,
+      "device": "cpu",
+      "image": [
+        "338",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "Resize Image v2"
+    }
+  },
+  "245": {
+    "inputs": {
+      "value": "{{width}}"
+    },
+    "class_type": "INTConstant",
+    "_meta": {
+      "title": "width"
+    }
+  },
+  "246": {
+    "inputs": {
+      "value": "{{height}}"
+    },
+    "class_type": "INTConstant",
+    "_meta": {
+      "title": "height"
+    }
+  },
+  "332": {
+    "inputs": {
+      "frame_rate": [
+        "340",
+        5
+      ],
+      "loop_count": 0,
+      "filename_prefix": "jit_api_raw_split_1_video",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": false,
+      "trim_to_audio": true,
+      "pingpong_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "339",
+        3
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "334": {
+    "inputs": {
+      "frame_rate": [
+        "340",
+        5
+      ],
+      "loop_count": 0,
+      "filename_prefix": "jit_api_raw_split_2_video",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": false,
+      "trim_to_audio": true,
+      "pingpong_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "339",
+        4
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine 🎥🅥🅗🅢"
+    }
+  },
+  "338": {
+    "inputs": {
+      "video": "{{source_video}}",
+      "force_rate": 0,
+      "custom_width": 0,
+      "custom_height": 0,
+      "frame_load_cap": 0,
+      "skip_first_frames": 0,
+      "select_every_nth": 1,
+      "format": "AnimateDiff"
+    },
+    "class_type": "VHS_LoadVideoPath",
+    "_meta": {
+      "title": "source_video"
+    }
+  },
+  "339": {
+    "inputs": {
+      "detection_model": "head",
+      "number_of_faces": 2,
+      "reverse_order": "{{reverse_order}}",
+      "head_ratio": 0.3,
+      "scale_factor": 1.1,
+      "shift_factor": 0.45,
+      "start_index": 0,
+      "max_faces_per_image": 2,
+      "confidence_threshold": 0.68,
+      "aspect_ratio": "3:4",
+      "image": [
+        "230",
+        0
+      ]
+    },
+    "class_type": "AutoCropFaces2",
+    "_meta": {
+      "title": "Auto Crop Faces 2"
+    }
+  },
+  "340": {
+    "inputs": {
+      "video_info": [
+        "338",
+        3
+      ]
+    },
+    "class_type": "VideoInfo",
+    "_meta": {
+      "title": "Video Info"
+    }
+  }
+}

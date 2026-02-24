@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+SOCKET_PATH="${REPO_ROOT}/.skillpilot/temp/engine.sock"
+
+cd "$REPO_ROOT"
+
+# Prefer in-engine sync when the bridge socket is available.
+if [[ -S "${SOCKET_PATH}" ]]; then
+  if core/bin/tool-cli request '{"operation":"sync_mcp"}'; then
+    exit 0
+  fi
+  echo "sync-mcp: socket sync failed, falling back to direct sync." >&2
+fi
+
+exec uv --directory core/engine run python -m mcp_servers.mcp_to_skills.sync "$@"

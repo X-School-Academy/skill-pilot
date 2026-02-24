@@ -1,0 +1,221 @@
+"""Bullet List scene type module for video creation"""
+
+import os
+from typing import Dict, Any, List
+from ..VideoStyle import VideoStyle
+
+# Import utility functions
+from llm import LLM
+from ..video_utils.html2image import capture_image
+import subprocess
+from tts_service import async_text_to_audio_file
+
+
+async def create_bullet_list_scene(scene: Dict[str, Any], style: VideoStyle, cost_member_id: int = None) -> tuple[str, float]:
+    """
+    Create a bullet list scene video.
+
+    Args:
+        scene: Scene data containing:
+            - items: list of strings - item text shown in the screen
+            - voice_over: string
+        style: Video style configuration
+        cost_member_id: Member ID for cost tracking (None for system cost)
+
+    Returns:
+        tuple: (video_path, scene_cost) - Local file path to the generated video and accumulated cost for this scene
+    """
+
+    # Extract scene data
+    items = scene.get("items", [])
+
+    # Track accumulated cost for this scene
+    scene_cost = 0.0
+    if not isinstance(items, list):
+        raise ValueError("Bullet list scene 'items' must be a list")
+    else:
+        # fix a json format error from gemini
+        first_item = items[0] if items else ""
+        if isinstance(first_item, dict):
+            items = [item.get("text", "") for item in items]
+    voice_over = scene.get("voice_over", "")
+    
+    if not items:
+        raise ValueError("Bullet list scene requires 'items' field")
+    
+    if not voice_over:
+        raise ValueError("Bullet list scene requires 'voice_over' field")
+    
+    # Generate HTML for bullet points
+    bullet_items_html = ""
+    for item in items:
+        bullet_items_html += f"<li class='bullet-item'>{item}</li>\n"
+    
+    # Create HTML content for the bullet list display
+    css_vars = style.to_css_vars()
+    css_vars_str = "\n".join([f"    {key}: {value};" for key, value in css_vars.items()])
+    
+    html_content = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bullet List Scene</title>
+    <style>
+        :root {{
+{css_vars_str}
+        }}
+        
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        
+        body {{
+            width: var(--video-width);
+            height: var(--video-height);
+            background: linear-gradient(135deg, var(--bg-color) 0%, #2d3748 100%);
+            font-family: var(--primary-font);
+            color: var(--primary-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 60px 40px;
+        }}
+        
+        .list-container {{
+            width: 100%;
+            text-align: left;
+        }}
+        
+        .bullet-list {{
+            list-style: none;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: var(--card-gap);
+        }}
+        
+        .bullet-item {{
+            font-size: var(--bullet-font-size);
+            font-weight: 500;
+            color: var(--primary-color);
+            line-height: 1.4;
+            position: relative;
+            padding: 40px 40px 40px 100px;
+            background: var(--card-bg);
+            border-radius: calc(var(--border-radius) * 3);
+            border-left: var(--card-border-width) solid var(--accent-color);
+            backdrop-filter: var(--backdrop-blur);
+            word-wrap: break-word;
+            text-align: left;
+        }}
+        
+        .bullet-item::before {{
+            content: "✦";
+            color: var(--accent-color);
+            font-size: calc(var(--bullet-font-size) + 4px);
+            position: absolute;
+            left: 36px;
+            top: 50%;
+            transform: translateY(-50%);
+            text-shadow: 0 0 var(--glow-intensity) var(--accent-color);
+        }}
+    </style>
+</head>
+<body>
+    <div class="list-container">
+        <ul class="bullet-list">
+            {bullet_items_html}
+        </ul>
+    </div>
+</body>
+</html>
+"""
+    
+    # Capture image from HTML
+    is_horizontal = style.width > style.height
+    image_path = await capture_image(
+        html_content,
+        isHorizontal=is_horizontal,
+        view_width=style.width,
+        view_height=style.height
+    )
+    
+    if not image_path:
+        raise Exception("Failed to capture image for bullet list scene")
+    
+    # Generate audio file using Gemini TTS or fallback to LLM
+    tts_cost = 0.0
+    try:
+        audio_path, tts_cost = await async_text_to_audio_file(
+            voice_over,
+            voice=style.voice_name,
+            format="wav",
+            cost_member_id=cost_member_id,
+            cost_note="Bullet list scene - voice narration"
+        )
+    except Exception as e:
+        print(f"Gemini TTS failed, falling back to LLM: {e}")
+        # Fallback to original LLM method
+        async with LLM() as llm:
+            audio_path, tts_cost = await llm.text_to_audio_file(
+                voice_over, 
+                voice=style.voice_name,
+                cost_member_id=cost_member_id,
+                cost_note="Bullet list scene - voice narration (fallback MS TTS)"
+            )
+
+    if not audio_path:
+        raise Exception("Failed to generate audio for bullet list scene")
+    
+    # Upload audio to S3 and add URL to scene data
+    scene['voice_url'] = audio_path
+
+    scene_cost += tts_cost
+    
+    # Create video by combining image and audio using ffmpeg
+    import uuid
+    video_filename = f"bullet_list_scene_{uuid.uuid4()}.mp4"
+    video_path = f"/tmp/{video_filename}"
+    
+    # Use ffmpeg to create video from image and audio with PCM audio (no AAC priming samples)
+    ffmpeg_cmd = [
+        "ffmpeg", "-y",  # -y to overwrite output file
+        "-loop", "1",  # Loop the image
+        "-i", image_path,  # Input image
+        "-i", audio_path,  # Input audio
+        "-c:v", "libx264",  # Video codec
+        "-crf", "18",
+        "-c:a", "aac",  # PCM audio codec (no priming samples)
+        "-pix_fmt", "yuv420p",  # Pixel format for compatibility
+        "-shortest",  # End when shortest input ends (audio)
+        "-r", "30",  # Frame rate
+        video_path
+    ]
+    
+    try:
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=60)
+        if result.returncode != 0:
+            raise Exception(f"FFmpeg failed: {result.stderr}")
+    except subprocess.TimeoutExpired:
+        raise Exception("FFmpeg timeout during video creation")
+    except Exception as e:
+        raise Exception(f"Error running FFmpeg: {str(e)}")
+    
+    # Return the temporary video file path (don't upload to S3 here)
+    if not os.path.exists(video_path):
+        raise Exception("Video file was not created successfully")
+    
+    # Clean up temporary files (keep the video file)
+    try:
+        if os.path.exists(image_path):
+            os.remove(image_path)
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
+    except:
+        pass  # Ignore cleanup errors
+
+    return video_path, scene_cost

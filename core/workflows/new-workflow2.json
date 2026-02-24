@@ -1,0 +1,75 @@
+{
+  "version": "1.0",
+  "name": "new-workflow",
+  "updated_at": "2026-02-19T10:57:46Z",
+  "nodes": [
+    {
+      "id": 0,
+      "type": "start",
+      "position": {
+        "x": 120,
+        "y": 300
+      }
+    },
+    {
+      "id": 1,
+      "type": "agent",
+      "position": {
+        "x": 363,
+        "y": 308
+      },
+      "data": {
+        "title": "Agent 1",
+        "provider_id": "claude",
+        "skill": "key-safe"
+      }
+    },
+    {
+      "id": -1,
+      "type": "end",
+      "position": {
+        "x": 760,
+        "y": 300
+      }
+    },
+    {
+      "id": 2,
+      "type": "agent",
+      "position": {
+        "x": 371,
+        "y": 96.60000610351562
+      },
+      "data": {
+        "title": "Agent 2",
+        "provider_id": "claude",
+        "skill": "course-creator"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "0->1",
+      "source": 0,
+      "target": 1
+    },
+    {
+      "id": "1->-1",
+      "source": 1,
+      "target": -1
+    },
+    {
+      "id": "2->-1",
+      "source": 2,
+      "target": -1,
+      "source_anchor": "right",
+      "target_anchor": "left"
+    },
+    {
+      "id": "0->2",
+      "source": 0,
+      "target": 2,
+      "source_anchor": "right",
+      "target_anchor": "left"
+    }
+  ]
+}

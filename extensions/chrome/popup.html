@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kill Pilot</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Kill Pilot</h1>
+      <p class="hint">Describe what you want to do on this page.</p>
+
+      <section class="context">
+        <p><strong>Page URL</strong></p>
+        <p id="page-url" class="value"></p>
+        <p><strong>Selected Text</strong></p>
+        <p id="selected-text" class="value"></p>
+      </section>
+
+      <label for="task-description"><strong>Task Description</strong></label>
+      <textarea
+        id="task-description"
+        rows="6"
+        placeholder="Example: Summarize this paragraph and extract action items."
+      ></textarea>
+
+      <div class="actions">
+        <button id="submit-btn" type="button">Submit</button>
+      </div>
+      <p id="status" class="status"></p>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

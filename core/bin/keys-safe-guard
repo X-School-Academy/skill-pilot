@@ -1,0 +1,312 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+ENV_FILE="${REPO_ROOT}/config/.env"
+PYTHON_BIN="${REPO_ROOT}/core/bin/python"
+MANAGE_SCRIPT="${REPO_ROOT}/core/engine/safe_dotenv/manage.py"
+TOOL_CLI="${REPO_ROOT}/core/bin/tool-cli"
+
+# --- Argument parsing ---
+USE_GUI=false
+action=""
+remaining_args=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --gui)
+      USE_GUI=true
+      shift
+      ;;
+    *)
+      if [[ -z "$action" ]]; then
+        action="$1"
+      else
+        remaining_args+=("$1")
+      fi
+      shift
+      ;;
+  esac
+done
+
+action="${action:-enable}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  core/bin/keys-safe-guard [--gui] [action] [args...]
+
+Options:
+  --gui                       Request privilege elevation via GUI dialog when available.
+                              macOS: osascript admin dialog.
+                              Linux: pkexec (polkit) or sudo -A with zenity/kdialog askpass.
+                              Falls back to terminal sudo when GUI is unavailable or fails.
+
+Actions:
+  enable (default)            Enable key safe guard on config/.env
+  disable                     Disable key safe guard and restore current user ownership
+  get_key_names               Read loaded key names from engine memory via core/bin/tool-cli
+  put_key_values KEY=VALUE... Update or insert one or more keys in config/.env
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# GUI detection helpers (based on gui-sudo-detect skill)
+# ---------------------------------------------------------------------------
+
+_is_ssh() {
+  [[ -n "${SSH_CONNECTION-}" || -n "${SSH_TTY-}" ]]
+}
+
+_has_linux_gui() {
+  if [[ -n "${DISPLAY-}" || -n "${WAYLAND_DISPLAY-}" ]]; then
+    return 0
+  fi
+  if command -v loginctl >/dev/null 2>&1 && [[ -n "${XDG_SESSION_ID-}" ]]; then
+    local t
+    t="$(loginctl show-session "$XDG_SESSION_ID" -p Type --value 2>/dev/null || true)"
+    [[ "$t" == "x11" || "$t" == "wayland" ]] && return 0
+  fi
+  return 1
+}
+
+_has_macos_gui() {
+  local u
+  u="$(/usr/bin/stat -f%Su /dev/console 2>/dev/null || true)"
+  [[ -n "$u" && "$u" != "root" && "$u" != "loginwindow" ]] && ! _is_ssh
+}
+
+_can_use_gui() {
+  local os
+  os="$(uname -s)"
+  if [[ "$os" == "Darwin" ]]; then
+    _has_macos_gui
+  else
+    _has_linux_gui && ! _is_ssh
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# run_elevated_script <script_file> [arg1 arg2 ...]
+#
+# Runs script_file as root. When --gui is passed and a desktop session is
+# detected, shows a native OS auth dialog:
+#   macOS  : osascript "do shell script … with administrator privileges"
+#   Linux  : pkexec (polkit) → sudo -A with zenity/kdialog askpass
+# When --gui is set, fails immediately (non-zero) if GUI is unavailable or cancelled —
+# never blocks on terminal sudo, safe to call from background services.
+# Without --gui, falls back to interactive terminal sudo (for direct terminal use).
+# ---------------------------------------------------------------------------
+run_elevated_script() {
+  local script_file="$1"
+  shift
+  local os rc
+  os="$(uname -s)"
+
+  if [[ "$USE_GUI" == "true" ]]; then
+    # When --gui is set we must never fall back to blocking terminal sudo —
+    # the caller may be a background service with no visible terminal.
+    # Any failure path must exit non-zero so the caller can handle the error.
+
+    if ! _can_use_gui; then
+      echo "Error: --gui requested but no GUI session detected (SSH session or no display)." >&2
+      return 1
+    fi
+
+    if [[ "$os" == "Darwin" ]]; then
+      # Build the shell command string to embed in the AppleScript literal.
+      local cmd
+      cmd="bash $(printf '%q' "$script_file")"
+      local arg
+      for arg in "$@"; do cmd+=" $(printf '%q' "$arg")"; done
+      # Escape backslashes, then double-quotes, for embedding in "…" AppleScript string.
+      local esc="${cmd//\\/\\\\}"
+      esc="${esc//\"/\\\"}"
+      if /usr/bin/osascript -e "do shell script \"${esc}\" with administrator privileges" 2>/dev/null; then
+        return 0
+      fi
+      # Dialog failed or was cancelled — do NOT fall back to terminal sudo.
+      echo "Error: macOS GUI auth dialog failed or was cancelled." >&2
+      return 1
+
+    else
+      # Linux: prefer pkexec (polkit native dialog)
+      if command -v pkexec >/dev/null 2>&1; then
+        if pkexec bash "$script_file" "$@"; then
+          return 0
+        fi
+        rc=$?
+        echo "Warning: pkexec failed (exit ${rc}); trying askpass fallback." >&2
+      fi
+
+      # Linux: try sudo -A with a GUI askpass helper (zenity or kdialog).
+      # sudo -A exits non-zero if the askpass script fails (e.g. user cancels) —
+      # it will not fall back to TTY input.
+      local askpass_tmp=""
+      if command -v zenity >/dev/null 2>&1; then
+        askpass_tmp="$(mktemp /tmp/askpass.XXXXXX.sh)"
+        printf '#!/bin/sh\nexec zenity --password --title="sudo password"\n' > "$askpass_tmp"
+        chmod +x "$askpass_tmp"
+      elif command -v kdialog >/dev/null 2>&1; then
+        askpass_tmp="$(mktemp /tmp/askpass.XXXXXX.sh)"
+        printf '#!/bin/sh\nexec kdialog --password "sudo password"\n' > "$askpass_tmp"
+        chmod +x "$askpass_tmp"
+      fi
+
+      if [[ -n "$askpass_tmp" ]]; then
+        sudo -k
+        SUDO_ASKPASS="$askpass_tmp" sudo -A bash "$script_file" "$@"
+        rc=$?
+        rm -f "$askpass_tmp"
+        return $rc
+      fi
+
+      # No GUI askpass available and pkexec unavailable — do NOT fall back to terminal sudo.
+      echo "Error: No GUI askpass helper found (zenity/kdialog) and pkexec is unavailable." >&2
+      return 1
+    fi
+  fi
+
+  # Console path — only reached when --gui is NOT set.
+  # Suitable for interactive terminal sessions where the user can see the prompt.
+  sudo -k
+  sudo bash "$script_file" "$@"
+}
+
+# ---------------------------------------------------------------------------
+# Actions
+# ---------------------------------------------------------------------------
+
+require_env_file() {
+  if [[ ! -f "${ENV_FILE}" ]]; then
+    echo "No env file found at ${ENV_FILE}."
+    echo "Create config/.env first, then run this command again."
+    exit 1
+  fi
+}
+
+do_enable() {
+  require_env_file
+  echo "Applying key safe guard to ${ENV_FILE}"
+
+  local tmp_script rc=0
+  tmp_script="$(mktemp /tmp/keys_enable.XXXXXX.sh)"
+  cat > "$tmp_script" <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+env_file="$1"
+chown root "$env_file"
+chmod 600 "$env_file"
+if ! grep -Eq "^[[:space:]]*IN_KEYS_SAFE_GUARD[[:space:]]*=" "$env_file"; then
+  printf "\nIN_KEYS_SAFE_GUARD=1\n" >> "$env_file"
+fi
+SCRIPT
+  run_elevated_script "$tmp_script" "${ENV_FILE}" || rc=$?
+  rm -f "$tmp_script"
+  [[ $rc -eq 0 ]] && echo "Done. ${ENV_FILE} is now guarded."
+  return $rc
+}
+
+do_disable() {
+  require_env_file
+  local uid gid
+  uid="$(id -u)"
+  gid="$(id -g)"
+
+  local tmp_script rc=0
+  tmp_script="$(mktemp /tmp/keys_disable.XXXXXX.sh)"
+  cat > "$tmp_script" <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+repo_root="$1"
+env_file="$2"
+target_uid="$3"
+target_gid="$4"
+python_bin="${repo_root}/core/bin/python"
+manage_script="${repo_root}/core/engine/safe_dotenv/manage.py"
+"$python_bin" "$manage_script" disable --env-file "$env_file"
+chown "${target_uid}:${target_gid}" "$env_file"
+chmod 600 "$env_file"
+SCRIPT
+  run_elevated_script "$tmp_script" "${REPO_ROOT}" "${ENV_FILE}" "${uid}" "${gid}" || rc=$?
+  rm -f "$tmp_script"
+  [[ $rc -eq 0 ]] && echo "Key safe guard disabled for ${ENV_FILE}."
+  return $rc
+}
+
+do_get_key_names() {
+  # No sudo required — reads from loaded engine memory via socket.
+  local payload response status
+  payload='{"operation":"safe_dotenv_key_names"}'
+  if ! response="$("${TOOL_CLI}" request "${payload}" 2>/dev/null)"; then
+    echo "Unable to read key names from engine memory. Ensure core engine is running."
+    return 1
+  fi
+  status="$("${PYTHON_BIN}" -c 'import json,sys; d=json.loads(sys.stdin.read()); print(d.get("status",""))' <<< "${response}" 2>/dev/null || true)"
+  if [[ "${status}" != "ok" ]]; then
+    echo "Engine response was not ok:"
+    echo "${response}"
+    return 1
+  fi
+  "${PYTHON_BIN}" -c 'import json,sys; d=json.loads(sys.stdin.read()); keys=((d.get("result") or {}).get("keys") or []); [print(k) for k in keys]' <<< "${response}"
+}
+
+do_put_key_values() {
+  require_env_file
+  if [[ ${#remaining_args[@]} -lt 1 ]]; then
+    echo "put_key_values requires one or more KEY=VALUE arguments."
+    usage
+    return 2
+  fi
+
+  # When the env file is writable by the current user (key safe guard not enabled),
+  # run manage.py directly — no sudo or GUI elevation needed.
+  if [[ -w "${ENV_FILE}" ]]; then
+    "${PYTHON_BIN}" "${MANAGE_SCRIPT}" put --env-file "${ENV_FILE}" "${remaining_args[@]}"
+    return $?
+  fi
+
+  # File is not user-writable (root-owned, key safe guard enabled) — need elevation.
+  local tmp_script rc=0
+  tmp_script="$(mktemp /tmp/keys_put.XXXXXX.sh)"
+  cat > "$tmp_script" <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+python_bin="$1"
+manage_script="$2"
+env_file="$3"
+shift 3
+"$python_bin" "$manage_script" put --env-file "$env_file" "$@"
+SCRIPT
+  run_elevated_script "$tmp_script" "${PYTHON_BIN}" "${MANAGE_SCRIPT}" "${ENV_FILE}" "${remaining_args[@]}" || rc=$?
+  rm -f "$tmp_script"
+  return $rc
+}
+
+# ---------------------------------------------------------------------------
+# Dispatch
+# ---------------------------------------------------------------------------
+
+case "${action}" in
+  enable)
+    do_enable
+    ;;
+  disable)
+    do_disable
+    ;;
+  get_key_names)
+    do_get_key_names
+    ;;
+  put_key_values)
+    do_put_key_values
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    echo "Unknown action: ${action}"
+    usage
+    exit 2
+    ;;
+esac

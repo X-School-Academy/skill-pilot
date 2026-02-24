@@ -1,0 +1,160 @@
+{
+  "name": "skill-pilot-local",
+  "displayName": "Skill Pilot for VS Code (Local)",
+  "description": "Real-Time Interactive Code Execution and AI Assistant - Local Version",
+  "publisher": "JuniorIT-AI",
+  "icon": "images/haicam-icon-128.png",
+  "version": "0.0.13",
+  "repository": {
+    "url": "https://github.com/Haicam/junior-it-ai"
+  },
+  "engines": {
+    "vscode": "^1.64.0"
+  },
+  "categories": [
+    "Debuggers",
+    "Other"
+  ],
+  "keywords": [
+    "JuniorIT",
+    "ChatGPT",
+    "Code Assistant"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "browser": "./dist/extension.js",
+  "contributes": {
+    "menus": {
+      "editor/context": [
+        {
+          "command": "skill-pilot.assistant.inline",
+          "when": "editorTextFocus",
+          "group": "jiGroup@1"
+        },
+        {
+          "command": "skill-pilot.assistant.complete",
+          "when": "editorHasSelection",
+          "group": "jiGroup@2"
+        },
+        {
+          "command": "skill-pilot.assistant.execute",
+          "when": "editorHasSelection",
+          "group": "jiGroup@3"
+        },
+        {
+          "command": "skill-pilot.assistant.assistant",
+          "when": "editorHasSelection",
+          "group": "jiGroup@4"
+        },
+        {
+          "command": "skill-pilot.assistant.markdown-side-view",
+          "when": "resourceLangId == markdown",
+          "group": "jiGroup@5"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "skill-pilot.assistant.markdown-view",
+          "when": "resourceExtname == .md",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "skill-pilot.assistant.enter",
+        "key": "ctrl+enter",
+        "mac": "ctrl+enter",
+        "when": "editorTextFocus"
+      }
+    ],
+    "commands": [
+      {
+        "command": "skill-pilot.assistant.inline",
+        "title": "Skill Pilot: Do It for Me"
+      },
+      {
+        "command": "skill-pilot.assistant.complete",
+        "title": "Skill Pilot: Complete"
+      },
+      {
+        "command": "skill-pilot.assistant.execute",
+        "title": "Skill Pilot: Execute"
+      },
+      {
+        "command": "skill-pilot.assistant.assistant",
+        "title": "Skill Pilot: Assistant"
+      },
+      {
+        "command": "skill-pilot.assistant.markdown-view",
+        "title": "Open Markdown View (Skill Pilot)"
+      },
+      {
+        "command": "skill-pilot.assistant.markdown-side-view",
+        "title": "Skill Pilot: Markdown Side View"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "view-left-panel",
+          "title": "Skill Pilot",
+          "icon": "images/haicam-icon-128.png"
+        }
+      ]
+    },
+    "views": {
+      "view-left-panel": [
+        {
+          "type": "webview",
+          "id": "left-panel-view",
+          "name": "Code Assistant"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "package": "rm -rf *.vsix && npm run esbuild-base -- --minify && vsce package",
+    "install": "npm run package && code --install-extension *.vsix",
+    "remove": "code --uninstall-extension JuniorIT-AI.skillpilot-local",
+    "reload": "code -r .",
+    "vscode:prepublish": "npm run esbuild-base -- --minify",
+    "esbuild-base": "rm -rf ./dist/* && esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "esbuild": "npm run esbuild-base -- --sourcemap",
+    "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
+    "compile": "tsc -p ./"
+  },
+  "devDependencies": {
+    "@types/glob": "^7.2.0",
+    "@types/mocha": "^9.1.0",
+    "@types/node": "14.x",
+    "@types/vscode": "^1.64.0",
+    "@typescript-eslint/eslint-plugin": "^5.12.1",
+    "@typescript-eslint/parser": "^5.12.1",
+    "@vscode/test-electron": "^2.1.2",
+    "eslint": "^8.9.0",
+    "glob": "^7.2.0",
+    "mocha": "^9.2.1",
+    "ts-loader": "^9.2.6",
+    "typescript": "^4.5.5",
+    "webpack": "^5.69.1",
+    "webpack-cli": "^4.9.2"
+  },
+  "dependencies": {
+    "@types/react-dom": "^17.0.11",
+    "dotenv-webpack": "^7.1.0",
+    "esbuild": "^0.18.4",
+    "module-alias": "^2.2.2",
+    "path": "^0.12.7",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "socket.io-client": "^4.7.2"
+  },
+  "_moduleAliases": {
+    "utils": "dist/utils",
+    "providers": "dist/providers",
+    "components": "dist/components"
+  }
+}

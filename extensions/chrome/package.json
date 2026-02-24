@@ -1,0 +1,16 @@
+{
+  "name": "kill-pilot-chrome-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kill Pilot Chrome extension",
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

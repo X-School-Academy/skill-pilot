@@ -1,0 +1,674 @@
+{
+  "8": {
+    "inputs": {
+      "vae_name": "wan_2.1_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "22": {
+    "inputs": {
+      "clip_name": "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "wan",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "70": {
+    "inputs": {
+      "lora_name": "Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors",
+      "strength_model": 1.0000000000000002,
+      "model": [
+        "74",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoraLoaderModelOnly"
+    }
+  },
+  "73": {
+    "inputs": {
+      "unet_name": "wan2.2_i2v_high_noise_14B_Q4_K_S.gguf"
+    },
+    "class_type": "UnetLoaderGGUF",
+    "_meta": {
+      "title": "Unet Loader (GGUF)"
+    }
+  },
+  "74": {
+    "inputs": {
+      "unet_name": "wan2.2_i2v_low_noise_14B_Q4_K_S.gguf"
+    },
+    "class_type": "UnetLoaderGGUF",
+    "_meta": {
+      "title": "Unet Loader (GGUF)"
+    }
+  },
+  "87": {
+    "inputs": {
+      "lora_name": "Wan2.2-Lightning_I2V-A14B-4steps-lora_HIGH_fp16.safetensors",
+      "strength_model": 2,
+      "strength_clip": 2,
+      "model": [
+        "73",
+        0
+      ],
+      "clip": [
+        "22",
+        0
+      ]
+    },
+    "class_type": "LoraLoader",
+    "_meta": {
+      "title": "Load LoRA"
+    }
+  },
+  "104": {
+    "inputs": {
+      "width": [
+        "381",
+        8
+      ],
+      "height": [
+        "381",
+        9
+      ],
+      "upscale_method": "lanczos",
+      "keep_proportion": "crop",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 16,
+      "device": "cpu",
+      "image": [
+        "379",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "Resize Image v2"
+    }
+  },
+  "230": {
+    "inputs": {
+      "Number": "81"
+    },
+    "class_type": "Int",
+    "_meta": {
+      "title": "frames"
+    }
+  },
+  "231": {
+    "inputs": {
+      "Number": "4"
+    },
+    "class_type": "Int",
+    "_meta": {
+      "title": "total steps"
+    }
+  },
+  "232": {
+    "inputs": {
+      "Number": "2"
+    },
+    "class_type": "Int",
+    "_meta": {
+      "title": "high steps"
+    }
+  },
+  "264": {
+    "inputs": {
+      "frame_rate": 16,
+      "loop_count": 0,
+      "filename_prefix": "jit_api_raw_video",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": false,
+      "trim_to_audio": true,
+      "pingpong_to_audio": false,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "212:212",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine \ud83c\udfa5\ud83c\udd65\ud83c\udd57\ud83c\udd62"
+    }
+  },
+  "313": {
+    "inputs": {
+      "frame_rate": 32,
+      "loop_count": 0,
+      "filename_prefix": "jit_api_upscaled_video",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 19,
+      "save_metadata": false,
+      "trim_to_audio": true,
+      "pingpong_to_audio": true,
+      "pingpong": false,
+      "save_output": true,
+      "images": [
+        "376",
+        0
+      ],
+      "audio": [
+        "386",
+        0
+      ]
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Video Combine \ud83c\udfa5\ud83c\udd65\ud83c\udd57\ud83c\udd62"
+    }
+  },
+  "371": {
+    "inputs": {
+      "lora_name": "svi-shot.safetensors",
+      "strength_model": 1,
+      "model": [
+        "70",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoraLoaderModelOnly"
+    }
+  },
+  "372": {
+    "inputs": {
+      "lora_name": "svi-shot.safetensors",
+      "strength_model": 1,
+      "model": [
+        "87",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoraLoaderModelOnly"
+    }
+  },
+  "373": {
+    "inputs": {
+      "filename_prefix": "jit_api_thumbnail",
+      "images": [
+        "377",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "374": {
+    "inputs": {
+      "model_name": "RealESRGAN_x2.pth"
+    },
+    "class_type": "UpscaleModelLoader",
+    "_meta": {
+      "title": "Load Upscale Model"
+    }
+  },
+  "375": {
+    "inputs": {
+      "upscale_model": [
+        "374",
+        0
+      ],
+      "image": [
+        "212:212",
+        0
+      ]
+    },
+    "class_type": "ImageUpscaleWithModel",
+    "_meta": {
+      "title": "Upscale Image (using Model)"
+    }
+  },
+  "376": {
+    "inputs": {
+      "ckpt_name": "rife49.pth",
+      "clear_cache_after_n_frames": 10,
+      "multiplier": 2,
+      "fast_mode": false,
+      "ensemble": true,
+      "scale_factor": 1,
+      "frames": [
+        "375",
+        0
+      ]
+    },
+    "class_type": "RIFE VFI",
+    "_meta": {
+      "title": "Frame Interpolation (RIFE VFI)"
+    }
+  },
+  "377": {
+    "inputs": {
+      "start_index": 0,
+      "num_frames": 1,
+      "images": [
+        "375",
+        0
+      ]
+    },
+    "class_type": "GetImageRangeFromBatch",
+    "_meta": {
+      "title": "Get Image or Mask Range From Batch"
+    }
+  },
+  "378": {
+    "inputs": {
+      "video": "{{source_video}}",
+      "force_rate": 0,
+      "custom_width": 0,
+      "custom_height": 0,
+      "frame_load_cap": 0,
+      "skip_first_frames": 0,
+      "select_every_nth": 1,
+      "format": "AnimateDiff"
+    },
+    "class_type": "VHS_LoadVideoPath",
+    "_meta": {
+      "title": "source_video"
+    }
+  },
+  "379": {
+    "inputs": {
+      "start_index": [
+        "382",
+        0
+      ],
+      "num_frames": 1,
+      "images": [
+        "378",
+        0
+      ]
+    },
+    "class_type": "GetImageRangeFromBatch",
+    "_meta": {
+      "title": "Get Image or Mask Range From Batch"
+    }
+  },
+  "380": {
+    "inputs": {
+      "Number": "{{frame_index}}"
+    },
+    "class_type": "Int",
+    "_meta": {
+      "title": "frame_index"
+    }
+  },
+  "381": {
+    "inputs": {
+      "video_info": [
+        "378",
+        3
+      ]
+    },
+    "class_type": "VHS_VideoInfo",
+    "_meta": {
+      "title": "Video Info \ud83c\udfa5\ud83c\udd65\ud83c\udd57\ud83c\udd62"
+    }
+  },
+  "382": {
+    "inputs": {
+      "condition": [
+        "383",
+        0
+      ],
+      "if_true": [
+        "384",
+        0
+      ],
+      "if_false": [
+        "380",
+        0
+      ]
+    },
+    "class_type": "Basic data handling: IfElse",
+    "_meta": {
+      "title": "if/else"
+    }
+  },
+  "383": {
+    "inputs": {
+      "comparison": "a > b",
+      "a": [
+        "380",
+        0
+      ],
+      "b": [
+        "381",
+        6
+      ]
+    },
+    "class_type": "easy compare",
+    "_meta": {
+      "title": "Compare"
+    }
+  },
+  "384": {
+    "inputs": {
+      "value": -1
+    },
+    "class_type": "easy int",
+    "_meta": {
+      "title": "Int"
+    }
+  },
+  "385": {
+    "inputs": {
+      "text": "{{video_prompt}}"
+    },
+    "class_type": "Text Multiline",
+    "_meta": {
+      "title": "video_prompt"
+    }
+  },
+  "386": {
+    "inputs": {
+      "path": "{{ref_audio}}",
+      "gain_db": 0,
+      "offset_seconds": 0,
+      "duration_seconds": 0,
+      "resample_to_hz": 0,
+      "make_stereo": false
+    },
+    "class_type": "JWLoadAudio",
+    "_meta": {
+      "title": "ref_audio"
+    }
+  },
+  "212:85": {
+    "inputs": {
+      "value": [
+        "231",
+        0
+      ]
+    },
+    "class_type": "JWInteger",
+    "_meta": {
+      "title": "Steps"
+    }
+  },
+  "212:86": {
+    "inputs": {
+      "value": [
+        "232",
+        0
+      ]
+    },
+    "class_type": "JWInteger",
+    "_meta": {
+      "title": "High Steps"
+    }
+  },
+  "212:81": {
+    "inputs": {
+      "width": [
+        "104",
+        1
+      ],
+      "height": [
+        "104",
+        2
+      ],
+      "length": [
+        "230",
+        0
+      ],
+      "batch_size": 1,
+      "positive": [
+        "212:213",
+        0
+      ],
+      "negative": [
+        "212:4",
+        0
+      ],
+      "vae": [
+        "8",
+        0
+      ],
+      "start_image": [
+        "104",
+        0
+      ]
+    },
+    "class_type": "WanImageToVideo",
+    "_meta": {
+      "title": "WanImageToVideo"
+    }
+  },
+  "212:213": {
+    "inputs": {
+      "text": [
+        "385",
+        0
+      ],
+      "clip": [
+        "87",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Positive Prompt"
+    }
+  },
+  "212:67": {
+    "inputs": {
+      "seed": 248257785861228
+    },
+    "class_type": "Seed Generator",
+    "_meta": {
+      "title": "Seed Generator"
+    }
+  },
+  "212:219": {
+    "inputs": {
+      "shift": 8,
+      "model": [
+        "212:218",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "ModelSamplingSD3"
+    }
+  },
+  "212:212": {
+    "inputs": {
+      "samples": [
+        "212:36",
+        0
+      ],
+      "vae": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "212:35": {
+    "inputs": {
+      "add_noise": "enable",
+      "noise_seed": [
+        "212:67",
+        0
+      ],
+      "steps": [
+        "212:85",
+        0
+      ],
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": 0,
+      "end_at_step": [
+        "212:86",
+        0
+      ],
+      "return_with_leftover_noise": "disable",
+      "model": [
+        "212:216",
+        0
+      ],
+      "positive": [
+        "212:81",
+        0
+      ],
+      "negative": [
+        "212:81",
+        1
+      ],
+      "latent_image": [
+        "212:81",
+        2
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "KSampler (Advanced)"
+    }
+  },
+  "212:36": {
+    "inputs": {
+      "add_noise": "enable",
+      "noise_seed": [
+        "212:67",
+        0
+      ],
+      "steps": [
+        "212:85",
+        0
+      ],
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "start_at_step": [
+        "212:86",
+        0
+      ],
+      "end_at_step": 999,
+      "return_with_leftover_noise": "disable",
+      "model": [
+        "212:219",
+        0
+      ],
+      "positive": [
+        "212:81",
+        0
+      ],
+      "negative": [
+        "212:81",
+        1
+      ],
+      "latent_image": [
+        "212:35",
+        0
+      ]
+    },
+    "class_type": "KSamplerAdvanced",
+    "_meta": {
+      "title": "KSampler (Advanced)"
+    }
+  },
+  "212:216": {
+    "inputs": {
+      "shift": 8,
+      "model": [
+        "212:215",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingSD3",
+    "_meta": {
+      "title": "ModelSamplingSD3"
+    }
+  },
+  "212:215": {
+    "inputs": {
+      "enable_fp16_accumulation": true,
+      "model": [
+        "212:214",
+        0
+      ]
+    },
+    "class_type": "ModelPatchTorchSettings",
+    "_meta": {
+      "title": "Model Patch Torch Settings"
+    }
+  },
+  "212:214": {
+    "inputs": {
+      "sage_attention": "auto",
+      "model": [
+        "372",
+        0
+      ]
+    },
+    "class_type": "PathchSageAttentionKJ",
+    "_meta": {
+      "title": "Patch Sage Attention KJ"
+    }
+  },
+  "212:218": {
+    "inputs": {
+      "enable_fp16_accumulation": true,
+      "model": [
+        "212:217",
+        0
+      ]
+    },
+    "class_type": "ModelPatchTorchSettings",
+    "_meta": {
+      "title": "Model Patch Torch Settings"
+    }
+  },
+  "212:217": {
+    "inputs": {
+      "sage_attention": "auto",
+      "model": [
+        "371",
+        0
+      ]
+    },
+    "class_type": "PathchSageAttentionKJ",
+    "_meta": {
+      "title": "Patch Sage Attention KJ"
+    }
+  },
+  "212:4": {
+    "inputs": {
+      "text": "\u8272\u8c03\u8273\u4e3d\uff0c\u8fc7\u66dd, \u5149\u7ebf\u592a\u4eae\uff0c\u9759\u6001\uff0c\u7ec6\u8282\u6a21\u7cca\u4e0d\u6e05\uff0c\u5b57\u5e55\uff0c\u98ce\u683c\uff0c\u4f5c\u54c1\uff0c\u753b\u4f5c\uff0c\u753b\u9762\uff0c\u9759\u6b62\uff0c\u6574\u4f53\u53d1\u7070\uff0c\u6700\u5dee\u8d28\u91cf\uff0c\u4f4e\u8d28\u91cf\uff0cJPEG\u538b\u7f29\u6b8b\u7559\uff0c\u4e11\u964b\u7684\uff0c\u6b8b\u7f3a\u7684\uff0c\u591a\u4f59\u7684\u624b\u6307\uff0c\u753b\u5f97\u4e0d\u597d\u7684\u624b\u90e8\uff0c\u753b\u5f97\u4e0d\u597d\u7684\u8138\u90e8\uff0c\u7578\u5f62\u7684\uff0c\u6bc1\u5bb9\u7684\uff0c\u5f62\u6001\u7578\u5f62\u7684\u80a2\u4f53\uff0c\u624b\u6307\u878d\u5408\uff0c\u9759\u6b62\u4e0d\u52a8\u7684\u753b\u9762\uff0c\u6742\u4e71\u7684\u80cc\u666f\uff0c\u4e09\u6761\u817f\uff0c\u80cc\u666f\u4eba\u5f88\u591a, \u773c\u955c, sunburnt skin, rashy skin, red cheeks, nsfw\n",
+      "clip": [
+        "87",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Negative Prompt"
+    }
+  }
+}

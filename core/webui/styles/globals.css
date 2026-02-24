@@ -1,0 +1,226 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen,
+    Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
+}
+
+/* For WebKit based browsers (Chrome, Safari, Opera) */
+ul::-webkit-scrollbar {
+  display: none;
+}
+
+ul {
+  scrollbar-width: none; /* For Firefox */
+  -ms-overflow-style: none; /* For Edge and Internet Explorer */
+}
+
+.rotate {
+  animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.center-window {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+@keyframes rotate-180 {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(180deg);
+  }
+}
+
+.animate-rotate-180 {
+  animation: rotate-180 0.2s linear forwards;
+}
+
+@keyframes rotate-180-0 {
+  from {
+    transform: rotate(180deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+.animate-rotate-180-0 {
+  animation: rotate-180-0 0.2s linear forwards;
+}
+
+.blog-cover {
+  width: 100%;
+  height: 0;
+  padding-bottom: 50%;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+}
+
+/* styles.css */
+.react-pagination {
+  display: flex;
+  justify-content: center;
+  list-style: none;
+  padding: 0;
+}
+
+.react-pagination li {
+  margin-right: 0.5rem;
+}
+
+.active-pagination {
+  color: #fff
+}
+
+.active-link-pagination {
+  background-color: #4299e1;
+}
+
+.react-pagination li a {
+  color: #4b5563;
+  background-color: #f3f4f6;
+  border-radius: 0.25rem;
+  display: inline-block;
+  font-weight: 500;
+  padding: 0.5rem;
+  text-align: center;
+  transition: background-color 0.2s ease;
+}
+
+.react-pagination li a:hover {
+  background-color: #e5e7eb;
+}
+
+.react-pagination li a:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.6);
+}
+
+.dev-swarm-root {
+  --color-background: #f5f7fc;
+  --color-surface: #ffffff;
+  --color-surface-alt: #eef2ff;
+  --color-border: #d6def8;
+  --color-text-primary: #1a2455;
+  --color-text-secondary: #5e6b9d;
+  --color-accent: #373c93;
+  --color-accent-hover: #2b3079;
+  --color-accent-cyan: #1766d5;
+  --color-success: #0f9d68;
+  --color-warning: #d48806;
+  --color-error: #d33d2f;
+  --color-focus: #373c93;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.dev-swarm-root .doc-markdown {
+  color: var(--color-text-primary);
+  line-height: 1.7;
+}
+
+.dev-swarm-root .doc-markdown h1,
+.dev-swarm-root .doc-markdown h2,
+.dev-swarm-root .doc-markdown h3,
+.dev-swarm-root .doc-markdown h4 {
+  color: var(--color-text-primary);
+  margin: 1.4rem 0 0.6rem;
+}
+
+.dev-swarm-root .doc-markdown h1 { font-size: 1.75rem; font-weight: 700; }
+.dev-swarm-root .doc-markdown h2 { font-size: 1.4rem; font-weight: 600; }
+.dev-swarm-root .doc-markdown h3 { font-size: 1.15rem; font-weight: 600; }
+.dev-swarm-root .doc-markdown p { margin: 0.6rem 0; color: var(--color-text-secondary); }
+.dev-swarm-root .doc-markdown ul,
+.dev-swarm-root .doc-markdown ol { margin: 0.6rem 0 0.6rem 1.2rem; color: var(--color-text-secondary); }
+.dev-swarm-root .doc-markdown li { margin: 0.35rem 0; }
+
+.dev-swarm-root .doc-markdown code {
+  font-size: 0.9em;
+  color: var(--color-accent-cyan);
+  background: #e8f0ff;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+}
+
+.dev-swarm-root .doc-markdown pre {
+  background: #e8f0ff;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 0.8rem 0;
+}
+
+.dev-swarm-root .doc-markdown pre code {
+  background: none;
+  padding: 0;
+}
+
+.dev-swarm-root .doc-markdown blockquote {
+  border-left: 3px solid var(--color-accent);
+  padding-left: 1rem;
+  margin: 0.8rem 0;
+  color: var(--color-text-secondary);
+}
+
+.dev-swarm-root .doc-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.8rem 0;
+}
+
+.dev-swarm-root .doc-markdown th,
+.dev-swarm-root .doc-markdown td {
+  border: 1px solid var(--color-border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+.dev-swarm-root .doc-markdown th {
+  background: var(--color-surface-alt);
+  font-weight: 600;
+}
+
+.dev-swarm-root .doc-markdown a {
+  color: var(--color-accent-cyan);
+  text-decoration: underline;
+}
+
+.dev-swarm-root .custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.dev-swarm-root .custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dev-swarm-root .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #c5cff6;
+  border-radius: 10px;
+}
+
+.dev-swarm-root .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #9eaded;
+}

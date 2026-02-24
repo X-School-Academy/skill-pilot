@@ -1,0 +1,18 @@
+__pycache__
+.venv
+
+.next
+node_modules
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+.DS_Store
+
+.env
+# local env files
+.env*.local
+
+.playwright-cli
+.skillpilot

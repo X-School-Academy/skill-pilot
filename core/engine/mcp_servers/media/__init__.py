@@ -1,0 +1,1 @@
+# Media MCP server package.

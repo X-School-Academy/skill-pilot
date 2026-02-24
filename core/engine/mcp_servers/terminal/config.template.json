@@ -1,0 +1,15 @@
+{
+  "profiles": {
+    "prod": {
+      "host": "1.2.3.4",
+      "port": 22,
+      "user": "deploy",
+      "password": "",
+      "key": "~/.ssh/id_rsa",
+      "knownHosts": "~/.ssh/known_hosts",
+      "timeoutMs": 60000,
+      "maxChars": 1000,
+      "sudoPassword": ""
+    }
+  }
+}

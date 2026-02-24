@@ -1,0 +1,45 @@
+flowchart TB
+    subgraph SPRINT_CMD["Sprint Commands"]
+        SC["/sprint [name]"]
+        BC["/backlog [name]"]
+        DC["/dev [name]"]
+        RC["/review [name]"]
+        TC["/test [name]"]
+    end
+
+    subgraph SPRINT_EXEC["Sprint Execution"]
+        direction TB
+        SF["SPRINT-XX-name/"]
+        BF1["FEATURE-01-*.md"]
+        BF2["CHANGE-02-*.md"]
+        BF3["BUG-03-*.md"]
+        BF4["IMPROVE-04-*.md"]
+    end
+
+    subgraph BACKLOG_EXEC["Backlog Execution"]
+        direction LR
+        D["Development<br/>(code-development)"]
+        R["Review<br/>(code-review)"]
+        T["Test<br/>(code-test)"]
+        D --> R --> T
+    end
+
+    SC --> SF
+    SF --> BF1 & BF2 & BF3 & BF4
+    BC --> BF1
+    BF1 --> BACKLOG_EXEC
+    BF2 --> BACKLOG_EXEC
+    BF3 --> BACKLOG_EXEC
+    BF4 --> BACKLOG_EXEC
+
+    DC -.-> D
+    RC -.-> R
+    TC -.-> T
+
+    classDef cmd fill:#9C27B0,stroke:#6A1B9A,color:#fff
+    classDef folder fill:#2196F3,stroke:#1565C0,color:#fff
+    classDef exec fill:#4CAF50,stroke:#2E7D32,color:#fff
+
+    class SC,BC,DC,RC,TC cmd
+    class SF,BF1,BF2,BF3,BF4 folder
+    class D,R,T exec

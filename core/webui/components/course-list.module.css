@@ -1,0 +1,24 @@
+.wrapper {
+    min-height: rem(650px);
+    margin-top: 50px !important;
+    padding: 0px !important;
+}
+
+.title {
+    font-size: 1.5rem !important;
+    margin-bottom: 15px !important;
+}
+
+.item {
+    border-radius: 10px !important;
+    margin-top: 0px !important;
+}
+
+.control {
+    margin-top: 0px !important;
+    margin-bottom: 0px !important;
+    padding-left: 1rem !important;
+    padding-top: 30px !important;
+    padding-bottom: 20px !important;
+    height: 35px !important;
+}
