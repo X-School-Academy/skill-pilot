@@ -55,7 +55,7 @@ Supported AI agents: **Claude Code**, **Codex**, **Gemini CLI**, **OpenCode** â€
 ### Auto Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/x-school-academy/skill-pilot/codeware/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/x-school-academy/skill-pilot/codeware/install.sh | bash
 ```
 
 ### Manual Install
