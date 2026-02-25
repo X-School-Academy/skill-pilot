@@ -333,18 +333,6 @@ main() {
     "install_homebrew"
 
   install_step \
-    "Git" \
-    "Git is required to clone the Skill Pilot repository." \
-    "git" \
-    "install_git"
-
-  install_step \
-    "curl" \
-    "curl downloads official install scripts for core tools." \
-    "curl" \
-    "install_curl"
-
-  install_step \
     "uv" \
     "uv manages Python runtimes and fast Python tooling used by this project." \
     "uv" \
