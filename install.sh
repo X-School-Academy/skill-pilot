@@ -91,6 +91,42 @@ reload_shell_env() {
   hash -r 2>/dev/null || true
 }
 
+# --- Sudo helpers ---
+is_root() { [ "$(id -u)" = "0" ]; }
+
+require_sudo() {
+  if is_root; then return 0; fi
+  if ! command -v sudo >/dev/null 2>&1; then
+    err "sudo is required but not found. Please run as root or install sudo."
+    exit 1
+  fi
+}
+
+# --- Linux build tools ---
+install_build_tools_linux() {
+  require_sudo
+  if command -v apt-get >/dev/null 2>&1; then
+    if is_root; then
+      apt-get update -qq
+      apt-get install -y -qq build-essential python3 make g++ cmake
+    else
+      sudo apt-get update -qq
+      sudo apt-get install -y -qq build-essential python3 make g++ cmake
+    fi
+    return 0
+  fi
+  if command -v dnf >/dev/null 2>&1; then
+    if is_root; then
+      dnf install -y -q gcc gcc-c++ make cmake python3
+    else
+      sudo dnf install -y -q gcc gcc-c++ make cmake python3
+    fi
+    return 0
+  fi
+  err "No supported package manager found (apt-get or dnf required)."
+  exit 1
+}
+
 # --- Package-manager dispatch ---
 pkg_install() {
   local pkg="$1"
@@ -239,9 +275,39 @@ main() {
     */core/engine/dev_swarm/*) skip_clone="true" ;;
   esac
 
+  # macOS: install Xcode Command Line Tools before Homebrew (provides clang/make/git)
+  if [ "$OS_KIND" = "mac" ]; then
+    info "\n${BOLD}Xcode Command Line Tools${NC}"
+    info "Xcode CLT provides clang, make, and git — required before installing Homebrew."
+    if xcode-select -p >/dev/null 2>&1; then
+      ok "Xcode Command Line Tools are already installed."
+    else
+      require_yes_or_exit "Install Xcode Command Line Tools now?"
+      xcode-select --install 2>/dev/null || true
+      warn "A system dialog has appeared. Complete the Xcode CLT installation, then press Enter."
+      read -r -p "Press Enter once Xcode CLT installation is complete..." </dev/tty
+      if xcode-select -p >/dev/null 2>&1; then
+        ok "Xcode Command Line Tools installed."
+      else
+        err "Xcode Command Line Tools are not ready."
+        err "Complete the dialog and re-run: bash install.sh"
+        exit 1
+      fi
+    fi
+  fi
+
+  # Linux: install build-essential before Homebrew (required to compile packages)
+  if [ "$OS_KIND" = "linux" ]; then
+    install_step \
+      "Linux build tools (build-essential)" \
+      "build-essential (gcc, make, cmake) is required before installing Homebrew on Linux." \
+      "make" \
+      "install_build_tools_linux"
+  fi
+
   install_step \
     "Homebrew" \
-    "Homebrew is used as a package manager on macOS and optionally on Linux." \
+    "Homebrew is used as a package manager on macOS and Linux." \
     "brew" \
     "install_homebrew"
 
