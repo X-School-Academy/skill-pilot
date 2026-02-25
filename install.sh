@@ -260,6 +260,9 @@ main() {
   say "${BOLD}Skill Pilot Installer (macOS/Linux)${NC}"
   say ""
 
+  # Load existing tool paths before any checks so already-installed tools are detected
+  reload_shell_env
+
   require_yes_or_exit "Before continuing, confirm you have one of these ready: Claude Code, OpenAI Codex, Gemini CLI, or an OpenAI/Claude-compatible API endpoint and API key"
 
   local os
