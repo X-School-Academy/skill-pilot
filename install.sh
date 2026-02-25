@@ -108,18 +108,18 @@ install_build_tools_linux() {
   if command -v apt-get >/dev/null 2>&1; then
     if is_root; then
       apt-get update -qq
-      apt-get install -y -qq build-essential python3 make g++ cmake
+      apt-get install -y -qq build-essential git curl python3 make g++ cmake
     else
       sudo apt-get update -qq
-      sudo apt-get install -y -qq build-essential python3 make g++ cmake
+      sudo apt-get install -y -qq build-essential git curl python3 make g++ cmake
     fi
     return 0
   fi
   if command -v dnf >/dev/null 2>&1; then
     if is_root; then
-      dnf install -y -q gcc gcc-c++ make cmake python3
+      dnf install -y -q gcc gcc-c++ make cmake python3 git curl
     else
-      sudo dnf install -y -q gcc gcc-c++ make cmake python3
+      sudo dnf install -y -q gcc gcc-c++ make cmake python3 git curl
     fi
     return 0
   fi
