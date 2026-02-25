@@ -2,6 +2,7 @@
 set -euo pipefail
 
 # --- Constants ---
+SOMETHING_INSTALLED=0
 BOLD='\033[1m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -26,7 +27,8 @@ cleanup() {
     err "Fix the issue above and re-run: bash install.sh"
   fi
 }
-trap cleanup EXIT INT
+trap cleanup EXIT
+trap 'printf "\n"; warn "Installation cancelled."; exit 130' INT
 
 # --- Usage ---
 usage() {
@@ -166,6 +168,7 @@ install_step() {
 
   require_yes_or_exit "Install now?"
   "$install_fn"
+  SOMETHING_INSTALLED=1
   reload_shell_env
 
   if command -v "$cmd_name" >/dev/null 2>&1; then
@@ -429,6 +432,7 @@ main() {
   else
     require_yes_or_exit "Install latest LTS Node.js with pnpm env use --global lts?"
     pnpm env use --global lts
+    SOMETHING_INSTALLED=1
     reload_shell_env
     if ! command -v node >/dev/null 2>&1; then
       err "Node.js is not available after install."
@@ -445,6 +449,7 @@ main() {
   else
     require_yes_or_exit "Install latest Python with uv python install?"
     uv python install
+    SOMETHING_INSTALLED=1
     reload_shell_env
     if ! command -v python3 >/dev/null 2>&1; then
       err "Python 3 is not available after install."
@@ -465,7 +470,9 @@ main() {
     "playwright-cli" \
     "install_playwright"
 
-  setup_shell_paths
+  if [ "$SOMETHING_INSTALLED" -eq 1 ]; then
+    setup_shell_paths
+  fi
 
   # --- Clone repository ---
   if [ "$skip_clone" = "true" ]; then
@@ -484,10 +491,23 @@ main() {
     return 0
   fi
 
+  local default_dir="$HOME/workspace/skill-pilot"
   info "\n${BOLD}Choose install location${NC}"
-  { read -r -p "Enter installation directory (default: \$HOME/workspace/skill-pilot): " install_base </dev/tty; } 2>/dev/null \
-    || { read -r -p "Enter installation directory (default: \$HOME/workspace/skill-pilot): " install_base || true; }
-  install_base="${install_base:-$HOME/workspace/skill-pilot}"
+  info "Default path: $default_dir"
+  if ask_yes_no "Install to $default_dir?"; then
+    install_base="$default_dir"
+  else
+    local input_fd="/dev/tty"
+    { true </dev/tty; } 2>/dev/null || input_fd="/dev/stdin"
+    if read -r -e -i "$default_dir" -p "Please update the path: " install_base <"$input_fd" 2>/dev/null; then
+      : # readline pre-fill succeeded
+    else
+      printf "Please update the path [%s]: " "$default_dir" >/dev/tty 2>&1 || printf "Please update the path [%s]: " "$default_dir"
+      IFS= read -r install_base <"$input_fd" || true
+    fi
+    install_base="${install_base:-$default_dir}"
+    info "Using: $install_base"
+  fi
 
   # If user entered a directory that isn't already skill-pilot, append it
   local clone_dir="$install_base"
