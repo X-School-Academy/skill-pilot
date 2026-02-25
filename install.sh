@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
 # --- Constants ---
 SOMETHING_INSTALLED=0
@@ -65,18 +64,8 @@ ask_yes_no() {
   done
 }
 
-require_yes_or_exit() {
-  local prompt="$1"
-  if ! ask_yes_no "$prompt"; then
-    warn "Installer stopped by user."
-    exit 1
-  fi
-}
-
 # --- Shell environment refresh ---
 reload_shell_env() {
-  # Prepend known installer directories to PATH (avoid sourcing shell profiles
-  # which can trigger cross-shell side effects).
   export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 
   case "$(uname -s 2>/dev/null || true)" in
@@ -85,14 +74,12 @@ reload_shell_env() {
   esac
   export PATH="$PNPM_HOME:$PATH"
 
-  # pnpm global bin (may differ from PNPM_HOME)
   if command -v pnpm >/dev/null 2>&1; then
     local pnpm_bin
     pnpm_bin="$(pnpm bin -g 2>/dev/null || true)"
     [ -n "$pnpm_bin" ] && export PATH="$pnpm_bin:$PATH"
   fi
 
-  # Homebrew: apply shellenv if installed
   if [ -x /opt/homebrew/bin/brew ]; then
     eval "$(/opt/homebrew/bin/brew shellenv)"
   elif [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
@@ -110,14 +97,14 @@ is_root() { [ "$(id -u)" = "0" ]; }
 require_sudo() {
   if is_root; then return 0; fi
   if ! command -v sudo >/dev/null 2>&1; then
-    err "sudo is required but not found. Please run as root or install sudo."
-    exit 1
+    warn "sudo is required but not found — skipping this step."
+    return 1
   fi
 }
 
 # --- Linux build tools ---
 install_build_tools_linux() {
-  require_sudo
+  require_sudo || return 1
   if command -v apt-get >/dev/null 2>&1; then
     if is_root; then
       apt-get update -qq
@@ -136,27 +123,26 @@ install_build_tools_linux() {
     fi
     return 0
   fi
-  err "No supported package manager found (apt-get or dnf required)."
-  exit 1
+  warn "No supported package manager found (apt-get or dnf required) — skipping build tools."
+  return 1
 }
 
 # --- Package-manager dispatch ---
 pkg_install() {
   local pkg="$1"
   if ! command -v brew >/dev/null 2>&1; then
-    err "Homebrew is required to install '$pkg', but 'brew' was not found."
-    err "Please complete the Homebrew step, then re-run: bash install.sh"
-    exit 1
+    warn "Homebrew not found — cannot install '$pkg'. Skipping."
+    return 1
   fi
   brew install "$pkg"
 }
 
-# --- Step runner (no eval) ---
+# --- Step runner ---
 install_step() {
   local title="$1"
   local why="$2"
-  local cmd_name="$3"          # command to check availability
-  local install_fn="$4"        # function name to call for install
+  local cmd_name="$3"
+  local install_fn="$4"
 
   info "\n${BOLD}${title}${NC}"
   info "$why"
@@ -166,17 +152,22 @@ install_step() {
     return 0
   fi
 
-  require_yes_or_exit "Install now?"
-  "$install_fn"
+  if ! ask_yes_no "Install $title now?"; then
+    warn "Skipping $title."
+    return 0
+  fi
+
+  if ! "$install_fn"; then
+    warn "$title installation failed — continuing without it."
+    return 0
+  fi
   SOMETHING_INSTALLED=1
   reload_shell_env
 
   if command -v "$cmd_name" >/dev/null 2>&1; then
     ok "$title installed and available in current shell."
   else
-    err "$title installation finished, but it is not visible in current shell PATH."
-    err "Open a new terminal and run this installer again."
-    exit 1
+    warn "$title installed but not visible in PATH yet. Open a new terminal if needed."
   fi
 }
 
@@ -209,9 +200,8 @@ install_playwright() {
 
 # --- Version checks ---
 check_node_version() {
-  # Require Node.js >= 18
   if ! command -v node >/dev/null 2>&1; then
-    return 1  # not installed
+    return 1
   fi
   local major
   major="$(node -e 'console.log(process.versions.node.split(".")[0])')"
@@ -223,9 +213,8 @@ check_node_version() {
 }
 
 check_python_version() {
-  # Require Python >= 3.9
   if ! command -v python3 >/dev/null 2>&1; then
-    return 1  # not installed
+    return 1
   fi
   local minor
   minor="$(python3 -c 'import sys; print(sys.version_info.minor)')"
@@ -237,28 +226,43 @@ check_python_version() {
 }
 
 # --- Shell PATH persistence ---
+path_contains() {
+  case ":${PATH}:" in
+    *":$1:"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 setup_shell_paths() {
-  # Determine which rc files to update
   local rc_files=()
   [ -f "$HOME/.bashrc" ] && rc_files+=("$HOME/.bashrc")
   [ -f "$HOME/.zshrc" ]  && rc_files+=("$HOME/.zshrc")
 
+  # Resolve actual PNPM_HOME path
   local pnpm_home
   case "$(uname -s 2>/dev/null || true)" in
-    Darwin) pnpm_home='$HOME/Library/pnpm' ;;
-    *)      pnpm_home='$HOME/.local/share/pnpm' ;;
+    Darwin) pnpm_home="$HOME/Library/pnpm" ;;
+    *)      pnpm_home="$HOME/.local/share/pnpm" ;;
   esac
+  pnpm_home="${PNPM_HOME:-$pnpm_home}"
 
-  local block
-  block="$(cat <<'PATHBLOCK'
+  # Build only the lines that are needed:
+  # include a path only if the directory exists and is not already in PATH
+  local lines=""
+  if [ -d "$HOME/.local/bin" ] && ! path_contains "$HOME/.local/bin"; then
+    lines+='export PATH="$HOME/.local/bin:$PATH"'$'\n'
+  fi
+  if [ -d "$pnpm_home" ] && ! path_contains "$pnpm_home"; then
+    lines+="export PNPM_HOME=\"$pnpm_home\""$'\n'
+    lines+='export PATH="$PNPM_HOME:$PATH"'$'\n'
+  fi
 
-# --- Added by Skill Pilot installer ---
-export PATH="$HOME/.local/bin:$PATH"
-PATHBLOCK
-)"
-  block+="
-export PNPM_HOME=\"${pnpm_home}\"
-export PATH=\"\$PNPM_HOME:\$PATH\""
+  if [ -z "$lines" ]; then
+    ok "All tool paths are already in PATH — no profile update needed."
+    return 0
+  fi
+
+  local block=$'\n# --- Added by Skill Pilot installer ---\n'"$lines"
 
   local updated=0
   local manual_files=()
@@ -317,7 +321,6 @@ setup_branches() {
 
 # --- Main ---
 main() {
-  # Parse flags
   case "${1:-}" in
     -h|--help) usage; exit 0 ;;
   esac
@@ -325,25 +328,24 @@ main() {
   say "${BOLD}Skill Pilot Installer (macOS/Linux)${NC}"
   say ""
 
-  # Load existing tool paths before any checks so already-installed tools are detected
   reload_shell_env
 
-  require_yes_or_exit "Before continuing, confirm you have one of these ready: Claude Code, OpenAI Codex, Gemini CLI, or an OpenAI/Claude-compatible API endpoint and API key"
+  ask_yes_no "Before continuing, confirm you have one of these ready: Claude Code, OpenAI Codex, Gemini CLI, or an OpenAI/Claude-compatible API endpoint and API key" \
+    || warn "Continuing anyway — you can configure an AI agent after installation."
 
   local os
   os="$(uname -s 2>/dev/null || true)"
+  local OS_KIND
   case "$os" in
     Darwin) OS_KIND="mac" ;;
-    Linux) OS_KIND="linux" ;;
+    Linux)  OS_KIND="linux" ;;
     MINGW*|MSYS*|CYGWIN*|Windows_NT)
-      err "Windows is not supported by this script."
-      err "Please install WSL first, then run this installer inside Linux."
-      exit 1
+      warn "Windows is not natively supported. Install WSL and re-run inside Linux for best results."
+      OS_KIND="windows"
       ;;
     *)
-      err "Unsupported OS: $os"
-      err "This installer supports only macOS and Linux."
-      exit 1
+      warn "Unrecognised OS: $os — proceeding anyway, some steps may fail."
+      OS_KIND="unknown"
       ;;
   esac
 
@@ -354,29 +356,30 @@ main() {
     */core/engine/dev_swarm/*) skip_clone="true" ;;
   esac
 
-  # macOS: install Xcode Command Line Tools before Homebrew (provides clang/make/git)
+  # macOS: Xcode Command Line Tools
   if [ "$OS_KIND" = "mac" ]; then
     info "\n${BOLD}Xcode Command Line Tools${NC}"
     info "Xcode CLT provides clang, make, and git — required before installing Homebrew."
     if xcode-select -p >/dev/null 2>&1; then
       ok "Xcode Command Line Tools are already installed."
     else
-      require_yes_or_exit "Install Xcode Command Line Tools now?"
-      xcode-select --install 2>/dev/null || true
-      warn "A system dialog has appeared. Complete the Xcode CLT installation, then press Enter."
-      { read -r -p "Press Enter once Xcode CLT installation is complete..." </dev/tty; } 2>/dev/null \
-        || read -r -p "Press Enter once Xcode CLT installation is complete..."
-      if xcode-select -p >/dev/null 2>&1; then
-        ok "Xcode Command Line Tools installed."
+      if ask_yes_no "Install Xcode Command Line Tools now?"; then
+        xcode-select --install 2>/dev/null || true
+        warn "A system dialog has appeared. Complete the Xcode CLT installation, then press Enter."
+        { read -r -p "Press Enter once Xcode CLT installation is complete..." </dev/tty; } 2>/dev/null \
+          || read -r -p "Press Enter once Xcode CLT installation is complete..."
+        if xcode-select -p >/dev/null 2>&1; then
+          ok "Xcode Command Line Tools installed."
+        else
+          warn "Xcode Command Line Tools not detected yet — continuing anyway."
+        fi
       else
-        err "Xcode Command Line Tools are not ready."
-        err "Complete the dialog and re-run: bash install.sh"
-        exit 1
+        warn "Skipping Xcode Command Line Tools — some steps may fail without them."
       fi
     fi
   fi
 
-  # Linux: install build-essential before Homebrew (required to compile packages)
+  # Linux: build-essential
   if [ "$OS_KIND" = "linux" ]; then
     install_step \
       "Linux build tools (build-essential)" \
@@ -385,25 +388,26 @@ main() {
       "install_build_tools_linux"
   fi
 
-  # Ensure git is available before Homebrew (Homebrew installer requires it)
+  # Git pre-Homebrew check
   info "\n${BOLD}Git (pre-Homebrew check)${NC}"
   info "Git is required by the Homebrew installer."
   if command -v git >/dev/null 2>&1; then
     ok "Git is already available."
   else
     if [ "$OS_KIND" = "linux" ]; then
-      require_yes_or_exit "Install git now via system package manager?"
-      if command -v apt-get >/dev/null 2>&1; then
-        if is_root; then apt-get install -y -qq git; else sudo apt-get install -y -qq git; fi
-      elif command -v dnf >/dev/null 2>&1; then
-        if is_root; then dnf install -y -q git; else sudo dnf install -y -q git; fi
+      if ask_yes_no "Install git now via system package manager?"; then
+        if command -v apt-get >/dev/null 2>&1; then
+          if is_root; then apt-get install -y -qq git; else sudo apt-get install -y -qq git; fi
+        elif command -v dnf >/dev/null 2>&1; then
+          if is_root; then dnf install -y -q git; else sudo dnf install -y -q git; fi
+        fi
       fi
     fi
-    if ! command -v git >/dev/null 2>&1; then
-      err "git is not available. Please install git and re-run: bash install.sh"
-      exit 1
+    if command -v git >/dev/null 2>&1; then
+      ok "Git installed."
+    else
+      warn "git is not available — Homebrew install may fail."
     fi
-    ok "Git installed."
   fi
 
   install_step \
@@ -424,38 +428,50 @@ main() {
     "pnpm" \
     "install_pnpm"
 
-  # --- Node.js (with version check) ---
+  # Node.js
   info "\n${BOLD}Node.js${NC}"
   info "Node.js v18+ is required to run JavaScript tooling used in Skill Pilot."
   if check_node_version; then
     ok "Node.js is already available and meets version requirements."
   else
-    require_yes_or_exit "Install latest LTS Node.js with pnpm env use --global lts?"
-    pnpm env use --global lts
-    SOMETHING_INSTALLED=1
-    reload_shell_env
-    if ! command -v node >/dev/null 2>&1; then
-      err "Node.js is not available after install."
-      exit 1
+    if ask_yes_no "Install latest LTS Node.js with pnpm env use --global lts?"; then
+      if pnpm env use --global lts; then
+        SOMETHING_INSTALLED=1
+        reload_shell_env
+        if command -v node >/dev/null 2>&1; then
+          ok "Node.js installed and available."
+        else
+          warn "Node.js installed but not visible in PATH yet — open a new terminal if needed."
+        fi
+      else
+        warn "Node.js installation failed — continuing without it."
+      fi
+    else
+      warn "Skipping Node.js."
     fi
-    ok "Node.js installed and available."
   fi
 
-  # --- Python 3 (with version check) ---
+  # Python 3
   info "\n${BOLD}Python 3${NC}"
   info "Python 3.9+ is required for engine and automation tasks."
   if check_python_version; then
     ok "Python 3 is already available and meets version requirements."
   else
-    require_yes_or_exit "Install latest Python with uv python install?"
-    uv python install
-    SOMETHING_INSTALLED=1
-    reload_shell_env
-    if ! command -v python3 >/dev/null 2>&1; then
-      err "Python 3 is not available after install."
-      exit 1
+    if ask_yes_no "Install latest Python with uv python install?"; then
+      if uv python install; then
+        SOMETHING_INSTALLED=1
+        reload_shell_env
+        if command -v python3 >/dev/null 2>&1; then
+          ok "Python 3 installed and available."
+        else
+          warn "Python 3 installed but not visible in PATH yet — open a new terminal if needed."
+        fi
+      else
+        warn "Python 3 installation failed — continuing without it."
+      fi
+    else
+      warn "Skipping Python 3."
     fi
-    ok "Python 3 installed and available."
   fi
 
   install_step \
@@ -474,7 +490,7 @@ main() {
     setup_shell_paths
   fi
 
-  # --- Clone repository ---
+  # Clone repository
   if [ "$skip_clone" = "true" ]; then
     warn "Detected installer path under 'core/engine/dev_swarm'; skipping repository clone step."
     ok "Installation bootstrap completed."
@@ -494,6 +510,7 @@ main() {
   local default_dir="$HOME/workspace/skill-pilot"
   info "\n${BOLD}Choose install location${NC}"
   info "Default path: $default_dir"
+  local install_base
   if ask_yes_no "Install to $default_dir?"; then
     install_base="$default_dir"
   else
@@ -509,31 +526,42 @@ main() {
     info "Using: $install_base"
   fi
 
-  # If user entered a directory that isn't already skill-pilot, append it
   local clone_dir="$install_base"
-
   local parent_dir
   parent_dir="$(dirname "$clone_dir")"
 
   if [ ! -d "$parent_dir" ]; then
-    require_yes_or_exit "Directory '$parent_dir' does not exist. Create it?"
-    mkdir -p "$parent_dir"
+    if ask_yes_no "Directory '$parent_dir' does not exist. Create it?"; then
+      mkdir -p "$parent_dir" || { warn "Could not create $parent_dir — skipping clone."; return 0; }
+    else
+      warn "Skipping repository clone."
+      return 0
+    fi
   fi
 
   if [ ! -w "$parent_dir" ]; then
-    err "Directory is not writable: $parent_dir"
-    exit 1
+    warn "Directory is not writable: $parent_dir — skipping clone."
+    return 0
   fi
 
   info "\nRepository setup"
   info "Cloning Skill Pilot into: $clone_dir"
-  require_yes_or_exit "Proceed with git clone?"
+  if ! ask_yes_no "Proceed with git clone?"; then
+    warn "Skipping repository clone."
+    return 0
+  fi
 
   if [ -d "$clone_dir/.git" ]; then
     warn "Repository already exists at $clone_dir"
-    require_yes_or_exit "Reuse existing repository and continue?"
+    if ! ask_yes_no "Reuse existing repository and continue?"; then
+      warn "Skipping repository setup."
+      return 0
+    fi
   else
-    git clone --depth 1 https://github.com/x-school-academy/skill-pilot "$clone_dir"
+    if ! git clone --depth 1 https://github.com/x-school-academy/skill-pilot "$clone_dir"; then
+      warn "git clone failed — skipping remaining setup."
+      return 0
+    fi
   fi
 
   cd "$clone_dir"
