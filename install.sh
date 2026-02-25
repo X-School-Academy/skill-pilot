@@ -176,10 +176,12 @@ install_curl()  { pkg_install curl; }
 install_tmux()  { pkg_install tmux; }
 
 install_uv() {
+  export SHELL="${SHELL:-bash}"
   $CURL https://astral.sh/uv/install.sh | sh
 }
 
 install_pnpm() {
+  export SHELL="${SHELL:-bash}"
   $CURL https://get.pnpm.io/install.sh | sh
 }
 
