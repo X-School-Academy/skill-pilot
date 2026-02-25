@@ -258,15 +258,31 @@ export PNPM_HOME=\"${pnpm_home}\"
 export PATH=\"\$PNPM_HOME:\$PATH\""
 
   local updated=0
+  local manual_files=()
   for rc in "${rc_files[@]}"; do
     if grep -q "Added by Skill Pilot installer" "$rc" 2>/dev/null; then
       ok "PATH entries already present in $rc."
+    elif [ ! -w "$rc" ]; then
+      warn "Cannot write to $rc (permission denied) — skipping."
+      manual_files+=("$rc")
     else
       printf '%s\n' "$block" >> "$rc"
       ok "Added tool PATH entries to $rc."
       updated=1
     fi
   done
+
+  if [ "${#manual_files[@]}" -gt 0 ]; then
+    warn "\nCould not update the following shell config file(s) automatically:"
+    for rc in "${manual_files[@]}"; do
+      warn "  $rc"
+    done
+    warn "\nTo set up your PATH manually, add the following lines to your shell config:"
+    warn "----"
+    warn "$block"
+    warn "----"
+    warn "Then run:  source <your-rc-file>  or open a new terminal."
+  fi
 
   if [ "$updated" -eq 1 ]; then
     info "Run 'source ~/.bashrc' (or open a new terminal) to apply PATH changes."
