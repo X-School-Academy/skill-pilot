@@ -50,7 +50,7 @@ ask_yes_no() {
   local prompt="$1"
   local answer
   while true; do
-    read -r -p "$prompt [y/N]: " answer
+    read -r -p "$prompt [y/N]: " answer </dev/tty
     case "${answer:-}" in
       [Yy]|[Yy][Ee][Ss]) return 0 ;;
       [Nn]|[Nn][Oo]|"") return 1 ;;
@@ -331,7 +331,7 @@ main() {
   fi
 
   info "\n${BOLD}Choose install location${NC}"
-  read -r -p "Enter installation directory (default: \$HOME/workspace/skill-pilot): " install_base
+  read -r -p "Enter installation directory (default: \$HOME/workspace/skill-pilot): " install_base </dev/tty
   install_base="${install_base:-$HOME/workspace/skill-pilot}"
 
   # If user entered a directory that isn't already skill-pilot, append it
