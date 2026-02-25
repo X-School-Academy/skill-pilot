@@ -49,8 +49,12 @@ EOF
 ask_yes_no() {
   local prompt="$1"
   local answer
+  local input_fd="/dev/tty"
+  if ! { true </dev/tty; } 2>/dev/null; then
+    input_fd="/dev/stdin"
+  fi
   while true; do
-    read -r -p "$prompt [Y/n]: " answer </dev/tty
+    read -r -p "$prompt [Y/n]: " answer <"$input_fd"
     case "${answer:-}" in
       [Yy]|[Yy][Ee][Ss]|"") return 0 ;;
       [Nn]|[Nn][Oo]) return 1 ;;
@@ -229,6 +233,46 @@ check_python_version() {
   return 0
 }
 
+# --- Shell PATH persistence ---
+setup_shell_paths() {
+  # Determine which rc files to update
+  local rc_files=()
+  [ -f "$HOME/.bashrc" ] && rc_files+=("$HOME/.bashrc")
+  [ -f "$HOME/.zshrc" ]  && rc_files+=("$HOME/.zshrc")
+
+  local pnpm_home
+  case "$(uname -s 2>/dev/null || true)" in
+    Darwin) pnpm_home='$HOME/Library/pnpm' ;;
+    *)      pnpm_home='$HOME/.local/share/pnpm' ;;
+  esac
+
+  local block
+  block="$(cat <<'PATHBLOCK'
+
+# --- Added by Skill Pilot installer ---
+export PATH="$HOME/.local/bin:$PATH"
+PATHBLOCK
+)"
+  block+="
+export PNPM_HOME=\"${pnpm_home}\"
+export PATH=\"\$PNPM_HOME:\$PATH\""
+
+  local updated=0
+  for rc in "${rc_files[@]}"; do
+    if grep -q "Added by Skill Pilot installer" "$rc" 2>/dev/null; then
+      ok "PATH entries already present in $rc."
+    else
+      printf '%s\n' "$block" >> "$rc"
+      ok "Added tool PATH entries to $rc."
+      updated=1
+    fi
+  done
+
+  if [ "$updated" -eq 1 ]; then
+    info "Run 'source ~/.bashrc' (or open a new terminal) to apply PATH changes."
+  fi
+}
+
 # --- Git branch setup ---
 setup_branches() {
   info "\nSetting up git branches..."
@@ -301,7 +345,8 @@ main() {
       require_yes_or_exit "Install Xcode Command Line Tools now?"
       xcode-select --install 2>/dev/null || true
       warn "A system dialog has appeared. Complete the Xcode CLT installation, then press Enter."
-      read -r -p "Press Enter once Xcode CLT installation is complete..." </dev/tty
+      { read -r -p "Press Enter once Xcode CLT installation is complete..." </dev/tty; } 2>/dev/null \
+        || read -r -p "Press Enter once Xcode CLT installation is complete..."
       if xcode-select -p >/dev/null 2>&1; then
         ok "Xcode Command Line Tools installed."
       else
@@ -401,8 +446,10 @@ main() {
   install_step \
     "Playwright CLI" \
     "Playwright CLI enables browser automation used by project skills and testing." \
-    "playwright" \
+    "playwright-cli" \
     "install_playwright"
+
+  setup_shell_paths
 
   # --- Clone repository ---
   if [ "$skip_clone" = "true" ]; then
@@ -422,7 +469,8 @@ main() {
   fi
 
   info "\n${BOLD}Choose install location${NC}"
-  read -r -p "Enter installation directory (default: \$HOME/workspace/skill-pilot): " install_base </dev/tty
+  { read -r -p "Enter installation directory (default: \$HOME/workspace/skill-pilot): " install_base </dev/tty; } 2>/dev/null \
+    || { read -r -p "Enter installation directory (default: \$HOME/workspace/skill-pilot): " install_base || true; }
   install_base="${install_base:-$HOME/workspace/skill-pilot}"
 
   # If user entered a directory that isn't already skill-pilot, append it
