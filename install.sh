@@ -50,10 +50,10 @@ ask_yes_no() {
   local prompt="$1"
   local answer
   while true; do
-    read -r -p "$prompt [y/N]: " answer </dev/tty
+    read -r -p "$prompt [Y/n]: " answer </dev/tty
     case "${answer:-}" in
-      [Yy]|[Yy][Ee][Ss]) return 0 ;;
-      [Nn]|[Nn][Oo]|"") return 1 ;;
+      [Yy]|[Yy][Ee][Ss]|"") return 0 ;;
+      [Nn]|[Nn][Oo]) return 1 ;;
       *) warn "Please answer y or n." ;;
     esac
   done
@@ -303,6 +303,27 @@ main() {
       "build-essential (gcc, make, cmake) is required before installing Homebrew on Linux." \
       "make" \
       "install_build_tools_linux"
+  fi
+
+  # Ensure git is available before Homebrew (Homebrew installer requires it)
+  info "\n${BOLD}Git (pre-Homebrew check)${NC}"
+  info "Git is required by the Homebrew installer."
+  if command -v git >/dev/null 2>&1; then
+    ok "Git is already available."
+  else
+    if [ "$OS_KIND" = "linux" ]; then
+      require_yes_or_exit "Install git now via system package manager?"
+      if command -v apt-get >/dev/null 2>&1; then
+        if is_root; then apt-get install -y -qq git; else sudo apt-get install -y -qq git; fi
+      elif command -v dnf >/dev/null 2>&1; then
+        if is_root; then dnf install -y -q git; else sudo dnf install -y -q git; fi
+      fi
+    fi
+    if ! command -v git >/dev/null 2>&1; then
+      err "git is not available. Please install git and re-run: bash install.sh"
+      exit 1
+    fi
+    ok "Git installed."
   fi
 
   install_step \
