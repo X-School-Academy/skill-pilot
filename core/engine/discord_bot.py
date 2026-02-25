@@ -90,7 +90,7 @@ async def on_message(message: discord.Message) -> None:
         await message.channel.send(chunk)
 
 
-async def send_dm_to_all(text: str) -> int:
+async def send_dm_to_all(text: str, image_path: str | None = None) -> int:
     sent = 0
     for guild in bot.guilds:
         for member in guild.members:
@@ -98,8 +98,10 @@ async def send_dm_to_all(text: str) -> int:
                 continue
             try:
                 dm_channel = await member.create_dm()
-                for chunk in _split_message(text):
-                    await dm_channel.send(chunk)
+                chunks = _split_message(text)
+                for i, chunk in enumerate(chunks):
+                    file = discord.File(image_path) if (image_path and i == 0) else None
+                    await dm_channel.send(chunk, file=file)
                 sent += 1
             except discord.Forbidden:
                 logger.warning("Cannot DM member %s (DMs disabled)", member)

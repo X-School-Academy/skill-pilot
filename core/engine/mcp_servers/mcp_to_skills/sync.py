@@ -5,6 +5,7 @@ import argparse
 from collections import deque
 import json
 import json5
+import logging
 import os
 import queue
 import re
@@ -20,6 +21,8 @@ from pathlib import Path
 from typing import Any
 import yaml
 from safe_dotenv import load_env_with_safeguard, safe_env
+
+logger = logging.getLogger(__name__)
 
 class MCPError(RuntimeError):
     pass
@@ -59,12 +62,20 @@ class MCPClient:
 class StdioClient(MCPClient):
     _response_timeout_seconds = 30
 
-    def __init__(self, command: str, args: list[str], env: dict[str, str], workdir: str | None = None) -> None:
+    def __init__(
+        self,
+        command: str,
+        args: list[str],
+        env: dict[str, str],
+        workdir: str | None = None,
+        server_id: str = "unknown",
+    ) -> None:
         self._next_id = 1
         self._lock = threading.Lock()
         self._stdout_queue: queue.Queue[str] = queue.Queue()
         self._stdout_closed = threading.Event()
         self._stderr_tail: deque[str] = deque(maxlen=20)
+        self._server_id = server_id
         merged_env = safe_env(extra=env)
         self._process = subprocess.Popen(
             [command, *args],
@@ -89,6 +100,7 @@ class StdioClient(MCPClient):
             stripped = line.strip()
             if stripped:
                 self._stderr_tail.append(stripped)
+                logger.info("[mcp.stdio.%s] %s", self._server_id, stripped)
 
     def _stderr_context(self) -> str:
         if not self._stderr_tail:
@@ -113,7 +125,8 @@ class StdioClient(MCPClient):
                     "clientInfo": {"name": "skill-pilot-sync", "version": "0.1"},
                 },
             )
-            self._send_notification("initialized", {})
+            # MCP notification method must include full notifications path.
+            self._send_notification("notifications/initialized", {})
         except Exception:
             pass
 
@@ -391,7 +404,7 @@ def create_client(config: ServerConfig) -> MCPClient:
     if transport == "stdio":
         if not config.command:
             raise MCPError(f"Missing command for stdio server {config.id}")
-        return StdioClient(config.command, config.args, config.env, config.workdir)
+        return StdioClient(config.command, config.args, config.env, config.workdir, server_id=config.id)
     if transport in {"http", "streamable-http"}:
         if not config.url:
             raise MCPError(f"Missing url for server {config.id}")

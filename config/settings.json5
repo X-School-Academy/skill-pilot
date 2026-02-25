@@ -28,9 +28,14 @@
       server_url: "ws://127.0.0.1:8008",
     },
 
-    // Camera Hub – Haicam P2P WebRTC camera server
-    camera: {
-      server_url: "ws://127.0.0.1:8081",
-    },
+  },
+
+  // ─── TURN server settings ────────────────────────────────────────────────────
+  // Shared by the cameras MCP server and live-avatar.
+  // Override with env vars: TURN_SERVER_URLS, TURN_SERVER_USERNAME, TURN_SERVER_PASSWORD
+  turn: {
+    urls: "",       // comma-separated, e.g. "turn:example.com:3478,turns:example.com:5349"
+    username: "",
+    password: "",
   },
 }

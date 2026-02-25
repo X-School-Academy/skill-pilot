@@ -17,6 +17,7 @@ from socket_service import wrap_app_with_socketio
 _AUTH_COOKIE_NAME = "auth_token"
 _AUTH_BYPASS_PATHS = {
     "/api/auth/session",
+    "/api/internal/discord/notify",  # localhost-only; handler enforces IP check
 }
 
 

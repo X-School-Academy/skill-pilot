@@ -1109,6 +1109,25 @@ async def config_mcp_servers_save(request: Request):
         _write_mcp_config(data)
     except OSError as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})
+
+    # Auto-install requirements.txt if enabling a stdio server that has one
+    enabling = disabled is False or (disabled is None and not entry.get("disabled", False))
+    if enabling and server_type == "stdio":
+        req_path = _REPO_ROOT / "core" / "engine" / "mcp_servers" / name / "requirements.txt"
+        if req_path.exists():
+            engine_dir = str(_REPO_ROOT / "core" / "engine")
+            req_rel = str(req_path.relative_to(_REPO_ROOT / "core" / "engine"))
+            try:
+                subprocess.run(
+                    ["uv", "add", "-r", req_rel],
+                    cwd=engine_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+            except Exception as exc:
+                logger.warning("Failed to install requirements for %s: %s", name, exc)
+
     return {"status": "ok", "name": name}
 
 
@@ -2194,6 +2213,312 @@ def live_avatar_config(request: Request):
         "turn_server_username": get_turn_server_username(),
         "turn_server_password": get_turn_server_password(),
     })
+
+
+@router.get("/api/cameras/config")
+def cameras_config(request: Request):
+    if not _is_authorized_request(request):
+        return _auth_required_response()
+    return JSONResponse({
+        "turn_server_urls": get_turn_server_urls(),
+        "turn_server_username": get_turn_server_username(),
+        "turn_server_password": get_turn_server_password(),
+    })
+
+
+# ── Cameras MCP client (lazy singleton) ──────────────────────────────────────
+_cameras_mcp_client = None
+_cameras_mcp_lock = asyncio.Lock()
+_cameras_signal_tool_lock = asyncio.Lock()
+
+
+async def _get_cameras_client():
+    """Return a live StdioClient for the cameras MCP server, creating it on first call."""
+    global _cameras_mcp_client
+    async with _cameras_mcp_lock:
+        if _cameras_mcp_client is not None:
+            # Check if the subprocess is still alive
+            proc = getattr(_cameras_mcp_client, "_process", None)
+            if proc is not None and proc.poll() is None:
+                return _cameras_mcp_client
+        # (Re)create the client
+        from mcp_servers.mcp_to_skills.sync import create_client, load_mcp_configs, is_server_enabled
+        configs, _ = await asyncio.to_thread(load_mcp_configs, _MCP_CONFIG_PATH)
+        cam_cfg = configs.get("cameras")
+        if cam_cfg is None:
+            raise RuntimeError("cameras MCP server not found in config/mcp.json5")
+        if not is_server_enabled(cam_cfg):
+            raise RuntimeError("cameras MCP server is disabled — enable it in MCP settings first")
+        _cameras_mcp_client = await asyncio.to_thread(create_client, cam_cfg)
+        return _cameras_mcp_client
+
+
+async def _reset_cameras_client() -> None:
+    global _cameras_mcp_client
+    async with _cameras_mcp_lock:
+        client = _cameras_mcp_client
+        _cameras_mcp_client = None
+    if client is not None:
+        try:
+            await asyncio.to_thread(client.close)
+        except Exception:
+            pass
+
+
+async def _call_cameras_tool(
+    tool_name: str,
+    arguments: dict[str, Any],
+    *,
+    timeout_seconds: float = 20.0,
+    retry_timeouts: tuple[float, float] | None = None,
+) -> Any:
+    """Call a cameras MCP tool with timeout and one automatic client-reset retry."""
+    async with _cameras_signal_tool_lock:
+        last_exc: Exception | None = None
+        for _attempt in (1, 2):
+            current_timeout = (
+                retry_timeouts[_attempt - 1]
+                if retry_timeouts is not None
+                else timeout_seconds
+            )
+            started = time.monotonic()
+            try:
+                client = await _get_cameras_client()
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        client.request,
+                        "tools/call",
+                        {"name": tool_name, "arguments": arguments},
+                    ),
+                    timeout=current_timeout,
+                )
+                elapsed_ms = int((time.monotonic() - started) * 1000)
+                logger.info(
+                    "[cameras.signal] tool=%s attempt=%d ok elapsed_ms=%d timeout_ms=%d",
+                    tool_name,
+                    _attempt,
+                    elapsed_ms,
+                    int(current_timeout * 1000),
+                )
+                return result
+            except Exception as exc:
+                last_exc = exc
+                elapsed_ms = int((time.monotonic() - started) * 1000)
+                logger.warning(
+                    "[cameras.signal] tool=%s attempt=%d failed elapsed_ms=%d timeout_ms=%d error=%s",
+                    tool_name,
+                    _attempt,
+                    elapsed_ms,
+                    int(current_timeout * 1000),
+                    exc,
+                )
+                await _reset_cameras_client()
+        if last_exc is None:
+            raise RuntimeError("Unknown cameras MCP call error")
+        raise last_exc
+
+
+@router.post("/api/cameras/signal")
+async def cameras_signal(request: Request):
+    if not _is_authorized_request(request):
+        return _auth_required_response()
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+
+    signal_type = body.get("type", "")
+    req_started = time.monotonic()
+    logger.info("[cameras.signal] recv type=%s", signal_type)
+    try:
+        client = await _get_cameras_client()
+    except RuntimeError as exc:
+        return JSONResponse(status_code=503, content={"error": str(exc)})
+
+    if signal_type == "offer":
+        def _normalize_sdp_answer(payload: Any) -> dict[str, Any] | Any:
+            if not isinstance(payload, dict):
+                return payload
+            # Some MCP tool wrappers return {"result":"{...json...}"} (or nested dict).
+            # Unwrap that shape first so WebUI always receives top-level sdp/type.
+            if "result" in payload and ("sdp" not in payload and "type" not in payload and "sdpType" not in payload):
+                result_payload = payload.get("result")
+                if isinstance(result_payload, str):
+                    try:
+                        decoded = json.loads(result_payload)
+                        if isinstance(decoded, dict):
+                            payload = decoded
+                    except json.JSONDecodeError:
+                        pass
+                elif isinstance(result_payload, dict):
+                    payload = result_payload
+            answer_type = payload.get("type")
+            if not isinstance(answer_type, str) or not answer_type:
+                if isinstance(payload.get("sdpType"), str) and payload.get("sdpType"):
+                    payload["type"] = payload["sdpType"]
+                elif isinstance(payload.get("sdp_type"), str) and payload.get("sdp_type"):
+                    payload["type"] = payload["sdp_type"]
+            if isinstance(payload.get("type"), str) and payload.get("type") and "sdpType" not in payload:
+                payload["sdpType"] = payload["type"]
+            return payload
+
+        sdp = body.get("sdp", "")
+        sdp_type = body.get("sdpType", "offer")
+        is_ice_restart = bool(body.get("iceRestart", False))
+        candidates = body.get("candidates", [])
+        if not isinstance(candidates, list):
+            candidates = []
+        if not sdp:
+            return JSONResponse(status_code=400, content={"error": "sdp is required"})
+        try:
+            result_raw = await _call_cameras_tool(
+                "webrtc_offer",
+                {
+                    "sdp": sdp,
+                    "sdp_type": sdp_type,
+                    "candidates": candidates,
+                },
+                timeout_seconds=6.0,
+                retry_timeouts=(2.5, 6.0) if is_ice_restart else None,
+            )
+        except Exception as exc:
+            logger.warning("[cameras.signal] offer failed error=%s", exc)
+            return JSONResponse(status_code=502, content={"error": f"cameras MCP webrtc_offer failed: {exc}"})
+        # Accept both structuredContent and text content from MCP responses.
+        if not isinstance(result_raw, dict):
+            return JSONResponse(status_code=502, content={"error": "Invalid cameras MCP response"})
+        if isinstance(result_raw.get("structuredContent"), dict):
+            return JSONResponse(_normalize_sdp_answer(result_raw["structuredContent"]))
+        if isinstance(result_raw.get("sdp"), str) and isinstance(result_raw.get("type"), str):
+            return JSONResponse({"sdp": result_raw["sdp"], "type": result_raw["type"]})
+
+        content = result_raw.get("content")
+        text = ""
+        if isinstance(content, list):
+            for item in content:
+                if isinstance(item, dict):
+                    candidate = item.get("text")
+                    if isinstance(candidate, str) and candidate.strip():
+                        text = candidate
+                        break
+        if bool(result_raw.get("isError")):
+            detail = text or "Unknown cameras MCP tool error"
+            return JSONResponse(status_code=502, content={"error": detail})
+        if not text:
+            return JSONResponse(
+                status_code=502,
+                content={"error": "Empty cameras MCP response for webrtc_offer"},
+            )
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return JSONResponse(
+                status_code=502,
+                content={"error": "Invalid JSON from cameras MCP webrtc_offer", "raw": text[:300]},
+            )
+        if not isinstance(parsed, dict):
+            return JSONResponse(status_code=502, content={"error": "Unexpected webrtc_offer response shape"})
+        normalized = _normalize_sdp_answer(parsed)
+        elapsed_ms = int((time.monotonic() - req_started) * 1000)
+        cand_count = len(normalized.get("candidates", [])) if isinstance(normalized, dict) and isinstance(normalized.get("candidates"), list) else 0
+        logger.info("[cameras.signal] offer ok elapsed_ms=%d answer_candidates=%d", elapsed_ms, cand_count)
+        return JSONResponse(normalized)
+
+    elif signal_type == "ice_candidate":
+        candidate = body.get("candidate", {})
+        if not candidate:
+            return JSONResponse(status_code=400, content={"error": "candidate is required"})
+        try:
+            ice_result = await _call_cameras_tool(
+                "webrtc_ice_candidate",
+                {
+                    "candidate": candidate.get("candidate", ""),
+                    "sdp_mid": candidate.get("sdpMid", ""),
+                    "sdp_mline_index": int(candidate.get("sdpMLineIndex", 0)),
+                },
+                timeout_seconds=4.0,
+            )
+        except Exception as exc:
+            logger.warning("[cameras.signal] ice_candidate failed error=%s", exc)
+            return JSONResponse(status_code=502, content={"error": f"cameras MCP webrtc_ice_candidate failed: {exc}"})
+        if isinstance(ice_result, dict) and bool(ice_result.get("isError")):
+            content = ice_result.get("content")
+            detail = "Unknown cameras MCP tool error"
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict):
+                        text = item.get("text")
+                        if isinstance(text, str) and text.strip():
+                            detail = text
+                            break
+            return JSONResponse(status_code=502, content={"error": detail})
+        elapsed_ms = int((time.monotonic() - req_started) * 1000)
+        logger.info("[cameras.signal] ice_candidate ok elapsed_ms=%d", elapsed_ms)
+        return JSONResponse({"status": "ok"})
+
+    else:
+        return JSONResponse(status_code=400, content={"error": f"Unknown signal type: {signal_type}"})
+
+
+@router.post("/api/webui/log")
+async def webui_log(request: Request):
+    if not _is_authorized_request(request):
+        return _auth_required_response()
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+    if not isinstance(payload, dict):
+        return JSONResponse(status_code=400, content={"error": "payload must be an object"})
+
+    tag = str(payload.get("tag") or "webui").replace("\n", " ").replace("\r", " ").strip()
+    level = str(payload.get("level") or "info").lower()
+    message = str(payload.get("message") or "").replace("\n", " ").replace("\r", " ").strip()
+    data = payload.get("data")
+
+    if not message:
+        return JSONResponse(status_code=400, content={"error": "message is required"})
+
+    line = f"[{tag}] {message}"
+    if data is not None:
+        line = f"{line} data={data!r}"
+
+    if level in {"error"}:
+        logger.error(line)
+    elif level in {"warn", "warning"}:
+        logger.warning(line)
+    elif level in {"debug"}:
+        logger.debug(line)
+    else:
+        logger.info(line)
+    return JSONResponse({"status": "ok"})
+
+
+@router.post("/api/internal/discord/notify")
+async def internal_discord_notify(request: Request):
+    """Internal endpoint for cameras MCP server to send Discord DMs with detection images."""
+    # Only allow requests from localhost
+    client_host = request.client.host if request.client else ""
+    if client_host not in ("127.0.0.1", "::1", "localhost"):
+        return JSONResponse(status_code=403, content={"error": "Forbidden"})
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+    message = str(body.get("message", ""))
+    image_path = str(body.get("image_path", ""))
+    if not message:
+        return JSONResponse(status_code=400, content={"error": "message is required"})
+    try:
+        from discord_bot import bot, send_dm_to_all
+        if bot.is_ready():
+            sent = await send_dm_to_all(message, image_path=image_path or None)
+            return JSONResponse({"status": "ok", "sent": sent})
+        else:
+            return JSONResponse({"status": "skipped", "reason": "Discord bot not ready"})
+    except Exception as exc:
+        logger.warning("Discord notify error: %s", exc)
+        return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
 @router.post("/api/discord/token")

@@ -69,15 +69,15 @@ def get_live_avatar_server_url() -> str:
 
 
 def get_turn_server_urls() -> str:
-    return _env_or_config("TURN_SERVER_URLS", "")
+    return _env_or_config("TURN_SERVER_URLS", _read_service_setting("turn", "urls"))
 
 
 def get_turn_server_username() -> str:
-    return _env_or_config("TURN_SERVER_USERNAME", "")
+    return _env_or_config("TURN_SERVER_USERNAME", _read_service_setting("turn", "username"))
 
 
 def get_turn_server_password() -> str:
-    return _env_or_config("TURN_SERVER_PASSWORD", "")
+    return _env_or_config("TURN_SERVER_PASSWORD", _read_service_setting("turn", "password"))
 
 
 def get_discord_bot_token() -> str:

@@ -1,87 +1,89 @@
 {
-  "mcpServers": {
-    "terminal": {
-      "system": true,
-      "command": "uv",
-      "args": [
+  mcpServers: {
+    terminal: {
+      system: true,
+      command: "uv",
+      args: [
         "--directory",
         "core/engine",
         "run",
-        "mcp_servers/terminal/main.py"
-      ]
-    },
-    "media": {
-      "system": false,
-      "command": "uv",
-      "args": [
-        "--directory",
-        "core/engine",
-        "run",
-        "mcp_servers/media/main.py"
+        "mcp_servers/terminal/main.py",
       ],
-      "env": {
-        // Address of the ComfyUI server (e.g. http://localhost:8188)
-        "COMFYUI_SERVER_ADDRESS": "http://localhost:8188",
-        // ComfyUI installation root path on the remote GPU worker
-        "COMFYUI_INSTALL_PATH": "/opt/comfyui",
-        // Path to the speech synthesis helper script on ComfyUI server
-        "GPU_WORKER_TTS_CREATOR": "/tmp/tts_creator.py",
-        // Path to the singing voice helper script on ComfyUI server
-        "GPU_WORKER_SONG_CREATOR": "/tmp/song_creator.py",
-        // Path to the local vision/LLM helper script on ComfyUI server
-        "GPU_WORKER_LLM_VISION_INFER": "/tmp/llm_vision_infer.py",
-        // Path to the Whisper audio transcription script on ComfyUI server
-        "GPU_WORKER_WHISPER_CLI": "/tmp/whisper_cli.py",
-        // Path to the MuseTalk lip-sync script on ComfyUI server
-        "GPU_WORKER_MUSETALK_CLI": "/tmp/musetalk_cli.py",
-        // Path to the Demucs vocal extraction script on ComfyUI server
-        "GPU_WORKER_DEMUCS_CLI": "/tmp/demucs_cli.py",
-        // Optional: override the max audio duration (seconds) for MuseTalk lip-sync (default: 7200)
-        "GPU_WORKER_MUSETALK_MAX_AUDIO_SECONDS": 7200
-      }
+    },
+    media: {
+      system: true,
+      command: "uv",
+      args: [
+        "--directory",
+        "core/engine",
+        "run",
+        "mcp_servers/media/main.py",
+      ],
+      env: {
+        COMFYUI_SERVER_ADDRESS: "http://localhost:8188",
+        COMFYUI_INSTALL_PATH: "/opt/comfyui",
+        GPU_WORKER_TTS_CREATOR: "/tmp/tts_creator.py",
+        GPU_WORKER_SONG_CREATOR: "/tmp/song_creator.py",
+        GPU_WORKER_LLM_VISION_INFER: "/tmp/llm_vision_infer.py",
+        GPU_WORKER_WHISPER_CLI: "/tmp/whisper_cli.py",
+        GPU_WORKER_MUSETALK_CLI: "/tmp/musetalk_cli.py",
+        GPU_WORKER_DEMUCS_CLI: "/tmp/demucs_cli.py",
+        GPU_WORKER_MUSETALK_MAX_AUDIO_SECONDS: 7200,
+      },
     },
     "live-tts": {
-      "system": false,
-      "command": "uv",
-      "args": [
+      system: true,
+      command: "uv",
+      args: [
         "--directory",
         "core/engine",
         "run",
-        "mcp_servers/live_tts.py"
-      ]
-    },
-    "dart": {
-      "command": "dart",
-      "args": [
-        "mcp-server"
+        "mcp_servers/live_tts.py",
       ],
-      "disabled": false
     },
-    "context7": {
-      "type": "http",
-      "url": "https://mcp.context7.com/mcp",
-      "disabled": false
+    cameras: {
+      system: true,
+      command: "uv",
+      args: [
+        "--directory",
+        "core/engine",
+        "run",
+        "mcp_servers/cameras/main.py",
+      ],
+      disabled: false,
+    },
+    dart: {
+      command: "dart",
+      args: [
+        "mcp-server",
+      ],
+      disabled: false,
+    },
+    context7: {
+      type: "http",
+      url: "https://mcp.context7.com/mcp",
+      disabled: false,
     },
     "aws-api": {
-      "command": "uvx",
-      "args": [
-        "awslabs.aws-api-mcp-server@latest"
+      command: "uvx",
+      args: [
+        "awslabs.aws-api-mcp-server@latest",
       ],
-      "env": {
-        "AWS_ACCESS_KEY_ID": "${AWS_ACCESS_KEY_ID}",
-        "AWS_SECRET_ACCESS_KEY": "${AWS_SECRET_ACCESS_KEY}",
-        "AWS_REGION": "${AWS_REGION}"
+      env: {
+        AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}",
+        AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}",
+        AWS_REGION: "${AWS_REGION}",
       },
-      "disabled": true
+      disabled: true,
     },
-    "github": {
-      "type": "http",
-      "url": "https://api.githubcopilot.com/mcp/",
-      "headers": {
-        "Authorization": "Bearer ${GITHUB_MCP_PAT}",
-        "X-MCP-Toolsets": "actions"
+    github: {
+      type: "http",
+      url: "https://api.githubcopilot.com/mcp/",
+      headers: {
+        Authorization: "Bearer ${GITHUB_MCP_PAT}",
+        "X-MCP-Toolsets": "actions",
       },
-      "disabled": true
-    }
-  }
+      disabled: true,
+    },
+  },
 }

@@ -70,8 +70,34 @@ AUTH_TOKEN = os.environ.get("AUTH_TOKEN", "")
 if not AUTH_TOKEN:
     print("ENV AUTH_TOKEN is not set – connections will be refused")
 
-if os.environ.get("TURN_SERVER_URLS") is None:
-    print("ENV TURN_SERVER_URLS is not set")
+
+def _read_settings_turn(key: str) -> str:
+    """Read a TURN setting from config/settings.json5 as fallback."""
+    try:
+        import json5 as _json5
+        settings_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "config", "settings.json5")
+        data = _json5.loads(open(settings_path, encoding="utf-8").read())
+        return str(data.get("turn", {}).get(key, "") or "")
+    except Exception:
+        return ""
+
+
+def _get_turn_urls() -> list[str]:
+    raw = os.environ.get("TURN_SERVER_URLS") or _read_settings_turn("urls")
+    return [u.strip() for u in raw.split(",") if u.strip()] if raw else []
+
+
+def _get_turn_username() -> str:
+    return os.environ.get("TURN_SERVER_USERNAME") or _read_settings_turn("username")
+
+
+def _get_turn_password() -> str:
+    return os.environ.get("TURN_SERVER_PASSWORD") or _read_settings_turn("password")
+
+
+_turn_urls = _get_turn_urls()
+if not _turn_urls:
+    print("TURN_SERVER_URLS is not set (env or settings.json5) — TURN disabled")
 
 class VideoTrack(VideoStreamTrack):
     """
@@ -273,12 +299,16 @@ async def _create_peer_connection(ws):
     global current_pc
 
     stun_server = RTCIceServer(urls='stun:stun.l.google.com:19302')
-    turn_server = RTCIceServer(
-        urls=os.environ.get("TURN_SERVER_URLS").split(','),
-        username=os.environ.get("TURN_SERVER_USERNAME"),
-        credential=os.environ.get("TURN_SERVER_PASSWORD")
-    )
-    rtc_configuration = RTCConfiguration(iceServers=[turn_server, stun_server])
+    ice_servers = [stun_server]
+    turn_urls = _get_turn_urls()
+    if turn_urls:
+        turn_server = RTCIceServer(
+            urls=turn_urls,
+            username=_get_turn_username() or None,
+            credential=_get_turn_password() or None,
+        )
+        ice_servers.append(turn_server)
+    rtc_configuration = RTCConfiguration(iceServers=ice_servers)
 
     pc = RTCPeerConnection(configuration=rtc_configuration)
     current_pc = pc

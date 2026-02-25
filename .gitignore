@@ -16,3 +16,5 @@ next-env.d.ts
 
 .playwright-cli
 .skillpilot
+
+config/cameras.json5

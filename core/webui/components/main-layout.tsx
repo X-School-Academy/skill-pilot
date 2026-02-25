@@ -163,7 +163,7 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
     >
       {title && (
         <Head>
-          <title>{title} — Skill Pilot</title>
+          <title>{`${title} — Skill Pilot`}</title>
         </Head>
       )}
       <div style={{ height: 'calc(100vh - 60px)', overflowY: 'auto', overflowX: 'hidden' }}>
