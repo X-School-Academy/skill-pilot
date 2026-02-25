@@ -79,6 +79,15 @@ reload_shell_env() {
   esac
   export PATH="$PNPM_HOME:$PATH"
 
+  # pnpm global bin (may differ from PNPM_HOME)
+  if command -v pnpm >/dev/null 2>&1; then
+    local pnpm_bin
+    pnpm_bin="$(pnpm bin -g 2>/dev/null || true)"
+    if [ -n "$pnpm_bin" ] && [ -d "$pnpm_bin" ]; then
+      export PATH="$pnpm_bin:$PATH"
+    fi
+  fi
+
   # Homebrew: apply shellenv if installed
   if [ -x /opt/homebrew/bin/brew ]; then
     eval "$(/opt/homebrew/bin/brew shellenv)"
