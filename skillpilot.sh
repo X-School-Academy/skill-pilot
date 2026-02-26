@@ -31,21 +31,26 @@ fi
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENGINE_ENV_FILE="${ROOT_DIR}/config/.env"
 ACTION="start"
+ACTION_TARGET=""
 IS_DEV=0
 AVAILABLE_PROVIDERS=()
+HUMAN_DETECTION_REQUIREMENTS="${ROOT_DIR}/core/engine/mcp_servers/cameras/requirements-human-detection.txt"
 
 print_help() {
   cat <<'EOF_HELP'
 Usage: ./skillpilot.sh [help|build|start|stop] [--dev]
+       ./skillpilot.sh <enable|disable> human-detection
 
 Commands:
   help    Show this help message.
   build   Build static webui export (core/webui/www).
   start   Start services. Default command.
   stop    Stop running tmux sessions.
+  enable human-detection    Install optional human detection dependencies.
+  disable human-detection   Uninstall optional human detection dependencies.
 
 Options:
-  --dev   Run in development mode.
+  --dev   Run in development mode (start only).
 
 Defaults:
   - Command defaults to: start
@@ -60,7 +65,7 @@ parse_args() {
       --dev)
         IS_DEV=1
         ;;
-      help|-h|--help|build|start|stop)
+      help|-h|--help|build|start|stop|enable|disable)
         if ((action_set == 1)); then
           echo "Error: multiple commands provided."
           print_help
@@ -68,6 +73,19 @@ parse_args() {
         fi
         ACTION="$1"
         action_set=1
+        ;;
+      human-detection)
+        if [[ "${ACTION}" != "enable" && "${ACTION}" != "disable" ]]; then
+          echo "Error: target '$1' requires enable/disable command."
+          print_help
+          exit 1
+        fi
+        if [[ -n "${ACTION_TARGET}" ]]; then
+          echo "Error: multiple targets provided."
+          print_help
+          exit 1
+        fi
+        ACTION_TARGET="$1"
         ;;
       *)
         echo "Error: unknown argument '$1'."
@@ -77,6 +95,29 @@ parse_args() {
     esac
     shift
   done
+
+  if ((IS_DEV == 1)) && [[ "${ACTION}" != "start" ]]; then
+    echo "Error: --dev is only supported with 'start'."
+    print_help
+    exit 1
+  fi
+
+  if [[ "${ACTION}" == "enable" || "${ACTION}" == "disable" ]]; then
+    if [[ -z "${ACTION_TARGET}" ]]; then
+      echo "Error: '${ACTION}' requires a target. Supported: human-detection."
+      print_help
+      exit 1
+    fi
+    if [[ "${ACTION_TARGET}" != "human-detection" ]]; then
+      echo "Error: unsupported target '${ACTION_TARGET}'. Supported: human-detection."
+      print_help
+      exit 1
+    fi
+  elif [[ -n "${ACTION_TARGET}" ]]; then
+    echo "Error: target '${ACTION_TARGET}' is only valid with enable/disable."
+    print_help
+    exit 1
+  fi
 }
 
 require_cmd() {
@@ -122,6 +163,28 @@ ensure_engine_venv() {
       exit 1
     fi
   fi
+}
+
+install_human_detection_deps() {
+  ensure_engine_venv
+  if [[ ! -f "${HUMAN_DETECTION_REQUIREMENTS}" ]]; then
+    echo "Error: missing ${HUMAN_DETECTION_REQUIREMENTS}."
+    exit 1
+  fi
+  echo "Installing optional human detection dependencies..."
+  uv --project "${ROOT_DIR}/core/engine" pip install -r "${HUMAN_DETECTION_REQUIREMENTS}"
+  echo "Human detection dependencies installed."
+}
+
+uninstall_human_detection_deps() {
+  require_cmd uv
+  if [[ ! -d "${ROOT_DIR}/core/engine/.venv" ]]; then
+    echo "core/engine/.venv not found. Nothing to uninstall."
+    return
+  fi
+  echo "Uninstalling optional human detection dependencies..."
+  uv --project "${ROOT_DIR}/core/engine" pip uninstall -y ultralytics ultralytics-thop torch torchvision
+  echo "Human detection dependencies removed."
 }
 
 engine_python() {
@@ -747,6 +810,28 @@ case "${ACTION}" in
     stop_session "sp-webui"
     stop_session "sp-engine"
     echo "Done."
+    ;;
+  enable)
+    case "${ACTION_TARGET}" in
+      human-detection)
+        install_human_detection_deps
+        ;;
+      *)
+        echo "Error: unsupported enable target '${ACTION_TARGET}'."
+        exit 1
+        ;;
+    esac
+    ;;
+  disable)
+    case "${ACTION_TARGET}" in
+      human-detection)
+        uninstall_human_detection_deps
+        ;;
+      *)
+        echo "Error: unsupported disable target '${ACTION_TARGET}'."
+        exit 1
+        ;;
+    esac
     ;;
   *)
     print_help

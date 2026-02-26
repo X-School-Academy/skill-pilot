@@ -4298,7 +4298,6 @@ dependencies = [
     { name = "screeninfo" },
     { name = "sshtunnel" },
     { name = "typing-extensions" },
-    { name = "ultralytics" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -4338,7 +4337,6 @@ requires-dist = [
     { name = "screeninfo", specifier = ">=0.8.1" },
     { name = "sshtunnel", specifier = ">=0.4.0" },
     { name = "typing-extensions", specifier = ">=4.12.0" },
-    { name = "ultralytics", specifier = ">=8.4.16" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
 ]
 

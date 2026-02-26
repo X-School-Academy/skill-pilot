@@ -74,15 +74,18 @@ After installation, run:
 
 ```
 Usage: ./skillpilot.sh [help|build|start|stop] [--dev]
+       ./skillpilot.sh <enable|disable> human-detection
 
 Commands:
   help    Show this help message.
   build   Build static webui export (core/webui/www).
   start   Start services. Default command.
   stop    Stop running tmux sessions.
+  enable human-detection    Install optional human detection dependencies.
+  disable human-detection   Uninstall optional human detection dependencies.
 
 Options:
-  --dev   Run in development mode.
+  --dev   Run in development mode (start only).
 
 Defaults:
   - Command defaults to: start

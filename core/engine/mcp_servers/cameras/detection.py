@@ -122,7 +122,11 @@ class DetectionService:
             model = await asyncio.get_event_loop().run_in_executor(None, YOLO, model_name)
             return model
         except Exception as exc:
-            logger.error("Failed to load YOLO model %s: %s", model_name, exc)
+            logger.error(
+                "Failed to load YOLO model %s: %s. Run './skillpilot.sh enable human-detection' to install it.",
+                model_name,
+                exc,
+            )
             return None
 
     def _run_inference(self, model, img_bytes: bytes) -> list[dict]:
