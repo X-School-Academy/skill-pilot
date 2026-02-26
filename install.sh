@@ -2,6 +2,10 @@
 
 # --- Constants ---
 SOMETHING_INSTALLED=0
+UPDATED_RC_FILES=()
+NEEDS_LOCAL_BIN_PATH=0
+NEEDS_PNPM_HOME_PATH=0
+NEEDS_BREW_SHELLENV=0
 BOLD='\033[1m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -106,20 +110,36 @@ require_sudo() {
 install_build_tools_linux() {
   require_sudo || return 1
   if command -v apt-get >/dev/null 2>&1; then
+    local base_pkgs=(build-essential git curl python3 make g++ cmake pkg-config)
+    local audio_pkgs=(portaudio19-dev)
     if is_root; then
       apt-get update -qq
-      apt-get install -y -qq build-essential git curl python3 make g++ cmake
+      apt-get install -y -qq "${base_pkgs[@]}"
+      if ! apt-get install -y -qq "${audio_pkgs[@]}"; then
+        warn "Could not install optional Linux audio build dependency: ${audio_pkgs[*]}"
+      fi
     else
       sudo apt-get update -qq
-      sudo apt-get install -y -qq build-essential git curl python3 make g++ cmake
+      sudo apt-get install -y -qq "${base_pkgs[@]}"
+      if ! sudo apt-get install -y -qq "${audio_pkgs[@]}"; then
+        warn "Could not install optional Linux audio build dependency: ${audio_pkgs[*]}"
+      fi
     fi
     return 0
   fi
   if command -v dnf >/dev/null 2>&1; then
+    local base_pkgs=(gcc gcc-c++ make cmake python3 git curl)
+    local audio_pkgs=(portaudio-devel)
     if is_root; then
-      dnf install -y -q gcc gcc-c++ make cmake python3 git curl
+      dnf install -y -q "${base_pkgs[@]}"
+      if ! dnf install -y -q "${audio_pkgs[@]}"; then
+        warn "Could not install optional Linux audio build dependency: ${audio_pkgs[*]}"
+      fi
     else
-      sudo dnf install -y -q gcc gcc-c++ make cmake python3 git curl
+      sudo dnf install -y -q "${base_pkgs[@]}"
+      if ! sudo dnf install -y -q "${audio_pkgs[@]}"; then
+        warn "Could not install optional Linux audio build dependency: ${audio_pkgs[*]}"
+      fi
     fi
     return 0
   fi
@@ -143,6 +163,7 @@ install_step() {
   local why="$2"
   local cmd_name="$3"
   local install_fn="$4"
+  local path_requirement="${5:-}"
 
   info "\n${BOLD}${title}${NC}"
   info "$why"
@@ -162,6 +183,7 @@ install_step() {
     return 0
   fi
   SOMETHING_INSTALLED=1
+  mark_path_requirement "$path_requirement"
   reload_shell_env
 
   if command -v "$cmd_name" >/dev/null 2>&1; then
@@ -198,6 +220,42 @@ install_playwright() {
   hash -r 2>/dev/null || true
 }
 
+install_mac_audio_build_deps() {
+  if ! command -v brew >/dev/null 2>&1; then
+    warn "Homebrew not found — cannot install macOS audio build dependencies."
+    return 1
+  fi
+
+  local missing=()
+  if ! brew list --versions portaudio >/dev/null 2>&1; then
+    missing+=("portaudio")
+  fi
+  if ! brew list --versions pkg-config >/dev/null 2>&1; then
+    missing+=("pkg-config")
+  fi
+
+  if [ "${#missing[@]}" -eq 0 ]; then
+    ok "macOS audio build dependencies are already installed."
+    return 0
+  fi
+
+  info "\n${BOLD}macOS audio build dependencies${NC}"
+  info "portaudio and pkg-config are required to build pyaudio in core/engine."
+  if ! ask_yes_no "Install missing macOS audio dependencies now? (${missing[*]})"; then
+    warn "Skipping macOS audio dependencies: ${missing[*]}"
+    return 0
+  fi
+
+  if brew install "${missing[@]}"; then
+    ok "Installed macOS audio dependencies: ${missing[*]}"
+    SOMETHING_INSTALLED=1
+    return 0
+  fi
+
+  warn "Failed to install macOS audio dependencies: ${missing[*]}"
+  return 1
+}
+
 # --- Version checks ---
 check_node_version() {
   if ! command -v node >/dev/null 2>&1; then
@@ -226,17 +284,87 @@ check_python_version() {
 }
 
 # --- Shell PATH persistence ---
-path_contains() {
-  case ":${PATH}:" in
-    *":$1:"*) return 0 ;;
-    *) return 1 ;;
+mark_path_requirement() {
+  case "${1:-}" in
+    local_bin) NEEDS_LOCAL_BIN_PATH=1 ;;
+    pnpm_home) NEEDS_PNPM_HOME_PATH=1 ;;
+    brew_shellenv) NEEDS_BREW_SHELLENV=1 ;;
+    both)
+      NEEDS_LOCAL_BIN_PATH=1
+      NEEDS_PNPM_HOME_PATH=1
+      ;;
+    all)
+      NEEDS_LOCAL_BIN_PATH=1
+      NEEDS_PNPM_HOME_PATH=1
+      NEEDS_BREW_SHELLENV=1
+      ;;
   esac
+}
+
+profile_has_token() {
+  local rc="$1"
+  local token="$2"
+  grep -F "$token" "$rc" 2>/dev/null | grep -qv '^[[:space:]]*#'
+}
+
+profile_has_local_bin_path() {
+  local rc="$1"
+  profile_has_token "$rc" '$HOME/.local/bin' \
+    || profile_has_token "$rc" "$HOME/.local/bin" \
+    || profile_has_token "$rc" '~/.local/bin'
+}
+
+profile_has_pnpm_home_decl() {
+  local rc="$1"
+  local pnpm_home="$2"
+  profile_has_token "$rc" 'export PNPM_HOME=' \
+    || profile_has_token "$rc" 'PNPM_HOME=' \
+    || profile_has_token "$rc" "$pnpm_home"
+}
+
+profile_has_pnpm_path() {
+  local rc="$1"
+  local pnpm_home="$2"
+  profile_has_token "$rc" '$PNPM_HOME' \
+    || profile_has_token "$rc" "$pnpm_home"
+}
+
+resolve_brew_bin() {
+  if command -v brew >/dev/null 2>&1; then
+    command -v brew
+    return 0
+  fi
+  if [ -x /opt/homebrew/bin/brew ]; then
+    printf '%s\n' /opt/homebrew/bin/brew
+    return 0
+  fi
+  if [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+    printf '%s\n' /home/linuxbrew/.linuxbrew/bin/brew
+    return 0
+  fi
+  if [ -x /usr/local/bin/brew ]; then
+    printf '%s\n' /usr/local/bin/brew
+    return 0
+  fi
+  return 1
+}
+
+profile_has_brew_shellenv() {
+  local rc="$1"
+  local brew_bin="$2"
+  profile_has_token "$rc" 'brew shellenv' \
+    || profile_has_token "$rc" "$brew_bin shellenv"
 }
 
 setup_shell_paths() {
   local rc_files=()
   [ -f "$HOME/.bashrc" ] && rc_files+=("$HOME/.bashrc")
   [ -f "$HOME/.zshrc" ]  && rc_files+=("$HOME/.zshrc")
+
+  if [ "$NEEDS_LOCAL_BIN_PATH" -eq 0 ] && [ "$NEEDS_PNPM_HOME_PATH" -eq 0 ] && [ "$NEEDS_BREW_SHELLENV" -eq 0 ]; then
+    ok "No profile PATH updates needed for tools installed in this run."
+    return 0
+  fi
 
   # Resolve actual PNPM_HOME path
   local pnpm_home
@@ -246,37 +374,125 @@ setup_shell_paths() {
   esac
   pnpm_home="${PNPM_HOME:-$pnpm_home}"
 
-  # Build only the lines that are needed:
-  # include a path only if the directory exists and is not already in PATH
-  local lines=""
-  if [ -d "$HOME/.local/bin" ] && ! path_contains "$HOME/.local/bin"; then
-    lines+='export PATH="$HOME/.local/bin:$PATH"'$'\n'
-  fi
-  if [ -d "$pnpm_home" ] && ! path_contains "$pnpm_home"; then
-    lines+="export PNPM_HOME=\"$pnpm_home\""$'\n'
-    lines+='export PATH="$PNPM_HOME:$PATH"'$'\n'
+  local can_add_local_bin=0
+  local can_add_pnpm_home=0
+  local can_add_brew_shellenv=0
+  local brew_bin=""
+
+  if [ "$NEEDS_LOCAL_BIN_PATH" -eq 1 ]; then
+    if [ -d "$HOME/.local/bin" ]; then
+      can_add_local_bin=1
+    else
+      warn "Skipping profile PATH update: $HOME/.local/bin does not exist."
+    fi
   fi
 
-  if [ -z "$lines" ]; then
-    ok "All tool paths are already in PATH — no profile update needed."
+  if [ "$NEEDS_PNPM_HOME_PATH" -eq 1 ]; then
+    if [ -d "$pnpm_home" ]; then
+      can_add_pnpm_home=1
+    else
+      warn "Skipping profile PATH update: $pnpm_home does not exist."
+    fi
+  fi
+
+  if [ "$NEEDS_BREW_SHELLENV" -eq 1 ]; then
+    if brew_bin="$(resolve_brew_bin)"; then
+      can_add_brew_shellenv=1
+    else
+      warn "Skipping profile Homebrew update: brew binary not found."
+    fi
+  fi
+
+  if [ "$can_add_local_bin" -eq 0 ] && [ "$can_add_pnpm_home" -eq 0 ] && [ "$can_add_brew_shellenv" -eq 0 ]; then
+    ok "No existing install path directories need profile updates."
     return 0
   fi
 
-  local block=$'\n# --- Added by Skill Pilot installer ---\n'"$lines"
+  if [ "${#rc_files[@]}" -eq 0 ]; then
+    warn "No shell profile file found (.bashrc or .zshrc) to update automatically."
+    warn "Add the following lines to your shell config manually:"
+    warn "────────────────────────────────────────────"
+    if [ "$can_add_local_bin" -eq 1 ]; then
+      warn 'export PATH="$HOME/.local/bin:$PATH"'
+    fi
+    if [ "$can_add_pnpm_home" -eq 1 ]; then
+      warn "export PNPM_HOME=\"$pnpm_home\""
+      warn 'export PATH="$PNPM_HOME:$PATH"'
+    fi
+    if [ "$can_add_brew_shellenv" -eq 1 ]; then
+      warn "eval \"\$($brew_bin shellenv)\""
+    fi
+    warn "────────────────────────────────────────────"
+    warn "Then run: source <rc-file> (example: source ~/.zshrc)"
+    warn "Or open a new terminal to apply changes."
+    return 0
+  fi
 
-  local updated=0
   local manual_files=()
+  local manual_need_local_bin=0
+  local manual_need_pnpm_home_decl=0
+  local manual_need_pnpm_path=0
+  local manual_need_brew_shellenv=0
   for rc in "${rc_files[@]}"; do
-    if grep -q "Added by Skill Pilot installer" "$rc" 2>/dev/null; then
-      ok "PATH entries already present in $rc."
-    elif [ ! -w "$rc" ]; then
+    local lines=""
+
+    if [ "$can_add_local_bin" -eq 1 ]; then
+      if profile_has_local_bin_path "$rc"; then
+        ok "PATH entry for ~/.local/bin already present in $rc."
+      else
+        lines+='export PATH="$HOME/.local/bin:$PATH"'$'\n'
+      fi
+    fi
+
+    if [ "$can_add_pnpm_home" -eq 1 ]; then
+      if profile_has_pnpm_home_decl "$rc" "$pnpm_home"; then
+        :
+      else
+        lines+="export PNPM_HOME=\"$pnpm_home\""$'\n'
+      fi
+
+      if profile_has_pnpm_path "$rc" "$pnpm_home"; then
+        :
+      else
+        lines+='export PATH="$PNPM_HOME:$PATH"'$'\n'
+      fi
+    fi
+
+    if [ "$can_add_brew_shellenv" -eq 1 ]; then
+      if profile_has_brew_shellenv "$rc" "$brew_bin"; then
+        ok "Homebrew shellenv already present in $rc."
+      else
+        lines+="eval \"\$($brew_bin shellenv)\""$'\n'
+      fi
+    fi
+
+    if [ -z "$lines" ]; then
+      ok "No PATH updates needed in $rc."
+      continue
+    fi
+
+    if [ ! -w "$rc" ]; then
       warn "Cannot write to $rc (permission denied) — skipping."
       manual_files+=("$rc")
-    else
-      printf '%s\n' "$block" >> "$rc"
-      ok "Added tool PATH entries to $rc."
-      updated=1
+      if printf '%s' "$lines" | grep -Fq 'export PATH="$HOME/.local/bin:$PATH"'; then
+        manual_need_local_bin=1
+      fi
+      if printf '%s' "$lines" | grep -Fq 'export PNPM_HOME='; then
+        manual_need_pnpm_home_decl=1
+      fi
+      if printf '%s' "$lines" | grep -Fq 'export PATH="$PNPM_HOME:$PATH"'; then
+        manual_need_pnpm_path=1
+      fi
+      if printf '%s' "$lines" | grep -Fq 'brew shellenv'; then
+        manual_need_brew_shellenv=1
+      fi
+      continue
     fi
+
+    local block=$'\n# --- Added by Skill Pilot installer ---\n'"$lines"
+    printf '%s\n' "$block" >> "$rc"
+    ok "Updated $rc with missing tool PATH entries."
+    UPDATED_RC_FILES+=("$rc")
   done
 
   if [ "${#manual_files[@]}" -gt 0 ]; then
@@ -284,15 +500,23 @@ setup_shell_paths() {
     for rc in "${manual_files[@]}"; do
       warn "  $rc"
     done
-    warn "\nTo set up your PATH manually, add the following lines to your shell config:"
-    warn "----"
-    warn "$block"
-    warn "----"
-    warn "Then run:  source <your-rc-file>  or open a new terminal."
-  fi
-
-  if [ "$updated" -eq 1 ]; then
-    info "Run 'source ~/.bashrc' (or open a new terminal) to apply PATH changes."
+    warn "\nAdd the following lines to your shell config manually:"
+    warn "────────────────────────────────────────────"
+    if [ "$manual_need_local_bin" -eq 1 ]; then
+      warn 'export PATH="$HOME/.local/bin:$PATH"'
+    fi
+    if [ "$manual_need_pnpm_home_decl" -eq 1 ]; then
+      warn "export PNPM_HOME=\"$pnpm_home\""
+    fi
+    if [ "$manual_need_pnpm_path" -eq 1 ]; then
+      warn 'export PATH="$PNPM_HOME:$PATH"'
+    fi
+    if [ "$manual_need_brew_shellenv" -eq 1 ]; then
+      warn "eval \"\$($brew_bin shellenv)\""
+    fi
+    warn "────────────────────────────────────────────"
+    warn "Then run: source <rc-file> (example: source ~/.zshrc)"
+    warn "Or open a new terminal to apply changes."
   fi
 }
 
@@ -317,6 +541,27 @@ setup_branches() {
   else
     ok "Already on branch 'user' (work branch)."
   fi
+}
+
+# --- Next-steps reminder ---
+print_next_steps() {
+  if [ "${#UPDATED_RC_FILES[@]}" -eq 0 ]; then
+    return 0
+  fi
+  say ""
+  say "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  say "${BOLD}  Action required — reload your shell${NC}"
+  say "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  say "  New tool paths were added to your shell profile file(s)."
+  say "  To activate commands in this terminal now, run:"
+  say ""
+  for rc in "${UPDATED_RC_FILES[@]}"; do
+    say "    ${BOLD}source $rc${NC}"
+  done
+  say ""
+  say "  Or open a new terminal window instead."
+  say "  New commands will work after either step."
+  say "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 
 # --- Main ---
@@ -414,19 +659,26 @@ main() {
     "Homebrew" \
     "Homebrew is used as a package manager on macOS and Linux." \
     "brew" \
-    "install_homebrew"
+    "install_homebrew" \
+    "brew_shellenv"
+
+  if [ "$OS_KIND" = "mac" ]; then
+    install_mac_audio_build_deps || true
+  fi
 
   install_step \
     "uv" \
     "uv manages Python runtimes and fast Python tooling used by this project." \
     "uv" \
-    "install_uv"
+    "install_uv" \
+    "local_bin"
 
   install_step \
     "pnpm" \
     "pnpm manages Node.js packages and installs Playwright CLI." \
     "pnpm" \
-    "install_pnpm"
+    "install_pnpm" \
+    "pnpm_home"
 
   # Node.js
   info "\n${BOLD}Node.js${NC}"
@@ -437,6 +689,7 @@ main() {
     if ask_yes_no "Install latest LTS Node.js with pnpm env use --global lts?"; then
       if pnpm env use --global lts; then
         SOMETHING_INSTALLED=1
+        mark_path_requirement "pnpm_home"
         reload_shell_env
         if command -v node >/dev/null 2>&1; then
           ok "Node.js installed and available."
@@ -484,7 +737,8 @@ main() {
     "Playwright CLI" \
     "Playwright CLI enables browser automation used by project skills and testing." \
     "playwright-cli" \
-    "install_playwright"
+    "install_playwright" \
+    "pnpm_home"
 
   if [ "$SOMETHING_INSTALLED" -eq 1 ]; then
     setup_shell_paths
@@ -504,27 +758,58 @@ main() {
     else
       warn "Skipping './skillpilot.sh help' because ./skillpilot.sh is not executable in current directory."
     fi
+    print_next_steps
     return 0
   fi
 
-  local default_dir="$HOME/workspace/skill-pilot"
-  info "\n${BOLD}Choose install location${NC}"
-  info "Default path: $default_dir"
+  local opt1="$HOME/workspace/skill-pilot"
+  local opt2
+  opt2="$(pwd)/skill-pilot"
   local install_base
-  if ask_yes_no "Install to $default_dir?"; then
-    install_base="$default_dir"
-  else
-    local input_fd="/dev/tty"
-    { true </dev/tty; } 2>/dev/null || input_fd="/dev/stdin"
-    if read -r -e -i "$default_dir" -p "Please update the path: " install_base <"$input_fd" 2>/dev/null; then
-      : # readline pre-fill succeeded
-    else
-      printf "Please update the path [%s]: " "$default_dir" >/dev/tty 2>&1 || printf "Please update the path [%s]: " "$default_dir"
-      IFS= read -r install_base <"$input_fd" || true
-    fi
-    install_base="${install_base:-$default_dir}"
-    info "Using: $install_base"
-  fi
+  local input_fd="/dev/tty"
+  { true </dev/tty; } 2>/dev/null || input_fd="/dev/stdin"
+
+  info "\n${BOLD}Choose install location${NC}"
+  say "  ${BOLD}1)${NC} ~/workspace/skill-pilot"
+  say "     ${BLUE}→ $opt1${NC}"
+  say ""
+  say "  ${BOLD}2)${NC} Current directory / skill-pilot"
+  say "     ${BLUE}→ $opt2${NC}"
+  say ""
+  say "  ${BOLD}3)${NC} Other location"
+  say ""
+
+  local choice
+  while true; do
+    read -r -p "Enter your choice [1/2/3]: " choice <"$input_fd"
+    case "${choice:-}" in
+      1)
+        install_base="$opt1"
+        ok "Install location: $install_base"
+        break
+        ;;
+      2)
+        install_base="$opt2"
+        ok "Install location: $install_base"
+        break
+        ;;
+      3)
+        local custom_base
+        printf "\nEnter your preferred folder path: " >/dev/tty 2>&1 || printf "\nEnter your preferred folder path: "
+        IFS= read -r custom_base <"$input_fd" || true
+        custom_base="${custom_base%/}"
+        if [ -z "$custom_base" ]; then
+          warn "No path entered — using default: $opt1"
+          install_base="$opt1"
+        else
+          install_base="$custom_base/skill-pilot"
+        fi
+        ok "Install location: $install_base"
+        break
+        ;;
+      *) warn "Please enter 1, 2, or 3." ;;
+    esac
+  done
 
   local clone_dir="$install_base"
   local parent_dir
@@ -567,11 +852,12 @@ main() {
   cd "$clone_dir"
   ok "Installation bootstrap completed."
   say ""
-  say "Next directory: $(pwd)"
+  say "Install directory: $(pwd)"
   setup_branches
   say ""
   info "Running: ./skillpilot.sh help"
   ./skillpilot.sh help
+  print_next_steps
 }
 
 main "$@"

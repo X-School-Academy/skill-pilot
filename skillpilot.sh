@@ -2,6 +2,27 @@
 
 set -euo pipefail
 
+reload_shell_env() {
+  export PATH="$HOME/.local/bin:$PATH"
+  case "$(uname -s 2>/dev/null || true)" in
+    Darwin) export PNPM_HOME="${PNPM_HOME:-$HOME/Library/pnpm}" ;;
+    *) export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}" ;;
+  esac
+  export PATH="$PNPM_HOME:$PATH"
+
+  if [ -x /opt/homebrew/bin/brew ]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+  elif [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+    eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+  elif [ -x /usr/local/bin/brew ]; then
+    eval "$(/usr/local/bin/brew shellenv)"
+  fi
+
+  hash -r 2>/dev/null || true
+}
+
+reload_shell_env
+
 if ! command -v tmux >/dev/null 2>&1; then
   echo "Error: tmux is not installed."
   exit 1
@@ -78,7 +99,28 @@ ensure_engine_venv() {
   require_cmd uv
   if [[ ! -d "${ROOT_DIR}/core/engine/.venv" ]]; then
     echo "core/engine/.venv missing, running uv sync..."
-    uv --project "${ROOT_DIR}/core/engine" sync
+    if ! uv --project "${ROOT_DIR}/core/engine" sync; then
+      echo "Error: uv sync failed."
+      if [[ "$(uname -s)" == "Linux" ]]; then
+        local prefix=""
+        if [[ "$(id -u)" -ne 0 ]] && command -v sudo >/dev/null 2>&1; then
+          prefix="sudo "
+        fi
+        echo "Likely cause: missing PortAudio development headers for pyaudio (portaudio.h)."
+        if command -v apt-get >/dev/null 2>&1; then
+          echo "Install dependency:"
+          echo "  ${prefix}apt-get update && ${prefix}apt-get install -y portaudio19-dev"
+        elif command -v dnf >/dev/null 2>&1; then
+          echo "Install dependency:"
+          echo "  ${prefix}dnf install -y portaudio-devel"
+        else
+          echo "Install the OS package that provides portaudio.h, then retry."
+        fi
+      fi
+      echo "After installing dependencies, run:"
+      echo "  uv --project ${ROOT_DIR}/core/engine sync"
+      exit 1
+    fi
   fi
 }
 

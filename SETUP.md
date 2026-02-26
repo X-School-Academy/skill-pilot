@@ -47,6 +47,27 @@ Install base packages with Homebrew:
 brew install git curl tmux
 ```
 
+Install audio build dependencies required by `pyaudio` in `core/engine`:
+
+macOS:
+
+```bash
+brew install portaudio pkg-config
+```
+
+Linux (Ubuntu/Debian):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y portaudio19-dev pkg-config
+```
+
+Linux (RHEL/Fedora):
+
+```bash
+sudo dnf install -y portaudio-devel pkgconf-pkg-config
+```
+
 Install `uv` using the official script (same method as `install.sh`):
 
 ```bash
@@ -149,6 +170,8 @@ From repo root:
 uv --project core/engine sync
 pnpm -C core/webui install
 ```
+
+If `uv sync` fails with `fatal error: portaudio.h: No such file or directory`, install the PortAudio dev package above and run `uv --project core/engine sync` again.
 
 ## 6. Create `config/.env`
 
