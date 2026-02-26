@@ -44,7 +44,7 @@ Options:
   -h, --help    Show this help message and exit
 
 Steps performed:
-  1. Install Homebrew, Git, curl, uv, pnpm, Node.js, Python 3, tmux
+  1. Install Homebrew, Git, curl, wget, uv, pnpm, Node.js, Python 3, tmux
   2. Install Playwright CLI
   3. Clone the Skill Pilot repository
 EOF
@@ -186,6 +186,7 @@ install_homebrew() {
 
 install_git()   { pkg_install git; }
 install_curl()  { pkg_install curl; }
+install_wget()  { pkg_install wget; }
 install_tmux()  { pkg_install tmux; }
 
 install_uv() {
@@ -678,6 +679,12 @@ main() {
     "tmux supports robust long-running terminal workflows and background sessions." \
     "tmux" \
     "install_tmux"
+
+  install_step \
+    "wget" \
+    "wget is used by many agent skills for CLI downloads and fetch workflows." \
+    "wget" \
+    "install_wget"
 
   install_step \
     "Playwright CLI" \
