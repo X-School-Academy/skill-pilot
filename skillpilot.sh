@@ -142,35 +142,46 @@ ensure_webui_deps() {
 ensure_engine_venv() {
   require_cmd uv
   if [[ ! -d "${ROOT_DIR}/core/engine/.venv" ]]; then
-    echo "core/engine/.venv missing, running uv sync..."
-    if ! uv --project "${ROOT_DIR}/core/engine" sync; then
+    echo "core/engine/.venv missing, running uv --directory core/engine sync..."
+    if ! uv --directory "${ROOT_DIR}/core/engine" sync; then
       echo "Error: uv sync failed."
       echo "After installing dependencies, run:"
-      echo "  uv --project ${ROOT_DIR}/core/engine sync"
+      echo "  uv --directory ${ROOT_DIR}/core/engine sync"
       exit 1
     fi
   fi
 }
 
-install_human_detection_deps() {
+engine_venv_python() {
+  local py="${ROOT_DIR}/core/engine/.venv/bin/python"
   ensure_engine_venv
+  if [[ ! -x "${py}" ]]; then
+    echo "Error: missing engine virtual environment at ${ROOT_DIR}/core/engine/.venv."
+    echo "Run: uv --directory ${ROOT_DIR}/core/engine sync"
+    exit 1
+  fi
+  echo "${py}"
+}
+
+install_human_detection_deps() {
+  local py
+  ensure_engine_venv
+  py="$(engine_venv_python)"
   if [[ ! -f "${HUMAN_DETECTION_REQUIREMENTS}" ]]; then
     echo "Error: missing ${HUMAN_DETECTION_REQUIREMENTS}."
     exit 1
   fi
   echo "Installing optional human detection dependencies..."
-  uv --project "${ROOT_DIR}/core/engine" pip install -r "${HUMAN_DETECTION_REQUIREMENTS}"
+  uv --directory "${ROOT_DIR}/core/engine" pip install --python "${py}" -r "${HUMAN_DETECTION_REQUIREMENTS}"
   echo "Human detection dependencies installed."
 }
 
 uninstall_human_detection_deps() {
+  local py
   require_cmd uv
-  if [[ ! -d "${ROOT_DIR}/core/engine/.venv" ]]; then
-    echo "core/engine/.venv not found. Nothing to uninstall."
-    return
-  fi
+  py="$(engine_venv_python)"
   echo "Uninstalling optional human detection dependencies..."
-  uv --project "${ROOT_DIR}/core/engine" pip uninstall -y ultralytics ultralytics-thop torch torchvision
+  uv --directory "${ROOT_DIR}/core/engine" pip uninstall --python "${py}" ultralytics ultralytics-thop torch torchvision
   echo "Human detection dependencies removed."
 }
 
@@ -221,25 +232,25 @@ install_live_tts_build_deps() {
 }
 
 install_live_tts_deps() {
+  local py
   ensure_engine_venv
+  py="$(engine_venv_python)"
   if [[ ! -f "${LIVE_TTS_REQUIREMENTS}" ]]; then
     echo "Error: missing ${LIVE_TTS_REQUIREMENTS}."
     exit 1
   fi
   install_live_tts_build_deps
   echo "Installing optional live-tts dependencies..."
-  uv --project "${ROOT_DIR}/core/engine" pip install -r "${LIVE_TTS_REQUIREMENTS}"
+  uv --directory "${ROOT_DIR}/core/engine" pip install --python "${py}" -r "${LIVE_TTS_REQUIREMENTS}"
   echo "Live-tts dependencies installed."
 }
 
 uninstall_live_tts_deps() {
+  local py
   require_cmd uv
-  if [[ ! -d "${ROOT_DIR}/core/engine/.venv" ]]; then
-    echo "core/engine/.venv not found. Nothing to uninstall."
-    return
-  fi
+  py="$(engine_venv_python)"
   echo "Uninstalling optional live-tts dependencies..."
-  uv --project "${ROOT_DIR}/core/engine" pip uninstall -y pyaudio
+  uv --directory "${ROOT_DIR}/core/engine" pip uninstall --python "${py}" pyaudio
   echo "Live-tts dependencies removed. numpy remains installed because other engine features use it."
 }
 
