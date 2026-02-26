@@ -35,11 +35,12 @@ ACTION_TARGET=""
 IS_DEV=0
 AVAILABLE_PROVIDERS=()
 HUMAN_DETECTION_REQUIREMENTS="${ROOT_DIR}/core/engine/mcp_servers/cameras/requirements-human-detection.txt"
+LIVE_TTS_REQUIREMENTS="${ROOT_DIR}/core/engine/mcp_servers/live_tts/requirements-live-tts.txt"
 
 print_help() {
   cat <<'EOF_HELP'
 Usage: ./skillpilot.sh [help|build|start|stop] [--dev]
-       ./skillpilot.sh <enable|disable> human-detection
+       ./skillpilot.sh <enable|disable> <human-detection|live-tts>
 
 Commands:
   help    Show this help message.
@@ -48,6 +49,8 @@ Commands:
   stop    Stop running tmux sessions.
   enable human-detection    Install optional human detection dependencies.
   disable human-detection   Uninstall optional human detection dependencies.
+  enable live-tts           Install optional live-tts dependencies.
+  disable live-tts          Uninstall optional live-tts dependencies.
 
 Options:
   --dev   Run in development mode (start only).
@@ -74,7 +77,7 @@ parse_args() {
         ACTION="$1"
         action_set=1
         ;;
-      human-detection)
+      human-detection|live-tts)
         if [[ "${ACTION}" != "enable" && "${ACTION}" != "disable" ]]; then
           echo "Error: target '$1' requires enable/disable command."
           print_help
@@ -104,12 +107,12 @@ parse_args() {
 
   if [[ "${ACTION}" == "enable" || "${ACTION}" == "disable" ]]; then
     if [[ -z "${ACTION_TARGET}" ]]; then
-      echo "Error: '${ACTION}' requires a target. Supported: human-detection."
+      echo "Error: '${ACTION}' requires a target. Supported: human-detection, live-tts."
       print_help
       exit 1
     fi
-    if [[ "${ACTION_TARGET}" != "human-detection" ]]; then
-      echo "Error: unsupported target '${ACTION_TARGET}'. Supported: human-detection."
+    if [[ "${ACTION_TARGET}" != "human-detection" && "${ACTION_TARGET}" != "live-tts" ]]; then
+      echo "Error: unsupported target '${ACTION_TARGET}'. Supported: human-detection, live-tts."
       print_help
       exit 1
     fi
@@ -142,22 +145,6 @@ ensure_engine_venv() {
     echo "core/engine/.venv missing, running uv sync..."
     if ! uv --project "${ROOT_DIR}/core/engine" sync; then
       echo "Error: uv sync failed."
-      if [[ "$(uname -s)" == "Linux" ]]; then
-        local prefix=""
-        if [[ "$(id -u)" -ne 0 ]] && command -v sudo >/dev/null 2>&1; then
-          prefix="sudo "
-        fi
-        echo "Likely cause: missing PortAudio development headers for pyaudio (portaudio.h)."
-        if command -v apt-get >/dev/null 2>&1; then
-          echo "Install dependency:"
-          echo "  ${prefix}apt-get update && ${prefix}apt-get install -y portaudio19-dev"
-        elif command -v dnf >/dev/null 2>&1; then
-          echo "Install dependency:"
-          echo "  ${prefix}dnf install -y portaudio-devel"
-        else
-          echo "Install the OS package that provides portaudio.h, then retry."
-        fi
-      fi
       echo "After installing dependencies, run:"
       echo "  uv --project ${ROOT_DIR}/core/engine sync"
       exit 1
@@ -185,6 +172,75 @@ uninstall_human_detection_deps() {
   echo "Uninstalling optional human detection dependencies..."
   uv --project "${ROOT_DIR}/core/engine" pip uninstall -y ultralytics ultralytics-thop torch torchvision
   echo "Human detection dependencies removed."
+}
+
+install_live_tts_build_deps() {
+  local os_name
+  os_name="$(uname -s 2>/dev/null || true)"
+
+  case "${os_name}" in
+    Darwin)
+      require_cmd brew
+      echo "Installing macOS audio build dependencies (portaudio, pkg-config)..."
+      brew install portaudio pkg-config
+      ;;
+    Linux)
+      local use_sudo=0
+      if [[ "$(id -u)" -ne 0 ]]; then
+        require_cmd sudo
+        use_sudo=1
+      fi
+
+      if command -v apt-get >/dev/null 2>&1; then
+        echo "Installing Linux audio build dependencies (portaudio19-dev, pkg-config)..."
+        if ((use_sudo == 1)); then
+          sudo apt-get update
+          sudo apt-get install -y portaudio19-dev pkg-config
+        else
+          apt-get update
+          apt-get install -y portaudio19-dev pkg-config
+        fi
+      elif command -v dnf >/dev/null 2>&1; then
+        echo "Installing Linux audio build dependencies (portaudio-devel, pkgconf-pkg-config)..."
+        if ((use_sudo == 1)); then
+          sudo dnf install -y portaudio-devel pkgconf-pkg-config
+        else
+          dnf install -y portaudio-devel pkgconf-pkg-config
+        fi
+      else
+        echo "Error: unsupported Linux package manager."
+        echo "Install PortAudio development headers manually, then retry."
+        exit 1
+      fi
+      ;;
+    *)
+      echo "Error: live-tts enable is supported on macOS and Linux only."
+      exit 1
+      ;;
+  esac
+}
+
+install_live_tts_deps() {
+  ensure_engine_venv
+  if [[ ! -f "${LIVE_TTS_REQUIREMENTS}" ]]; then
+    echo "Error: missing ${LIVE_TTS_REQUIREMENTS}."
+    exit 1
+  fi
+  install_live_tts_build_deps
+  echo "Installing optional live-tts dependencies..."
+  uv --project "${ROOT_DIR}/core/engine" pip install -r "${LIVE_TTS_REQUIREMENTS}"
+  echo "Live-tts dependencies installed."
+}
+
+uninstall_live_tts_deps() {
+  require_cmd uv
+  if [[ ! -d "${ROOT_DIR}/core/engine/.venv" ]]; then
+    echo "core/engine/.venv not found. Nothing to uninstall."
+    return
+  fi
+  echo "Uninstalling optional live-tts dependencies..."
+  uv --project "${ROOT_DIR}/core/engine" pip uninstall -y pyaudio
+  echo "Live-tts dependencies removed. numpy remains installed because other engine features use it."
 }
 
 engine_python() {
@@ -816,6 +872,9 @@ case "${ACTION}" in
       human-detection)
         install_human_detection_deps
         ;;
+      live-tts)
+        install_live_tts_deps
+        ;;
       *)
         echo "Error: unsupported enable target '${ACTION_TARGET}'."
         exit 1
@@ -826,6 +885,9 @@ case "${ACTION}" in
     case "${ACTION_TARGET}" in
       human-detection)
         uninstall_human_detection_deps
+        ;;
+      live-tts)
+        uninstall_live_tts_deps
         ;;
       *)
         echo "Error: unsupported disable target '${ACTION_TARGET}'."

@@ -21,6 +21,9 @@ try:
 except ModuleNotFoundError:
     pyaudio = None  # type: ignore[assignment]
     _MISSING_DEPS.append("pyaudio")
+    logging.warning(
+        "Optional dependency 'pyaudio' is missing. Enable live-tts with: ./skillpilot.sh enable live-tts"
+    )
 
 try:
     import numpy as np
@@ -897,7 +900,7 @@ def _ensure_tts_manager() -> LiveTTSManager:
         missing = ", ".join(sorted(set(_MISSING_DEPS)))
         raise RuntimeError(
             f"Missing live_tts dependencies: {missing}. "
-            "Install them in core/engine (for example: uv --directory core/engine add pyaudio numpy websockets)."
+            "Run './skillpilot.sh enable live-tts' from repo root to install optional dependencies."
         )
     if tts_manager is None:
         tts_manager = LiveTTSManager()
@@ -946,9 +949,9 @@ def _cleanup_and_exit(*_args) -> None:
 def main() -> None:
     if _MISSING_DEPS:
         missing = ", ".join(sorted(set(_MISSING_DEPS)))
-        raise RuntimeError(
-            f"Live TTS MCP server failed to start: missing dependencies: {missing}. "
-            "Install them in core/engine (for example: uv --directory core/engine add pyaudio numpy websockets)."
+        logging.warning(
+            "Live TTS optional dependencies are missing: %s. Run './skillpilot.sh enable live-tts' from repo root.",
+            missing,
         )
 
     signal.signal(signal.SIGINT, _cleanup_and_exit)

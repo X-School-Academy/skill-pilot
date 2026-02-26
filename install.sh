@@ -111,35 +111,21 @@ install_build_tools_linux() {
   require_sudo || return 1
   if command -v apt-get >/dev/null 2>&1; then
     local base_pkgs=(build-essential git curl python3 make g++ cmake pkg-config)
-    local audio_pkgs=(portaudio19-dev)
     if is_root; then
       apt-get update -qq
       apt-get install -y -qq "${base_pkgs[@]}"
-      if ! apt-get install -y -qq "${audio_pkgs[@]}"; then
-        warn "Could not install optional Linux audio build dependency: ${audio_pkgs[*]}"
-      fi
     else
       sudo apt-get update -qq
       sudo apt-get install -y -qq "${base_pkgs[@]}"
-      if ! sudo apt-get install -y -qq "${audio_pkgs[@]}"; then
-        warn "Could not install optional Linux audio build dependency: ${audio_pkgs[*]}"
-      fi
     fi
     return 0
   fi
   if command -v dnf >/dev/null 2>&1; then
     local base_pkgs=(gcc gcc-c++ make cmake python3 git curl)
-    local audio_pkgs=(portaudio-devel)
     if is_root; then
       dnf install -y -q "${base_pkgs[@]}"
-      if ! dnf install -y -q "${audio_pkgs[@]}"; then
-        warn "Could not install optional Linux audio build dependency: ${audio_pkgs[*]}"
-      fi
     else
       sudo dnf install -y -q "${base_pkgs[@]}"
-      if ! sudo dnf install -y -q "${audio_pkgs[@]}"; then
-        warn "Could not install optional Linux audio build dependency: ${audio_pkgs[*]}"
-      fi
     fi
     return 0
   fi
@@ -218,42 +204,6 @@ install_playwright() {
   bin_dir="$(pnpm bin -g 2>/dev/null || true)"
   [ -n "$bin_dir" ] && export PATH="$bin_dir:$PATH"
   hash -r 2>/dev/null || true
-}
-
-install_mac_audio_build_deps() {
-  if ! command -v brew >/dev/null 2>&1; then
-    warn "Homebrew not found — cannot install macOS audio build dependencies."
-    return 1
-  fi
-
-  local missing=()
-  if ! brew list --versions portaudio >/dev/null 2>&1; then
-    missing+=("portaudio")
-  fi
-  if ! brew list --versions pkg-config >/dev/null 2>&1; then
-    missing+=("pkg-config")
-  fi
-
-  if [ "${#missing[@]}" -eq 0 ]; then
-    ok "macOS audio build dependencies are already installed."
-    return 0
-  fi
-
-  info "\n${BOLD}macOS audio build dependencies${NC}"
-  info "portaudio and pkg-config are required to build pyaudio in core/engine."
-  if ! ask_yes_no "Install missing macOS audio dependencies now? (${missing[*]})"; then
-    warn "Skipping macOS audio dependencies: ${missing[*]}"
-    return 0
-  fi
-
-  if brew install "${missing[@]}"; then
-    ok "Installed macOS audio dependencies: ${missing[*]}"
-    SOMETHING_INSTALLED=1
-    return 0
-  fi
-
-  warn "Failed to install macOS audio dependencies: ${missing[*]}"
-  return 1
 }
 
 # --- Version checks ---
@@ -661,10 +611,6 @@ main() {
     "brew" \
     "install_homebrew" \
     "brew_shellenv"
-
-  if [ "$OS_KIND" = "mac" ]; then
-    install_mac_audio_build_deps || true
-  fi
 
   install_step \
     "uv" \

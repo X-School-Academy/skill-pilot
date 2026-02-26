@@ -38,7 +38,7 @@
         "--directory",
         "core/engine",
         "run",
-        "mcp_servers/live_tts.py",
+        "mcp_servers/live_tts/main.py",
       ],
     },
     cameras: {

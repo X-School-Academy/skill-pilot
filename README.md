@@ -74,7 +74,7 @@ After installation, run:
 
 ```
 Usage: ./skillpilot.sh [help|build|start|stop] [--dev]
-       ./skillpilot.sh <enable|disable> human-detection
+       ./skillpilot.sh <enable|disable> <human-detection|live-tts>
 
 Commands:
   help    Show this help message.
@@ -83,6 +83,8 @@ Commands:
   stop    Stop running tmux sessions.
   enable human-detection    Install optional human detection dependencies.
   disable human-detection   Uninstall optional human detection dependencies.
+  enable live-tts           Install optional live-tts dependencies.
+  disable live-tts          Uninstall optional live-tts dependencies.
 
 Options:
   --dev   Run in development mode (start only).

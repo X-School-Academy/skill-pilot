@@ -47,27 +47,6 @@ Install base packages with Homebrew:
 brew install git curl tmux
 ```
 
-Install audio build dependencies required by `pyaudio` in `core/engine`:
-
-macOS:
-
-```bash
-brew install portaudio pkg-config
-```
-
-Linux (Ubuntu/Debian):
-
-```bash
-sudo apt-get update
-sudo apt-get install -y portaudio19-dev pkg-config
-```
-
-Linux (RHEL/Fedora):
-
-```bash
-sudo dnf install -y portaudio-devel pkgconf-pkg-config
-```
-
 Install `uv` using the official script (same method as `install.sh`):
 
 ```bash
@@ -171,8 +150,6 @@ uv --project core/engine sync
 pnpm -C core/webui install
 ```
 
-If `uv sync` fails with `fatal error: portaudio.h: No such file or directory`, install the PortAudio dev package above and run `uv --project core/engine sync` again.
-
 ## 6. Create `config/.env`
 
 Create `config/.env` with at minimum:
@@ -267,6 +244,24 @@ Stop services:
 
 ```bash
 ./skillpilot.sh stop
+```
+
+## 10. Optional dependency packs
+
+Enable optional features only when needed:
+
+```bash
+./skillpilot.sh enable human-detection
+./skillpilot.sh enable live-tts
+```
+
+`enable live-tts` installs OS audio build dependencies (PortAudio + pkg-config) on macOS/Linux and then installs Python packages from `core/engine/mcp_servers/live_tts/requirements-live-tts.txt`.
+
+Disable optional packs:
+
+```bash
+./skillpilot.sh disable human-detection
+./skillpilot.sh disable live-tts
 ```
 
 ## Notes
