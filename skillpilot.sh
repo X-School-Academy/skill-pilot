@@ -251,7 +251,7 @@ uninstall_live_tts_deps() {
   py="$(engine_venv_python)"
   echo "Uninstalling optional live-tts dependencies..."
   uv --directory "${ROOT_DIR}/core/engine" pip uninstall --python "${py}" pyaudio
-  echo "Live-tts dependencies removed. numpy remains installed because other engine features use it."
+  echo "Live-tts dependencies removed."
 }
 
 engine_python() {
