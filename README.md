@@ -1,18 +1,14 @@
 # Skill Pilot AI Agent
 
-**An AI-native Codeware system**
+**Your personal AI workspace — learn, automate, and build from a single idea.**
 
 > Software runs. Codeware grows.
 
-Skill Pilot is not a traditional application and not a SaaS platform.
-It is a **Codeware environment** — a living codebase continuously extended and maintained by AI agents and humans together.
+Whether you are just starting out with AI, a professional who wants to automate your daily work, or a team building a full commercial product — Skill Pilot gives you one unified environment powered by AI agents.
 
-Instead of shipping fixed features, Skill Pilot exposes its own source as the interface.
-The AI reads it, modifies it, learns from it, and evolves new capabilities.
+**Join the community:**
 
-**Join Us**
-
-💬 Community: [Discord](https://discord.com/invite/myf9RRhfxN) | [ 𝕏 ](https://x.com/skill_pilot_ai) | [WebChat](assets/webchat-contact.jpg)
+💬 [Discord](https://discord.com/invite/myf9RRhfxN) | [𝕏](https://x.com/skill_pilot_ai) | [Reddit](https://www.reddit.com/r/skillpilot/) | [WebChat](assets/webchat-contact.jpg)
 
 ## Intro Video
 
@@ -20,37 +16,105 @@ The AI reads it, modifies it, learns from it, and evolves new capabilities.
 
 ---
 
-## What is Codeware?
+## Who Is This For?
 
-Traditional computing:
+### 🌱 Beginners — Learn AI from Zero to Hero
+
+You have heard about AI and vibe coding but don't know where to start. Skill Pilot gives you:
+
+- **Interactive AI courses** generated just for you — no prior coding experience needed
+- **Vibe coding** — describe what you want in plain English and watch AI build it
+- **Hands-on projects** — spin up real working apps without writing a single line of code yourself
+- A structured path from complete beginner to confident AI user
+
+> Start here: open the `workspace/learning/` folder and ask the AI to create a course on any topic.
+
+---
+
+### ⚡ Professionals — Automate Your Daily Work with AI
+
+You already know your domain. Now you want AI to handle the repetitive, time-consuming work — not just in code, but across everything you do. Skill Pilot gives you:
+
+- **Task automation** — delegate writing, research, analysis, planning, and scheduling to AI agents
+- **Computer control** — let AI operate your desktop, fill forms, extract data from websites, and interact with any app
+- **Remote access** — control servers and cloud infrastructure through natural language
+- **Discord and communication bots** — AI-powered assistants that work while you sleep
+- A growing library of reusable skills you can trigger anytime
+
+> Start here: open the `workspace/tasks/` folder and describe any task you want automated.
+
+---
+
+### 🏢 Enterprises — Build a Commercial Product from a Single Idea
+
+You have an idea and want to go from concept to a fully deployed, commercial-ready product. Skill Pilot's **Dev Swarm** system handles the entire software lifecycle:
+
+1. **Idea → Requirements** — AI clarifies and structures your business problem
+2. **Market Research** — competitive analysis and opportunity identification
+3. **Architecture & Tech Specs** — system design, API specs, database schema
+4. **Sprint Planning & Development** — feature-by-feature implementation with tests
+5. **DevOps & Deployment** — CI/CD, containerization, cloud infrastructure
+6. **Monitoring & Iteration** — production-ready and continuously improving
+
+> Start here: write your idea in `ideas.md` and ask Dev Swarm to begin stage 1.
+
+---
+
+### 🎯 Everyone — Master AI and Prepare for the AI Era
+
+The most valuable skill in the next decade is knowing how to work with AI effectively. Skill Pilot is designed to grow with you:
+
+- **Agent skills** you build become reusable assets — your AI gets smarter over time
+- **Community knowledge sharing** — learn from and contribute to a growing library of capabilities
+- **Multi-agent workflows** — chain AI agents together to solve complex, multi-step problems
+- **Your personal AI habitat** — a workspace that evolves as you do
+
+---
+
+## What Is Skill Pilot?
+
+Skill Pilot is an **AI-native workspace** you run locally. It connects your favorite AI coding agents (Claude Code, Codex, Gemini CLI, and more) to a structured environment of reusable skills, tools, and workflows.
+
+Instead of using AI as a chat assistant, Skill Pilot turns AI into an active worker that:
+
+- Reads and modifies your codebase
+- Executes tasks on your computer
+- Learns new capabilities through reusable "skills"
+- Operates across your entire digital workflow — not just code
+
+**In short:** You describe what you want. The AI does it. The system gets better every time.
+
+---
+
+## What Is Codeware?
+
+Traditional software is static — it ships with fixed features that only change when developers update it.
+
+**Codeware is different.** The source code itself is the product, and AI continuously extends it based on what you need.
 
 ```
-Human → UI → Software → Fixed behavior
-```
-
-Codeware computing:
-
-```
-Human → AI → Codebase → Evolving behavior
+Traditional:  Human → UI → Software → Fixed behavior
+Codeware:     Human → AI → Codebase → Evolving behavior
 ```
 
 In Skill Pilot:
 
-* The repository is the product
-* Commits become capabilities
-* Pull requests become knowledge sharing
-* Releases become stabilized intelligence
+| Traditional Software | Skill Pilot Codeware |
+|----------------------|----------------------|
+| You use features | You grow capabilities |
+| Updates come from developers | Updates come from AI + you |
+| Fixed at release | Evolves through use |
+| One-size-fits-all | Adapts to your needs |
 
-The system is not "used".
-It is **grown**.
+The system is not "used". It is **grown**.
 
 ---
 
 ## Installation
 
-Supported platforms: **macOS**, **Linux**, **Windows via WSL only**
+**Supported platforms:** macOS, Linux, Windows (via WSL only)
 
-Supported AI agents: **Claude Code**, **Codex**, **Gemini CLI**, **OpenCode** — or bring your own **OpenAI-compatible** or **Claude-compatible** API key
+**Supported AI agents:** Claude Code, Codex, Gemini CLI, OpenCode — or bring your own OpenAI-compatible or Claude-compatible API key
 
 ### Auto Install
 
@@ -98,7 +162,7 @@ Defaults:
 
 ## Your Workspace
 
-After installation, your workspace is organized into focused zones — each one powered by Skill Pilot.
+After installation, your workspace is organized into focused zones — each powered by Skill Pilot.
 
 ```
 skill-pilot/
@@ -119,15 +183,13 @@ skill-pilot/
         └── ...                Automate any non-coding task with AI
 ```
 
-| Zone | What it is |
-|------|------------|
-| `src/` | The product you are building — from ideas to deployment, managed by Dev Swarm |
-| `workspace/learning/` | An AI-powered study studio for courses, tutorials, and skill-building |
-| `workspace/projects/` | A vibe coding space — describe what you want, watch it get built |
-| `workspace/research/` | A research workspace for analysis, competitive research, and knowledge synthesis |
-| `workspace/tasks/` | A task runner for everything else — writing, automation, planning, and more |
-
-> All zones are fully supported by Skill Pilot. Sample workflows for each are coming soon.
+| Zone | What it is | Best for |
+|------|------------|----------|
+| `src/` | The product you are building — from idea to deployment, managed by Dev Swarm | Enterprises, product builders |
+| `workspace/learning/` | AI-powered courses, tutorials, and skill-building | Beginners, learners |
+| `workspace/projects/` | Vibe coding space — describe what you want, watch it get built | Beginners, developers |
+| `workspace/research/` | Research workspace for analysis, competitive research, and knowledge synthesis | Professionals, researchers |
+| `workspace/tasks/` | Task runner for everything else — writing, automation, planning, and more | Professionals, everyone |
 
 ---
 
@@ -224,90 +286,81 @@ skill-pilot/
 
 ---
 
+## How Skill Pilot Works
+
+1. You run Skill Pilot locally on your machine
+2. The AI reads your repository and understands your project
+3. You describe what you want — in plain English
+4. The AI edits code, runs tasks, or creates new skills to solve it
+5. New capabilities are saved as reusable skills for next time
+6. Useful skills can be shared back to the community via `contrib`
+7. Stable, proven skills are released into `codeware` for everyone
+
+**The system improves every time it is used.**
+
+---
+
 ## Branch Model
 
-Skill Pilot separates three layers of evolution.
+Skill Pilot separates three layers of evolution so your personal work never conflicts with shared releases.
 
-| Branch     | Purpose                           | Who writes            |
-|------------|-----------------------------------|-----------------------|
-| `codeware` | Stable release layer              | Maintainers           |
-| `contrib`  | Shared improvements between users | Community + AI review |
-| `user`     | Personal evolving workspace       | User AI               |
+| Branch | Purpose | Who writes |
+|--------|---------|------------|
+| `codeware` | Stable release layer | Maintainers |
+| `contrib` | Shared improvements between users | Community + AI review |
+| `user` | Your personal evolving workspace | You + your AI |
 
 ### Flow of knowledge
 
 ```
-codeware  → user        (sync updates)
-user      → contrib     (share useful capability)
+codeware  → user        (receive updates)
+user      → contrib     (share what works)
 contrib   → codeware    (stabilized release)
 ```
 
 Rules:
 
-* `codeware` is protected (release only)
-* `contrib` accepts pull requests
-* `user` is freely modified by AI
-* AI never edits `codeware` directly
+- `codeware` is protected — release only
+- `contrib` accepts pull requests from the community
+- `user` is freely modified by you and your AI
+- AI never edits `codeware` directly
 
 ---
 
-## How Skill Pilot Works
+## Contributing
 
-1. The user runs Skill Pilot locally
-2. The AI reads the repository
-3. The AI edits code to solve tasks
-4. New skills appear as modules
-5. Useful skills can be shared to `contrib`
-6. Stable knowledge is released to `codeware`
+You do not contribute by writing features for users. You contribute by **teaching the system a reusable skill**.
 
-The system improves every time it is used.
+Steps:
+
+1. Work in your `user` branch
+2. If multiple users share one computer, each user should fork to a different repo and clone locally to a different path
+3. When something is useful → create a PR to `contrib`
+4. Maintainers and AI review integration safety
+5. Merged into shared knowledge
+6. Released into `codeware`
 
 ---
 
 ## Philosophy
 
-Skill Pilot is built on a different assumption:
-
-> Software should not contain all knowledge.
-> It should learn knowledge.
+> Software should not contain all knowledge. It should learn knowledge.
 
 Traditional software distributes features.
 Codeware distributes capability evolution.
 
----
-
-## What You Are Installing
-
 You are not installing an application.
 
-You are installing a **habitat for an AI worker**.
+You are installing **a habitat for an AI worker**.
 
 The AI does not operate inside the program.
 The program operates inside the AI.
 
 ---
 
-## Contributing
-
-You do not contribute by writing features for users.
-You contribute by teaching the system a reusable skill.
-
-Steps:
-
-1. Work in `user`
-2. If multiple users share one computer, each user should fork to a different repo and clone locally to a different path
-3. When useful → create PR to `contrib`
-4. Maintainers/AI review integration safety
-5. Merged into shared knowledge
-6. Released into `codeware`
-
----
-
 ## Release Concept
 
-Releases are not feature milestones.
-
-They are **intelligence stabilization points**.
+Releases are not feature milestones. They are **intelligence stabilization points**.
 
 A release means:
 
