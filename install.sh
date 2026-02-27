@@ -2,6 +2,7 @@
 
 # --- Constants ---
 SOMETHING_INSTALLED=0
+FAILED_INSTALLS=()
 UPDATED_RC_FILES=()
 NEEDS_LOCAL_BIN_PATH=0
 NEEDS_PNPM_HOME_PATH=0
@@ -21,6 +22,23 @@ info() { say "${BLUE}$*${NC}"; }
 warn() { say "${YELLOW}$*${NC}"; }
 err() { say "${RED}$*${NC}"; }
 ok() { say "${GREEN}$*${NC}"; }
+
+press_any_key() {
+  local msg="${1:-Press any key to continue, or Ctrl-C to exit.}"
+  printf '%b' "${BOLD}${msg}${NC} "
+  local input_fd="/dev/tty"
+  { true </dev/tty; } 2>/dev/null || input_fd="/dev/stdin"
+  read -r -s -n 1 <"$input_fd" || true
+  printf '\n'
+}
+
+show_screen() {
+  say ""
+  say "${BOLD}============================================================${NC}"
+  say "${BOLD}  $1${NC}"
+  say "${BOLD}============================================================${NC}"
+  say ""
+}
 
 # --- Trap for clean exit ---
 cleanup() {
@@ -146,26 +164,26 @@ pkg_install() {
 # --- Step runner ---
 install_step() {
   local title="$1"
-  local why="$2"
+  local edu_text="$2"
   local cmd_name="$3"
   local install_fn="$4"
   local path_requirement="${5:-}"
 
-  info "\n${BOLD}${title}${NC}"
-  info "$why"
+  show_screen "$title"
+  say "$edu_text"
+  say ""
 
   if command -v "$cmd_name" >/dev/null 2>&1; then
-    ok "$title is already available."
+    ok "Good — ${title} is already installed."
+    press_any_key
     return 0
   fi
 
-  if ! ask_yes_no "Install $title now?"; then
-    warn "Skipping $title."
-    return 0
-  fi
+  press_any_key "Press any key and I will install it for you, or Ctrl-C to exit."
 
   if ! "$install_fn"; then
-    warn "$title installation failed — continuing without it."
+    warn "${title} installation failed — continuing without it."
+    FAILED_INSTALLS+=("${title}")
     return 0
   fi
   SOMETHING_INSTALLED=1
@@ -173,15 +191,26 @@ install_step() {
   reload_shell_env
 
   if command -v "$cmd_name" >/dev/null 2>&1; then
-    ok "$title installed and available in current shell."
+    ok "${title} installed and available."
   else
-    warn "$title installed but not visible in PATH yet. Open a new terminal if needed."
+    warn "${title} installed but not yet visible in PATH. Open a new terminal if needed."
   fi
 }
 
 # --- Individual install functions ---
 install_homebrew() {
-  NONINTERACTIVE=1 /bin/bash -c "$($CURL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  local tmpscript
+  tmpscript="$(mktemp)" || { warn "Cannot create temp file for Homebrew installer."; return 1; }
+  if ! $CURL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh > "$tmpscript" \
+     || [ ! -s "$tmpscript" ]; then
+    rm -f "$tmpscript"
+    warn "Failed to download Homebrew installer."
+    return 1
+  fi
+  NONINTERACTIVE=1 /bin/bash "$tmpscript"
+  local rc=$?
+  rm -f "$tmpscript"
+  return $rc
 }
 
 install_git()   { pkg_install git; }
@@ -191,12 +220,30 @@ install_tmux()  { pkg_install tmux; }
 
 install_uv() {
   export SHELL="${SHELL:-bash}"
-  $CURL https://astral.sh/uv/install.sh | sh
+  local tmpscript
+  tmpscript="$(mktemp)" || { warn "Cannot create temp file for uv installer."; return 1; }
+  if ! $CURL https://astral.sh/uv/install.sh > "$tmpscript" || [ ! -s "$tmpscript" ]; then
+    rm -f "$tmpscript"
+    warn "Failed to download uv installer."
+    return 1
+  fi
+  sh "$tmpscript"; local rc=$?
+  rm -f "$tmpscript"
+  return $rc
 }
 
 install_pnpm() {
   export SHELL="${SHELL:-bash}"
-  $CURL https://get.pnpm.io/install.sh | sh
+  local tmpscript
+  tmpscript="$(mktemp)" || { warn "Cannot create temp file for pnpm installer."; return 1; }
+  if ! $CURL https://get.pnpm.io/install.sh > "$tmpscript" || [ ! -s "$tmpscript" ]; then
+    rm -f "$tmpscript"
+    warn "Failed to download pnpm installer."
+    return 1
+  fi
+  sh "$tmpscript"; local rc=$?
+  rm -f "$tmpscript"
+  return $rc
 }
 
 install_playwright() {
@@ -225,10 +272,12 @@ check_python_version() {
   if ! command -v python3 >/dev/null 2>&1; then
     return 1
   fi
-  local minor
-  minor="$(python3 -c 'import sys; print(sys.version_info.minor)')"
-  if [ "$minor" -lt 9 ] 2>/dev/null; then
-    warn "Python 3.${minor} found — 3.9+ is required."
+  local version_ok
+  version_ok="$(python3 -c 'import sys; print(1 if sys.version_info >= (3, 9) else 0)')"
+  if [ "${version_ok}" != "1" ]; then
+    local ver
+    ver="$(python3 -c 'import sys; v=sys.version_info; print(f"{v.major}.{v.minor}")')"
+    warn "Python ${ver} found — 3.9+ is required."
     return 1
   fi
   return 0
@@ -471,6 +520,36 @@ setup_shell_paths() {
   fi
 }
 
+# --- Internal profile for skillpilot.sh ---
+write_skillpilot_profile() {
+  local profile_dir="$HOME/.skillpilot"
+  local profile_file="${profile_dir}/.profile"
+  mkdir -p "$profile_dir" 2>/dev/null || true
+
+  local pnpm_home_line
+  case "$(uname -s 2>/dev/null || true)" in
+    Darwin) pnpm_home_line='export PNPM_HOME="${PNPM_HOME:-$HOME/Library/pnpm}"' ;;
+    *)      pnpm_home_line='export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"' ;;
+  esac
+
+  local brew_env=""
+  if [ -x /opt/homebrew/bin/brew ]; then
+    brew_env='eval "$(/opt/homebrew/bin/brew shellenv)"'
+  elif [ -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+    brew_env='eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"'
+  elif [ -x /usr/local/bin/brew ]; then
+    brew_env='eval "$(/usr/local/bin/brew shellenv)"'
+  fi
+
+  {
+    echo '# --- Added by Skill Pilot installer ---'
+    echo 'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"'
+    echo "$pnpm_home_line"
+    echo 'export PATH="$PNPM_HOME:$PATH"'
+    [ -n "$brew_env" ] && echo "$brew_env"
+  } > "$profile_file"
+}
+
 # --- Git branch setup ---
 setup_branches() {
   info "\nSetting up git branches..."
@@ -521,23 +600,49 @@ main() {
     -h|--help) usage; exit 0 ;;
   esac
 
-  say "${BOLD}Skill Pilot Installer (macOS/Linux)${NC}"
+  # Screen 1 — Welcome
+  show_screen "Welcome to Skill Pilot AI Agent"
+  say "You are about to set up a Codeware environment — a living"
+  say "workspace where you and AI work together every day."
   say ""
+  say "This is not a regular app you download and click."
+  say "You are installing a habitat for an AI worker."
+  say ""
+  say "  Traditional software:  Human -> UI -> Software -> Fixed result"
+  say "  Codeware:              Human -> AI -> Codebase -> Evolving result"
+  say ""
+  say "Skill Pilot lets you vibe code, learn, build products, and"
+  say "explore what AI can really do — side by side, in your own"
+  say "terminal."
+  press_any_key
 
   reload_shell_env
 
-  ask_yes_no "Before continuing, confirm you have one of these ready: Claude Code, OpenAI Codex, Gemini CLI, or an OpenAI/Claude-compatible API endpoint and API key" \
-    || warn "Continuing anyway — you can configure an AI agent after installation."
-
-  local os
+  local os OS_KIND
   os="$(uname -s 2>/dev/null || true)"
-  local OS_KIND
   case "$os" in
     Darwin) OS_KIND="mac" ;;
     Linux)  OS_KIND="linux" ;;
     MINGW*|MSYS*|CYGWIN*|Windows_NT)
-      warn "Windows is not natively supported. Install WSL and re-run inside Linux for best results."
-      OS_KIND="windows"
+      # Screen 2 — Windows
+      show_screen "Windows Detected"
+      say "Windows is not natively compatible with the AI and developer"
+      say "tools that Skill Pilot depends on."
+      say ""
+      say "The good news: Microsoft ships a free Linux layer for Windows"
+      say "called WSL (Windows Subsystem for Linux). It lets you run a"
+      say "full Linux terminal inside Windows."
+      say ""
+      say "Step 1 — Open this link in your browser and follow the guide:"
+      say "  https://learn.microsoft.com/en-us/windows/wsl/install"
+      say ""
+      say "Step 2 — When asked to choose a Linux distribution, pick:"
+      say "  Ubuntu  (most widely used by developers and in the cloud)"
+      say ""
+      say "Step 3 — Once WSL is installed, open the Ubuntu terminal and"
+      say "  run the Skill Pilot install command from there."
+      press_any_key "Press any key to exit, then install WSL first."
+      exit 0
       ;;
     *)
       warn "Unrecognised OS: $os — proceeding anyway, some steps may fail."
@@ -552,143 +657,208 @@ main() {
     */core/engine/dev_swarm/*) skip_clone="true" ;;
   esac
 
-  # macOS: Xcode Command Line Tools
+  # Screen 3 — macOS only: Xcode Command Line Tools
   if [ "$OS_KIND" = "mac" ]; then
-    info "\n${BOLD}Xcode Command Line Tools${NC}"
-    info "Xcode CLT provides clang, make, and git — required before installing Homebrew."
+    show_screen "Xcode Command Line Tools"
+    say "AI needs a small free toolkit from Apple called \"Xcode Command Line Tools\"."
+    say ""
+    say "What it includes:"
+    say "  - clang   : a compiler that turns code into programs"
+    say "  - make    : a tool for building software step by step"
+    say "  - git     : version control (we will explain this soon)"
+    say ""
+    say "Think of it as the foundation layer before any AI/developer"
+    say "tools can be installed on a Mac."
+    say ""
     if xcode-select -p >/dev/null 2>&1; then
-      ok "Xcode Command Line Tools are already installed."
+      ok "Good — Xcode Command Line Tools are already on your Mac."
+      press_any_key
     else
-      if ask_yes_no "Install Xcode Command Line Tools now?"; then
-        xcode-select --install 2>/dev/null || true
-        warn "A system dialog has appeared. Complete the Xcode CLT installation, then press Enter."
-        { read -r -p "Press Enter once Xcode CLT installation is complete..." </dev/tty; } 2>/dev/null \
-          || read -r -p "Press Enter once Xcode CLT installation is complete..."
-        if xcode-select -p >/dev/null 2>&1; then
-          ok "Xcode Command Line Tools installed."
-        else
-          warn "Xcode Command Line Tools not detected yet — continuing anyway."
-        fi
+      press_any_key "Press any key and I will start the installation for you, or Ctrl-C to exit."
+      xcode-select --install 2>/dev/null || true
+      warn "A system dialog has appeared. Complete the Xcode CLT installation,"
+      warn "then come back here and press Enter."
+      { read -r -p "" </dev/tty; } 2>/dev/null || read -r -p ""
+      if xcode-select -p >/dev/null 2>&1; then
+        ok "Xcode Command Line Tools installed."
       else
-        warn "Skipping Xcode Command Line Tools — some steps may fail without them."
+        warn "Xcode Command Line Tools not detected yet — continuing anyway."
       fi
     fi
   fi
 
-  # Linux: build-essential
+  # Screen 4 — Linux only: Build Tools
   if [ "$OS_KIND" = "linux" ]; then
-    install_step \
-      "Linux build tools (build-essential)" \
-      "build-essential (gcc, make, cmake) is required before installing Homebrew on Linux." \
-      "make" \
-      "install_build_tools_linux"
-  fi
-
-  # Git pre-Homebrew check
-  info "\n${BOLD}Git (pre-Homebrew check)${NC}"
-  info "Git is required by the Homebrew installer."
-  if command -v git >/dev/null 2>&1; then
-    ok "Git is already available."
-  else
-    if [ "$OS_KIND" = "linux" ]; then
-      if ask_yes_no "Install git now via system package manager?"; then
-        if command -v apt-get >/dev/null 2>&1; then
-          if is_root; then apt-get install -y -qq git; else sudo apt-get install -y -qq git; fi
-        elif command -v dnf >/dev/null 2>&1; then
-          if is_root; then dnf install -y -q git; else sudo dnf install -y -q git; fi
-        fi
-      fi
-    fi
-    if command -v git >/dev/null 2>&1; then
-      ok "Git installed."
+    show_screen "Linux Build Tools"
+    say "AI needs a set of compilers and utilities on Linux."
+    say ""
+    say "What is being installed:"
+    say "  - gcc / g++ : compilers that turn code into programs"
+    say "  - make      : a build coordinator"
+    say "  - cmake     : used by many tools and libraries"
+    say "  - pkg-config: helps programs find other libraries"
+    say ""
+    say "Think of it as the foundation layer before any AI/developer"
+    say "tools can be installed on Linux."
+    say ""
+    if command -v make >/dev/null 2>&1; then
+      ok "Good — build tools are already available."
+      press_any_key
     else
-      warn "git is not available — Homebrew install may fail."
+      press_any_key "Press any key and I will install them for you, or Ctrl-C to exit."
+      install_build_tools_linux || warn "Build tools installation failed — continuing anyway."
     fi
   fi
 
+  # Git pre-Homebrew check (silent)
+  if ! command -v git >/dev/null 2>&1 && [ "$OS_KIND" = "linux" ]; then
+    if command -v apt-get >/dev/null 2>&1; then
+      if is_root; then apt-get install -y -qq git 2>/dev/null; else sudo apt-get install -y -qq git 2>/dev/null; fi
+    elif command -v dnf >/dev/null 2>&1; then
+      if is_root; then dnf install -y -q git 2>/dev/null; else sudo dnf install -y -q git 2>/dev/null; fi
+    fi
+  fi
+
+  # Screen 5 — Homebrew
   install_step \
-    "Homebrew" \
-    "Homebrew is used as a package manager on macOS and Linux." \
+    "Homebrew — Your Package Manager" \
+    "$(printf '%s\n%s\n\n%s\n%s\n%s\n%s\n%s' \
+      "A package manager is like an app store for developer tools," \
+      "but operated entirely from the terminal." \
+      "Why Homebrew?" \
+      "  - Installs software without needing admin/root password" \
+      "  - Keeps everything in its directory (safe, clean)" \
+      "  - Used by most AI agent skills in Skill Pilot" \
+      "  - Works on both macOS and Linux")" \
     "brew" \
     "install_homebrew" \
     "brew_shellenv"
 
+  # Screen 6 — uv
   install_step \
-    "uv" \
-    "uv manages Python runtimes and fast Python tooling used by this project." \
+    "uv — Fast Python Manager" \
+    "$(printf '%s\n%s\n%s\n\n%s\n\n%s\n%s\n%s\n%s\n\n%s' \
+      "Python is AI's first language." \
+      "AI agents use Python to run calculations, call APIs," \
+      "process files, and do anything an LLM alone cannot do." \
+      "uv is a modern tool for managing Python. Compare:" \
+      "  Old way (pip):  slow installs, shared packages between" \
+      "                  projects, easy to break things" \
+      "  uv:             very fast, each project gets its own" \
+      "                  isolated packages, saves disk space" \
+      "Skill Pilot's engine is built with Python + uv.")" \
     "uv" \
     "install_uv" \
     "local_bin"
 
+  # Screen 7 — Python 3
+  show_screen "Python 3 — AI's First Language"
+  say "Python is the language most widely used in AI research and"
+  say "engineering. Skill Pilot's engine, LLM routing, and most"
+  say "automation tools are written in Python."
+  say ""
+  say "We need Python version 3.9 or newer."
+  say "uv will install the right version automatically."
+  say ""
+  if check_python_version; then
+    ok "Good — Python 3 is already installed and up to date."
+    press_any_key
+  else
+    press_any_key "Press any key and I will install the latest Python 3 for you, or Ctrl-C to exit."
+    if uv python install; then
+      SOMETHING_INSTALLED=1
+      reload_shell_env
+      ok "Python 3 installed."
+    else
+      warn "Python 3 installation failed — continuing without it."
+    fi
+  fi
+
+  # Screen 8 — pnpm
   install_step \
-    "pnpm" \
-    "pnpm manages Node.js packages and installs Playwright CLI." \
+    "pnpm — Fast Node.js Package Manager" \
+    "$(printf '%s\n%s\n\n%s\n%s\n\n%s\n%s\n%s\n%s\n%s' \
+      "Node.js is the most popular runtime for building websites," \
+      "AI agents, and cloud services." \
+      "Skill Pilot's web interface is built with Next.js — a" \
+      "framework that runs on Node.js." \
+      "pnpm manages Node.js packages. Compare:" \
+      "  Old way (npm):  downloads a full copy of packages for" \
+      "                  every project — uses a lot of disk space" \
+      "  pnpm:           uses smart links to share packages across" \
+      "                  projects — faster, much less disk space")" \
     "pnpm" \
     "install_pnpm" \
     "pnpm_home"
 
-  # Node.js
-  info "\n${BOLD}Node.js${NC}"
-  info "Node.js v18+ is required to run JavaScript tooling used in Skill Pilot."
+  # Screen 9 — Node.js
+  show_screen "Node.js — JavaScript Runtime"
+  say "Node.js lets JavaScript code run on your computer (not just"
+  say "in a browser). It powers:"
+  say ""
+  say "  - Skill Pilot's web interface (Next.js)"
+  say "  - Many AI agent tools and CLI programs"
+  say "  - Modern cloud services and APIs"
+  say ""
+  say "We need Node.js version 18 or newer."
+  say "pnpm will install the right version for you."
+  say ""
+  say "  LTS = Long-Term Support — the stable, recommended version"
+  say "  that gets security updates for several years."
+  say ""
   if check_node_version; then
-    ok "Node.js is already available and meets version requirements."
+    ok "Good — Node.js is already installed and up to date."
+    press_any_key
   else
-    if ask_yes_no "Install latest LTS Node.js with pnpm env use --global lts?"; then
-      if pnpm env use --global lts; then
-        SOMETHING_INSTALLED=1
-        mark_path_requirement "pnpm_home"
-        reload_shell_env
-        if command -v node >/dev/null 2>&1; then
-          ok "Node.js installed and available."
-        else
-          warn "Node.js installed but not visible in PATH yet — open a new terminal if needed."
-        fi
-      else
-        warn "Node.js installation failed — continuing without it."
-      fi
+    press_any_key "Press any key and I will install the latest LTS Node.js for you, or Ctrl-C to exit."
+    if pnpm env use --global lts; then
+      SOMETHING_INSTALLED=1
+      mark_path_requirement "pnpm_home"
+      reload_shell_env
+      ok "Node.js installed."
     else
-      warn "Skipping Node.js."
+      warn "Node.js installation failed — continuing without it."
     fi
   fi
 
-  # Python 3
-  info "\n${BOLD}Python 3${NC}"
-  info "Python 3.9+ is required for engine and automation tasks."
-  if check_python_version; then
-    ok "Python 3 is already available and meets version requirements."
-  else
-    if ask_yes_no "Install latest Python with uv python install?"; then
-      if uv python install; then
-        SOMETHING_INSTALLED=1
-        reload_shell_env
-        if command -v python3 >/dev/null 2>&1; then
-          ok "Python 3 installed and available."
-        else
-          warn "Python 3 installed but not visible in PATH yet — open a new terminal if needed."
-        fi
-      else
-        warn "Python 3 installation failed — continuing without it."
-      fi
-    else
-      warn "Skipping Python 3."
-    fi
-  fi
-
+  # Screen 10 — tmux
   install_step \
-    "tmux" \
-    "tmux supports robust long-running terminal workflows and background sessions." \
+    "tmux — Your Shared Terminal Space" \
+    "$(printf '%s\n\n%s\n%s\n\n%s\n%s\n%s\n\n%s\n%s' \
+      "tmux is one of the most important tools in Skill Pilot." \
+      "Normally, when you close a terminal window, everything" \
+      "running inside it stops. tmux keeps sessions alive in the" \
+      "background, even when you close the window." \
+      "More importantly for Skill Pilot:" \
+      "  tmux lets you and AI share the same terminal view." \
+      "  You can both see what is happening at the same time —" \
+      "  great for debugging and working together." \
+      "  You watch AI work." \
+      "  AI can see your terminal output too.")" \
     "tmux" \
     "install_tmux"
 
+  # Screen 11 — wget
   install_step \
-    "wget" \
-    "wget is used by many agent skills for CLI downloads and fetch workflows." \
+    "wget — File Downloader" \
+    "$(printf '%s\n%s\n%s\n\n%s\n%s' \
+      "wget is a command-line tool for downloading files from the" \
+      "internet. Many AI agent skills use wget to fetch datasets," \
+      "models, configuration files, and other resources." \
+      "curl can also download files, but wget handles large files" \
+      "and retries broken downloads more gracefully.")" \
     "wget" \
     "install_wget"
 
+  # Screen 12 — Playwright CLI
   install_step \
-    "Playwright CLI" \
-    "Playwright CLI enables browser automation used by project skills and testing." \
+    "Playwright CLI — Browser Automation" \
+    "$(printf '%s\n%s\n%s\n\n%s\n%s' \
+      "Playwright lets AI agents control a web browser" \
+      "programmatically — opening pages, clicking buttons, filling" \
+      "forms, taking screenshots, and extracting data." \
+      "Skill Pilot's agent skills use Playwright for web tasks" \
+      "you would normally do by hand.")" \
     "playwright-cli" \
     "install_playwright" \
     "pnpm_home"
@@ -697,7 +867,36 @@ main() {
     setup_shell_paths
   fi
 
-  # Clone repository
+  # Write internal profile for skillpilot.sh to source silently
+  write_skillpilot_profile
+
+  # Screen 16 — PATH environment setup (only shown when new tools were installed)
+  if [ "$SOMETHING_INSTALLED" -eq 1 ]; then
+    show_screen "Saving Tool Paths"
+    say "When you install a tool, your terminal needs to know"
+    say "where to find it. This is called the PATH."
+    say ""
+    say "The PATH settings for the tools just installed have been"
+    say "added to your shell profile. The installer detected your"
+    say "shell and updated the right file automatically."
+    say ""
+    say "New terminal windows will pick this up automatically."
+    say ""
+    say "To use the newly installed tools right now in this terminal,"
+    say "run the command shown below (your file may be different):"
+    say ""
+    if [ "${#UPDATED_RC_FILES[@]}" -gt 0 ]; then
+      for rc in "${UPDATED_RC_FILES[@]}"; do
+        say "  source $rc"
+      done
+    else
+      say "  source ~/.zshrc   or   source ~/.bashrc"
+    fi
+    say ""
+    say "Or simply open a new terminal window — either works."
+    press_any_key
+  fi
+
   if [ "$skip_clone" = "true" ]; then
     warn "Detected installer path under 'core/engine/dev_swarm'; skipping repository clone step."
     ok "Installation bootstrap completed."
@@ -711,9 +910,21 @@ main() {
     else
       warn "Skipping './skillpilot.sh help' because ./skillpilot.sh is not executable in current directory."
     fi
-    print_next_steps
     return 0
   fi
+
+  # Screen 13 — Choose install location
+  show_screen "Choose Install Location"
+  say "The ~/  symbol means your home folder."
+  say "On macOS:  /Users/your-username/"
+  say "On Linux:  /home/your-username/"
+  say ""
+  say "This is your personal space on the computer. Installing"
+  say "here does not affect other users and requires no special"
+  say "permissions."
+  say ""
+  say "We recommend installing under your home folder:"
+  say ""
 
   local opt1="$HOME/workspace/skill-pilot"
   local opt2
@@ -722,14 +933,13 @@ main() {
   local input_fd="/dev/tty"
   { true </dev/tty; } 2>/dev/null || input_fd="/dev/stdin"
 
-  info "\n${BOLD}Choose install location${NC}"
-  say "  ${BOLD}1)${NC} ~/workspace/skill-pilot"
-  say "     ${BLUE}→ $opt1${NC}"
+  say "  ${BOLD}1)${NC} ~/workspace/skill-pilot          ${BLUE}(recommended)${NC}"
+  say "     ${BLUE}-> $opt1${NC}"
   say ""
-  say "  ${BOLD}2)${NC} Current directory / skill-pilot"
-  say "     ${BLUE}→ $opt2${NC}"
+  say "  ${BOLD}2)${NC} Current folder / skill-pilot"
+  say "     ${BLUE}-> $opt2${NC}"
   say ""
-  say "  ${BOLD}3)${NC} Other location"
+  say "  ${BOLD}3)${NC} Enter a custom path (you specify the full project folder)"
   say ""
 
   local choice
@@ -748,14 +958,15 @@ main() {
         ;;
       3)
         local custom_base
-        printf "\nEnter your preferred folder path: " >/dev/tty 2>&1 || printf "\nEnter your preferred folder path: "
+        printf "\nEnter the full installation path (this will be the project folder): " >/dev/tty 2>&1 \
+          || printf "\nEnter the full installation path (this will be the project folder): "
         IFS= read -r custom_base <"$input_fd" || true
         custom_base="${custom_base%/}"
         if [ -z "$custom_base" ]; then
           warn "No path entered — using default: $opt1"
           install_base="$opt1"
         else
-          install_base="$custom_base/skill-pilot"
+          install_base="$custom_base"
         fi
         ok "Install location: $install_base"
         break
@@ -769,12 +980,8 @@ main() {
   parent_dir="$(dirname "$clone_dir")"
 
   if [ ! -d "$parent_dir" ]; then
-    if ask_yes_no "Directory '$parent_dir' does not exist. Create it?"; then
-      mkdir -p "$parent_dir" || { warn "Could not create $parent_dir — skipping clone."; return 0; }
-    else
-      warn "Skipping repository clone."
-      return 0
-    fi
+    say "Creating directory: $parent_dir"
+    mkdir -p "$parent_dir" || { warn "Could not create $parent_dir — skipping clone."; return 0; }
   fi
 
   if [ ! -w "$parent_dir" ]; then
@@ -782,19 +989,28 @@ main() {
     return 0
   fi
 
-  info "\nRepository setup"
-  info "Cloning Skill Pilot into: $clone_dir"
-  if ! ask_yes_no "Proceed with git clone?"; then
-    warn "Skipping repository clone."
-    return 0
-  fi
+  # Screen 14 — Git clone
+  show_screen "Downloading Skill Pilot (git clone)"
+  say "What is git?"
+  say "  git is a version control tool — it tracks every change"
+  say "  made to a codebase over time. Like \"Track Changes\" in a"
+  say "  document, but for code."
+  say ""
+  say "What is git clone?"
+  say "  git clone downloads a full copy of a codebase from the"
+  say "  internet to your computer. Unlike a zip download, a clone"
+  say "  keeps a connection to the original — so you can receive"
+  say "  future updates."
+  say ""
+  say "  In Skill Pilot, updates to the codeware (the stable"
+  say "  release layer) come in as git updates, just like any"
+  say "  normal software update."
+  say ""
+  say "Cloning Skill Pilot into: $clone_dir"
+  press_any_key "Press any key to start the download, or Ctrl-C to exit."
 
   if [ -d "$clone_dir/.git" ]; then
-    warn "Repository already exists at $clone_dir"
-    if ! ask_yes_no "Reuse existing repository and continue?"; then
-      warn "Skipping repository setup."
-      return 0
-    fi
+    warn "Repository already exists at $clone_dir — reusing existing repository."
   else
     if ! git clone --depth 1 https://github.com/x-school-academy/skill-pilot "$clone_dir"; then
       warn "git clone failed — skipping remaining setup."
@@ -803,14 +1019,73 @@ main() {
   fi
 
   cd "$clone_dir"
-  ok "Installation bootstrap completed."
+
+  # Screen 15 — Git branches
+  show_screen "Setting Up Your Workspace Branches"
+  say "git uses branches to manage parallel versions of the same"
+  say "codebase."
   say ""
-  say "Install directory: $(pwd)"
+  say "Skill Pilot has three branches:"
+  say ""
+  say "  codeware  The stable release layer — maintained by the"
+  say "            Skill Pilot team. Think of this as the \"main\""
+  say "            software release. You keep it clean and use it"
+  say "            as your update source."
+  say ""
+  say "  contrib   A shared improvement layer — where you can"
+  say "            submit useful skills back to the community"
+  say "            via a pull request."
+  say ""
+  say "  user      Your personal workspace — where you and AI"
+  say "            make all your daily changes. This branch is"
+  say "            yours to edit freely."
+  say ""
+  say "Flow of knowledge:"
+  say "  codeware -> user       (you receive updates)"
+  say "  user -> contrib        (you share improvements)"
+  say "  contrib -> codeware    (stable knowledge is released)"
+  press_any_key "Press any key to create your branches and switch to 'user' now."
+
   setup_branches
+
+  # Screen 17 — Installation complete
+  show_screen "Installation Complete"
+  if [ "${#FAILED_INSTALLS[@]}" -eq 0 ]; then
+    ok "All tools are installed and your workspace is ready."
+  else
+    warn "Setup finished, but the following tools could not be installed:"
+    for t in "${FAILED_INSTALLS[@]}"; do
+      warn "  - ${t}"
+    done
+    say ""
+    say "You can install missing tools manually and re-run:"
+    say "  bash install.sh"
+    say ""
+    say "Your workspace is otherwise ready — continuing."
+  fi
   say ""
-  info "Running: ./skillpilot.sh help"
-  ./skillpilot.sh help
-  print_next_steps
+  say "Next step — start Skill Pilot:"
+  say ""
+  say "1. Activate new tool paths in this terminal:"
+  if [ "${#UPDATED_RC_FILES[@]}" -gt 0 ]; then
+    for rc in "${UPDATED_RC_FILES[@]}"; do
+      say "     source $rc"
+    done
+  else
+    say "     (no new paths needed — all tools were already set up)"
+  fi
+  say "   (or open a new terminal window instead)"
+  say ""
+  say "2. Run the Skill Pilot setup wizard:"
+  say "     cd $clone_dir"
+  say "     ./skillpilot.sh"
+  say ""
+  say "The wizard will:"
+  say "  - Explain ports, addresses, and network settings"
+  say "  - Install free AI agent CLIs"
+  say "  - Set up your AI provider"
+  say "  - Start Skill Pilot for the first time"
+  press_any_key "Press any key to exit the installer."
 }
 
 main "$@"

@@ -23,8 +23,23 @@ reload_shell_env() {
 
 reload_shell_env
 
+# Load internal profile written by install.sh (fallback for fresh installs)
+# shellcheck source=/dev/null
+[ -f "$HOME/.skillpilot/.profile" ] && source "$HOME/.skillpilot/.profile" || true
+reload_shell_env
+
 if ! command -v tmux >/dev/null 2>&1; then
-  echo "Error: tmux is not installed."
+  printf '\n\033[1m============================================================\033[0m\n'
+  printf '\033[1m  Error: tmux is required but not found\033[0m\n'
+  printf '\033[1m============================================================\033[0m\n\n'
+  printf 'tmux is essential for Skill Pilot to run background\n'
+  printf 'sessions and let you share the terminal with AI.\n\n'
+  printf 'To fix this, re-run the installer:\n'
+  printf '  bash install.sh\n\n'
+  printf '  or\n\n'
+  printf '  brew install tmux   # then re-run ./skillpilot.sh\n\n'
+  printf 'Or raise an issue at:\n'
+  printf '  https://github.com/x-school-academy/skill-pilot\n\n'
   exit 1
 fi
 
@@ -268,6 +283,44 @@ engine_python() {
   exit 1
 }
 
+press_any_key() {
+  local msg="${1:-Press any key to continue, or Ctrl-C to exit.}"
+  printf '\033[1m%s\033[0m ' "$msg"
+  local input_fd="/dev/tty"
+  { true </dev/tty; } 2>/dev/null || input_fd="/dev/stdin"
+  read -r -s -n 1 <"$input_fd" || true
+  printf '\n'
+}
+
+show_screen() {
+  printf '\n\033[1m============================================================\033[0m\n'
+  printf '\033[1m  %s\033[0m\n' "$1"
+  printf '\033[1m============================================================\033[0m\n\n'
+}
+
+install_free_cli_tools() {
+  # Accepts a list of agent names to install: gemini, codex, opencode
+  local agents_to_install=("$@")
+  if ! command -v pnpm >/dev/null 2>&1; then
+    echo "pnpm not found — cannot install free CLI tools automatically."
+    return 0
+  fi
+  local -A pkg_map=(
+    [gemini]="@google/gemini-cli"
+    [codex]="@openai/codex"
+    [opencode]="opencode-ai"
+  )
+  for agent in "${agents_to_install[@]}"; do
+    local pkg="${pkg_map[$agent]:-}"
+    if [[ -z "$pkg" ]]; then
+      echo "Unknown agent: $agent — skipping."
+      continue
+    fi
+    echo "Installing ${pkg}..."
+    pnpm add -g "${pkg}" || echo "${pkg} install failed."
+  done
+}
+
 ask_yes_no() {
   local prompt="$1"
   local default_no="${2:-1}"
@@ -329,12 +382,12 @@ pick_port() {
     chosen="${chosen:-${suggested}}"
 
     if [[ ! "${chosen}" =~ ^[0-9]+$ ]] || ((chosen < 1 || chosen > 65535)); then
-      echo "Invalid port '${chosen}'. Enter a number between 1 and 65535."
+      echo "Invalid port '${chosen}'. Enter a number between 1 and 65535." >&2
       continue
     fi
 
     if [[ -n "${blocked_port}" && "${chosen}" == "${blocked_port}" ]]; then
-      echo "Port ${chosen} is already used by another Skill Pilot service."
+      echo "Port ${chosen} is already used by another Skill Pilot service." >&2
       continue
     fi
 
@@ -343,7 +396,7 @@ pick_port() {
       return
     fi
 
-    echo "Port ${chosen} is not available on ${host}."
+    echo "Port ${chosen} is not available on ${host}." >&2
   done
 }
 
@@ -429,10 +482,12 @@ PY
 
 update_ai_providers_json5() {
   local provider_id="$1"
+  shift
+  local installed_providers=("$@")
   local py
   py="$(engine_python)"
 
-  "${py}" - "${ROOT_DIR}/config/ai_providers.json5" "${provider_id}" <<'PY'
+  "${py}" - "${ROOT_DIR}/config/ai_providers.json5" "${provider_id}" "${installed_providers[@]}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -441,6 +496,7 @@ import json5
 
 providers_path = Path(sys.argv[1])
 default_provider = sys.argv[2]
+installed_providers = set(sys.argv[3:])
 
 data = json5.loads(providers_path.read_text(encoding="utf-8"))
 if not isinstance(data, dict):
@@ -460,7 +516,8 @@ if isinstance(llm, list):
         item_id = str(item.get("id") or "").strip()
         if not item_id:
             continue
-        item["disabled"] = item_id != default_provider
+        # disabled=False for any installed provider, disabled=True for missing ones
+        item["disabled"] = item_id not in installed_providers
 
 providers_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
@@ -542,146 +599,257 @@ run_init_wizard_if_needed() {
     return
   fi
 
-  echo "config/.env not found. Running first-time initialization."
+  # Wizard Screen 2 — Intro
+  show_screen "Skill Pilot First-Time Setup"
+  echo "Welcome! This wizard will walk you through a few settings"
+  echo "before Skill Pilot starts for the first time."
   echo ""
-  echo "This setup will ask a few questions to prepare Skill Pilot."
-  echo "Each step explains what it changes and why it is needed."
-  echo ""
+  echo "Each step includes a short explanation of what you are"
+  echo "choosing and why it matters."
+  press_any_key "Press any key to begin."
 
   local listen_host only_allow_https
   local webui_port engine_port
   local provider_id=""
-  local selected_cli_provider=""
-  local api_type="none"
-  local api_url=""
-  local api_key=""
   local webui_auth_token
 
-  echo "Step 1/6 - Network host"
-  echo "What: choose where Skill Pilot listens for connections."
-  echo "Why: 127.0.0.1 keeps access on this computer only and is safest."
-  read -r -p "Listen host [127.0.0.1]: " listen_host
-  listen_host="${listen_host:-127.0.0.1}"
+  # Wizard Screen 3 — Ports and addresses education
+  show_screen "Understanding Ports and Addresses"
+  echo 'When your computer runs a web service, it listens on a'
+  echo '"port" — a numbered door where connections arrive.'
+  echo ""
+  echo "Think of your computer as a building:"
+  echo "  IP address = the building address"
+  echo "  Port number = the specific room inside the building"
+  echo ""
+  echo "Common port numbers you will use with Skill Pilot:"
+  echo ""
+  echo "  3000  ->  Web interface (the website you open in browser)"
+  echo "  3001  ->  Skill Pilot engine API (the backend service)"
+  echo ""
+  echo "What is 127.0.0.1?"
+  echo '  This is called "localhost" — it means your own computer.'
+  echo "  When you open http://127.0.0.1:3000 in a browser, you"
+  echo "  are connecting to a service running on your own machine."
+  echo "  No one else on the internet can access it."
+  echo ""
+  echo "What is 0.0.0.0?"
+  echo '  This means "listen on all network interfaces" — your'
+  echo "  computer will accept connections from other devices on"
+  echo "  your local network (like your phone or another laptop)."
+  press_any_key "Press any key to choose your network binding."
 
+  # Wizard Screen 4 — Choose host binding
+  show_screen "Choose Where Skill Pilot Listens"
+  echo "  1)  127.0.0.1  (localhost — your computer only)"
+  echo "      Safest option. Only you can access Skill Pilot."
+  echo "      Best for: personal use on a single machine."
+  echo ""
+  echo "  2)  0.0.0.0    (all interfaces — local network access)"
+  echo "      Other devices on your home or office network can"
+  echo "      also connect to Skill Pilot."
+  echo "      Best for: accessing from your phone or tablet."
+  echo ""
+  local host_choice
+  while true; do
+    read -r -p "Enter your choice [1/2]: " host_choice
+    case "${host_choice:-1}" in
+      1) listen_host="127.0.0.1"; break ;;
+      2) listen_host="0.0.0.0";   break ;;
+      *) echo "Please enter 1 or 2." ;;
+    esac
+  done
   only_allow_https=0
   if [[ "${listen_host}" != "127.0.0.1" && "${listen_host}" != "localhost" ]]; then
+    # Wizard Screen 4b — HTTPS explanation
+    show_screen "HTTP vs HTTPS"
+    echo "When a service is accessible on your local network (not"
+    echo "just localhost), it is good practice to encrypt the"
+    echo "connection."
     echo ""
-    echo "You selected a non-local host."
-    echo "What: decide whether plain HTTP is allowed."
-    echo "Why: allowing HTTP makes setup easier but traffic is not encrypted."
-    if ask_yes_no "Host is ${listen_host}. Allow HTTP access without HTTPS for all clients?" 1; then
-      only_allow_https=0
-    else
-      only_allow_https=1
-    fi
+    echo "  HTTP   = plain text — data can be read if intercepted"
+    echo "  HTTPS  = encrypted — safe even on shared networks"
+    echo ""
+    echo "Do you plan to access Skill Pilot only within your local"
+    echo "home or office network?"
+    echo ""
+    echo "  1)  Yes — local network only (ONLY_ALLOW_HTTPS=0)"
+    echo "      HTTP is acceptable. Simpler setup."
+    echo ""
+    echo "  2)  No — I may expose it to the public internet (ONLY_ALLOW_HTTPS=1)"
+    echo "      HTTPS will be enforced for safety."
+    echo ""
+    echo "Note: You can change this later by editing:"
+    echo "  config/.env  ->  ONLY_ALLOW_HTTPS=0  or  1"
+    echo ""
+    local https_choice
+    while true; do
+      read -r -p "Enter your choice [1/2]: " https_choice
+      case "${https_choice:-1}" in
+        1) only_allow_https=0; break ;;
+        2) only_allow_https=1; break ;;
+        *) echo "Please enter 1 or 2." ;;
+      esac
+    done
   fi
 
+  # Wizard Screen 4c — Choose ports
+  show_screen "Choose Your Port Numbers"
+  echo "Skill Pilot runs two services, each on its own port:"
   echo ""
-  echo "Step 2/6 - Service ports"
-  echo "What: choose ports for WebUI and Core Engine."
-  echo "Why: each service needs an open port; defaults are 3000 and 3001."
-  webui_port="$(pick_port "WebUI" "${listen_host}" "3000")"
-  engine_port="$(pick_port "Core engine" "${listen_host}" "3001" "${webui_port}")"
+  echo "  Dev  port  ->  Web interface (the page you open in a browser)"
+  echo "  Prod port  ->  Engine API (the backend that powers AI agents)"
+  echo ""
+  echo "The defaults work for most setups. Change them only if"
+  echo "another program on your computer is already using that port."
+  echo ""
+  echo "Press Enter to accept the default, or type a port number (1-65535)."
+  echo ""
+  webui_port="$(pick_port "Dev  (WebUI)" "${listen_host}" "3000")"
+  engine_port="$(pick_port "Prod (Engine API)" "${listen_host}" "3001" "${webui_port}")"
+  echo ""
+  echo "  Dev  port: ${webui_port}  ->  http://${listen_host}:${webui_port}"
+  echo "  Prod port: ${engine_port}  ->  http://${listen_host}:${engine_port}"
+  press_any_key
 
-  local local_token=""
+  # Wizard Screen 5 — AI agent CLI detection
+  show_screen "AI Agent CLI Tools"
+  echo "Skill Pilot works with these AI code agent CLIs:"
   echo ""
-  echo "Step 3/6 - AI tool detection"
-  echo "What: check if Claude, Codex, Gemini, or OpenCode CLI is installed."
-  echo "Why: Skill Pilot needs one of them as the default coding agent."
+  echo "  claude    Claude Code by Anthropic"
+  echo "  codex     OpenAI Codex CLI"
+  echo "  gemini    Google Gemini CLI"
+  echo "  opencode  OpenCode (open source, OpenAI-compatible)"
+  echo ""
+  echo "Checking what you have installed..."
+  echo ""
   detect_available_providers
+  local all_agents=("claude" "codex" "gemini" "opencode")
+  for agent in "${all_agents[@]}"; do
+    local found=0
+    for p in "${AVAILABLE_PROVIDERS[@]}"; do
+      [[ "$p" == "$agent" ]] && found=1 && break
+    done
+    if ((found)); then
+      printf '  \033[0;32m%-10s  ✓ installed\033[0m\n' "${agent}"
+    else
+      printf '  \033[1;33m%-10s  ✗ not found\033[0m\n' "${agent}"
+    fi
+  done
+  echo ""
 
-  if ((${#AVAILABLE_PROVIDERS[@]} == 0)); then
-    echo "No supported AI code agent CLI found (claude/codex/gemini/opencode)."
-    if ask_yes_no "Do you have an OpenAI-compatible or Claude-compatible API URL and key?" 1; then
-      echo ""
-      echo "Step 4/6 - Optional CLI install"
-      echo "What: offer to install Claude and/or Codex CLI automatically."
-      echo "Why: if no CLI exists, Skill Pilot cannot run coding-agent tasks."
-      maybe_install_cli_tools || true
+  # Wizard Screen 5b — Install free CLI tools
+  local missing_free=()
+  for agent in gemini codex opencode; do
+    local found=0
+    for p in "${AVAILABLE_PROVIDERS[@]}"; do
+      [[ "$p" == "$agent" ]] && found=1 && break
+    done
+    ((found)) || missing_free+=("$agent")
+  done
+
+  if ((${#missing_free[@]} > 0)); then
+    show_screen "Install Free AI Agent CLIs"
+    echo "We recommend installing the free (open source) alternatives too."
+    echo ""
+    echo "The following are not yet installed:"
+    echo ""
+    local -A agent_labels=(
+      [gemini]="Google Gemini CLI — free tier available"
+      [codex]="OpenAI Codex CLI  — free tier available"
+      [opencode]="OpenCode           — free tier available"
+    )
+    local -A agent_pkgs=(
+      [gemini]="@google/gemini-cli"
+      [codex]="@openai/codex"
+      [opencode]="opencode-ai"
+    )
+    for agent in gemini codex opencode; do
+      local is_missing=0
+      for m in "${missing_free[@]}"; do
+        [[ "$m" == "$agent" ]] && is_missing=1 && break
+      done
+      if ((is_missing)); then
+        printf '  %-10s  %s\n' "${agent}" "${agent_labels[$agent]}"
+      else
+        printf '  %-10s  (already installed — skipped)\n' "${agent}"
+      fi
+    done
+    echo ""
+    echo "Why install all of them?"
+    echo "  Different AI models have different strengths."
+    echo "  Having all available lets you compare results and choose"
+    echo "  the best tool for each task — for free."
+    echo ""
+    echo "Press any key and I will install the missing ones for you:"
+    echo ""
+    for agent in "${missing_free[@]}"; do
+      echo "  pnpm add -g ${agent_pkgs[$agent]}"
+    done
+    echo ""
+    if ((${#AVAILABLE_PROVIDERS[@]} == 0)); then
+      echo "Note: No AI agent is installed — installation is required to continue."
+      press_any_key "Press any key to install, or Ctrl-C to exit."
+      install_free_cli_tools "${missing_free[@]}"
+      detect_available_providers
+      if ((${#AVAILABLE_PROVIDERS[@]} == 0)); then
+        echo "Error: No AI agent CLI is available after installation attempt."
+        echo "Please install one manually and re-run: ./skillpilot.sh"
+        exit 1
+      fi
+    else
+      echo "Or press Ctrl-C to skip."
+      press_any_key "Press any key to install, or Ctrl-C to skip."
+      install_free_cli_tools "${missing_free[@]}" || true
       detect_available_providers
     fi
   fi
 
-  if ((${#AVAILABLE_PROVIDERS[@]} == 0)); then
-    echo "No AI code agent CLI is available, and setup cannot continue automatically."
-    echo "Please re-run this script after installing an agent, or follow SETUP.md for manual setup."
-    return 1
-  fi
-
-  selected_cli_provider="$(choose_provider)"
-  provider_id="${selected_cli_provider}"
-  echo ""
-  echo "Step 5/6 - API endpoint (optional)"
-  echo "What: configure your API URL and key for compatible providers."
-  echo "Why: required when using custom OpenAI-compatible or Claude-compatible endpoints."
-
-  case "${selected_cli_provider}" in
-    claude)
-      if ask_yes_no "Configure Claude-compatible API URL and key now?" 1; then
-        api_type="anthropic"
-        provider_id="claude-compat"
-      fi
-      ;;
-    codex)
-      if ask_yes_no "Configure OpenAI-compatible API URL and key now?" 1; then
-        api_type="openai"
-        provider_id="codex-compat"
-      fi
-      ;;
-    opencode)
-      if ask_yes_no "Configure OpenAI-compatible API URL and key now?" 1; then
-        api_type="openai"
-      fi
-      ;;
-    gemini)
-      api_type="none"
-      ;;
-  esac
-
-  if [[ "${api_type}" == "anthropic" ]]; then
-    read -r -p "Claude-compatible API URL: " api_url
-    while [[ -z "${api_url}" ]]; do
-      echo "API URL is required."
-      read -r -p "Claude-compatible API URL: " api_url
-    done
-    read -r -s -p "Claude-compatible API key/token: " api_key
+  # Wizard Screen 6 — Choose default provider
+  if ((${#AVAILABLE_PROVIDERS[@]} == 1)); then
+    provider_id="${AVAILABLE_PROVIDERS[0]}"
+    echo "Using ${provider_id} as the default AI agent."
+  else
+    show_screen "Choose Your Default AI Agent"
+    echo "Which AI agent do you want Skill Pilot to use by default?"
+    echo "You can change this later in config/ai_providers.json5."
     echo ""
-    while [[ -z "${api_key}" ]]; do
-      echo "API key/token is required."
-      read -r -s -p "Claude-compatible API key/token: " api_key
-      echo ""
+    local i=1
+    for p in "${AVAILABLE_PROVIDERS[@]}"; do
+      echo "  ${i})  ${p}"
+      ((i++))
     done
-  elif [[ "${api_type}" == "openai" ]]; then
-    read -r -p "OpenAI-compatible API URL: " api_url
-    while [[ -z "${api_url}" ]]; do
-      echo "API URL is required."
-      read -r -p "OpenAI-compatible API URL: " api_url
-    done
-    read -r -s -p "OpenAI-compatible API key: " api_key
     echo ""
-    while [[ -z "${api_key}" ]]; do
-      echo "API key is required."
-      read -r -s -p "OpenAI-compatible API key: " api_key
-      echo ""
+    local provider_choice
+    while true; do
+      read -r -p "Enter your choice [1]: " provider_choice
+      provider_choice="${provider_choice:-1}"
+      if [[ "${provider_choice}" =~ ^[0-9]+$ ]] && \
+         ((provider_choice >= 1 && provider_choice <= ${#AVAILABLE_PROVIDERS[@]})); then
+        provider_id="${AVAILABLE_PROVIDERS[$((provider_choice - 1))]}"
+        echo "Default AI agent: ${provider_id}"
+        break
+      fi
+      echo "Invalid selection. Enter a number from 1 to ${#AVAILABLE_PROVIDERS[@]}."
     done
   fi
 
-  echo ""
-  echo "Step 6/6 - WebUI auth token"
-  echo "What: set a token used by the web interface for access control."
-  echo "Why: this prevents unauthorized use of your local/remote instance."
+  # Auto-generate auth token (no prompt needed for beginners)
   webui_auth_token="$(generate_uuid)"
-  read -r -p "WebUI auth token [${webui_auth_token}]: " local_token
-  webui_auth_token="${local_token:-${webui_auth_token}}"
 
-  write_engine_env "${only_allow_https}" "${webui_auth_token}" "${api_type}" "${api_url}" "${api_key}"
+  write_engine_env "${only_allow_https}" "${webui_auth_token}" "none" "" ""
   update_settings_json5 "${listen_host}" "${webui_port}" "${engine_port}"
-  update_ai_providers_json5 "${provider_id}"
+  update_ai_providers_json5 "${provider_id}" "${AVAILABLE_PROVIDERS[@]}"
 
-  echo "Initialization completed:"
-  echo "  - ${ENGINE_ENV_FILE} created"
-  echo "  - config/settings.json5 updated"
-  echo "  - config/ai_providers.json5 default provider set to '${provider_id}'"
+  # Wizard Screen 7 — Configuration saved
+  show_screen "Configuration Saved"
+  echo "Your settings have been written to:"
+  echo "  config/.env"
+  echo "  config/settings.json5"
+  echo "  config/ai_providers.json5"
+  echo ""
+  echo "You can review and edit these files at any time."
+  press_any_key "Press any key to start Skill Pilot."
 }
 
 build_webui_export() {
@@ -858,18 +1026,35 @@ case "${ACTION}" in
     ensure_engine_venv
     run_init_wizard_if_needed
     load_guarded_env
+    # Wizard Screen 8 — Starting services
+    show_screen "Starting Skill Pilot"
+    echo "Launching services in tmux background sessions..."
+    echo ""
     if ((IS_DEV == 1)); then
       ensure_webui_deps
       start_session "sp-webui" "pnpm -C core/webui dev"
       start_session "sp-engine" "uv --project core/engine run core/engine/main.py --reload --reload-dir core/engine"
-      echo "Done (dev mode)."
+      _engine_url="$(get_webui_base_url "prod")"
+      _webui_url="$(get_webui_base_url "dev")"
+      echo "  Engine  ->  ${_engine_url%/}"
+      echo "  WebUI   ->  ${_webui_url%/}  (dev mode)"
+      echo ""
       echo "Use 'tmux attach -t sp-webui' or 'tmux attach -t sp-engine' to view logs."
-      open_or_print_webui_url "dev"
     else
       ensure_webui_release_assets
       start_session "sp-engine" "uv --project core/engine run core/engine/main.py"
-      echo "Done (production mode)."
-      echo "WebUI is served by the engine. Use 'tmux attach -t sp-engine' to view logs."
+      _engine_url="$(get_webui_base_url "prod")"
+      echo "  Engine + WebUI  ->  ${_engine_url%/}  (production mode)"
+      echo ""
+      echo "Use 'tmux attach -t sp-engine' to view logs."
+    fi
+    echo ""
+    echo "To stop Skill Pilot at any time, run:"
+    echo "  ./skillpilot.sh stop"
+    press_any_key "Press any key to open Skill Pilot in your browser."
+    if ((IS_DEV == 1)); then
+      open_or_print_webui_url "dev"
+    else
       open_or_print_webui_url "prod"
     fi
     ;;
