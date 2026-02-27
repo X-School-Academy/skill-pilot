@@ -224,6 +224,86 @@
       max-width: 580px;
     }
 
+    /* ── INSTALL (compact, centered) ── */
+    #install { padding: 64px 0; text-align: center; }
+
+    .install-box {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      margin: 32px auto 0;
+      max-width: 660px;
+      text-align: left;
+    }
+
+    .install-platforms {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .platform-badge {
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 20px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .code-block {
+      background: #070a0f;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.9rem;
+      color: var(--accent3);
+      position: relative;
+      overflow-x: auto;
+    }
+
+    .code-block .prompt { color: var(--muted); user-select: none; }
+
+    .copy-btn {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: color .2s, background .2s;
+    }
+    .copy-btn:hover { color: var(--text); background: rgba(255,255,255,0.08); }
+
+    .install-agents {
+      margin-top: 16px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .install-agents strong { color: var(--text); }
+
+    .install-license {
+      margin-top: 12px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .install-license a {
+      color: var(--accent2);
+      text-decoration: underline;
+      text-decoration-color: rgba(56,189,248,0.3);
+    }
+    .install-license a:hover { text-decoration-color: var(--accent2); }
+
     /* ── AUDIENCE CARDS ── */
     #for { background: var(--bg2); }
 
@@ -314,6 +394,14 @@
     .c-everyone .card-cta:hover { background: rgba(245,158,11,0.08); }
     .c-everyone li::before { color: var(--accent4); }
 
+    .c-companion .card-tag, .c-companion .card-cta { color: #f43f5e; border-color: rgba(244,63,94,0.3); }
+    .c-companion .card-cta:hover { background: rgba(244,63,94,0.08); }
+    .c-companion li::before { color: #f43f5e; }
+
+    .c-enjoyer .card-tag, .c-enjoyer .card-cta { color: #f97316; border-color: rgba(249,115,22,0.3); }
+    .c-enjoyer .card-cta:hover { background: rgba(249,115,22,0.08); }
+    .c-enjoyer li::before { color: #f97316; }
+
     /* ── WHAT IS SECTION ── */
     .what-grid {
       display: grid;
@@ -387,111 +475,6 @@
     .compare-head .compare-cell:first-child { color: var(--muted); }
     .compare-head .compare-cell:last-child { color: var(--accent2); }
 
-    /* ── WORKSPACE ── */
-    #workspace { background: var(--bg2); }
-
-    .workspace-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-      margin-top: 56px;
-    }
-
-    .workspace-card {
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 24px 20px;
-      transition: border-color .2s, transform .2s;
-    }
-    .workspace-card:hover { border-color: rgba(255,255,255,0.18); transform: translateY(-3px); }
-
-    .ws-icon { font-size: 1.6rem; margin-bottom: 12px; display: block; }
-    .ws-path {
-      font-family: "SF Mono", "Fira Code", monospace;
-      font-size: 0.78rem;
-      color: var(--accent2);
-      background: rgba(56,189,248,0.08);
-      border: 1px solid rgba(56,189,248,0.15);
-      border-radius: 6px;
-      padding: 3px 8px;
-      display: inline-block;
-      margin-bottom: 12px;
-    }
-
-    .workspace-card h4 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
-    .workspace-card p { font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
-
-    .ws-for {
-      margin-top: 10px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: var(--accent);
-    }
-
-    /* ── INSTALL ── */
-    .install-box {
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 40px;
-      margin-top: 56px;
-    }
-
-    .install-platforms {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-bottom: 28px;
-    }
-
-    .platform-badge {
-      font-size: 0.8rem;
-      font-weight: 600;
-      padding: 4px 12px;
-      border-radius: 20px;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid var(--border);
-      color: var(--muted);
-    }
-
-    .code-block {
-      background: #070a0f;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 20px 24px;
-      font-family: "SF Mono", "Fira Code", monospace;
-      font-size: 0.9rem;
-      color: var(--accent3);
-      position: relative;
-      overflow-x: auto;
-    }
-
-    .code-block .prompt { color: var(--muted); user-select: none; }
-
-    .copy-btn {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      color: var(--muted);
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 0.75rem;
-      cursor: pointer;
-      transition: color .2s, background .2s;
-    }
-    .copy-btn:hover { color: var(--text); background: rgba(255,255,255,0.08); }
-
-    .install-agents {
-      margin-top: 20px;
-      font-size: 0.88rem;
-      color: var(--muted);
-    }
-
-    .install-agents strong { color: var(--text); }
-
     /* ── FEATURES ── */
     .features-grid {
       display: grid;
@@ -538,6 +521,7 @@
       flex-wrap: wrap;
       gap: 14px;
       margin-top: 48px;
+      justify-content: center;
     }
 
     .community-link {
@@ -604,7 +588,7 @@
     @media (max-width: 640px) {
       section { padding: 64px 0; }
       .hero { padding: 80px 0 56px; }
-      .install-box { padding: 24px; }
+      .install-box { padding: 20px; }
       .cta-banner { padding: 40px 24px; margin: 64px 0; }
       .nav-links { display: none; }
       .footer-inner { flex-direction: column; text-align: center; }
@@ -622,10 +606,9 @@
       <ul class="nav-links">
         <li><a href="#for">Who it's for</a></li>
         <li><a href="#what">What it is</a></li>
-        <li><a href="#workspace">Workspace</a></li>
         <li><a href="#features">Features</a></li>
         <li><a href="#community">Community</a></li>
-        <li><a href="#install" class="nav-cta">Install Free</a></li>
+        <li><a href="https://github.com/X-School-Academy/skill-pilot" target="_blank" rel="noopener" class="nav-cta">GitHub</a></li>
       </ul>
     </div>
   </nav>
@@ -633,28 +616,46 @@
   <!-- ── HERO ── -->
   <section class="hero">
     <div class="container">
-      <img class="hero-logo" src="assets/skill-pilot-2.png" alt="Skill Pilot AI" />
-
       <h1>Your personal AI workspace —<br /><span class="grad-text">learn, automate, and build</span><br />from a single idea.</h1>
 
       <p class="hero-sub">
         Whether you're new to AI, a professional automating your daily work, or a team turning ideas into products — Skill Pilot gives you one unified environment powered by AI agents.
       </p>
 
-      <div class="hero-actions">
-        <a href="#install" class="btn btn-primary">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
-          Get Started Free
-        </a>
-        <a href="https://github.com/X-School-Academy/skill-pilot" target="_blank" rel="noopener" class="btn btn-outline">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
-          View on GitHub
-        </a>
-      </div>
-
       <p class="hero-tagline">
         <strong>"Software runs. Codeware grows."</strong>
       </p>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- ── INSTALL ── -->
+  <section id="install">
+    <div class="container">
+      <span class="section-label">Installation</span>
+      <h2 class="section-title">One command.<br />You're in.</h2>
+      <p class="section-sub" style="margin: 0 auto;">Install Skill Pilot locally in seconds. No cloud account required. Your data stays on your machine.</p>
+
+      <div class="install-box">
+        <div class="install-platforms">
+          <span class="platform-badge">🍎 macOS</span>
+          <span class="platform-badge">🐧 Linux</span>
+          <span class="platform-badge">🪟 Windows via WSL</span>
+        </div>
+
+        <div class="code-block" style="position:relative;">
+          <span class="prompt">$ </span>curl -fsSL https://skill-pilot.ai/install.sh | bash
+          <button class="copy-btn" onclick="navigator.clipboard.writeText('curl -fsSL https://skill-pilot.ai/install.sh | bash');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000)">Copy</button>
+        </div>
+
+        <p class="install-agents">
+          Works with: <strong>Claude Code</strong>, <strong>Codex</strong>, <strong>Gemini CLI</strong>, <strong>OpenCode</strong> — or any <strong>OpenAI-compatible</strong> or <strong>Claude-compatible</strong> API key.
+        </p>
+        <p class="install-license">
+          Free and open source &middot; <a href="https://github.com/X-School-Academy/skill-pilot/blob/codeware/LICENSE" target="_blank" rel="noopener">MIT License</a>
+        </p>
+      </div>
     </div>
   </section>
 
@@ -679,7 +680,7 @@
             <li>Spin up real working apps without writing a single line of code</li>
             <li>A structured path from complete beginner to confident AI user</li>
           </ul>
-          <a href="#workspace" class="card-cta">Start in workspace/learning →</a>
+          <a href="#install" class="card-cta">Get started for free →</a>
         </div>
 
         <div class="audience-card c-pro">
@@ -692,7 +693,7 @@
             <li>Manage servers and cloud infrastructure through natural language</li>
             <li>AI-powered bots that work while you sleep</li>
           </ul>
-          <a href="#workspace" class="card-cta">Start in workspace/tasks →</a>
+          <a href="#install" class="card-cta">Start automating →</a>
         </div>
 
         <div class="audience-card c-enterprise">
@@ -719,6 +720,32 @@
             <li>A personal AI habitat that evolves as you do</li>
           </ul>
           <a href="#community" class="card-cta">Join the community →</a>
+        </div>
+
+        <div class="audience-card c-companion">
+          <span class="card-icon">🤝</span>
+          <span class="card-tag">AI Companion</span>
+          <h3>Your Always-On AI Best Friend</h3>
+          <ul>
+            <li>A lifelike AI avatar lives right on your screen — always present, always ready</li>
+            <li>Talk, ask questions, and think out loud together, just like a real conversation</li>
+            <li>Feels less like a tool, more like a close friend who truly gets you</li>
+            <li>Available 24/7 — no scheduling, no waiting, no judgment</li>
+          </ul>
+          <a href="#install" class="card-cta">Meet your companion →</a>
+        </div>
+
+        <div class="audience-card c-enjoyer">
+          <span class="card-icon">🎬</span>
+          <span class="card-tag">Life Enjoyer</span>
+          <h3>Your Private AI Cinema, One Click Away</h3>
+          <ul>
+            <li>One-click setup for a fully private media center powered by ComfyUI</li>
+            <li>Generate stunning AI videos, images, and audio entirely on your machine</li>
+            <li>Stream your own AI-created content — no subscriptions, no limits, no cloud</li>
+            <li>Your entertainment, imagined and produced by you and AI together</li>
+          </ul>
+          <a href="#install" class="card-cta">Start enjoying →</a>
         </div>
 
       </div>
@@ -799,55 +826,6 @@
 
   <hr class="divider" />
 
-  <!-- ── WORKSPACE ── -->
-  <section id="workspace">
-    <div class="container">
-      <span class="section-label">Your Workspace</span>
-      <h2 class="section-title">Five zones.<br />One environment.</h2>
-      <p class="section-sub">After install, your workspace is organized into focused zones — each powered by Skill Pilot AI agents.</p>
-
-      <div class="workspace-grid">
-        <div class="workspace-card">
-          <span class="ws-icon">🏗️</span>
-          <span class="ws-path">src/</span>
-          <h4>Product Builder</h4>
-          <p>Your commercial-ready product, built end-to-end by Dev Swarm agents — from idea to deployment.</p>
-          <p class="ws-for">For enterprises &amp; product builders</p>
-        </div>
-        <div class="workspace-card">
-          <span class="ws-icon">📚</span>
-          <span class="ws-path">workspace/learning/</span>
-          <h4>AI Study Studio</h4>
-          <p>AI-generated courses, tutorials, and interactive lessons tailored to your goals.</p>
-          <p class="ws-for">For beginners &amp; learners</p>
-        </div>
-        <div class="workspace-card">
-          <span class="ws-icon">💻</span>
-          <span class="ws-path">workspace/projects/</span>
-          <h4>Vibe Coding Lab</h4>
-          <p>Describe what you want, watch it get built. No setup friction, just ideas becoming apps.</p>
-          <p class="ws-for">For beginners &amp; developers</p>
-        </div>
-        <div class="workspace-card">
-          <span class="ws-icon">🔬</span>
-          <span class="ws-path">workspace/research/</span>
-          <h4>Research Workspace</h4>
-          <p>Deep dives, competitive analysis, and knowledge synthesis — AI-assisted research at scale.</p>
-          <p class="ws-for">For professionals &amp; researchers</p>
-        </div>
-        <div class="workspace-card">
-          <span class="ws-icon">⚙️</span>
-          <span class="ws-path">workspace/tasks/</span>
-          <h4>AI Task Runner</h4>
-          <p>Automate any non-coding task — writing, scheduling, form filling, communication, and more.</p>
-          <p class="ws-for">For professionals &amp; everyone</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <hr class="divider" />
-
   <!-- ── FEATURES ── -->
   <section id="features" style="background: var(--bg2);">
     <div class="container">
@@ -908,34 +886,6 @@
 
   <hr class="divider" />
 
-  <!-- ── INSTALL ── -->
-  <section id="install">
-    <div class="container">
-      <span class="section-label">Installation</span>
-      <h2 class="section-title">One command.<br />You're in.</h2>
-      <p class="section-sub">Install Skill Pilot locally in seconds. No cloud account required. Your data stays on your machine.</p>
-
-      <div class="install-box">
-        <div class="install-platforms">
-          <span class="platform-badge">🍎 macOS</span>
-          <span class="platform-badge">🐧 Linux</span>
-          <span class="platform-badge">🪟 Windows via WSL</span>
-        </div>
-
-        <div class="code-block" style="position:relative;">
-          <span class="prompt">$ </span>curl -fsSL https://skill-pilot.ai/install.sh | bash
-          <button class="copy-btn" onclick="navigator.clipboard.writeText('curl -fsSL https://skill-pilot.ai/install.sh | bash');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000)">Copy</button>
-        </div>
-
-        <p class="install-agents">
-          Works with: <strong>Claude Code</strong>, <strong>Codex</strong>, <strong>Gemini CLI</strong>, <strong>OpenCode</strong> — or any <strong>OpenAI-compatible</strong> or <strong>Claude-compatible</strong> API key.
-        </p>
-      </div>
-    </div>
-  </section>
-
-  <hr class="divider" />
-
   <!-- ── COMMUNITY ── -->
   <section id="community">
     <div class="container">
@@ -946,25 +896,21 @@
       <div class="community-links">
 
         <a href="https://discord.com/invite/myf9RRhfxN" target="_blank" rel="noopener" class="community-link">
-          <!-- Discord icon -->
           <svg viewBox="0 0 24 24" fill="currentColor" style="color:#7289da"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03z"/></svg>
           Discord
         </a>
 
         <a href="https://x.com/skill_pilot_ai" target="_blank" rel="noopener" class="community-link">
-          <!-- X / Twitter icon -->
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
           𝕏 (Twitter)
         </a>
 
         <a href="https://www.reddit.com/r/skillpilot/" target="_blank" rel="noopener" class="community-link">
-          <!-- Reddit icon -->
           <svg viewBox="0 0 24 24" fill="currentColor" style="color:#ff4500"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
           Reddit
         </a>
 
         <a href="https://github.com/X-School-Academy/skill-pilot" target="_blank" rel="noopener" class="community-link">
-          <!-- GitHub icon -->
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
           GitHub
         </a>
@@ -995,8 +941,9 @@
         <a href="https://github.com/X-School-Academy/skill-pilot/blob/codeware/LICENSE" target="_blank" rel="noopener">MIT License</a>
         <a href="https://discord.com/invite/myf9RRhfxN" target="_blank" rel="noopener">Discord</a>
         <a href="https://www.reddit.com/r/skillpilot/" target="_blank" rel="noopener">Reddit</a>
+        <a href="https://x.com/skill_pilot_ai" target="_blank" rel="noopener">𝕏 Twitter</a>
       </div>
-      <p class="footer-copy">© 2025 Skill Pilot AI · MIT License</p>
+      <p class="footer-copy">© 2026 Skill Pilot AI · MIT License</p>
     </div>
   </footer>
 
