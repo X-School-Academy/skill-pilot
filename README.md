@@ -119,7 +119,7 @@ The system is not "used". It is **grown**.
 ### Auto Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/x-school-academy/skill-pilot/codeware/install.sh | bash
+curl -fsSL https://skill-pilot.ai/install.sh | bash
 ```
 
 ### Manual Install
@@ -133,6 +133,7 @@ Follow the step-by-step guide in [SETUP.md](SETUP.md).
 After installation, run:
 
 ```bash
+# cd <your installation path>
 ./skillpilot.sh help
 ```
 
