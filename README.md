@@ -10,6 +10,24 @@ Whether you are just starting out with AI, a professional who wants to automate 
 
 💬 [Discord](https://discord.com/invite/myf9RRhfxN) | [𝕏](https://x.com/skill_pilot_ai) | [Reddit](https://www.reddit.com/r/skillpilot/) | [WebChat](assets/webchat-contact.jpg)
 
+## Installation
+
+**Supported platforms:** macOS, Linux, Windows (via WSL only)
+
+**Supported AI agents:** Claude Code, Codex, Gemini CLI, OpenCode — or bring your own OpenAI-compatible or Claude-compatible API key
+
+### Auto Install
+
+```bash
+curl -fsSL https://skill-pilot.ai/install.sh | bash
+```
+
+### Manual Install
+
+Follow the step-by-step guide in [SETUP.md](SETUP.md).
+
+---
+
 ## Intro Video
 
 ![Intro](assets/intro-video.webp)
@@ -110,27 +128,9 @@ The system is not "used". It is **grown**.
 
 ---
 
-## Installation
-
-**Supported platforms:** macOS, Linux, Windows (via WSL only)
-
-**Supported AI agents:** Claude Code, Codex, Gemini CLI, OpenCode — or bring your own OpenAI-compatible or Claude-compatible API key
-
-### Auto Install
-
-```bash
-curl -fsSL https://skill-pilot.ai/install.sh | bash
-```
-
-### Manual Install
-
-Follow the step-by-step guide in [SETUP.md](SETUP.md).
-
----
-
 ## Usage
 
-After installation, run:
+After [installation](#installation), run:
 
 ```bash
 # cd <your installation path>
