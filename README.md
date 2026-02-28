@@ -26,6 +26,8 @@ curl -fsSL https://skill-pilot.ai/install.sh | bash
 
 Follow the step-by-step guide in [SETUP.md](SETUP.md).
 
+Then see [Usage](#usage) to get started.
+
 ---
 
 ## Intro Video
