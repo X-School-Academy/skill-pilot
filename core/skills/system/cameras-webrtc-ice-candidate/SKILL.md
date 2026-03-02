@@ -1,0 +1,46 @@
+---
+name: cameras-webrtc-ice-candidate
+description: "Relay a WebRTC ICE candidate from the WebUI to the server peer connection."
+---
+
+Args:
+    candidate: The ICE candidate string (e.g. "candidate:...").
+    sdp_mid: The m-line identifier (sdpMid) of the ICE candidate.
+    sdp_mline_index: The m-line index (sdpMLineIndex) of the candidate.
+
+Returns:
+    JSON string with key "status": "ok".
+
+## Usage
+Call the local MCP bridge shell wrapper:
+
+```bash
+core/bin/tool-cli request '{"server_id": "cameras", "tool_name": "webrtc_ice_candidate", "arguments": {}}'
+```
+
+## Arguments Schema
+```json
+{
+  "properties": {
+    "candidate": {
+      "title": "Candidate",
+      "type": "string"
+    },
+    "sdp_mid": {
+      "default": "",
+      "title": "Sdp Mid",
+      "type": "string"
+    },
+    "sdp_mline_index": {
+      "default": 0,
+      "title": "Sdp Mline Index",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "candidate"
+  ],
+  "title": "webrtc_ice_candidateArguments",
+  "type": "object"
+}
+```

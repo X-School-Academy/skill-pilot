@@ -78,8 +78,9 @@ def _build_prompt(
         "",
         f"Workflow name: {workflow_name}",
         f"Current Agent: {current_name}",
-        f"Current Agent skill: {skill}",
     ]
+    if skill:
+        lines.append(f"Current Agent skill: {skill}")
     if responsibility:
         lines.append(f"Current Agent role: {responsibility}")
 

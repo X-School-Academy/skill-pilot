@@ -3,15 +3,22 @@ name: terminal-tunnel-list
 description: "List all active SSH tunnels managed by this server."
 ---
 
+Use this tool when you need to see which port-forward tunnels are currently open.
+        Best for auditing active connections or finding a tunnelId before calling tunnel_stop.
+
+        Returns:
+            JSON object with:
+            - tunnels: list of active tunnel objects, each containing tunnelId, direction, localAddress, and remoteAddress.
+
+        Do not use this tool:
+            - to stop a tunnel; use tunnel_stop instead
+
 ## Usage
 Call the local MCP bridge shell wrapper:
 
 ```bash
 core/bin/tool-cli request '{"server_id": "terminal", "tool_name": "tunnel_list", "arguments": {}}'
 ```
-
-## Tool Description
-List all active SSH tunnels managed by this server.
 
 ## Arguments Schema
 ```json

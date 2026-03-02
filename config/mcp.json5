@@ -74,7 +74,7 @@
         AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}",
         AWS_REGION: "${AWS_REGION}",
       },
-      disabled: true,
+      disabled: "${DISABLE_AWS_API_MCP_SERVER}",
     },
     github: {
       type: "http",

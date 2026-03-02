@@ -47,7 +47,10 @@ Actions:
   enable (default)            Enable key safe guard on config/.env
   disable                     Disable key safe guard and restore current user ownership
   get_key_names               Read loaded key names from engine memory via core/bin/tool-cli
+  get_key_value KEY [KEY...]  Read one or more key values from config/.env
+                              Requires elevation when the file is root-owned (safe guard active).
   put_key_values KEY=VALUE... Update or insert one or more keys in config/.env
+                              All pairs are written in one elevated call — password prompt once.
 EOF
 }
 
@@ -252,6 +255,38 @@ do_get_key_names() {
   "${PYTHON_BIN}" -c 'import json,sys; d=json.loads(sys.stdin.read()); keys=((d.get("result") or {}).get("keys") or []); [print(k) for k in keys]' <<< "${response}"
 }
 
+do_get_key_value() {
+  require_env_file
+  if [[ ${#remaining_args[@]} -lt 1 ]]; then
+    echo "get_key_value requires one or more KEY arguments."
+    usage
+    return 2
+  fi
+
+  # When the env file is readable by the current user (safe guard not enabled),
+  # run manage.py directly — no elevation needed.
+  if [[ -r "${ENV_FILE}" ]]; then
+    "${PYTHON_BIN}" "${MANAGE_SCRIPT}" get --env-file "${ENV_FILE}" "${remaining_args[@]}"
+    return $?
+  fi
+
+  # File is root-owned — need elevation to read.
+  local tmp_script rc=0
+  tmp_script="$(mktemp /tmp/keys_get.XXXXXX.sh)"
+  cat > "$tmp_script" <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+python_bin="$1"
+manage_script="$2"
+env_file="$3"
+shift 3
+"$python_bin" "$manage_script" get --env-file "$env_file" "$@"
+SCRIPT
+  run_elevated_script "$tmp_script" "${PYTHON_BIN}" "${MANAGE_SCRIPT}" "${ENV_FILE}" "${remaining_args[@]}" || rc=$?
+  rm -f "$tmp_script"
+  return $rc
+}
+
 do_put_key_values() {
   require_env_file
   if [[ ${#remaining_args[@]} -lt 1 ]]; then
@@ -297,6 +332,9 @@ case "${action}" in
     ;;
   get_key_names)
     do_get_key_names
+    ;;
+  get_key_value)
+    do_get_key_value
     ;;
   put_key_values)
     do_put_key_values

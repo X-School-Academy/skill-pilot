@@ -330,6 +330,17 @@ def expand_env_placeholders(value: Any, env: dict[str, str], missing: set[str]) 
     return value
 
 
+def _coerce_to_bool(value: Any) -> bool:
+    """Convert env-expanded field values (possibly strings) to bool.
+
+    String values are parsed case-insensitively: "1", "true", "yes" → True;
+    everything else (including "false", "0", "") → False.
+    """
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes")
+    return bool(value)
+
+
 def load_expansion_env(config_path: Path) -> dict[str, str]:
     return dict(os.environ)
 
@@ -372,8 +383,8 @@ def load_mcp_configs(path: Path) -> tuple[dict[str, ServerConfig], dict[str, set
             type=str(expanded.get("type")) if expanded.get("type") is not None else None,
             transport=str(expanded.get("transport")) if expanded.get("transport") is not None else None,
             headers={str(k): str(v) for k, v in headers_val.items()} if isinstance(headers_val, dict) else {},
-            disabled=bool(expanded.get("disabled", False)),
-            enabled=bool(expanded["enabled"]) if "enabled" in expanded and expanded["enabled"] is not None else None,
+            disabled=_coerce_to_bool(expanded.get("disabled", False)),
+            enabled=_coerce_to_bool(expanded["enabled"]) if "enabled" in expanded and expanded["enabled"] is not None else None,
             system=bool(expanded.get("system", False)),
             workdir=default_workdir,
         )
@@ -446,6 +457,20 @@ def normalize_description(value: str) -> str:
     return "\n".join(line.rstrip() for line in text.splitlines()).strip()
 
 
+def split_docstring(description: str) -> tuple[str, str]:
+    """Split a normalized docstring into (first_line, remaining_content).
+
+    For system MCP tools the first line becomes the skill description and
+    the remaining content is prepended to the skill body.
+    """
+    lines = description.splitlines()
+    if not lines:
+        return "", ""
+    first_line = lines[0].strip()
+    remaining = "\n".join(lines[1:]).strip()
+    return first_line, remaining
+
+
 def build_short_description(full_description: str, max_chars: int = 220) -> str:
     first_line = full_description.splitlines()[0].strip()
     candidate = re.sub(r"\s+", " ", first_line).strip()
@@ -478,28 +503,43 @@ def load_description_overrides(path: Path) -> dict[str, str]:
     return overrides
 
 
-def render_skill(tool: ToolDef, server_id: str, description_overrides: dict[str, str]) -> str:
+def render_skill(tool: ToolDef, server_id: str, description_overrides: dict[str, str], is_system: bool = False) -> str:
     sid = skill_name(server_id, tool.name)
     fallback = f"Invoke MCP tool {tool.name} on server {server_id}."
-    full_description = description_overrides.get(sid, normalize_description(tool.description or fallback) or fallback)
-    short_description = build_short_description(full_description).replace('"', '\\"')
+    normalized = normalize_description(tool.description or fallback) or fallback
+
+    if sid in description_overrides:
+        full_description = description_overrides[sid]
+        skill_description = build_short_description(full_description).replace('"', '\\"')
+        tool_extra = ""
+    elif is_system:
+        first_line, remaining = split_docstring(normalized)
+        skill_description = (first_line or normalized)[:1024].rstrip().replace('"', '\\"')
+        full_description = normalized
+        tool_extra = remaining
+    else:
+        full_description = normalized
+        skill_description = build_short_description(full_description).replace('"', '\\"')
+        tool_extra = ""
+
     schema_json = json.dumps(tool.input_schema or {}, indent=2, ensure_ascii=True)
     request_json = json.dumps({"server_id": server_id, "tool_name": tool.name, "arguments": {}}, ensure_ascii=True)
+
+    extra_block = f"{tool_extra}\n\n" if tool_extra else ""
+    tool_description_section = "" if is_system and not (sid in description_overrides) else f"\n## Tool Description\n{full_description}\n"
+
     return f"""---
 name: {sid}
-description: "{short_description}"
+description: "{skill_description}"
 ---
 
-## Usage
+{extra_block}## Usage
 Call the local MCP bridge shell wrapper:
 
 ```bash
 core/bin/tool-cli request '{request_json}'
 ```
-
-## Tool Description
-{full_description}
-
+{tool_description_section}
 ## Arguments Schema
 ```json
 {schema_json}
@@ -508,7 +548,7 @@ core/bin/tool-cli request '{request_json}'
 
 
 def write_skill_files(
-    output_dir: Path, tools_by_server: dict[str, list[ToolDef]], description_overrides: dict[str, str]
+    output_dir: Path, tools_by_server: dict[str, list[ToolDef]], description_overrides: dict[str, str], is_system: bool = False
 ) -> set[str]:
     expected: set[str] = set()
     for server_id in sorted(tools_by_server.keys()):
@@ -516,7 +556,7 @@ def write_skill_files(
             path = skill_dir(output_dir, server_id, tool.name)
             expected.add(path.name)
             path.mkdir(parents=True, exist_ok=True)
-            (path / "SKILL.md").write_text(render_skill(tool, server_id, description_overrides))
+            (path / "SKILL.md").write_text(render_skill(tool, server_id, description_overrides, is_system=is_system))
     return expected
 
 
@@ -623,7 +663,7 @@ def sync_mcp_tools(
         try:
             client = create_client(config)
             tools = client.list_tools()
-            expected = write_skill_files(target_output_dir, {server_id: tools}, description_overrides)
+            expected = write_skill_files(target_output_dir, {server_id: tools}, description_overrides, is_system=config.system)
             prune_server_skills(target_output_dir, server_id, expected)
             for path in alternate_output_dirs:
                 prune_server_skills(path, server_id, set())
@@ -697,7 +737,7 @@ def main() -> int:
         try:
             client = create_client(config)
             tools = client.list_tools()
-            expected = write_skill_files(target_output_dir, {server_id: tools}, description_overrides)
+            expected = write_skill_files(target_output_dir, {server_id: tools}, description_overrides, is_system=config.system)
             prune_server_skills(target_output_dir, server_id, expected)
             for path in alternate_output_dirs:
                 prune_server_skills(path, server_id, set())

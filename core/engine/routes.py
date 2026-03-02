@@ -1031,23 +1031,40 @@ def _infer_mcp_server_type(config: Dict[str, Any]) -> str:
     return "stdio"
 
 
+def _parse_bool_value(value: Any) -> bool:
+    """Parse a potentially string-typed bool field from env expansion."""
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes")
+    return bool(value)
+
+
 @router.get("/api/config/mcp-servers")
 def config_mcp_servers_list():
     try:
         data = _read_mcp_config()
     except (ValueError, OSError) as exc:
         return JSONResponse(status_code=500, content={"error": str(exc), "servers": []})
+    from mcp_servers.mcp_to_skills.sync import expand_env_placeholders
+    expansion_env = dict(os.environ)
     servers_dict = data.get("mcpServers", {})
     servers = []
     for name, cfg in servers_dict.items():
-        entry: Dict[str, Any] = {"name": name, "type": _infer_mcp_server_type(cfg)}
-        if cfg.get("system"):
+        missing: set = set()
+        expanded = expand_env_placeholders(cfg, expansion_env, missing)
+        entry: Dict[str, Any] = {"name": name, "type": _infer_mcp_server_type(expanded)}
+        if expanded.get("system"):
             entry["system"] = True
-        if cfg.get("disabled"):
+        enabled_raw = expanded.get("enabled")
+        disabled_raw = expanded.get("disabled", False)
+        if enabled_raw is not None:
+            is_disabled = not _parse_bool_value(enabled_raw)
+        else:
+            is_disabled = _parse_bool_value(disabled_raw)
+        if is_disabled:
             entry["disabled"] = True
         for field in ("command", "args", "env", "url", "headers"):
-            if field in cfg:
-                entry[field] = cfg[field]
+            if field in expanded:
+                entry[field] = expanded[field]
         servers.append(entry)
     return {"servers": servers}
 

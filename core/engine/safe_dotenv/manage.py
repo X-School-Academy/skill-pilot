@@ -48,6 +48,20 @@ def _upsert_key_values(text: str, updates: list[tuple[str, str]]) -> str:
     return "\n".join(updated_lines).rstrip("\n") + "\n"
 
 
+def _get_key_values(text: str, keys: list[str]) -> list[tuple[str, str | None]]:
+    """Return [(key, value_or_None), ...] for each requested key."""
+    found: dict[str, str] = {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k = k.strip()
+        if k in keys:
+            found[k] = v
+    return [(k, found.get(k)) for k in keys]
+
+
 def _remove_key(text: str, target_key: str) -> str:
     out: list[str] = []
     for line in text.splitlines():
@@ -83,6 +97,20 @@ def _cmd_put(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_get(args: argparse.Namespace) -> int:
+    env_file = Path(args.env_file).resolve()
+    text = _read_text(env_file)
+    results = _get_key_values(text, args.keys)
+    rc = 0
+    for key, value in results:
+        if value is None:
+            print(f"{key}=")
+            rc = 1  # signal that at least one key was missing
+        else:
+            print(f"{key}={value}")
+    return rc
+
+
 def _cmd_disable(args: argparse.Namespace) -> int:
     env_file = Path(args.env_file).resolve()
     text = _read_text(env_file)
@@ -100,6 +128,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_put.add_argument("--env-file", required=True)
     p_put.add_argument("key_values", nargs="+")
     p_put.set_defaults(func=_cmd_put)
+
+    p_get = sub.add_parser("get", help="Read one or more key values from the env file")
+    p_get.add_argument("--env-file", required=True)
+    p_get.add_argument("keys", nargs="+", metavar="KEY")
+    p_get.set_defaults(func=_cmd_get)
 
     p_disable = sub.add_parser("disable", help="Remove IN_KEYS_SAFE_GUARD flag from env file")
     p_disable.add_argument("--env-file", required=True)

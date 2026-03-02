@@ -171,7 +171,7 @@ def validate_workflow_doc(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
             if not isinstance(data, dict):
                 errors.append(_err("AGENT_DATA", "Agent `data` is required.", [node_id]))
             else:
-                for field in ("title", "provider_id", "skill"):
+                for field in ("title", "provider_id"):
                     val = data.get(field)
                     if not isinstance(val, str) or not val.strip():
                         errors.append(
@@ -181,6 +181,16 @@ def validate_workflow_doc(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
                                 [node_id],
                             )
                         )
+                skill = str(data.get("skill") or "").strip()
+                responsibility = str(data.get("responsibility") or "").strip()
+                if not skill and not responsibility:
+                    errors.append(
+                        _err(
+                            "AGENT_FIELD",
+                            "Agent requires non-empty `skill` or `responsibility`.",
+                            [node_id],
+                        )
+                    )
         else:
             errors.append(_err("NODE_KIND", "Node `type` must be start, subagent, or end.", [node_id]))
 

@@ -804,10 +804,10 @@ export default function WorkflowsPage() {
           edge_ids: [],
         });
       }
-      if (!(node.data?.skill || '').trim()) {
+      if (!(node.data?.skill || '').trim() && !(node.data?.responsibility || '').trim()) {
         localErrors.push({
           rule: 'SUBAGENT_FIELD',
-          message: 'Agent requires non-empty `skill`.',
+          message: 'Agent requires non-empty `skill` or `responsibility`.',
           node_ids: [node.id],
           edge_ids: [],
         });
@@ -857,7 +857,9 @@ export default function WorkflowsPage() {
 
   const selectedNode = workflow.nodes.find((n) => n.id === selectedNodeId) || null;
   const selectedNodeHasMissingSkill = Boolean(
-    selectedNode?.type === 'agent' && !(selectedNode.data?.skill || '').trim(),
+    selectedNode?.type === 'agent' &&
+    !(selectedNode.data?.skill || '').trim() &&
+    !(selectedNode.data?.responsibility || '').trim(),
   );
 
   return (
@@ -1338,7 +1340,7 @@ export default function WorkflowsPage() {
                     />
                     {selectedNodeHasMissingSkill ? (
                       <Paper p="xs" withBorder style={{ borderColor: '#ef4444', background: '#fef2f2' }}>
-                        <Text size="xs" c="red" fw={700}>Validation Error: no skill selected</Text>
+                        <Text size="xs" c="red" fw={700}>Validation Error: skill or responsibility is required</Text>
                       </Paper>
                     ) : null}
                     <Button

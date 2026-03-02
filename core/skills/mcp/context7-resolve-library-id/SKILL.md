@@ -16,11 +16,12 @@ Resolve a package or product name to the best matching Context7 library ID befor
 ## Arguments Schema
 ```json
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
     "query": {
       "type": "string",
-      "description": "The user's original question or task. This is used to rank library results by relevance to what the user is trying to accomplish. IMPORTANT: Do not include any sensitive or confidential information such as API keys, passwords, credentials, or personal data in your query."
+      "description": "The question or task you need help with. This is used to rank library results by relevance to what the user is trying to accomplish. The query is sent to the Context7 API for processing. Do not include any sensitive or confidential information such as API keys, passwords, credentials, personal data, or proprietary code in your query."
     },
     "libraryName": {
       "type": "string",
@@ -30,8 +31,6 @@ Resolve a package or product name to the best matching Context7 library ID befor
   "required": [
     "query",
     "libraryName"
-  ],
-  "additionalProperties": false,
-  "$schema": "http://json-schema.org/draft-07/schema#"
+  ]
 }
 ```
