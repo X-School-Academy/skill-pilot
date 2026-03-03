@@ -180,6 +180,7 @@ export default function HomePage() {
   const [opened, setOpened] = useState(false);
   const [activeView, setActiveView] = useState<ActiveView>('home');
   const [promptText, setPromptText] = useState('');
+  const [newSessionWorkflow, setNewSessionWorkflow] = useState<string | null>(null);
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
   const [llmProvider, setLlmProvider] = useState<string | null>(null);
   const [liveSessionName, setLiveSessionName] = useState<string | null>(null);
@@ -515,9 +516,10 @@ export default function HomePage() {
 
   useEffect(() => {
     if (router.isReady) {
-      const { prompt, new_session, view } = router.query;
+      const { prompt, new_session, view, workflow } = router.query;
       if (new_session === 'true' && prompt) {
         setPromptText(prompt as string);
+        setNewSessionWorkflow(typeof workflow === 'string' && workflow ? workflow : null);
         setActiveView('home');
       } else if (typeof view === 'string' && view) {
         const validViews: ActiveView[] = [
@@ -538,14 +540,25 @@ export default function HomePage() {
     const provider = llmProvider || 'gemini';
     setStartingSession(true);
     try {
-      const res = await axios.post(`${API_BASE_URL}/terminal/tmux/create`, {
-        provider_id: provider,
-        prompt: trimmedPrompt,
-        sandbox: newSessionSandbox,
-        auto: newSessionAuto,
-        network: newSessionNetwork,
-        native_terminal: newSessionNativeTerminal,
-      });
+      const endpoint = newSessionWorkflow ? `${API_BASE_URL}/workflows/execute` : `${API_BASE_URL}/terminal/tmux/create`;
+      const payload = newSessionWorkflow
+        ? {
+            workflow: newSessionWorkflow,
+            prompt: trimmedPrompt,
+            sandbox: newSessionSandbox,
+            auto: newSessionAuto,
+            network: newSessionNetwork,
+            native_terminal: newSessionNativeTerminal,
+          }
+        : {
+            provider_id: provider,
+            prompt: trimmedPrompt,
+            sandbox: newSessionSandbox,
+            auto: newSessionAuto,
+            network: newSessionNetwork,
+            native_terminal: newSessionNativeTerminal,
+          };
+      const res = await axios.post(endpoint, payload);
       const sessionName: string | undefined = res.data?.session?.name;
       const nativeOpened: boolean = Boolean(res.data?.native_terminal?.opened);
       const nativeError: string = String(res.data?.native_terminal?.error || '');
@@ -562,9 +575,10 @@ export default function HomePage() {
           setActiveView('live-terminal');
         }
         setPromptText('');
+        setNewSessionWorkflow(null);
       }
     } catch (err) {
-      console.error('Failed to create session:', err);
+      console.error('Failed to start session:', err);
     } finally {
       setStartingSession(false);
     }
@@ -682,6 +696,11 @@ export default function HomePage() {
           maxRows={10}
           size="md"
         />
+        {newSessionWorkflow && (
+          <Text size="sm" color="dimmed" align="center">
+            Workflow mode: providers are controlled by the workflow nodes for {`core/workflows/${newSessionWorkflow}`}
+          </Text>
+        )}
         <Group position="center" spacing="lg">
           <Checkbox
             label="Sandbox"
@@ -3096,6 +3115,7 @@ export default function HomePage() {
               <Select
                 placeholder="LLM"
                 value={llmProvider}
+                disabled={Boolean(newSessionWorkflow)}
                 onChange={(value) => {
                   if (!value) return;
                   setLlmProvider(value);

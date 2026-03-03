@@ -101,6 +101,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Reuse latest web/native tmux bash session by stopping the current agent process and launching a new prompt",
     )
     new_agent_parser.add_argument("prompt", nargs="+", help="Prompt text")
+    new_agent_parser.add_argument("--session-name", default=None, help="Optional explicit tmux session name")
+    new_agent_parser.add_argument("--provider", default=None, help="Optional explicit provider id")
+    new_agent_parser.add_argument("--auto", dest="auto", action="store_true", default=None)
+    new_agent_parser.add_argument("--no-auto", dest="auto", action="store_false")
+    new_agent_parser.add_argument("--network", dest="network", action="store_true", default=None)
+    new_agent_parser.add_argument("--no-network", dest="network", action="store_false")
+    new_agent_parser.add_argument("--sandbox", dest="sandbox", action="store_true", default=None)
+    new_agent_parser.add_argument("--no-sandbox", dest="sandbox", action="store_false")
 
     return parser
 
@@ -240,6 +248,7 @@ def main() -> int:
                 workflow_prompt=" ".join(args.prompt).strip(),
                 max_workers=effective_workers,
                 infer_fn=infer_fn,
+                log_fn=lambda message: print(message, file=sys.stderr),
             )
         except Exception as exc:
             print(f"run-workflow failed: {exc}", file=sys.stderr)
@@ -252,6 +261,8 @@ def main() -> int:
                     "workflow": result.workflow,
                     "workflow_name": result.workflow_name,
                     "duration_sec": result.duration_sec,
+                    "run_id": result.run_id,
+                    "output_root": result.output_root,
                     "node_status": result.node_status,
                     "final_outputs": result.final_outputs,
                     "errors": result.errors,
@@ -267,6 +278,16 @@ def main() -> int:
             "operation": "new_agent_session",
             "prompt": " ".join(args.prompt).strip(),
         }
+        if args.session_name:
+            payload["session_name"] = str(args.session_name).strip()
+        if args.provider:
+            payload["provider_id"] = str(args.provider).strip()
+        if args.auto is not None:
+            payload["auto"] = bool(args.auto)
+        if args.network is not None:
+            payload["network"] = bool(args.network)
+        if args.sandbox is not None:
+            payload["sandbox"] = bool(args.sandbox)
 
         try:
             response_raw = send_request(json.dumps(payload, ensure_ascii=True), socket_path, args.timeout)

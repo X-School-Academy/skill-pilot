@@ -385,15 +385,20 @@ export default function TasksPage() {
     if (!target) return;
 
     const instructionPath = taskProjectPath(currentTask);
+    const workspacePath = currentDirectory ? taskProjectPath(currentDirectory) : 'workspace/tasks';
     const projectReferenceFiles = selectedReferenceFiles.map((path) => taskProjectPath(path));
-    const referenceClause = selectedReferenceFiles.length > 0
-      ? `, and refer to files: ${projectReferenceFiles.join(', ')}`
+    const referenceSection = selectedReferenceFiles.length > 0
+      ? `\n\nReference files:\n- ${projectReferenceFiles.join('\n- ')}`
       : '';
     const prompt = executeMode === 'skill'
-      ? `Use Agent skill ${target}, follow the instructions defined at ${instructionPath}${referenceClause}.`
-      : `Execute workflow ${workflowProjectPath(target)} in terminal, follow the instructions defined at ${instructionPath}${referenceClause}.`;
+      ? `Use Agent skill ${target}, follow the instructions defined at ${instructionPath}${selectedReferenceFiles.length > 0 ? `, and refer to files: ${projectReferenceFiles.join(', ')}` : ''}.`
+      : `Execute workflow ${workflowProjectPath(target)}.\n\nFollow the instructions defined at ${instructionPath}.\n\nWorkspace path: ${workspacePath}\n\nIf you create any intermediate files, save them inside the task workspace above.${referenceSection}`;
 
     setExecuteOpened(false);
+    if (executeMode === 'workflow') {
+      void router.push(`/?new_session=true&prompt=${encodeURIComponent(prompt)}&workflow=${encodeURIComponent(`${target}.json`)}`);
+      return;
+    }
     void router.push(`/?new_session=true&prompt=${encodeURIComponent(prompt)}`);
   };
 
