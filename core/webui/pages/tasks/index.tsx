@@ -20,6 +20,7 @@ import {
   NavLink,
   ScrollArea,
   Select,
+  Stack,
   Text,
   TextInput,
   Textarea,
@@ -58,6 +59,8 @@ interface LlmProvider {
   name: string;
 }
 
+type ExecuteMode = 'skill' | 'workflow';
+
 const detectTaskKind = (path: string): TaskKind => {
   const lower = (path || '').toLowerCase();
   if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'markdown';
@@ -65,6 +68,35 @@ const detectTaskKind = (path: string): TaskKind => {
   if (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.ogg') || lower.endsWith('.m4a') || lower.endsWith('.aac') || lower.endsWith('.flac')) return 'audio';
   if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.webm') || lower.endsWith('.m4v') || lower.endsWith('.avi') || lower.endsWith('.mkv')) return 'video';
   return 'text';
+};
+
+const workflowBaseName = (path: string): string => {
+  const filename = path.split('/').pop() || path;
+  return filename.endsWith('.json') ? filename.slice(0, -5) : filename;
+};
+
+const taskProjectPath = (path: string): string => {
+  const trimmed = path.replace(/^\/+/, '');
+  return trimmed ? `workspace/tasks/${trimmed}` : 'workspace/tasks';
+};
+
+const workflowProjectPath = (name: string): string => `core/workflows/${name}.json`;
+
+const listFilesInDirectory = (items: FileItem[], directoryPath: string): FileItem[] => {
+  if (!directoryPath) {
+    return items.filter((item) => item.type === 'file');
+  }
+
+  for (const item of items) {
+    if (item.type !== 'dir') continue;
+    if (item.path === directoryPath) {
+      return (item.children || []).filter((child) => child.type === 'file');
+    }
+    const nested = listFilesInDirectory(item.children || [], directoryPath);
+    if (nested.length > 0) return nested;
+  }
+
+  return [];
 };
 
 export default function TasksPage() {
@@ -88,10 +120,22 @@ export default function TasksPage() {
   const [newTaskPath, setNewTaskPath] = useState('');
   const [taskTitle, setTaskTitle] = useState('');
   const [creatingTask, setCreatingTask] = useState(false);
+  const [executeOpened, setExecuteOpened] = useState(false);
+  const [executeMode, setExecuteMode] = useState<ExecuteMode>('skill');
+  const [skillOptions, setSkillOptions] = useState<string[]>([]);
+  const [workflowOptions, setWorkflowOptions] = useState<string[]>([]);
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
+  const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
+  const [selectedReferenceFiles, setSelectedReferenceFiles] = useState<string[]>([]);
   const [navbarWidth, setNavbarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
 
   const currentTask = typeof task === 'string' ? task : '';
+  const currentDirectory = currentTask.includes('/') ? currentTask.slice(0, currentTask.lastIndexOf('/')) : '';
+  const currentDirectoryFiles = useMemo(
+    () => listFilesInDirectory(treeData, currentDirectory).filter((item) => item.path !== currentTask),
+    [treeData, currentDirectory, currentTask],
+  );
 
   const startResizing = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -188,6 +232,31 @@ export default function TasksPage() {
     }
   };
 
+  const fetchExecuteOptions = async () => {
+    try {
+      const [skillsRes, workflowsRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/config/skills`),
+        axios.get(`${API_BASE_URL}/workflows/tree`),
+      ]);
+
+      const nextSkills: string[] = [];
+      for (const category of skillsRes.data.categories || []) {
+        for (const skill of category.skills || []) {
+          if (skill?.name) nextSkills.push(String(skill.name));
+        }
+      }
+      setSkillOptions(nextSkills.sort((a, b) => a.localeCompare(b)));
+
+      const nextWorkflows = (workflowsRes.data.items || [])
+        .filter((item: FileItem) => item.type === 'file')
+        .map((item: FileItem) => workflowBaseName(item.path))
+        .sort((a: string, b: string) => a.localeCompare(b));
+      setWorkflowOptions(nextWorkflows);
+    } catch (err) {
+      console.error('Failed to fetch execute options:', err);
+    }
+  };
+
   const saveContent = async () => {
     if (!currentTask || selectedKind === 'image' || selectedKind === 'audio' || selectedKind === 'video') return;
     setEditorSaving(true);
@@ -230,6 +299,7 @@ export default function TasksPage() {
   useEffect(() => {
     fetchTree();
     fetchLlmProviders();
+    fetchExecuteOptions();
   }, []);
 
   useEffect(() => {
@@ -239,6 +309,10 @@ export default function TasksPage() {
       fetchLatest();
     }
   }, [currentTask, router.isReady]);
+
+  useEffect(() => {
+    setSelectedReferenceFiles((prev) => prev.filter((path) => currentDirectoryFiles.some((item) => item.path === path)));
+  }, [currentDirectoryFiles]);
 
   const sortItems = (items: FileItem[]): FileItem[] => {
     const sorted = [...items].sort((a, b) => {
@@ -287,6 +361,42 @@ export default function TasksPage() {
   const isMarkdownEditor = selectedKind === 'markdown';
   const isTextEditor = selectedKind === 'text';
 
+  const openExecuteScreen = () => {
+    setExecuteMode('skill');
+    setSelectedSkill(null);
+    setSelectedWorkflow(null);
+    setSelectedReferenceFiles([]);
+    setExecuteOpened(true);
+    setNotice('');
+    setEditorError('');
+  };
+
+  const toggleReferenceFile = (path: string, checked: boolean) => {
+    setSelectedReferenceFiles((prev) => (
+      checked
+        ? (prev.includes(path) ? prev : [...prev, path])
+        : prev.filter((item) => item !== path)
+    ));
+  };
+
+  const runExecuteAction = () => {
+    if (!currentTask) return;
+    const target = executeMode === 'skill' ? selectedSkill : selectedWorkflow;
+    if (!target) return;
+
+    const instructionPath = taskProjectPath(currentTask);
+    const projectReferenceFiles = selectedReferenceFiles.map((path) => taskProjectPath(path));
+    const referenceClause = selectedReferenceFiles.length > 0
+      ? `, and refer to files: ${projectReferenceFiles.join(', ')}`
+      : '';
+    const prompt = executeMode === 'skill'
+      ? `Use Agent skill ${target}, follow the instructions defined at ${instructionPath}${referenceClause}.`
+      : `Execute workflow ${workflowProjectPath(target)} in terminal, follow the instructions defined at ${instructionPath}${referenceClause}.`;
+
+    setExecuteOpened(false);
+    void router.push(`/?new_session=true&prompt=${encodeURIComponent(prompt)}`);
+  };
+
   const renderMainContent = () => {
     if (selectedKind === 'image' && currentTask) {
       return (
@@ -330,10 +440,7 @@ export default function TasksPage() {
               size="xs"
               variant="default"
               leftIcon={<IconPlayerPlay size="1rem" />}
-              onClick={() => {
-                setNotice('Execute is a placeholder for now.');
-                setEditorError('');
-              }}
+              onClick={openExecuteScreen}
             >
               Execute
             </Button>
@@ -444,6 +551,108 @@ export default function TasksPage() {
           <Button variant="default" onClick={() => setAddTaskOpened(false)}>Cancel</Button>
           <Button onClick={() => void createTask()} disabled={!newTaskPath.trim()} loading={creatingTask}>Create Task</Button>
         </Group>
+      </Modal>
+
+      <Modal
+        opened={executeOpened}
+        onClose={() => setExecuteOpened(false)}
+        title="Execute Task"
+        centered
+        size="lg"
+      >
+        <Stack spacing="md">
+          <div>
+            <Text size="sm" weight={600} mb={6}>Executed By</Text>
+            <Group spacing="lg">
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="execute-mode"
+                  checked={executeMode === 'skill'}
+                  onChange={() => setExecuteMode('skill')}
+                />
+                <span>Skill</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="execute-mode"
+                  checked={executeMode === 'workflow'}
+                  onChange={() => setExecuteMode('workflow')}
+                />
+                <span>Workflow</span>
+              </label>
+            </Group>
+          </div>
+
+          {executeMode === 'skill' ? (
+            <Select
+              label="Skill"
+              placeholder="Select a skill"
+              value={selectedSkill}
+              onChange={setSelectedSkill}
+              data={skillOptions.map((item) => ({ value: item, label: item }))}
+              searchable
+              clearable
+            />
+          ) : (
+            <Select
+              label="Workflow"
+              placeholder="Select a workflow"
+              value={selectedWorkflow}
+              onChange={setSelectedWorkflow}
+              data={workflowOptions.map((item) => ({ value: item, label: item }))}
+              searchable
+              clearable
+            />
+          )}
+
+          <div>
+            <Text size="sm" weight={600}>Instruction File</Text>
+            <Text size="sm" color="dimmed" mt={4}>{currentTask || '(no file selected)'}</Text>
+          </div>
+
+          <div>
+            <Text size="sm" weight={600} mb={6}>Reference Files</Text>
+            {currentDirectoryFiles.length > 0 ? (
+              <div
+                style={{
+                  border: `1px solid ${theme.colorScheme === 'dark' ? theme.colors.dark[4] : theme.colors.gray[3]}`,
+                  borderRadius: 8,
+                  padding: 12,
+                  maxHeight: 220,
+                  overflowY: 'auto',
+                }}
+              >
+                {currentDirectoryFiles.map((item) => (
+                  <label
+                    key={item.path}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedReferenceFiles.includes(item.path)}
+                      onChange={(e) => toggleReferenceFile(item.path, e.currentTarget.checked)}
+                    />
+                    <span>{item.name}</span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <Text size="sm" color="dimmed">No other files found in this directory.</Text>
+            )}
+          </div>
+
+          <Group position="right">
+            <Button variant="default" onClick={() => setExecuteOpened(false)}>Cancel</Button>
+            <Button
+              onClick={runExecuteAction}
+              disabled={!currentTask || (executeMode === 'skill' ? !selectedSkill : !selectedWorkflow)}
+            >
+              Run
+            </Button>
+          </Group>
+        </Stack>
       </Modal>
 
       <div className="shrink-0 border-b border-[#d6def8] bg-white/60 px-6 py-2">
