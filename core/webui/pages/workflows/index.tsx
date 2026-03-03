@@ -569,6 +569,15 @@ export default function WorkflowsPage() {
     setSelectedEdgeId(null);
   };
 
+  const getViewportAddPosition = useCallback(() => {
+    const scrollLeft = canvasScrollRef.current?.scrollLeft || 0;
+    const scrollTop = canvasScrollRef.current?.scrollTop || 0;
+    return {
+      x: Math.max(10, Math.min(CANVAS_WIDTH - 210, scrollLeft + 120)),
+      y: Math.max(10, Math.min(CANVAS_HEIGHT - 170, scrollTop + 80)),
+    };
+  }, []);
+
   const findNode = useCallback((id: number) => workflow.nodes.find((n) => n.id === id) || null, [workflow.nodes]);
 
   const getNodeSize = useCallback((node: WorkflowNode): { width: number; height: number } => {
@@ -1025,22 +1034,17 @@ export default function WorkflowsPage() {
                 }}
               >
                 <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 30 }}>
-                  <Tooltip label="New Agent">
-                    <ActionIcon
-                      variant="filled"
-                      color="blue"
+                  <Tooltip label="Add New Node">
+                    <Button
+                      size="xs"
+                      leftIcon={<IconPlus size="0.95rem" />}
                       onClick={(e) => {
                         e.stopPropagation();
-                        const scrollLeft = canvasScrollRef.current?.scrollLeft || 0;
-                        const scrollTop = canvasScrollRef.current?.scrollTop || 0;
-                        handleAddAgent({
-                          x: Math.max(10, Math.min(CANVAS_WIDTH - 210, scrollLeft + 120)),
-                          y: Math.max(10, Math.min(CANVAS_HEIGHT - 170, scrollTop + 80)),
-                        });
+                        handleAddAgent(getViewportAddPosition());
                       }}
                     >
-                      <IconPlus size="1rem" />
-                    </ActionIcon>
+                      Node
+                    </Button>
                   </Tooltip>
                 </div>
                 <svg width={CANVAS_WIDTH} height={CANVAS_HEIGHT} style={{ position: 'absolute', inset: 0 }}>
