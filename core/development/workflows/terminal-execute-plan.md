@@ -241,7 +241,9 @@ The feature must keep the existing workflow graph validation rules, reuse existi
 
 2. Node output convention
    - Each agent node writes:
-     - `{output_root}/{node_uid}.md`
+     - `{output_root}/{node_name}-id-{node_id}.md`
+   - `node_id` is the numeric workflow node id.
+   - `node_name` is included as a readable filename prefix for easier inspection in the workflow output folder.
 
 3. Terminal completion detection
    - The orchestrator waits until:
@@ -318,7 +320,7 @@ The feature must keep the existing workflow graph validation rules, reuse existi
    - build prompt
    - dispatch via a session-targeted internal helper
      or an explicitly extended `new_agent_session` contract that accepts `session_name` and node `provider_id`
-   - wait for `{output_root}/{node_uid}.md`
+   - wait for `{output_root}/{node_name}-id-{node_id}.md`
    - mark node complete
    - unlock downstream nodes whose dependencies are now satisfied
 5. After all nodes complete:
@@ -331,7 +333,7 @@ The feature must keep the existing workflow graph validation rules, reuse existi
 2. CLI resolves the workflow file and enters Python runtime
 3. Runtime creates `run_id` and `output_root = .skillpilot/temp/background-workflow/{run_id}/`
 4. Runtime executes nodes via `infer_fn()`
-5. Each completed node writes `{output_root}/{node_uid}.md`
+5. Each completed node writes `{output_root}/{node_name}-id-{node_id}.md`
 6. Runtime returns the JSON summary result
 
 ## 7. Prompt Specifications
@@ -383,15 +385,14 @@ Task workspace:
 Workflow output root:
 {output_root}
 
-If you have upstream inputs (and this node is not the START node), the upstream outputs are stored in:
-{upstream_file_1}
-{upstream_file_2}
+If you have upstream outputs as your inputs as needed, they are stored in:
+{output_root}/*.md
 ...
 
 Read those files to get all required context before you start.
 
 When you finish:
-1. Write your final output to {output_root}/{node_uid}.md
+1. Write your final output to {output_root}/{node_name}-id-{node_id}.md
 2. Keep the output concise and structured so downstream nodes can consume it
 3. If you make assumptions, state them before the final result
 4. Do not write output files outside the task workspace or workflow output root unless explicitly required
@@ -400,7 +401,7 @@ When you finish:
 Rules:
 - Omit the `Skill:` line when skill is empty.
 - Omit the `Responsibility:` line when responsibility is empty.
-- Omit the upstream file list for nodes whose only upstream node is `START`.
+- The agent may read any upstream output file under `{output_root}/*.md`, not only directly connected upstream node files.
 - Do not add a new `node_prompt` field in this phase; the node-specific instruction is derived from the existing node `skill` and optional `responsibility`.
 
 ### C. Background mode execution prompt

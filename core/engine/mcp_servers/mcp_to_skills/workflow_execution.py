@@ -13,6 +13,7 @@ from workflow_editor_utils import validate_workflow_doc
 
 
 _WORKSPACE_LINE_RE = re.compile(r"(?mi)^Workspace path:\s*(.+?)\s*$")
+_SAFE_FILENAME_RE = re.compile(r"[^a-z0-9]+")
 
 
 @dataclass
@@ -86,12 +87,18 @@ def create_run_output_dir(base_dir: Path, *, cleanup_base_dir: bool = False) -> 
     return run_id, output_root
 
 
-def node_output_path(output_root: Path, node_id: int) -> Path:
-    return output_root / f"{int(node_id)}.md"
+def safe_node_filename_prefix(name: str) -> str:
+    value = _SAFE_FILENAME_RE.sub("-", str(name or "").strip().lower()).strip("-")
+    return value or "node"
 
 
-def write_node_output(output_root: Path, node_id: int, text: str) -> Path:
-    output_file = node_output_path(output_root, node_id)
+def node_output_path(output_root: Path, node_id: int, node_label: str | None = None) -> Path:
+    prefix = safe_node_filename_prefix(node_label or "")
+    return output_root / f"{prefix}-id-{int(node_id)}.md"
+
+
+def write_node_output(output_root: Path, node_id: int, text: str, node_label: str | None = None) -> Path:
+    output_file = node_output_path(output_root, node_id, node_label)
     output_file.write_text(str(text), encoding="utf-8")
     return output_file
 
@@ -185,6 +192,7 @@ def build_node_prompt(
     skill = str(data.get("skill") or "").strip()
     responsibility = str(data.get("responsibility") or "").strip()
     output_root_text = display_repo_relative(output_root, repo_root)
+    current_node_title = node_name(current_node)
 
     lines: list[str] = [
         "You are running as an AI agent node inside a multi-step workflow.",
@@ -192,7 +200,7 @@ def build_node_prompt(
         f"Workflow name: {graph.workflow_name}",
         f"Workflow file: core/workflows/{graph.workflow_relative_path}",
         f"Current AI agent node UID: {current_node_id}",
-        f"Current AI agent node name: {node_name(current_node)}",
+        f"Current AI agent node name: {current_node_title}",
         "",
         "Workflow system prompt:",
         str(workflow_prompt or "").strip() or "(empty)",
@@ -216,18 +224,17 @@ def build_node_prompt(
         lines.extend(
             [
                 "",
-                "If you have upstream inputs (and this node is not the START node), the upstream outputs are stored in:",
+                "If you have upstream outputs as your inputs as needed, they are stored in:",
             ]
         )
-        for upstream_node_id in upstream_node_ids:
-            lines.append(display_repo_relative(node_output_path(output_root, upstream_node_id), repo_root))
+        lines.append(f"{output_root_text}/*.md")
         lines.extend(["", "Read those files to get all required context before you start."])
 
     lines.extend(
         [
             "",
             "When you finish:",
-            f"1. Write your final output to {display_repo_relative(node_output_path(output_root, current_node_id), repo_root)}",
+            f"1. Write your final output to {display_repo_relative(node_output_path(output_root, current_node_id, current_node_title), repo_root)}",
             "2. Keep the output concise and structured so downstream nodes can consume it",
             "3. If you make assumptions, state them before the final result",
             "4. Do not write output files outside the task workspace or workflow output root unless explicitly required",

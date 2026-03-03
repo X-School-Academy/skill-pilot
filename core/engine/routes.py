@@ -941,7 +941,7 @@ def _execute_workflow_in_terminal_thread(
                 upstream_node_ids=upstream_node_ids,
                 task_workspace=task_workspace,
             )
-            output_file = node_output_path(output_root, node_id)
+            output_file = node_output_path(output_root, node_id, node_name(node))
             if output_file.exists():
                 try:
                     output_file.unlink()

@@ -128,11 +128,11 @@ def run_workflow(
             f"node_name={node_name(node)} "
             f"provider_id={provider_id or ''} "
             f"upstream_ids={upstream_node_ids} "
-            f"expected_output={node_output_path(output_root, node_id)}"
+            f"expected_output={node_output_path(output_root, node_id, node_name(node))}"
         )
         emit(f"[workflow-run] node_prompt node_id={node_id}\n{prompt}")
         text = infer_fn(prompt, provider_id).strip()
-        output_file = write_node_output(output_root, node_id, text)
+        output_file = write_node_output(output_root, node_id, text, node_name(node))
         emit(f"[workflow-run] node_output node_id={node_id} output_file={output_file}\n{text}")
         return text
 

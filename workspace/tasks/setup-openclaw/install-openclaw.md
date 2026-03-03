@@ -1,0 +1,4 @@
+- Create a Discord server and a Discord bot token.
+- Create an AWS EC2 instance.
+- Install OpenClaw on the AWS EC2 instance using an OpenAI account via OAuth2 and connect it to the Discord bot.
+- Create an SSH tunnel to the AWS EC2 instance to access the OpenClaw WebUI locally.
