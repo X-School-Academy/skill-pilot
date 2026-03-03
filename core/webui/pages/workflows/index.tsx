@@ -745,12 +745,14 @@ export default function WorkflowsPage() {
   };
 
   const onNodeMouseDown = (e: React.MouseEvent, node: WorkflowNode) => {
-    if (!canvasInnerRef.current) return;
+    if (!canvasInnerRef.current || !canvasScrollRef.current) return;
     const rect = canvasInnerRef.current.getBoundingClientRect();
+    const scrollLeft = canvasScrollRef.current.scrollLeft;
+    const scrollTop = canvasScrollRef.current.scrollTop;
     dragRef.current = {
       nodeId: node.id,
-      dx: e.clientX - rect.left - node.position.x,
-      dy: e.clientY - rect.top - node.position.y,
+      dx: e.clientX - rect.left + scrollLeft - node.position.x,
+      dy: e.clientY - rect.top + scrollTop - node.position.y,
     };
     setSelectedNodeId(node.id);
     setSelectedEdgeId(null);
@@ -784,11 +786,12 @@ export default function WorkflowsPage() {
           ...prev,
           nodes: prev.nodes.map((n) => {
             if (n.id !== dragRef.current?.nodeId) return n;
+            const size = getNodeSize(n);
             return {
               ...n,
               position: {
-                x: Math.max(10, Math.min(CANVAS_WIDTH - 210, x)),
-                y: Math.max(10, Math.min(CANVAS_HEIGHT - 120, y)),
+                x: Math.max(10, Math.min(CANVAS_WIDTH - size.width - 10, x)),
+                y: Math.max(10, Math.min(CANVAS_HEIGHT - size.height - 10, y)),
               },
             };
           }),
@@ -808,7 +811,7 @@ export default function WorkflowsPage() {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [connectionDrag]);
+  }, [connectionDrag, getNodeSize]);
 
   const removeSelectedEdge = () => {
     if (!selectedEdgeId) return;

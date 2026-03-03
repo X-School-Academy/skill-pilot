@@ -148,6 +148,10 @@ Detailed instructions for this step...
 - **Key Principles**: List important guidelines (RECOMMENDED)
 - **Common Issues**: Document known problems and solutions (RECOMMENDED)
 
+**Workflow-specific rule:**
+- If the user says the skill is for workflow usage, include this exact sentence in the skill instructions or expected output section:
+  `Output result as plain text. If the user asked to save it to a file, write it there.`
+
 #### Optional Sections
 
 - **Examples**: Only include if the user specifically requests examples or if they are truly necessary for understanding. Prefer keeping skills concise.
@@ -267,6 +271,7 @@ Ask: "The skill has been created/updated. Would you like me to make any changes?
 - **Validate thoroughly**: Check all requirements before considering the skill complete
 - **Naming convention**: Only dev-swarm skills use the `dev-swarm-` prefix; system, user, and third-party skills use plain names
 - **Minimize examples**: Only include Examples section if truly necessary or explicitly requested
+- **Workflow output contract**: If the user says the skill is for workflow usage, the skill must explicitly include `Output result as plain text. If the user asked to save it to a file, write it there.`
 
 ## Common Issues
 
