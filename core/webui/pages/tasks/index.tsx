@@ -262,7 +262,7 @@ export default function TasksPage() {
           label={item.name}
           icon={<IconFolder size="1.2rem" stroke={1.5} color={theme.colors.blue[6]} />}
           childrenOffset={16}
-          defaultOpened={currentTask.startsWith(item.path)}
+          opened={Boolean(currentTask && (currentTask === item.path || currentTask.startsWith(`${item.path}/`)))}
         >
           {item.children && renderTree(item.children)}
         </NavLink>
