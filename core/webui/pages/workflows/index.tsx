@@ -236,6 +236,8 @@ export default function WorkflowsPage() {
   const [saving, setSaving] = useState(false);
   const [inspectorVisible, setInspectorVisible] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [editingNodeId, setEditingNodeId] = useState<number | null>(null);
+  const [editingNodeTitle, setEditingNodeTitle] = useState('');
 
   const [isResizing, setIsResizing] = useState(false);
   const [navbarWidth, setNavbarWidth] = useState(320);
@@ -405,6 +407,8 @@ export default function WorkflowsPage() {
       pendingNewNodeSelectRef.current = null;
       setErrors([]);
       setHasUnsavedChanges(false);
+      setEditingNodeId(null);
+      setEditingNodeTitle('');
     } catch (err: any) {
       console.error('Failed to load workflow:', err);
       const apiErrors = err?.response?.data?.errors;
@@ -501,6 +505,15 @@ export default function WorkflowsPage() {
     pendingNewNodeSelectRef.current = null;
   }, [workflow.nodes]);
 
+  useEffect(() => {
+    if (editingNodeId === null) return;
+    const stillExists = workflow.nodes.some((node) => node.id === editingNodeId && node.type === 'agent');
+    if (!stillExists) {
+      setEditingNodeId(null);
+      setEditingNodeTitle('');
+    }
+  }, [editingNodeId, workflow.nodes]);
+
   const renderTree = (items: FileItem[]) => items.map((item) => {
     if (item.type === 'dir') {
       return (
@@ -546,6 +559,8 @@ export default function WorkflowsPage() {
     pendingNewNodeSelectRef.current = null;
     setErrors([]);
     setHasUnsavedChanges(false);
+    setEditingNodeId(null);
+    setEditingNodeTitle('');
   };
 
   const handleAddAgent = (position?: { x: number; y: number }) => {
@@ -632,7 +647,7 @@ export default function WorkflowsPage() {
     };
   }, [findNode, getAnchorOffset]);
 
-  const setAgentField = (nodeId: number, key: 'title' | 'provider_id' | 'skill' | 'responsibility', value: string) => {
+  const setAgentField = useCallback((nodeId: number, key: 'title' | 'provider_id' | 'skill' | 'responsibility', value: string) => {
     setWorkflow((prev) => ({
       ...prev,
       nodes: prev.nodes.map((node) => {
@@ -640,7 +655,28 @@ export default function WorkflowsPage() {
         return { ...node, data: { ...node.data, [key]: value } };
       }),
     }));
-  };
+  }, []);
+
+  const startEditingNodeTitle = useCallback((node: WorkflowNode) => {
+    if (node.type !== 'agent') return;
+    setSelectedNodeId(node.id);
+    setSelectedEdgeId(null);
+    setEditingNodeId(node.id);
+    setEditingNodeTitle(node.data?.title || `Agent ${node.id}`);
+  }, []);
+
+  const commitEditingNodeTitle = useCallback(() => {
+    if (editingNodeId === null) return;
+    const nextTitle = editingNodeTitle.trim() || `Agent ${editingNodeId}`;
+    setAgentField(editingNodeId, 'title', nextTitle);
+    setEditingNodeId(null);
+    setEditingNodeTitle('');
+  }, [editingNodeId, editingNodeTitle, setAgentField]);
+
+  const cancelEditingNodeTitle = useCallback(() => {
+    setEditingNodeId(null);
+    setEditingNodeTitle('');
+  }, []);
 
   const resolveDirectedEdge = useCallback(
     (sourceNodeId: number, sourceKind: AnchorKind, targetNodeId: number, targetKind: AnchorKind): { source: number; target: number; fromFirst: boolean } | null => {
@@ -1148,38 +1184,61 @@ export default function WorkflowsPage() {
                         setSelectedNodeId(node.id);
                         setSelectedEdgeId(null);
                       }}
-                      onDoubleClick={(e) => {
-                        e.stopPropagation();
-                      }}
-                    >
-                      <Group position="apart" mb={isRoundNode ? 0 : 4}>
-                        <Text
-                          fw={700}
-                          size="sm"
-                          ta={isRoundNode ? 'center' : 'left'}
-                          style={{ width: isRoundNode ? '100%' : undefined }}
-                        >
-                          {getNodeLabel(node)}
-                        </Text>
-                        {!isRoundNode ? (
-                          <Badge size="xs" color={node.type === 'agent' ? 'blue' : node.type === 'start' ? 'green' : 'grape'}>
-                            {node.type}
-                          </Badge>
-                        ) : null}
+	                      onDoubleClick={(e) => {
+	                        e.stopPropagation();
+	                      }}
+	                    >
+	                      <Group position="apart" mb={isRoundNode ? 0 : 4}>
+	                        {node.type === 'agent' && editingNodeId === node.id ? (
+	                          <TextInput
+	                            size="xs"
+	                            value={editingNodeTitle}
+	                            onChange={(e) => setEditingNodeTitle(e.currentTarget.value)}
+	                            onBlur={commitEditingNodeTitle}
+	                            onKeyDown={(e) => {
+	                              if (e.key === 'Enter') {
+	                                e.preventDefault();
+	                                commitEditingNodeTitle();
+	                              } else if (e.key === 'Escape') {
+	                                e.preventDefault();
+	                                cancelEditingNodeTitle();
+	                              }
+	                            }}
+	                            autoFocus
+	                            styles={{ input: { fontWeight: 700 } }}
+	                            style={{ flex: 1 }}
+	                          />
+	                        ) : (
+	                          <Text
+	                            fw={700}
+	                            size="sm"
+	                            ta={isRoundNode ? 'center' : 'left'}
+	                            style={{
+	                              width: isRoundNode ? '100%' : undefined,
+	                              flex: isRoundNode ? undefined : 1,
+	                              cursor: node.type === 'agent' ? 'text' : 'default',
+	                            }}
+	                            onClick={(e) => {
+	                              e.stopPropagation();
+	                              if (node.type === 'agent') startEditingNodeTitle(node);
+	                            }}
+	                          >
+	                            {getNodeLabel(node)}
+	                          </Text>
+	                        )}
+	                        {!isRoundNode ? (
+	                          <Badge size="xs" color={node.type === 'agent' ? 'blue' : node.type === 'start' ? 'green' : 'grape'}>
+	                            {node.type}
+	                          </Badge>
+	                        ) : null}
                       </Group>
 
-                      {node.type === 'agent' ? (
-                        <Stack spacing={6}>
-                          <TextInput
-                            size="xs"
-                            value={node.data?.title || ''}
-                            onChange={(e) => setAgentField(node.id, 'title', e.currentTarget.value)}
-                            placeholder="Title"
-                          />
-                          <Select
-                            size="xs"
-                            value={node.data?.provider_id || ''}
-                            onChange={(value) => setAgentField(node.id, 'provider_id', value || '')}
+	                      {node.type === 'agent' ? (
+	                        <Stack spacing={6}>
+	                          <Select
+	                            size="xs"
+	                            value={node.data?.provider_id || ''}
+	                            onChange={(value) => setAgentField(node.id, 'provider_id', value || '')}
                             data={providers.map((p) => ({ value: p.id, label: p.name }))}
                             placeholder="Provider"
                             searchable
@@ -1308,18 +1367,18 @@ export default function WorkflowsPage() {
                 <Text size="sm">Node ID: {selectedNode.id}</Text>
                 <Text size="sm">Type: {selectedNode.type}</Text>
                 <Text size="sm">Position: ({Math.round(selectedNode.position.x)}, {Math.round(selectedNode.position.y)})</Text>
-                {selectedNode.type === 'agent' ? (
-                  <>
-                    <Divider />
-                    <TextInput
-                      label="Name"
-                      size="sm"
-                      value={selectedNode.data?.title || ''}
-                      onChange={(e) => setAgentField(selectedNode.id, 'title', e.currentTarget.value)}
-                    />
-                    <Select
-                      label="AI Provider"
-                      size="sm"
+	                {selectedNode.type === 'agent' ? (
+	                  <>
+	                    <Divider />
+	                    <TextInput
+	                      label="Name"
+	                      size="sm"
+	                      value={selectedNode.data?.title || ''}
+	                      onChange={(e) => setAgentField(selectedNode.id, 'title', e.currentTarget.value)}
+	                    />
+	                    <Select
+	                      label="AI Provider"
+	                      size="sm"
                       value={selectedNode.data?.provider_id || ''}
                       onChange={(value) => setAgentField(selectedNode.id, 'provider_id', value || '')}
                       data={providers.map((p) => ({ value: p.id, label: p.name }))}
