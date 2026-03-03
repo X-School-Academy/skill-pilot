@@ -31,7 +31,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { dividerBefore: 'Workspace', label: 'Learning', href: '/courses',                icon: <IconSchool size="1rem" /> },
   { label: 'Projects',         href: '/?view=projects',      view: 'projects',      icon: <IconBriefcase size="1rem" /> },
   { label: 'Research',         href: '/?view=research',      view: 'research',      icon: <IconSearch size="1rem" /> },
-  { label: 'Tasks',            href: '/?view=tasks',         view: 'tasks',         icon: <IconChecklist size="1rem" /> },
+  { label: 'Tasks',            href: '/tasks',                                    icon: <IconChecklist size="1rem" /> },
   { dividerBefore: 'Skill Pilot', label: 'Development', href: '/?view=development', view: 'development', icon: <IconCode size="1rem" /> },
   { dividerBefore: 'Commercial Project', label: 'Dev Swarm', href: '/dev-swarm',    icon: <IconRocket size="1rem" /> },
   { dividerBefore: '', label: 'Processes',     href: '/?view=processes',    view: 'processes',    icon: <IconProgress size="1rem" /> },
