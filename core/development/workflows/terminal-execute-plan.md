@@ -341,7 +341,7 @@ The feature must keep the existing workflow graph validation rules, reuse existi
 This is the prompt the user edits in the new-session screen. For workflow launches it becomes the workflow-level system prompt and should include:
 
 ```text
-Execute workflow core/workflows/{workflow_relative_path} in terminal.
+Execute workflow core/workflows/{workflow_relative_path}.
 
 Follow the instructions defined at {instruction_file_path}.
 
@@ -369,7 +369,6 @@ Workflow name: {workflow_name}
 Workflow file: core/workflows/{workflow_relative_path}
 Current AI agent node UID: {node_uid}
 Current AI agent node name: {node_title}
-Current AI agent provider: {node_provider_id}
 
 Workflow system prompt:
 {workflow_prompt}
