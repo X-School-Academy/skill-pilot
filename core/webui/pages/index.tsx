@@ -232,6 +232,8 @@ export default function HomePage() {
   const [newSessionAuto, setNewSessionAuto] = useState(false);
   const [newSessionNetwork, setNewSessionNetwork] = useState(true);
   const [newSessionNativeTerminal, setNewSessionNativeTerminal] = useState(false);
+  const [workflowSessionActive, setWorkflowSessionActive] = useState(false);
+  const [workflowExecuteStatus, setWorkflowExecuteStatus] = useState<{ status: string; error?: string } | null>(null);
   const [defaultLlmProvider, setDefaultLlmProvider] = useState<string>('');
   const [profileData, setProfileData] = useState<Record<string, string>>({});
 
@@ -478,6 +480,25 @@ export default function HomePage() {
   }, [activeView, fetchExternalSessions]);
 
   useEffect(() => {
+    if (!workflowSessionActive) return;
+    const poll = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/workflows/execute/status`, { withCredentials: true });
+        const st = res.data as { status: string; error?: string };
+        setWorkflowExecuteStatus(st);
+        if (st.status === 'finished' || st.status === 'error' || st.status === 'terminated') {
+          setWorkflowSessionActive(false);
+        }
+      } catch {
+        // ignore polling errors
+      }
+    };
+    void poll();
+    const intervalId = window.setInterval(() => void poll(), 3000);
+    return () => window.clearInterval(intervalId);
+  }, [workflowSessionActive]);
+
+  useEffect(() => {
     if (activeView === 'mcp-servers') {
       void fetchMcpServers();
     }
@@ -573,6 +594,10 @@ export default function HomePage() {
         } else {
           setLiveSessionName(sessionName);
           setActiveView('live-terminal');
+        }
+        if (newSessionWorkflow) {
+          setWorkflowSessionActive(true);
+          setWorkflowExecuteStatus(null);
         }
         setPromptText('');
         setNewSessionWorkflow(null);
@@ -701,6 +726,26 @@ export default function HomePage() {
             Workflow mode: providers are controlled by the workflow nodes for {`core/workflows/${newSessionWorkflow}`}
           </Text>
         )}
+        {workflowExecuteStatus && workflowSessionActive && (
+          <Text
+            size="sm"
+            align="center"
+            color={workflowExecuteStatus.status === 'error' || workflowExecuteStatus.status === 'terminated' ? 'red' : 'dimmed'}
+          >
+            Workflow status: {workflowExecuteStatus.status}
+            {workflowExecuteStatus.error ? ` - ${workflowExecuteStatus.error}` : ''}
+          </Text>
+        )}
+        {workflowExecuteStatus && !workflowSessionActive && (workflowExecuteStatus.status === 'finished' || workflowExecuteStatus.status === 'error' || workflowExecuteStatus.status === 'terminated') && (
+          <Text
+            size="sm"
+            align="center"
+            color={workflowExecuteStatus.status === 'finished' ? 'green' : 'red'}
+          >
+            Workflow {workflowExecuteStatus.status}
+            {workflowExecuteStatus.error ? ` - ${workflowExecuteStatus.error}` : ''}
+          </Text>
+        )}
         <Group position="center" spacing="lg">
           <Checkbox
             label="Sandbox"
@@ -738,6 +783,16 @@ export default function HomePage() {
 
   const renderLiveTerminalView = () => (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '12px 16px 16px 16px' }}>
+      {workflowExecuteStatus && (workflowExecuteStatus.status === 'error' || workflowExecuteStatus.status === 'terminated') && (
+        <div style={{ padding: '8px 12px', marginBottom: 8, borderRadius: 6, background: '#fde8e8', color: '#c0392b', fontSize: 13 }}>
+          Workflow execution failed{workflowExecuteStatus.error ? `: ${workflowExecuteStatus.error}` : ''}
+        </div>
+      )}
+      {workflowExecuteStatus && workflowExecuteStatus.status === 'finished' && (
+        <div style={{ padding: '8px 12px', marginBottom: 8, borderRadius: 6, background: '#e8fde8', color: '#27ae60', fontSize: 13 }}>
+          Workflow completed
+        </div>
+      )}
       <div style={{ flex: 1, position: 'relative' }}>
         {liveSessionName && (
           <iframe

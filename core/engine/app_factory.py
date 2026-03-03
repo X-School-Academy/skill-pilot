@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from mcp_servers.mcp_to_skills.service import MCPBridgeSocketService
-from routes import router, start_heartbeat_watcher, _cleanup_webui_tmux_sessions
+from routes import router, start_heartbeat_watcher, _cleanup_webui_tmux_sessions, cleanup_stale_workflow_session
 from scheduler import load_schedules, start_scheduler, stop_scheduler
 from settings import get_auth_token, get_discord_bot_token, logger
 from socket_service import wrap_app_with_socketio
@@ -84,6 +84,7 @@ def create_app():
             logger.warning("MCP probe failed: %s", exc)
         start_heartbeat_watcher()
         logger.info("Heartbeat watcher started")
+        cleanup_stale_workflow_session()
         try:
             start_scheduler(load_schedules())
         except Exception as exc:

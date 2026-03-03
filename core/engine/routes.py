@@ -124,8 +124,10 @@ _CONFIG_ENV_PATH = _REPO_ROOT / "config" / ".env"
 _AUTH_COOKIE_NAME = "auth_token"
 _AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
 _WORKFLOW_EXECUTE_LOCK = threading.Lock()
+_WORKFLOW_EXECUTE_STOP = threading.Event()
 _WORKFLOW_EXECUTE_STATE: Dict[str, Any] = {
     "thread": None,
+    "token": "",
     "status": "idle",
     "session_name": WORKFLOW_EXECUTE_SESSION_NAME,
     "workflow": "",
@@ -690,6 +692,7 @@ def _reset_workflow_execute_state(status: str = "idle", error: str = "") -> None
         _WORKFLOW_EXECUTE_STATE.update(
             {
                 "thread": None,
+                "token": "",
                 "status": status,
                 "workflow": "",
                 "run_id": "",
@@ -859,6 +862,7 @@ def _execute_workflow_in_terminal_thread(
     workflow_file: Path,
     workflow_prompt: str,
     session_name: str,
+    run_token: str,
     sandbox: Any,
     auto: Any,
     network: Any,
@@ -871,6 +875,13 @@ def _execute_workflow_in_terminal_thread(
         with _WORKFLOW_EXECUTE_LOCK:
             return _WORKFLOW_EXECUTE_STATE.get("thread") is threading.current_thread()
 
+    def run_is_current() -> bool:
+        with _WORKFLOW_EXECUTE_LOCK:
+            return (
+                _WORKFLOW_EXECUTE_STATE.get("thread") is threading.current_thread()
+                and _WORKFLOW_EXECUTE_STATE.get("token") == run_token
+            )
+
     try:
         graph = load_workflow_graph(workflow_file, WORKFLOWS_DIR)
         run_id, output_root = create_run_output_dir(
@@ -878,7 +889,7 @@ def _execute_workflow_in_terminal_thread(
             cleanup_base_dir=True,
         )
         task_workspace = parse_task_workspace(workflow_prompt)
-        if thread_is_current():
+        if run_is_current():
             _set_workflow_execute_state(
                 status="running",
                 workflow=graph.workflow_relative_path,
@@ -906,6 +917,10 @@ def _execute_workflow_in_terminal_thread(
         previous_provider: Dict[str, Any] | None = None
 
         while ready:
+            if not run_is_current():
+                raise RuntimeError("workflow execution superseded by a newer run")
+            if _WORKFLOW_EXECUTE_STOP.is_set():
+                raise RuntimeError("workflow execution stopped by user")
             if not _tmux_session_exists(session_name):
                 raise RuntimeError(f"workflow tmux session was terminated: {session_name}")
             ready.sort()
@@ -943,43 +958,58 @@ def _execute_workflow_in_terminal_thread(
                 output_file,
             )
             logger.info("[workflow-execute] node_prompt node_id=%s\n%s", node_id, prompt)
-            previous_provider, _ = _start_workflow_agent_in_session(
-                session_name=session_name,
-                prompt=prompt,
-                provider_id=provider_id,
-                sandbox=sandbox,
-                auto=auto,
-                network=network,
-                previous_provider=previous_provider,
-            )
+            try:
+                previous_provider, _ = _start_workflow_agent_in_session(
+                    session_name=session_name,
+                    prompt=prompt,
+                    provider_id=provider_id,
+                    sandbox=sandbox,
+                    auto=auto,
+                    network=network,
+                    previous_provider=previous_provider,
+                )
 
-            wait_started = time.time()
-            while True:
-                if output_file.exists():
-                    break
-                if not _tmux_session_exists(session_name):
-                    raise RuntimeError(f"workflow tmux session was terminated during node {node_id}")
-                if time.time() - wait_started > 3600:
-                    raise TimeoutError(f"timed out waiting for node output file: {output_file}")
-                time.sleep(1.0)
+                wait_started = time.time()
+                while True:
+                    if output_file.exists():
+                        break
+                    if not run_is_current():
+                        raise RuntimeError("workflow execution superseded by a newer run")
+                    if not _tmux_session_exists(session_name):
+                        raise RuntimeError(f"workflow tmux session was terminated during node {node_id}")
+                    if time.time() - wait_started > 3600:
+                        raise TimeoutError(f"timed out waiting for node output file: {output_file}")
+                    if _WORKFLOW_EXECUTE_STOP.is_set():
+                        raise RuntimeError("workflow execution stopped by user")
+                    _WORKFLOW_EXECUTE_STOP.wait(1.0)
 
-            output_text = output_file.read_text(encoding="utf-8", errors="replace")
-            logger.info("[workflow-execute] node_output node_id=%s output_file=%s\n%s", node_id, output_file, output_text)
-            node_status[node_id] = "done"
+                output_text = output_file.read_text(encoding="utf-8", errors="replace")
+                logger.info("[workflow-execute] node_output node_id=%s output_file=%s\n%s", node_id, output_file, output_text)
+                node_status[node_id] = "done"
+            except (RuntimeError, TimeoutError):
+                raise  # session killed or timeout — abort workflow
+            except Exception as exc:  # noqa: BLE001
+                node_status[node_id] = "failed"
+                logger.error("[workflow-execute] node_failed node_id=%s error=%s", node_id, exc)
+                for downstream_id in graph.downstream_agents.get(node_id, []):
+                    has_failed_upstream[downstream_id] = True
 
             for downstream_id in graph.downstream_agents.get(node_id, []):
                 pending_upstream_count[downstream_id] = max(0, pending_upstream_count[downstream_id] - 1)
                 if node_status[node_id] != "done":
                     has_failed_upstream[downstream_id] = True
-                if pending_upstream_count[downstream_id] == 0 and not has_failed_upstream[downstream_id]:
-                    ready.append(downstream_id)
+                if pending_upstream_count[downstream_id] == 0:
+                    if has_failed_upstream[downstream_id]:
+                        node_status[downstream_id] = "blocked"
+                    else:
+                        ready.append(downstream_id)
 
         failed_nodes = [node_id for node_id, status in node_status.items() if status != "done"]
         if failed_nodes:
             raise RuntimeError(f"workflow finished with incomplete nodes: {failed_nodes}")
 
         finished_at = time.time()
-        if thread_is_current():
+        if run_is_current():
             _set_workflow_execute_state(status="finished", finished_at=finished_at)
         logger.info(
             "[workflow-execute] thread_finish workflow=%s session=%s run_id=%s duration_sec=%.3f",
@@ -990,12 +1020,15 @@ def _execute_workflow_in_terminal_thread(
         )
     except Exception as exc:  # noqa: BLE001
         finished_at = time.time()
-        if thread_is_current():
+        if run_is_current():
             _set_workflow_execute_state(status="error", error=str(exc), finished_at=finished_at)
         logger.exception("[workflow-execute] thread_error session=%s error=%s", session_name, exc)
     finally:
         with _WORKFLOW_EXECUTE_LOCK:
-            if _WORKFLOW_EXECUTE_STATE.get("thread") is threading.current_thread():
+            if (
+                _WORKFLOW_EXECUTE_STATE.get("thread") is threading.current_thread()
+                and _WORKFLOW_EXECUTE_STATE.get("token") == run_token
+            ):
                 _WORKFLOW_EXECUTE_STATE["thread"] = None
 
 
@@ -1006,13 +1039,25 @@ def _stop_existing_workflow_execute_thread() -> None:
         thread = _WORKFLOW_EXECUTE_STATE.get("thread")
     if thread and thread.is_alive():
         logger.info("[workflow-execute] stopping_existing_thread status=%s", status.get("status"))
+    _WORKFLOW_EXECUTE_STOP.set()
     try:
         _kill_tmux_session_any(WORKFLOW_EXECUTE_SESSION_NAME)
     except RuntimeError as exc:
         logger.warning("[workflow-execute] failed_to_kill_existing_session session=%s error=%s", WORKFLOW_EXECUTE_SESSION_NAME, exc)
     if thread and thread.is_alive():
-        thread.join(timeout=2.0)
+        thread.join(timeout=5.0)
     _reset_workflow_execute_state(status="terminated")
+
+
+def cleanup_stale_workflow_session() -> None:
+    """Kill any leftover sp-workflow-execute tmux session on engine startup."""
+    try:
+        if _tmux_session_exists(WORKFLOW_EXECUTE_SESSION_NAME):
+            _kill_tmux_session_any(WORKFLOW_EXECUTE_SESSION_NAME)
+            logger.info("[workflow-execute] cleanup_stale_session session=%s", WORKFLOW_EXECUTE_SESSION_NAME)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[workflow-execute] cleanup_stale_session_failed session=%s error=%s", WORKFLOW_EXECUTE_SESSION_NAME, exc)
+    _reset_workflow_execute_state(status="idle")
 
 
 @router.get("/api/health")
@@ -2402,12 +2447,15 @@ def workflows_execute(payload: Dict[str, Any]):
     if native_terminal and "requested" not in native_status:
         native_status["requested"] = True
 
+    _WORKFLOW_EXECUTE_STOP.clear()
+    run_token = uuid4().hex
     thread = threading.Thread(
         target=_execute_workflow_in_terminal_thread,
         kwargs={
             "workflow_file": workflow_file,
             "workflow_prompt": workflow_prompt,
             "session_name": session_name,
+            "run_token": run_token,
             "sandbox": sandbox,
             "auto": auto,
             "network": network,
@@ -2419,6 +2467,7 @@ def workflows_execute(payload: Dict[str, Any]):
         _WORKFLOW_EXECUTE_STATE.update(
             {
                 "thread": thread,
+                "token": run_token,
                 "status": "starting",
                 "session_name": session_name,
                 "workflow": workflow,
