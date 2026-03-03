@@ -598,7 +598,7 @@ export default function HomePage() {
     { dividerBefore: 'Workspace', label: 'Learning', icon: <IconSchool size="1rem" />, action: () => router.push('/courses') },
     { label: 'Projects', view: 'projects', icon: <IconBriefcase size="1rem" /> },
     { label: 'Research', view: 'research', icon: <IconSearch size="1rem" /> },
-    { label: 'Tasks', view: 'tasks', icon: <IconChecklist size="1rem" /> },
+    { label: 'Tasks', icon: <IconChecklist size="1rem" />, action: () => router.push('/tasks') },
     { dividerBefore: 'Skill Pilot', label: 'Development', view: 'development', icon: <IconCode size="1rem" /> },
     { dividerBefore: 'Commercial Project', label: 'Dev Swarm', icon: <IconRocket size="1rem" />, action: () => router.push('/dev-swarm') },
     { dividerBefore: '', label: 'Processes', view: 'processes', icon: <IconProgress size="1rem" /> },

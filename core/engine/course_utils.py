@@ -19,19 +19,20 @@ def safe_course_path(course: str) -> Path:
     return candidate
 
 
-def build_tree(path: Path) -> list:
+def build_tree(path: Path, root: Optional[Path] = None) -> list:
+    root = (root or COURSES_DIR).resolve()
     items = []
     for entry in sorted(path.iterdir(), key=lambda p: p.name.lower()):
         if entry.name.startswith("."):
             continue
         stat = entry.stat()
         if entry.is_dir():
-            children = build_tree(entry)
+            children = build_tree(entry, root)
             mtime = max([stat.st_mtime] + [c["mtime"] for c in children]) if children else stat.st_mtime
             items.append(
                 {
                     "name": entry.name,
-                    "path": str(entry.relative_to(COURSES_DIR)),
+                    "path": str(entry.relative_to(root)),
                     "type": "dir",
                     "mtime": mtime,
                     "children": children,
@@ -41,7 +42,7 @@ def build_tree(path: Path) -> list:
             items.append(
                 {
                     "name": entry.name,
-                    "path": str(entry.relative_to(COURSES_DIR)),
+                    "path": str(entry.relative_to(root)),
                     "type": "file",
                     "mtime": stat.st_mtime,
                 }
@@ -49,7 +50,8 @@ def build_tree(path: Path) -> list:
     return items
 
 
-def find_latest_course(path: Path) -> Optional[tuple[str, float]]:
+def find_latest_course(path: Path, root: Optional[Path] = None) -> Optional[tuple[str, float]]:
+    root = (root or COURSES_DIR).resolve()
     latest_path = None
     latest_mtime = 0.0
     for entry in path.rglob("*"):
@@ -63,7 +65,7 @@ def find_latest_course(path: Path) -> Optional[tuple[str, float]]:
             latest_path = entry
     if latest_path is None:
         return None
-    return str(latest_path.relative_to(COURSES_DIR)), latest_mtime
+    return str(latest_path.relative_to(root)), latest_mtime
 
 
 def _meta_block_match(text: str) -> Optional[re.Match]:

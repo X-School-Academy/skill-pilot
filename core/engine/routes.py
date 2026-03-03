@@ -3,6 +3,7 @@ import base64
 import fcntl
 import ipaddress
 import json
+import mimetypes
 import os
 import pty
 import re
@@ -25,7 +26,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from apscheduler.triggers.cron import CronTrigger
 
@@ -59,6 +60,7 @@ from socket_service import emit_to_vscode_clients
 from settings import (
     COURSES_DIR,
     PROJECT_DIR,
+    TASKS_DIR,
     WORKFLOWS_DIR,
     LOCAL_DEV_TOKEN,
     TERMINAL_AUTO_IMAGE_URL_PREVIEW,
@@ -1750,6 +1752,132 @@ async def terminal_ws(
             session_name or "",
             elapsed_ms,
         )
+
+def _safe_tasks_path(task_path: str, *, must_exist: bool = True) -> Path:
+    if not task_path:
+        raise ValueError("Missing task path")
+    candidate = (TASKS_DIR / task_path).resolve()
+    if candidate != TASKS_DIR and TASKS_DIR not in candidate.parents:
+        raise ValueError("Invalid task path")
+    if must_exist and (not candidate.exists() or not candidate.is_file()):
+        raise FileNotFoundError("Task not found")
+    return candidate
+
+
+def _is_text_bytes(data: bytes) -> bool:
+    return b"\x00" not in data
+
+
+def _task_type_from_path(path: str) -> str:
+    lower = path.lower()
+    if lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg")):
+        return "image"
+    if lower.endswith((".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac")):
+        return "audio"
+    if lower.endswith((".mp4", ".mov", ".webm", ".m4v", ".avi", ".mkv")):
+        return "video"
+    if lower.endswith((".md", ".markdown")):
+        return "markdown"
+    return "text"
+
+
+@router.get("/api/tasks/tree")
+def tasks_tree():
+    if not TASKS_DIR.exists():
+        return {"items": []}
+    return {"items": build_tree(TASKS_DIR, TASKS_DIR)}
+
+
+@router.get("/api/tasks/latest")
+def tasks_latest():
+    if not TASKS_DIR.exists():
+        return {"path": None}
+    latest = find_latest_course(TASKS_DIR, TASKS_DIR)
+    if not latest:
+        return {"path": None}
+    return {"path": latest[0]}
+
+
+@router.get("/api/tasks/content")
+def task_content(path: str):
+    try:
+        file_path = _safe_tasks_path(path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    raw = file_path.read_bytes()
+    if not _is_text_bytes(raw):
+        return JSONResponse(status_code=400, content={"error": "Binary files are not editable"})
+
+    return {
+        "path": path,
+        "kind": _task_type_from_path(path),
+        "content": raw.decode("utf-8", errors="replace"),
+    }
+
+
+@router.post("/api/tasks/save")
+def task_save(payload: Dict[str, Any]):
+    raw_path = str(payload.get("path") or "").strip()
+    content = payload.get("content")
+    if not raw_path:
+        return JSONResponse(status_code=400, content={"error": "Missing task path"})
+    if not isinstance(content, str):
+        return JSONResponse(status_code=400, content={"error": "Invalid content"})
+
+    try:
+        file_path = _safe_tasks_path(raw_path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    file_path.write_text(content, encoding="utf-8")
+    return {"status": "ok"}
+
+
+@router.post("/api/tasks/create")
+def task_create(payload: Dict[str, Any]):
+    raw_path = str(payload.get("path") or "").strip().replace("\\", "/")
+    if not raw_path:
+        return JSONResponse(status_code=400, content={"error": "Task name is required"})
+    if raw_path.endswith("/"):
+        return JSONResponse(status_code=400, content={"error": "Task path must include a filename"})
+
+    clean_path = raw_path.strip("/")
+    if not clean_path:
+        return JSONResponse(status_code=400, content={"error": "Task name is required"})
+    if "." not in Path(clean_path).name:
+        clean_path = f"{clean_path}.md"
+
+    try:
+        file_path = _safe_tasks_path(clean_path, must_exist=False)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+    if file_path.exists():
+        return JSONResponse(status_code=409, content={"error": "Task already exists"})
+
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    initial_content = "# New Task\n\n"
+    file_path.write_text(initial_content, encoding="utf-8")
+    return {"status": "ok", "path": str(file_path.relative_to(TASKS_DIR))}
+
+
+@router.get("/api/tasks/file")
+def task_file(path: str):
+    try:
+        file_path = _safe_tasks_path(path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    media_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+    return FileResponse(file_path, media_type=media_type, filename=file_path.name)
+
 
 @router.get("/api/courses/tree")
 def courses_tree():
