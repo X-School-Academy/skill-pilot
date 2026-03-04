@@ -267,8 +267,8 @@ export default function TasksPage() {
     }
   };
 
-  const saveContent = async () => {
-    if (!currentTask || selectedKind === 'image' || selectedKind === 'audio' || selectedKind === 'video') return;
+  const saveCurrentTaskContent = async (): Promise<boolean> => {
+    if (!currentTask || selectedKind === 'image' || selectedKind === 'audio' || selectedKind === 'video') return true;
     setEditorSaving(true);
     setEditorError('');
     setNotice('');
@@ -277,12 +277,18 @@ export default function TasksPage() {
       setNotice('Saved.');
       await fetchTree();
       await fetchContent(currentTask);
+      return true;
     } catch (err: any) {
       console.error('Failed to save task content:', err);
       setEditorError(err?.response?.data?.error || 'Failed to save task content.');
+      return false;
     } finally {
       setEditorSaving(false);
     }
+  };
+
+  const saveContent = async () => {
+    await saveCurrentTaskContent();
   };
 
   const createTask = async () => {
@@ -411,10 +417,12 @@ export default function TasksPage() {
     ));
   };
 
-  const runExecuteAction = () => {
+  const runExecuteAction = async () => {
     if (!currentTask) return;
     const target = executeMode === 'skill' ? selectedSkill : selectedWorkflow;
     if (!target) return;
+    const saved = await saveCurrentTaskContent();
+    if (!saved) return;
 
     const instructionPath = taskProjectPath(currentTask);
     const workspacePath = currentDirectory ? taskProjectPath(currentDirectory) : 'workspace/tasks';
