@@ -96,6 +96,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=300.0,
         help="Per-SubAgent socket timeout in seconds (default: 300)",
     )
+    run_workflow_parser.add_argument("--auto", dest="auto", action="store_true", default=None)
+    run_workflow_parser.add_argument("--no-auto", dest="auto", action="store_false")
+    run_workflow_parser.add_argument("--network", dest="network", action="store_true", default=None)
+    run_workflow_parser.add_argument("--no-network", dest="network", action="store_false")
+    run_workflow_parser.add_argument("--sandbox", dest="sandbox", action="store_true", default=None)
+    run_workflow_parser.add_argument("--no-sandbox", dest="sandbox", action="store_false")
     new_agent_parser = subparsers.add_parser(
         "new_agent_session",
         help="Reuse latest web/native tmux bash session by stopping the current agent process and launching a new prompt",
@@ -220,7 +226,22 @@ def main() -> int:
             payload = {"operation": "skill_agent_infer", "prompt": prompt}
             if provider_id:
                 payload["provider_id"] = provider_id
+            if args.auto is not None:
+                payload["auto"] = bool(args.auto)
+            if args.network is not None:
+                payload["network"] = bool(args.network)
+            if args.sandbox is not None:
+                payload["sandbox"] = bool(args.sandbox)
+            debug_parts = [
+                "[run-workflow] infer_request",
+                f"provider_id={provider_id or ''}",
+                f"timeout={args.infer_timeout}",
+                f"payload={json.dumps(payload, ensure_ascii=False)}",
+            ]
+            print(" ".join(debug_parts), file=sys.stderr)
+            print(f"[run-workflow] infer_prompt\n{prompt}", file=sys.stderr)
             response_raw = send_request(json.dumps(payload, ensure_ascii=True), socket_path, args.infer_timeout)
+            print(f"[run-workflow] infer_response_raw\n{response_raw}", file=sys.stderr)
             response = json.loads(response_raw)
             if not isinstance(response, dict):
                 raise RuntimeError("invalid skill-agent response")

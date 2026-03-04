@@ -13,7 +13,6 @@ from .workflow_execution import (
     node_name,
     node_output_path,
     parse_task_workspace,
-    write_node_output,
 )
 
 
@@ -36,13 +35,21 @@ def resolve_workflow_file(workflow_arg: str, workflows_root: Path) -> Path:
     if not raw:
         raise ValueError("workflow path is required")
 
-    candidate = Path(raw).expanduser()
-    if not candidate.is_absolute():
-        candidate = (workflows_root / candidate).resolve()
-    else:
-        candidate = candidate.resolve()
-
     root = workflows_root.resolve()
+    repo_root = root.parent.parent
+    input_path = Path(raw).expanduser()
+
+    if input_path.is_absolute():
+        candidate = input_path.resolve()
+    else:
+        normalized_raw = raw.replace("\\", "/")
+        if normalized_raw.startswith("core/workflows/"):
+            candidate = (repo_root / normalized_raw).resolve()
+        elif normalized_raw.startswith("core/"):
+            candidate = (repo_root / normalized_raw).resolve()
+        else:
+            candidate = (root / input_path).resolve()
+
     try:
         candidate.relative_to(root)
     except ValueError as exc:
@@ -113,6 +120,7 @@ def run_workflow(
         data = node.get("data") if isinstance(node.get("data"), dict) else {}
         provider_id = str(data.get("provider_id") or "").strip() or None
         upstream_node_ids = list(graph.upstream_agents[node_id])
+        expected_output_file = node_output_path(output_root, node_id, node_name(node))
         prompt = build_node_prompt(
             graph=graph,
             current_node=node,
@@ -128,13 +136,19 @@ def run_workflow(
             f"node_name={node_name(node)} "
             f"provider_id={provider_id or ''} "
             f"upstream_ids={upstream_node_ids} "
-            f"expected_output={node_output_path(output_root, node_id, node_name(node))}"
+            f"expected_output={expected_output_file}"
         )
         emit(f"[workflow-run] node_prompt node_id={node_id}\n{prompt}")
-        text = infer_fn(prompt, provider_id).strip()
-        output_file = write_node_output(output_root, node_id, text, node_name(node))
-        emit(f"[workflow-run] node_output node_id={node_id} output_file={output_file}\n{text}")
-        return text
+        raw_text = infer_fn(prompt, provider_id).strip()
+        emit(f"[workflow-run] node_response node_id={node_id}\n{raw_text}")
+        if not expected_output_file.exists() or not expected_output_file.is_file():
+            raise RuntimeError(
+                "agent did not create expected output file: "
+                f"{expected_output_file}"
+            )
+        output_text = expected_output_file.read_text(encoding="utf-8", errors="replace").strip()
+        emit(f"[workflow-run] node_output node_id={node_id} output_file={expected_output_file}\n{output_text}")
+        return output_text
 
     started_at = time.time()
     futures: dict[Future[str], int] = {}

@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "name": "test-workflow-four-skills",
-  "updated_at": "2026-03-03T22:45:48Z",
+  "updated_at": "2026-03-03T22:53:16Z",
   "nodes": [
     {
       "id": 0,
@@ -43,7 +43,7 @@
       "id": 3,
       "type": "agent",
       "position": {
-        "x": 598,
+        "x": 607,
         "y": 147
       },
       "data": {
@@ -57,8 +57,8 @@
       "id": 4,
       "type": "agent",
       "position": {
-        "x": 917,
-        "y": 167
+        "x": 919,
+        "y": 162
       },
       "data": {
         "title": "Detect Number",
@@ -71,8 +71,8 @@
       "id": -1,
       "type": "end",
       "position": {
-        "x": 1001,
-        "y": 506
+        "x": 953,
+        "y": 476
       }
     }
   ],
