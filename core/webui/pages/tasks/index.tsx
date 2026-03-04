@@ -117,9 +117,11 @@ export default function TasksPage() {
   const [editorContent, setEditorContent] = useState('');
   const [markdownView, setMarkdownView] = useState<'editor' | 'preview'>('editor');
   const [addTaskOpened, setAddTaskOpened] = useState(false);
-  const [newTaskPath, setNewTaskPath] = useState('');
+  const [newTaskFolder, setNewTaskFolder] = useState('');
+  const [newTaskFile, setNewTaskFile] = useState('new task');
   const [taskTitle, setTaskTitle] = useState('');
   const [creatingTask, setCreatingTask] = useState(false);
+  const [deletingTask, setDeletingTask] = useState(false);
   const [executeOpened, setExecuteOpened] = useState(false);
   const [executeMode, setExecuteMode] = useState<ExecuteMode>('skill');
   const [skillOptions, setSkillOptions] = useState<string[]>([]);
@@ -131,10 +133,18 @@ export default function TasksPage() {
   const [isResizing, setIsResizing] = useState(false);
 
   const currentTask = typeof task === 'string' ? task : '';
+  const currentTaskFolder = currentTask.includes('/') ? currentTask.split('/')[0] : '';
   const currentDirectory = currentTask.includes('/') ? currentTask.slice(0, currentTask.lastIndexOf('/')) : '';
   const currentDirectoryFiles = useMemo(
     () => listFilesInDirectory(treeData, currentDirectory).filter((item) => item.path !== currentTask),
     [treeData, currentDirectory, currentTask],
+  );
+  const taskFolderOptions = useMemo(
+    () => treeData
+      .filter((item) => item.type === 'dir' && !item.path.includes('/'))
+      .map((item) => item.path)
+      .sort((a, b) => a.localeCompare(b)),
+    [treeData],
   );
 
   const startResizing = (e: React.MouseEvent) => {
@@ -276,16 +286,20 @@ export default function TasksPage() {
   };
 
   const createTask = async () => {
-    const trimmed = newTaskPath.trim();
-    if (!trimmed) return;
+    const trimmedFile = newTaskFile.trim();
+    if (!trimmedFile) return;
     setCreatingTask(true);
     setEditorError('');
     setNotice('');
     try {
-      const res = await axios.post(`${API_BASE_URL}/tasks/create`, { path: trimmed });
-      const createdPath = String(res.data.path || trimmed);
+      const res = await axios.post(`${API_BASE_URL}/tasks/create`, {
+        folder: newTaskFolder.trim(),
+        file: trimmedFile,
+      });
+      const createdPath = String(res.data.path || trimmedFile);
       setAddTaskOpened(false);
-      setNewTaskPath('');
+      setNewTaskFolder(currentTaskFolder);
+      setNewTaskFile('new task');
       await fetchTree();
       router.push(`/tasks?task=${encodeURIComponent(createdPath)}`, undefined, { shallow: true });
     } catch (err: any) {
@@ -293,6 +307,24 @@ export default function TasksPage() {
       setEditorError(err?.response?.data?.error || 'Failed to create task.');
     } finally {
       setCreatingTask(false);
+    }
+  };
+
+  const deleteTask = async () => {
+    if (!currentTask) return;
+    if (!window.confirm(`Delete ${currentTask}?`)) return;
+    setDeletingTask(true);
+    setEditorError('');
+    setNotice('');
+    try {
+      await axios.post(`${API_BASE_URL}/tasks/delete`, { path: currentTask });
+      await fetchTree();
+      router.push('/tasks', undefined, { shallow: true });
+    } catch (err: any) {
+      console.error('Failed to delete task:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to delete task.');
+    } finally {
+      setDeletingTask(false);
     }
   };
 
@@ -405,29 +437,44 @@ export default function TasksPage() {
   const renderMainContent = () => {
     if (selectedKind === 'image' && currentTask) {
       return (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 480 }}>
-          <img src={mediaUrl} alt={taskTitle} style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 8 }} />
-        </div>
+        <>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 480 }}>
+            <img src={mediaUrl} alt={taskTitle} style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 8 }} />
+          </div>
+          <Group position="right" mt="md">
+            <Button color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
+          </Group>
+        </>
       );
     }
 
     if (selectedKind === 'audio' && currentTask) {
       return (
-        <div style={{ paddingTop: 40 }}>
-          <audio controls src={mediaUrl} style={{ width: '100%' }}>
-            Your browser does not support audio playback.
-          </audio>
-        </div>
+        <>
+          <div style={{ paddingTop: 40 }}>
+            <audio controls src={mediaUrl} style={{ width: '100%' }}>
+              Your browser does not support audio playback.
+            </audio>
+          </div>
+          <Group position="right" mt="md">
+            <Button color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
+          </Group>
+        </>
       );
     }
 
     if (selectedKind === 'video' && currentTask) {
       return (
-        <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
-          <video controls src={mediaUrl} style={{ width: '100%', maxHeight: '70vh', borderRadius: 8 }}>
-            Your browser does not support video playback.
-          </video>
-        </div>
+        <>
+          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
+            <video controls src={mediaUrl} style={{ width: '100%', maxHeight: '70vh', borderRadius: 8 }}>
+              Your browser does not support video playback.
+            </video>
+          </div>
+          <Group position="right" mt="md">
+            <Button color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
+          </Group>
+        </>
       );
     }
 
@@ -465,12 +512,18 @@ export default function TasksPage() {
               />
               <Group position="right" mt="md">
                 <Button onClick={() => void saveContent()} loading={editorSaving}>Save</Button>
+                <Button color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
               </Group>
             </>
           ) : (
-            <div className="doc-markdown">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
-            </div>
+            <>
+              <div className="doc-markdown">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+              </div>
+              <Group position="right" mt="md">
+                <Button color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
+              </Group>
+            </>
           )}
         </div>
       );
@@ -492,6 +545,7 @@ export default function TasksPage() {
           />
           <Group position="right" mt="md">
             <Button onClick={() => void saveContent()} loading={editorSaving}>Save</Button>
+            <Button color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
           </Group>
         </>
       );
@@ -546,15 +600,31 @@ export default function TasksPage() {
       </Head>
 
       <Modal opened={addTaskOpened} onClose={() => setAddTaskOpened(false)} title="Add Task" centered>
-        <TextInput
-          placeholder="project-a/new-task.md"
-          value={newTaskPath}
-          onChange={(e) => setNewTaskPath(e.currentTarget.value)}
-          description="Relative to workspace/tasks. Missing extensions default to .md."
-        />
+        <Stack spacing="md">
+          <TextInput
+            label="Task"
+            placeholder="Current folder or new subfolder"
+            value={newTaskFolder}
+            onChange={(e) => setNewTaskFolder(e.currentTarget.value)}
+            list="task-folder-options"
+            description="Top-level subfolders under workspace/tasks. Leave blank for the root folder."
+          />
+          <datalist id="task-folder-options">
+            {taskFolderOptions.map((folder) => (
+              <option key={folder} value={folder} />
+            ))}
+          </datalist>
+          <TextInput
+            label="File"
+            placeholder="new task"
+            value={newTaskFile}
+            onChange={(e) => setNewTaskFile(e.currentTarget.value)}
+            description="Names are converted to lowercase kebab-case. Missing extensions default to .md and duplicates get _1, _2, etc."
+          />
+        </Stack>
         <Group position="right" mt="md">
           <Button variant="default" onClick={() => setAddTaskOpened(false)}>Cancel</Button>
-          <Button onClick={() => void createTask()} disabled={!newTaskPath.trim()} loading={creatingTask}>Create Task</Button>
+          <Button onClick={() => void createTask()} disabled={!newTaskFile.trim()} loading={creatingTask}>Create Task</Button>
         </Group>
       </Modal>
 
@@ -692,8 +762,8 @@ export default function TasksPage() {
                   <ActionIcon
                     variant="subtle"
                     onClick={() => {
-                      const baseDir = currentTask.includes('/') ? currentTask.slice(0, currentTask.lastIndexOf('/') + 1) : '';
-                      setNewTaskPath(`${baseDir}new-task.md`);
+                      setNewTaskFolder(currentTaskFolder);
+                      setNewTaskFile('new task');
                       setAddTaskOpened(true);
                     }}
                   >

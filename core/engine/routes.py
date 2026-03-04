@@ -2172,6 +2172,74 @@ def _safe_tasks_path(task_path: str, *, must_exist: bool = True) -> Path:
     return candidate
 
 
+def _normalize_task_slug(value: str, *, default: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "-", (value or "").strip().lower()).strip("-")
+    return normalized or default
+
+
+def _normalize_task_folder_name(value: str) -> str:
+    if not value:
+        return ""
+    return _normalize_task_slug(value, default="task")
+
+
+def _normalize_task_file_name(value: str) -> str:
+    raw_name = (value or "").strip()
+    suffix = Path(raw_name).suffix.lower()
+    stem = raw_name[:-len(suffix)] if suffix else raw_name
+    safe_stem = _normalize_task_slug(stem, default="new-task")
+    safe_suffix = suffix if suffix not in {"", "."} else ".md"
+    return f"{safe_stem}{safe_suffix}"
+
+
+def _unique_task_file_path(parent: Path, file_name: str) -> Path:
+    candidate = parent / file_name
+    stem = candidate.stem
+    suffix = candidate.suffix
+    index = 1
+    while candidate.exists():
+        candidate = parent / f"{stem}_{index}{suffix}"
+        index += 1
+    return candidate
+
+
+def _unique_task_dir_path(folder_name: str) -> Path:
+    candidate = TASKS_DIR / folder_name
+    index = 1
+    while candidate.exists():
+        candidate = TASKS_DIR / f"{folder_name}_{index}"
+        index += 1
+    return candidate
+
+
+def _extract_task_create_parts(payload: Dict[str, Any]) -> tuple[str, str]:
+    folder = str(payload.get("folder") or "").strip()
+    file_name = str(payload.get("file") or "").strip()
+
+    if folder and any(sep in folder for sep in ("/", "\\")):
+        raise ValueError("Task folder supports only one subfolder level")
+    if file_name and any(sep in file_name for sep in ("/", "\\")):
+        raise ValueError("File name cannot include folder separators")
+
+    if file_name:
+        return folder, file_name
+
+    raw_path = str(payload.get("path") or "").strip().replace("\\", "/")
+    if not raw_path:
+        raise ValueError("Task file name is required")
+    if raw_path.endswith("/"):
+        raise ValueError("Task path must include a filename")
+
+    parts = [part for part in raw_path.strip("/").split("/") if part]
+    if not parts:
+        raise ValueError("Task file name is required")
+    if len(parts) > 2:
+        raise ValueError("Only root files or one subfolder are supported")
+    if len(parts) == 1:
+        return "", parts[0]
+    return parts[0], parts[1]
+
+
 def _is_text_bytes(data: bytes) -> bool:
     return b"\x00" not in data
 
@@ -2248,30 +2316,55 @@ def task_save(payload: Dict[str, Any]):
 
 @router.post("/api/tasks/create")
 def task_create(payload: Dict[str, Any]):
-    raw_path = str(payload.get("path") or "").strip().replace("\\", "/")
-    if not raw_path:
-        return JSONResponse(status_code=400, content={"error": "Task name is required"})
-    if raw_path.endswith("/"):
-        return JSONResponse(status_code=400, content={"error": "Task path must include a filename"})
-
-    clean_path = raw_path.strip("/")
-    if not clean_path:
-        return JSONResponse(status_code=400, content={"error": "Task name is required"})
-    if "." not in Path(clean_path).name:
-        clean_path = f"{clean_path}.md"
-
     try:
-        file_path = _safe_tasks_path(clean_path, must_exist=False)
+        raw_folder, raw_file_name = _extract_task_create_parts(payload)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
 
-    if file_path.exists():
-        return JSONResponse(status_code=409, content={"error": "Task already exists"})
+    TASKS_DIR.mkdir(parents=True, exist_ok=True)
+    folder_name = _normalize_task_folder_name(raw_folder)
+    file_name = _normalize_task_file_name(raw_file_name)
+    if folder_name:
+        preferred_dir = TASKS_DIR / folder_name
+        if preferred_dir.exists() and preferred_dir.is_dir():
+            parent_dir = preferred_dir
+        else:
+            parent_dir = preferred_dir if not preferred_dir.exists() else _unique_task_dir_path(folder_name)
+            parent_dir.mkdir(parents=False, exist_ok=False)
+    else:
+        parent_dir = TASKS_DIR
+        parent_dir.mkdir(parents=True, exist_ok=True)
 
-    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path = _unique_task_file_path(parent_dir, file_name)
     initial_content = "# New Task\n\n"
     file_path.write_text(initial_content, encoding="utf-8")
     return {"status": "ok", "path": str(file_path.relative_to(TASKS_DIR))}
+
+
+@router.post("/api/tasks/delete")
+def task_delete(payload: Dict[str, Any]):
+    raw_path = str(payload.get("path") or "").strip()
+    if not raw_path:
+        return JSONResponse(status_code=400, content={"error": "Missing task path"})
+
+    try:
+        file_path = _safe_tasks_path(raw_path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    file_path.unlink()
+    removed_folder = None
+    parent_dir = file_path.parent
+    if parent_dir != TASKS_DIR:
+        try:
+            parent_dir.rmdir()
+            removed_folder = str(parent_dir.relative_to(TASKS_DIR))
+        except OSError:
+            pass
+
+    return {"status": "ok", "deleted": raw_path, "removedFolder": removed_folder}
 
 
 @router.get("/api/tasks/file")
