@@ -402,6 +402,25 @@ def _list_webui_tmux_sessions() -> List[Dict[str, Any]]:
     return sessions
 
 
+def _list_live_tmux_sessions() -> List[Dict[str, Any]]:
+    sessions = _list_webui_tmux_sessions()
+    if not any(session["name"] == WORKFLOW_EXECUTE_SESSION_NAME for session in sessions):
+        try:
+            if _tmux_session_exists(WORKFLOW_EXECUTE_SESSION_NAME):
+                sessions.append(
+                    {
+                        "name": WORKFLOW_EXECUTE_SESSION_NAME,
+                        "attached": False,
+                        "created_at": 0,
+                        "windows": 1,
+                    }
+                )
+        except RuntimeError:
+            pass
+    sessions.sort(key=lambda item: item["name"])
+    return sessions
+
+
 def _list_native_tmux_sessions() -> List[Dict[str, Any]]:
     proc = _run_tmux_command(
         [
@@ -474,6 +493,8 @@ def _list_external_tmux_sessions() -> List[Dict[str, Any]]:
         parts = raw.split("\t")
         name = parts[0].strip() if parts else ""
         if name.startswith(TMUX_SESSION_PREFIX):
+            continue
+        if name == WORKFLOW_EXECUTE_SESSION_NAME:
             continue
         if not name:
             continue
@@ -1107,7 +1128,7 @@ def terminal_api(command: str = Query("top"), session: str | None = Query(None),
 @router.get("/api/terminal/tmux/sessions")
 def terminal_tmux_sessions():
     try:
-        sessions = _list_webui_tmux_sessions()
+        sessions = _list_live_tmux_sessions()
     except RuntimeError as exc:
         return JSONResponse(status_code=500, content={"error": str(exc), "sessions": []})
     return {"sessions": sessions}
