@@ -92,6 +92,7 @@
     // opencode usage: OPENCODE_CONFIG={ROOT-SKILL-PILOT}/config/opencode-yolo.json opencode
     // update opencode.json with the appropriate permissions and settings
     // opencode is no sandbox model, so be cautious when using it and ensure you have the necessary safeguards in place
+    // stored OpenCode state at ~/.local/share/opencode/  
     {
       id: 'opencode',
       name: 'OpenCode CLI',
