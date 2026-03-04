@@ -170,6 +170,15 @@ function canTarget(node: WorkflowNode): boolean {
   return node.type !== 'start';
 }
 
+function isInteractiveNodeTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(
+    target.closest(
+      'input,textarea,select,button,[role="textbox"],[role="combobox"],[contenteditable="true"],[data-node-interactive],.anchor-btn',
+    ),
+  );
+}
+
 function getNodeAnchors(node: WorkflowNode): NodeAnchor[] {
   if (node.type === 'start') {
     return [{ key: 'start-out', side: 'right', kind: 'out' }];
@@ -1179,7 +1188,7 @@ export default function WorkflowsPage() {
                         justifyContent: 'center',
                       }}
                       onMouseDown={(e) => {
-                        if ((e.target as HTMLElement).closest('input,button,.anchor-btn')) return;
+                        if (isInteractiveNodeTarget(e.target)) return;
                         onNodeMouseDown(e, node);
                       }}
                       onClick={(e) => {
@@ -1238,30 +1247,48 @@ export default function WorkflowsPage() {
 
 	                      {node.type === 'agent' ? (
 	                        <Stack spacing={6}>
+                            <div
+                              data-node-interactive
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => e.stopPropagation()}
+                            >
 	                          <Select
 	                            size="xs"
 	                            value={node.data?.provider_id || ''}
 	                            onChange={(value) => setAgentField(node.id, 'provider_id', value || '')}
-                            data={providers.map((p) => ({ value: p.id, label: p.name }))}
-                            placeholder="Provider"
-                            searchable
-                          />
-                          <TextInput
-                            size="xs"
-                            value={node.data?.skill || ''}
-                            onChange={(e) => setAgentField(node.id, 'skill', e.currentTarget.value)}
-                            placeholder="Skill"
-                            list="workflow-skills-list"
-                          />
-                          <Textarea
-                            size="xs"
-                            value={node.data?.responsibility || ''}
-                            onChange={(e) => setAgentField(node.id, 'responsibility', e.currentTarget.value)}
-                            placeholder="Describe the role and focus of this agent"
-                            minRows={2}
-                            autosize
-                            maxRows={4}
-                          />
+                              data={providers.map((p) => ({ value: p.id, label: p.name }))}
+                              placeholder="Provider"
+                              searchable
+                            />
+                          </div>
+                          <div
+                            data-node-interactive
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <TextInput
+                              size="xs"
+                              value={node.data?.skill || ''}
+                              onChange={(e) => setAgentField(node.id, 'skill', e.currentTarget.value)}
+                              placeholder="Skill"
+                              list="workflow-skills-list"
+                            />
+                          </div>
+                          <div
+                            data-node-interactive
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Textarea
+                              size="xs"
+                              value={node.data?.responsibility || ''}
+                              onChange={(e) => setAgentField(node.id, 'responsibility', e.currentTarget.value)}
+                              placeholder="Describe the role and focus of this agent"
+                              minRows={2}
+                              autosize
+                              maxRows={4}
+                            />
+                          </div>
                         </Stack>
                       ) : null}
 

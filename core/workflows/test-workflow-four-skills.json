@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "name": "test-workflow-four-skills",
-  "updated_at": "2026-03-04T12:01:14Z",
+  "updated_at": "2026-03-04T13:07:10Z",
   "nodes": [
     {
       "id": 0,
@@ -15,12 +15,12 @@
       "id": 1,
       "type": "agent",
       "position": {
-        "x": 256,
-        "y": 72
+        "x": 262,
+        "y": 74
       },
       "data": {
         "title": "Random Number",
-        "provider_id": "gemini",
+        "provider_id": "opencode",
         "skill": "test-workflow-random-number",
         "responsibility": ""
       }
@@ -34,7 +34,7 @@
       },
       "data": {
         "title": "Random String",
-        "provider_id": "gemini",
+        "provider_id": "opencode",
         "skill": "test-workflow-random-string",
         "responsibility": ""
       }
@@ -48,7 +48,7 @@
       },
       "data": {
         "title": "Concat Number And String",
-        "provider_id": "gemini",
+        "provider_id": "opencode",
         "skill": "test-workflow-concat-number-string",
         "responsibility": ""
       }
@@ -62,7 +62,7 @@
       },
       "data": {
         "title": "Detect Number",
-        "provider_id": "gemini",
+        "provider_id": "opencode",
         "skill": "test-workflow-detect-number",
         "responsibility": ""
       }
