@@ -548,25 +548,32 @@ def _create_named_tmux_session(session_name: str) -> str:
     return safe_name
 
 
+def _send_tmux_command_literal(session_name: str, command: str) -> None:
+    safe_name = _validate_tmux_session_name_any(session_name)
+    safe_command = _coerce_command(command)
+    _run_tmux_command(["set-buffer", "--", safe_command], check=True)
+    _run_tmux_command(["paste-buffer", "-t", safe_name], check=True)
+    _run_tmux_command(["send-keys", "-t", safe_name, "Enter"], check=True)
+    _run_tmux_command(["delete-buffer"], check=False)
+
+
 def _create_webui_tmux_session(command: str) -> str:
     session_name = f"{TMUX_SESSION_PREFIX}{int(time.time())}-{secrets.token_hex(2)}"
-    safe_command = _coerce_command(command)
     _run_tmux_command(
         ["new-session", "-d", "-s", session_name, "/bin/bash"],
         check=True,
     )
-    _run_tmux_command(["send-keys", "-t", session_name, safe_command, "Enter"], check=True)
+    _send_tmux_command_literal(session_name, command)
     return session_name
 
 
 def _create_native_tmux_session(command: str) -> str:
     session_name = f"{NATIVE_TMUX_SESSION_PREFIX}{int(time.time())}-{secrets.token_hex(2)}"
-    safe_command = _coerce_command(command)
     _run_tmux_command(
         ["new-session", "-d", "-s", session_name, "/bin/bash"],
         check=True,
     )
-    _run_tmux_command(["send-keys", "-t", session_name, safe_command, "Enter"], check=True)
+    _send_tmux_command_literal(session_name, command)
     return session_name
 
 
@@ -638,7 +645,7 @@ def _build_provider_command(
     sandbox: Any,
     auto: Any,
     network: Any,
-) -> tuple[Dict[str, Any], str]:
+) -> tuple[Dict[str, Any], str, str]:
     provider = get_provider(provider_id)
     cmd_list = build_terminal_command(
         provider,
@@ -647,12 +654,24 @@ def _build_provider_command(
         network_allow=network,
         sandbox_mode=sandbox,
     )
+    env_overrides: Dict[str, str] = {}
     if provider.get("id") == "opencode" and auto:
         opencode_config = str(_REPO_ROOT / "config" / "opencode-yolo.json")
-        command = f"OPENCODE_CONFIG={shlex.quote(opencode_config)} {shlex.join(cmd_list)}"
+        env_overrides["OPENCODE_CONFIG"] = opencode_config
+        display_command = f"OPENCODE_CONFIG={shlex.quote(opencode_config)} {shlex.join(cmd_list)}"
     else:
-        command = shlex.join(cmd_list)
-    return provider, command
+        display_command = shlex.join(cmd_list)
+
+    launch_dir = _REPO_ROOT / ".skillpilot" / "temp" / "tmux-argv"
+    launch_dir.mkdir(parents=True, exist_ok=True)
+    payload_path = launch_dir / f"{int(time.time())}-{uuid4().hex[:8]}.json"
+    payload_path.write_text(
+        json.dumps({"argv": cmd_list, "env": env_overrides}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    launcher = _REPO_ROOT / "core" / "engine" / "exec_argv.py"
+    command = shlex.join(["python3", str(launcher), str(payload_path)])
+    return provider, command, display_command
 
 
 def _start_workflow_agent_in_session(
@@ -683,18 +702,19 @@ def _start_workflow_agent_in_session(
             raise RuntimeError(
                 f"Failed to exit current agent session '{previous_provider_bin}' in tmux session '{safe_name}'."
             )
-    provider, command = _build_provider_command(
+    provider, command, display_command = _build_provider_command(
         provider_id=provider_id,
         prompt=prompt,
         sandbox=sandbox,
         auto=auto,
         network=network,
     )
-    _run_tmux_command(["send-keys", "-t", safe_name, command, "Enter"], check=True)
+    _send_tmux_command_literal(safe_name, command)
     logger.info(
-        "[workflow-execute] session_launch session=%s provider=%s command=%s",
+        "[workflow-execute] session_launch session=%s provider=%s command=%s launcher=%s",
         safe_name,
         str(provider.get("id") or ""),
+        display_command,
         command,
     )
     return provider, command
