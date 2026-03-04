@@ -249,11 +249,16 @@ class Bridge:
         steps = [step.strip().lower() for step in raw.splitlines() if step.strip()]
         if not steps:
             steps = ["ctrl+c"]
+        time.sleep(1.5)
         for step in steps:
             if step in {"ctrl+c", "^c", "c-c"}:
                 self._run_tmux(["send-keys", "-t", session_name, "C-c"], check=False)
             elif step in {"enter", "return"}:
                 self._run_tmux(["send-keys", "-t", session_name, "Enter"], check=False)
+            elif step in {"esc", "escape"}:
+                self._run_tmux(["send-keys", "-t", session_name, "Escape"], check=False)
+                time.sleep(1.0)
+                continue
             else:
                 self._run_tmux(["send-keys", "-t", session_name, step, "Enter"], check=False)
             time.sleep(0.35)

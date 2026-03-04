@@ -51,7 +51,7 @@
         '{{prompt}}',
       ],
       "env": {},
-      'exit-session': 'ctrl+c\nctrl+c',
+      'exit-session': 'esc\nctrl+c\nctrl+c',
     },
     /*
     # Using OpenAI codex with ENV vars below for any openai compatible api 
@@ -71,7 +71,7 @@
         '--json',
         '{{prompt}}',
       ],
-      'exit-session': 'ctrl+c\nctrl+c',
+      'exit-session': 'esc\nctrl+c\nctrl+c',
     },
     {
       id: 'gemini',
@@ -87,7 +87,7 @@
         '{{prompt}}',
       ],
       model: 'auto-gemini-3',
-      'exit-session': 'ctrl+c\nctrl+c',
+      'exit-session': 'esc\nctrl+c\nctrl+c',
     },
     // opencode usage: OPENCODE_CONFIG={ROOT-SKILL-PILOT}/config/opencode-yolo.json opencode
     // update opencode.json with the appropriate permissions and settings
@@ -98,7 +98,7 @@
       bin: 'opencode',
       args: ['--format', 'json', 'run', '{{prompt}}'],
       'terminal-args': ['--prompt', '{{prompt}}'],
-      'exit-session': 'ctrl+c\nctrl+c',
+      'exit-session': 'esc\nctrl+c\nctrl+c',
       env:{
         'OPENAI_API_KEY': '',
         'OPENAI_BASE_URL': ''
@@ -126,7 +126,7 @@
         'ANTHROPIC_AUTH_TOKEN': '${ANTHROPIC_AUTH_TOKEN}',
         'ANTHROPIC_API_KEY': '',
       },
-      'exit-session': 'ctrl+c\nctrl+c',
+      'exit-session': 'esc\nctrl+c\nctrl+c',
     },
     // OpenAI Codex via OpenAI-compatible API endpoint (disabled by default — configure env vars to enable)
     {
@@ -147,7 +147,7 @@
         'OPENAI_API_KEY': '${OPENAI_API_KEY}',
         'OPENAI_BASE_URL': '${OPENAI_BASE_URL}',
       },
-      'exit-session': 'ctrl+c\nctrl+c',
+      'exit-session': 'esc\nctrl+c\nctrl+c',
     },
 
   ],

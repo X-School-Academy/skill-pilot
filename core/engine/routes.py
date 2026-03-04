@@ -594,11 +594,16 @@ def _send_exit_session_shortcut_any(session_name: str, provider: Dict[str, Any])
     steps = [step.strip().lower() for step in raw.splitlines() if step.strip()]
     if not steps:
         steps = ["ctrl+c"]
+    time.sleep(1.5)
     for step in steps:
         if step in {"ctrl+c", "^c", "c-c"}:
             _run_tmux_command(["send-keys", "-t", safe_name, "C-c"], check=False)
         elif step in {"enter", "return"}:
             _run_tmux_command(["send-keys", "-t", safe_name, "Enter"], check=False)
+        elif step in {"esc", "escape"}:
+            _run_tmux_command(["send-keys", "-t", safe_name, "Escape"], check=False)
+            time.sleep(1.0)
+            continue
         else:
             _run_tmux_command(["send-keys", "-t", safe_name, step, "Enter"], check=False)
         time.sleep(0.35)
