@@ -96,7 +96,7 @@
       id: 'opencode',
       name: 'OpenCode CLI',
       bin: 'opencode',
-      model: 'big-pickle',
+      model: 'opencode/big-pickle',
       args: ['--format', 'json', 'run', '{{prompt}}'],
       'terminal-args': ['--prompt', '{{prompt}}'],
       'exit-session': 'esc\nctrl+c\nctrl+c',
