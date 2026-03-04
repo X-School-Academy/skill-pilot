@@ -151,6 +151,7 @@ Detailed instructions for this step...
 **Workflow-specific rule:**
 - If the user says the skill is for workflow usage, include this exact sentence in the skill instructions or expected output section:
   `Output result as plain text. If the user asked to save it to a file, write it there.`
+- For workflow usage, also instruct the agent to include enough basic context in the plain-text output so downstream agents can understand what the result represents. Do not define the output as only a bare number, string, or similarly context-free value unless the workflow explicitly requires that exact format.
 
 #### Optional Sections
 
@@ -272,6 +273,7 @@ Ask: "The skill has been created/updated. Would you like me to make any changes?
 - **Naming convention**: Only dev-swarm skills use the `dev-swarm-` prefix; system, user, and third-party skills use plain names
 - **Minimize examples**: Only include Examples section if truly necessary or explicitly requested
 - **Workflow output contract**: If the user says the skill is for workflow usage, the skill must explicitly include `Output result as plain text. If the user asked to save it to a file, write it there.`
+- **Workflow output clarity**: For workflow usage, define outputs so they remain plain text but still include enough basic context for downstream agents to understand the meaning of the result.
 
 ## Common Issues
 

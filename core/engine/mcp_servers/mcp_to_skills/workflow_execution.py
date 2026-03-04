@@ -196,6 +196,7 @@ def build_node_prompt(
 
     lines: list[str] = [
         "You are running as an AI agent node inside a multi-step workflow.",
+        "You need to use the workflow instruction and the agent skill provided for this node to finish the task.",
         "",
         f"Workflow name: {graph.workflow_name}",
         f"Workflow file: core/workflows/{graph.workflow_relative_path}",
@@ -235,9 +236,11 @@ def build_node_prompt(
             "",
             "When you finish:",
             f"1. Write your final output to {display_repo_relative(node_output_path(output_root, current_node_id, current_node_title), repo_root)}",
-            "2. Keep the output concise and structured so downstream nodes can consume it",
-            "3. If you make assumptions, state them before the final result",
-            "4. Do not write output files outside the task workspace or workflow output root unless explicitly required",
+            "2. Keep the output concise, structured, and easy for downstream nodes to understand",
+            "3. Include enough basic context in the output so another agent can understand what the result represents",
+            "4. Do not return only a bare number, string, or similarly context-free value unless the workflow explicitly requires that exact format",
+            "5. If you make assumptions, state them before the final result",
+            "6. Do not write output files outside the task workspace or workflow output root unless explicitly required",
         ]
     )
     return "\n".join(lines).strip()
