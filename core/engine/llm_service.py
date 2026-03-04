@@ -284,9 +284,20 @@ def build_terminal_command(
     if use_network_allow:
         args.extend(_resolve_arg(arg) for arg in network_args)
 
+    model = provider.get("model")
+    if model:
+        if isinstance(model, list):
+            args.extend(str(m) for m in model)
+        else:
+            args.extend(["--model", str(model)])
+
+    if provider.get("bin") == "gemini" and os.name == "nt":
+        prompt = prompt.replace("\r\n", "\\n").replace("\n", "\\n")
+
     terminal_args = _string_list(provider, "terminal-args")
     if terminal_args:
         for arg in terminal_args:
+            arg = _resolve_arg(arg)
             if "{{prompt}}" in arg:
                 args.append(arg.replace("{{prompt}}", prompt))
             else:

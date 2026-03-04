@@ -53,6 +53,7 @@ from mcp_servers.mcp_to_skills.workflow_execution import (
 )
 
 from llm_service import (
+    _resolve_provider_env,
     build_chat_system_message,
     build_code_system_message,
     build_llm_command,
@@ -1182,11 +1183,13 @@ def terminal_tmux_create(payload: Dict[str, Any]):
             network_allow=network,
             sandbox_mode=sandbox,
         )
+        env_vars = _resolve_provider_env(provider)
         if provider.get("id") == "opencode" and auto:
-            opencode_config = str(_REPO_ROOT / "config" / "opencode-yolo.json")
-            command = f"OPENCODE_CONFIG={shlex.quote(opencode_config)} {shlex.join(cmd_list)}"
-        else:
-            command = shlex.join(cmd_list)
+            env_vars["OPENCODE_CONFIG"] = str(_REPO_ROOT / "config" / "opencode-yolo.json")
+        env_prefix = " ".join(f"{key}={shlex.quote(str(value))}" for key, value in env_vars.items())
+        command = shlex.join(cmd_list)
+        if env_prefix:
+            command = f"{env_prefix} {command}"
         logger.info("[tmux-create] provider=%s command=%s", provider.get("id"), command)
     else:
         command = _coerce_command(str(payload.get("command") or ""))
