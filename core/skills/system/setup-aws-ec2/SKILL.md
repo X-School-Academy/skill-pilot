@@ -34,6 +34,13 @@ Verify:
 core/bin/keys-safe-guard get_key_value AWS_ACCESS_KEY_ID AWS_REGION
 ```
 
+## Workflow Usage Requirement
+
+When this skill is used in a workflow agent node:
+
+- Output result as plain text. If the user asked to save it to a file, write it there.
+- Include concise context in the output (instance ID, public IP, region, and security-group status) so downstream agents can safely continue.
+
 ## Skip Condition
 
 Ask user if an EC2 instance already exists for this task. If yes, get the instance ID and verify:

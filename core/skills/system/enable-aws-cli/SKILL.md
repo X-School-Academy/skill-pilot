@@ -29,6 +29,13 @@ As a {Role, and Role-XYZ if have more roles}, I will {action description}
 
 None — this skill is self-contained.
 
+## Workflow Usage Requirement
+
+When this skill is used in a workflow agent node:
+
+- Output result as plain text. If the user asked to save it to a file, write it there.
+- Include concise context in the output (credentials status, selected region, and MCP sync status) so downstream agents can safely continue.
+
 ## Skip Condition
 
 Check if credentials are already configured:

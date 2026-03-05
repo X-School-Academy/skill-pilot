@@ -36,6 +36,13 @@ Verify AWS credentials:
 core/bin/keys-safe-guard get_key_value AWS_ACCESS_KEY_ID AWS_REGION
 ```
 
+## Workflow Usage Requirement
+
+When this skill is used in a workflow agent node:
+
+- Output result as plain text. If the user asked to save it to a file, write it there.
+- Include concise context in the output (profile name, key path, target host, and session ID) so downstream agents can safely continue.
+
 ## Skip Condition
 
 Ask user if an SSH session is already active. If yes, get the session ID and verify with

@@ -29,6 +29,13 @@ As a {Role, and Role-XYZ if have more roles}, I will {action description}
 
 None — this skill is self-contained.
 
+## Workflow Usage Requirement
+
+When this skill is used in a workflow agent node:
+
+- Output result as plain text. If the user asked to save it to a file, write it there.
+- Include concise context in the output (what was checked, what is ready, and any blocking issue) so downstream agents can safely continue.
+
 ## Skip Condition
 
 Run the test command directly. If it succeeds, skip remaining install steps and report ready.
@@ -84,7 +91,7 @@ Capture the playwright-cli version:
 playwright-cli --version
 ```
 
-Output the result as plain text. If the user asked to save it to a file, write it there.
+Output result as plain text. If the user asked to save it to a file, write it there.
 
 ## Output
 
