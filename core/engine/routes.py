@@ -1096,6 +1096,7 @@ def _execute_workflow_in_terminal_thread(
                 output_root=output_root,
                 upstream_node_ids=upstream_node_ids,
                 task_workspace=task_workspace,
+                start_by_prompt_mode=(next_node_trigger == "start_by_prompt"),
             )
             output_file = node_output_path(output_root, node_id, node_name(node))
             if output_file.exists():

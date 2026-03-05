@@ -185,6 +185,7 @@ def build_node_prompt(
     output_root: Path,
     upstream_node_ids: list[int],
     task_workspace: str | None = None,
+    start_by_prompt_mode: bool = False,
 ) -> str:
     repo_root = repo_root_from_workflow_file(graph.workflow_file)
     current_node_id = int(current_node["id"])
@@ -235,6 +236,9 @@ def build_node_prompt(
         [
             "",
             "When you finish:",
+            "Once you finish the task, ask user to comfirm the output result, then execute agent skill continue-workflow-execution."
+            if start_by_prompt_mode
+            else None,
             f"1. Write your final output to {display_repo_relative(node_output_path(output_root, current_node_id, current_node_title), repo_root)}",
             "2. Keep the output concise, structured, and easy for downstream nodes to understand",
             "3. Include enough basic context in the output so another agent can understand what the result represents",
@@ -243,4 +247,4 @@ def build_node_prompt(
             "6. Do not write output files outside the task workspace or workflow output root unless explicitly required",
         ]
     )
-    return "\n".join(lines).strip()
+    return "\n".join([line for line in lines if line is not None]).strip()
