@@ -59,21 +59,21 @@ pnpm install -g @playwright/cli@latest
 playwright-cli --version
 ```
 
-### Step 2: Check if Chrome is installed
-
-```bash
-playwright install chrome
-```
-
-(Safe to re-run — skips if already installed.)
-
-### Step 3: Test browser + extension bridge
+### Step 2: Test browser + extension bridge
 
 ```bash
 playwright-cli open https://www.google.com --extension --headed
 ```
 
-**If "Extension connection timeout" error appears:**
+### Step 3: Check any errors
+
+**If get error, Chrome is not installed**
+
+```bash
+pnpm exec playwright install chrome # install the official branded Google Chrome browser
+```
+
+**Or if "Extension connection timeout" error appears:**
 
 Warn user: "About to open Chrome Web Store — this is a trusted Google site."
 
@@ -84,6 +84,8 @@ https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjad
 
 Once installed, retry the open command. Repeat until the browser opens successfully.
 
+Check any errors until run `playwright-cli open https://www.google.com --extension --headed` without error and the Google website is opened.
+
 ### Step 4: Report result
 
 Capture the playwright-cli version:
@@ -91,7 +93,7 @@ Capture the playwright-cli version:
 playwright-cli --version
 ```
 
-Output result as plain text. If the user asked to save it to a file, write it there.
+Output result as plain text, say "playwright-cli and Google chrome extension has installed, open any web URL using: `playwright-cli open URL --extension --headed`". If the user asked to save it to a file, write it there.
 
 ## Output
 
@@ -99,9 +101,9 @@ Plain text result shown to user (example):
 
 ```
 Playwright CLI: ready
-Version: 1.x.x
 Chrome: installed
 MCP Bridge extension: connected
+Open any web URL using: `playwright-cli open URL --extension --headed`
 ```
 
 If user requested file output, write the same content to the specified path.
