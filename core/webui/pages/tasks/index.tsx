@@ -60,6 +60,7 @@ interface LlmProvider {
 }
 
 type ExecuteMode = 'skill' | 'workflow';
+type NextNodeTrigger = 'auto_continue' | 'start_by_prompt';
 
 const detectTaskKind = (path: string): TaskKind => {
   const lower = (path || '').toLowerCase();
@@ -128,6 +129,7 @@ export default function TasksPage() {
   const [workflowOptions, setWorkflowOptions] = useState<string[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
+  const [executeNextNodeTrigger, setExecuteNextNodeTrigger] = useState<NextNodeTrigger>('auto_continue');
   const [selectedReferenceFiles, setSelectedReferenceFiles] = useState<string[]>([]);
   const [navbarWidth, setNavbarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
@@ -403,6 +405,7 @@ export default function TasksPage() {
     setExecuteMode('skill');
     setSelectedSkill(null);
     setSelectedWorkflow(null);
+    setExecuteNextNodeTrigger('auto_continue');
     setSelectedReferenceFiles([]);
     setExecuteOpened(true);
     setNotice('');
@@ -436,7 +439,9 @@ export default function TasksPage() {
 
     setExecuteOpened(false);
     if (executeMode === 'workflow') {
-      void router.push(`/?new_session=true&prompt=${encodeURIComponent(prompt)}&workflow=${encodeURIComponent(`${target}.json`)}`);
+      void router.push(
+        `/?new_session=true&prompt=${encodeURIComponent(prompt)}&workflow=${encodeURIComponent(`${target}.json`)}&next_node_trigger=${encodeURIComponent(executeNextNodeTrigger)}`,
+      );
       return;
     }
     void router.push(`/?new_session=true&prompt=${encodeURIComponent(prompt)}`);
@@ -679,15 +684,26 @@ export default function TasksPage() {
               clearable
             />
           ) : (
-            <Select
-              label="Workflow"
-              placeholder="Select a workflow"
-              value={selectedWorkflow}
-              onChange={setSelectedWorkflow}
-              data={workflowOptions.map((item) => ({ value: item, label: item }))}
-              searchable
-              clearable
-            />
+            <>
+              <Select
+                label="Workflow"
+                placeholder="Select a workflow"
+                value={selectedWorkflow}
+                onChange={setSelectedWorkflow}
+                data={workflowOptions.map((item) => ({ value: item, label: item }))}
+                searchable
+                clearable
+              />
+              <Select
+                label="Next Node Trigger"
+                value={executeNextNodeTrigger}
+                onChange={(value) => setExecuteNextNodeTrigger((value as NextNodeTrigger) || 'auto_continue')}
+                data={[
+                  { value: 'auto_continue', label: 'Auto continue' },
+                  { value: 'start_by_prompt', label: 'Start by prompt' },
+                ]}
+              />
+            </>
           )}
 
           <div>

@@ -126,6 +126,7 @@ _AUTH_COOKIE_NAME = "auth_token"
 _AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
 _WORKFLOW_EXECUTE_LOCK = threading.Lock()
 _WORKFLOW_EXECUTE_STOP = threading.Event()
+_WORKFLOW_EXECUTE_CONTINUE = threading.Event()
 _WORKFLOW_EXECUTE_STATE: Dict[str, Any] = {
     "thread": None,
     "token": "",
@@ -137,6 +138,14 @@ _WORKFLOW_EXECUTE_STATE: Dict[str, Any] = {
     "error": "",
     "started_at": 0.0,
     "finished_at": 0.0,
+    "next_node_trigger": "auto_continue",
+    "waiting_for_continue": False,
+    "current_node_id": 0,
+    "current_node_name": "",
+    "current_output_file": "",
+    "current_provider_id": "",
+    "current_provider_bin": "",
+    "has_remaining_nodes": False,
 }
 
 _DEFAULT_SETTINGS: Dict[str, Any] = {
@@ -747,8 +756,99 @@ def _reset_workflow_execute_state(status: str = "idle", error: str = "") -> None
                 "error": error,
                 "started_at": 0.0,
                 "finished_at": time.time() if status in {"finished", "error", "terminated"} else 0.0,
+                "next_node_trigger": "auto_continue",
+                "waiting_for_continue": False,
+                "current_node_id": 0,
+                "current_node_name": "",
+                "current_output_file": "",
+                "current_provider_id": "",
+                "current_provider_bin": "",
+                "has_remaining_nodes": False,
             }
         )
+
+
+def _notify_workflow_tmux_message(session_name: str, message: str) -> None:
+    safe_message = str(message or "").strip()
+    if not safe_message:
+        return
+    _send_tmux_command_literal(session_name, f"echo {shlex.quote(safe_message)}")
+
+
+def request_workflow_continue_signal(source: str = "api") -> Dict[str, Any]:
+    status = _workflow_execute_status()
+    if not status.get("thread_alive"):
+        return {
+            "accepted": False,
+            "status": status,
+            "message": "No active workflow execution thread.",
+        }
+    if status.get("next_node_trigger") != "start_by_prompt":
+        return {
+            "accepted": False,
+            "status": status,
+            "message": "Workflow is not using start-by-prompt mode.",
+        }
+
+    session_name = str(status.get("session_name") or WORKFLOW_EXECUTE_SESSION_NAME)
+    output_file = str(status.get("current_output_file") or "").strip()
+    waiting_for_continue = bool(status.get("waiting_for_continue"))
+    has_remaining_nodes = bool(status.get("has_remaining_nodes"))
+
+    if not waiting_for_continue:
+        return {
+            "accepted": False,
+            "status": status,
+            "message": "Workflow is not currently waiting for a continue signal.",
+        }
+    if not has_remaining_nodes:
+        return {
+            "accepted": False,
+            "status": status,
+            "message": "No remaining workflow nodes to continue.",
+        }
+
+    if not output_file:
+        try:
+            _notify_workflow_tmux_message(
+                session_name,
+                "User asked to continue to the next workflow node, but the current node output file is not ready. Please finish the current task first.",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[workflow-execute] continue_notify_failed session=%s error=%s", session_name, exc)
+        return {
+            "accepted": False,
+            "status": _workflow_execute_status(),
+            "message": "Current node output file is not ready.",
+        }
+
+    if not Path(output_file).exists():
+        try:
+            _notify_workflow_tmux_message(
+                session_name,
+                "User asked to continue to the next workflow node, but the current node output file is not ready. Please finish the current task first.",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[workflow-execute] continue_notify_failed session=%s error=%s", session_name, exc)
+        return {
+            "accepted": False,
+            "status": _workflow_execute_status(),
+            "message": "Current node output file is not ready.",
+        }
+
+    _WORKFLOW_EXECUTE_CONTINUE.set()
+    logger.info(
+        "[workflow-execute] continue_signal source=%s session=%s output_file=%s waiting_for_continue=%s",
+        source,
+        session_name,
+        output_file,
+        waiting_for_continue,
+    )
+    return {
+        "accepted": True,
+        "status": _workflow_execute_status(),
+        "message": "Continue signal accepted.",
+    }
 
 
 def _validate_writable_session_name(session_name: str) -> str:
@@ -913,6 +1013,7 @@ def _execute_workflow_in_terminal_thread(
     sandbox: Any,
     auto: Any,
     network: Any,
+    next_node_trigger: str = "auto_continue",
 ) -> None:
     started_at = time.time()
     graph = None
@@ -945,6 +1046,14 @@ def _execute_workflow_in_terminal_thread(
                 error="",
                 started_at=started_at,
                 finished_at=0.0,
+                next_node_trigger=next_node_trigger,
+                waiting_for_continue=False,
+                current_node_id=0,
+                current_node_name="",
+                current_output_file="",
+                current_provider_id="",
+                current_provider_bin="",
+                has_remaining_nodes=False,
             )
         logger.info(
             "[workflow-execute] thread_start workflow=%s workflow_name=%s session=%s run_id=%s output_root=%s",
@@ -996,6 +1105,16 @@ def _execute_workflow_in_terminal_thread(
                     pass
 
             node_status[node_id] = "running"
+            if run_is_current():
+                _set_workflow_execute_state(
+                    status="running",
+                    waiting_for_continue=False,
+                    current_node_id=node_id,
+                    current_node_name=node_name(node),
+                    current_output_file=str(output_file),
+                    current_provider_id=provider_id,
+                    has_remaining_nodes=False,
+                )
             logger.info(
                 "[workflow-execute] node_start node_id=%s node_name=%s provider_id=%s upstream_ids=%s output_file=%s",
                 node_id,
@@ -1015,6 +1134,11 @@ def _execute_workflow_in_terminal_thread(
                     network=network,
                     previous_provider=previous_provider,
                 )
+                if run_is_current():
+                    _set_workflow_execute_state(
+                        current_provider_id=str(previous_provider.get("id") or ""),
+                        current_provider_bin=str(previous_provider.get("bin") or ""),
+                    )
 
                 wait_started = time.time()
                 while True:
@@ -1051,13 +1175,63 @@ def _execute_workflow_in_terminal_thread(
                     else:
                         ready.append(downstream_id)
 
+            has_remaining_nodes = len(ready) > 0
+            if node_status[node_id] == "done" and next_node_trigger == "start_by_prompt":
+                if has_remaining_nodes:
+                    if run_is_current():
+                        _set_workflow_execute_state(
+                            status="waiting_for_continue",
+                            waiting_for_continue=True,
+                            current_node_id=node_id,
+                            current_node_name=node_name(node),
+                            current_output_file=str(output_file),
+                            has_remaining_nodes=has_remaining_nodes,
+                        )
+                    while True:
+                        if not run_is_current():
+                            raise RuntimeError("workflow execution superseded by a newer run")
+                        if _WORKFLOW_EXECUTE_STOP.is_set():
+                            raise RuntimeError("workflow execution stopped by user")
+                        if not _tmux_session_exists(session_name):
+                            raise RuntimeError(f"workflow tmux session was terminated during node {node_id}")
+                        if _WORKFLOW_EXECUTE_CONTINUE.wait(1.0):
+                            _WORKFLOW_EXECUTE_CONTINUE.clear()
+                            break
+
+                    if previous_provider is not None:
+                        _send_exit_session_shortcut_any(session_name, previous_provider)
+                        previous_provider = None
+                    if run_is_current():
+                        _set_workflow_execute_state(status="running", waiting_for_continue=False)
+                else:
+                    if previous_provider is not None:
+                        _send_exit_session_shortcut_any(session_name, previous_provider)
+                        previous_provider = None
+                    _send_tmux_command_literal(session_name, "echo 'The workflow has completed.'")
+                    if run_is_current():
+                        _set_workflow_execute_state(
+                            status="running",
+                            waiting_for_continue=False,
+                            has_remaining_nodes=False,
+                        )
+
         failed_nodes = [node_id for node_id, status in node_status.items() if status != "done"]
         if failed_nodes:
             raise RuntimeError(f"workflow finished with incomplete nodes: {failed_nodes}")
 
         finished_at = time.time()
         if run_is_current():
-            _set_workflow_execute_state(status="finished", finished_at=finished_at)
+            _set_workflow_execute_state(
+                status="finished",
+                finished_at=finished_at,
+                waiting_for_continue=False,
+                current_node_id=0,
+                current_node_name="",
+                current_output_file="",
+                current_provider_id="",
+                current_provider_bin="",
+                has_remaining_nodes=False,
+            )
         logger.info(
             "[workflow-execute] thread_finish workflow=%s session=%s run_id=%s duration_sec=%.3f",
             graph.workflow_relative_path,
@@ -1068,7 +1242,12 @@ def _execute_workflow_in_terminal_thread(
     except Exception as exc:  # noqa: BLE001
         finished_at = time.time()
         if run_is_current():
-            _set_workflow_execute_state(status="error", error=str(exc), finished_at=finished_at)
+            _set_workflow_execute_state(
+                status="error",
+                error=str(exc),
+                finished_at=finished_at,
+                waiting_for_continue=False,
+            )
         logger.exception("[workflow-execute] thread_error session=%s error=%s", session_name, exc)
     finally:
         with _WORKFLOW_EXECUTE_LOCK:
@@ -1087,6 +1266,7 @@ def _stop_existing_workflow_execute_thread() -> None:
     if thread and thread.is_alive():
         logger.info("[workflow-execute] stopping_existing_thread status=%s", status.get("status"))
     _WORKFLOW_EXECUTE_STOP.set()
+    _WORKFLOW_EXECUTE_CONTINUE.set()
     try:
         _kill_tmux_session_any(WORKFLOW_EXECUTE_SESSION_NAME)
     except RuntimeError as exc:
@@ -1094,6 +1274,7 @@ def _stop_existing_workflow_execute_thread() -> None:
     if thread and thread.is_alive():
         thread.join(timeout=5.0)
     _reset_workflow_execute_state(status="terminated")
+    _WORKFLOW_EXECUTE_CONTINUE.clear()
 
 
 def cleanup_stale_workflow_session() -> None:
@@ -1105,6 +1286,7 @@ def cleanup_stale_workflow_session() -> None:
     except Exception as exc:  # noqa: BLE001
         logger.warning("[workflow-execute] cleanup_stale_session_failed session=%s error=%s", WORKFLOW_EXECUTE_SESSION_NAME, exc)
     _reset_workflow_execute_state(status="idle")
+    _WORKFLOW_EXECUTE_CONTINUE.clear()
 
 
 @router.get("/api/health")
@@ -2562,11 +2744,14 @@ def workflows_execute(payload: Dict[str, Any]):
     sandbox = payload.get("sandbox")
     auto = payload.get("auto")
     network = payload.get("network")
+    next_node_trigger = str(payload.get("next_node_trigger") or "auto_continue").strip().lower()
 
     if not workflow:
         return JSONResponse(status_code=400, content={"error": "workflow is required"})
     if not workflow_prompt:
         return JSONResponse(status_code=400, content={"error": "prompt is required"})
+    if next_node_trigger not in {"auto_continue", "start_by_prompt"}:
+        return JSONResponse(status_code=400, content={"error": "next_node_trigger must be auto_continue or start_by_prompt"})
     if workflow.startswith("core/workflows/"):
         workflow = workflow[len("core/workflows/") :]
 
@@ -2590,6 +2775,7 @@ def workflows_execute(payload: Dict[str, Any]):
         native_status["requested"] = True
 
     _WORKFLOW_EXECUTE_STOP.clear()
+    _WORKFLOW_EXECUTE_CONTINUE.clear()
     run_token = uuid4().hex
     thread = threading.Thread(
         target=_execute_workflow_in_terminal_thread,
@@ -2601,6 +2787,7 @@ def workflows_execute(payload: Dict[str, Any]):
             "sandbox": sandbox,
             "auto": auto,
             "network": network,
+            "next_node_trigger": next_node_trigger,
         },
         daemon=True,
         name="workflow-execute",
@@ -2618,16 +2805,25 @@ def workflows_execute(payload: Dict[str, Any]):
                 "error": "",
                 "started_at": time.time(),
                 "finished_at": 0.0,
+                "next_node_trigger": next_node_trigger,
+                "waiting_for_continue": False,
+                "current_node_id": 0,
+                "current_node_name": "",
+                "current_output_file": "",
+                "current_provider_id": "",
+                "current_provider_bin": "",
+                "has_remaining_nodes": False,
             }
         )
     logger.info(
-        "[workflow-execute] request workflow=%s session=%s native_terminal=%s sandbox=%s auto=%s network=%s",
+        "[workflow-execute] request workflow=%s session=%s native_terminal=%s sandbox=%s auto=%s network=%s next_node_trigger=%s",
         workflow,
         session_name,
         native_terminal,
         sandbox,
         auto,
         network,
+        next_node_trigger,
     )
     thread.start()
 
@@ -2639,6 +2835,11 @@ def workflows_execute(payload: Dict[str, Any]):
         "workflow_thread": _workflow_execute_status(),
         "native_terminal": native_status,
     }
+
+
+@router.post("/api/workflows/execute/continue")
+def workflows_execute_continue():
+    return request_workflow_continue_signal(source="api")
 
 
 @router.post("/api/workflows/validate")

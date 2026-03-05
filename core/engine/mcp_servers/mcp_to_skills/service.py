@@ -538,6 +538,13 @@ class Bridge:
                 "status": "ok",
                 "result": result,
             }
+        if operation == "continue_workflow_terminal":
+            from routes import request_workflow_continue_signal  # lazy import to avoid module cycle at startup
+
+            source_raw = payload.get("source")
+            source = str(source_raw).strip() if isinstance(source_raw, str) else "cli"
+            result = request_workflow_continue_signal(source=source or "cli")
+            return {"status": "ok", "result": result}
         if operation == "safe_dotenv_key_names":
             return {"status": "ok", "result": {"keys": loaded_env_key_names()}}
 

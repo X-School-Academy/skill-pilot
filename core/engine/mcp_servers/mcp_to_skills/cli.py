@@ -81,9 +81,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_workflow_parser.add_argument(
         "workflow",
+        nargs="?",
         help="Workflow JSON path (relative to core/workflows or absolute path under it)",
     )
-    run_workflow_parser.add_argument("prompt", nargs="+", help="Global workflow instruction")
+    run_workflow_parser.add_argument("prompt", nargs="*", help="Global workflow instruction")
     run_workflow_parser.add_argument(
         "--max-workers",
         type=int,
@@ -102,6 +103,16 @@ def build_parser() -> argparse.ArgumentParser:
     run_workflow_parser.add_argument("--no-network", dest="network", action="store_false")
     run_workflow_parser.add_argument("--sandbox", dest="sandbox", action="store_true", default=None)
     run_workflow_parser.add_argument("--no-sandbox", dest="sandbox", action="store_false")
+    run_workflow_parser.add_argument(
+        "--continue-terminal-session",
+        action="store_true",
+        help="Signal active terminal workflow execution to continue to the next node (start-by-prompt mode)",
+    )
+    run_workflow_parser.add_argument(
+        "--continue-source",
+        default="cli",
+        help="Source label for continue signal logs (default: cli)",
+    )
     new_agent_parser = subparsers.add_parser(
         "new_agent_session",
         help="Reuse latest web/native tmux bash session by stopping the current agent process and launching a new prompt",
@@ -213,6 +224,40 @@ def main() -> int:
         return 0
 
     if args.command == "run-workflow":
+        if bool(args.continue_terminal_session):
+            payload = {
+                "operation": "continue_workflow_terminal",
+                "source": str(args.continue_source or "cli"),
+            }
+            try:
+                response_raw = send_request(json.dumps(payload, ensure_ascii=True), socket_path, args.timeout)
+            except Exception as exc:
+                print(f"run-workflow continue request failed: {exc}", file=sys.stderr)
+                return 2
+            try:
+                response = json.loads(response_raw)
+            except json.JSONDecodeError:
+                print(response_raw)
+                return 0
+
+            if not isinstance(response, dict):
+                print(response_raw)
+                return 0
+            if response.get("status") != "ok":
+                detail = response.get("detail") or "run-workflow continue request failed"
+                print(str(detail), file=sys.stderr)
+                return 2
+            result = response.get("result") or {}
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if bool(result.get("accepted")) else 2
+
+        if not args.workflow:
+            print("run-workflow setup failed: workflow path is required", file=sys.stderr)
+            return 2
+        if not args.prompt:
+            print("run-workflow setup failed: prompt is required", file=sys.stderr)
+            return 2
+
         repo_root = Path(__file__).resolve().parents[4]
         workflows_root = repo_root / "core" / "workflows"
 

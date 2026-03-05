@@ -160,6 +160,14 @@ interface SecuritySettings {
 }
 
 type FixedSecuritySection = 'schedules' | 'newSession' | 'remoteBot' | 'devSwarm';
+type NextNodeTrigger = 'auto_continue' | 'start_by_prompt';
+
+interface WorkflowExecuteStatus {
+  status: string;
+  error?: string;
+  next_node_trigger?: NextNodeTrigger;
+  waiting_for_continue?: boolean;
+}
 
 const SECURITY_SECTION_DEFS: { key: FixedSecuritySection; label: string; defaults: SecurityFlags }[] = [
   { key: 'schedules', label: 'Schedules', defaults: { sandbox: true, auto: true, network: true } },
@@ -233,7 +241,9 @@ export default function HomePage() {
   const [newSessionNetwork, setNewSessionNetwork] = useState(true);
   const [newSessionNativeTerminal, setNewSessionNativeTerminal] = useState(false);
   const [workflowSessionActive, setWorkflowSessionActive] = useState(false);
-  const [workflowExecuteStatus, setWorkflowExecuteStatus] = useState<{ status: string; error?: string } | null>(null);
+  const [workflowExecuteStatus, setWorkflowExecuteStatus] = useState<WorkflowExecuteStatus | null>(null);
+  const [newSessionNextNodeTrigger, setNewSessionNextNodeTrigger] = useState<NextNodeTrigger>('auto_continue');
+  const [continuingWorkflow, setContinuingWorkflow] = useState(false);
   const [defaultLlmProvider, setDefaultLlmProvider] = useState<string>('');
   const [profileData, setProfileData] = useState<Record<string, string>>({});
 
@@ -484,7 +494,7 @@ export default function HomePage() {
     const poll = async () => {
       try {
         const res = await axios.get(`${API_BASE_URL}/workflows/execute/status`, { withCredentials: true });
-        const st = res.data as { status: string; error?: string };
+        const st = res.data as WorkflowExecuteStatus;
         setWorkflowExecuteStatus(st);
         if (st.status === 'finished' || st.status === 'error' || st.status === 'terminated') {
           setWorkflowSessionActive(false);
@@ -537,10 +547,11 @@ export default function HomePage() {
 
   useEffect(() => {
     if (router.isReady) {
-      const { prompt, new_session, view, workflow } = router.query;
+      const { prompt, new_session, view, workflow, next_node_trigger } = router.query;
       if (new_session === 'true' && prompt) {
         setPromptText(prompt as string);
         setNewSessionWorkflow(typeof workflow === 'string' && workflow ? workflow : null);
+        setNewSessionNextNodeTrigger(next_node_trigger === 'start_by_prompt' ? 'start_by_prompt' : 'auto_continue');
         setActiveView('home');
       } else if (typeof view === 'string' && view) {
         const validViews: ActiveView[] = [
@@ -570,6 +581,7 @@ export default function HomePage() {
             auto: newSessionAuto,
             network: newSessionNetwork,
             native_terminal: newSessionNativeTerminal,
+            next_node_trigger: newSessionNextNodeTrigger,
           }
         : {
             provider_id: provider,
@@ -601,11 +613,26 @@ export default function HomePage() {
         }
         setPromptText('');
         setNewSessionWorkflow(null);
+        setNewSessionNextNodeTrigger('auto_continue');
       }
     } catch (err) {
       console.error('Failed to start session:', err);
     } finally {
       setStartingSession(false);
+    }
+  };
+
+  const handleWorkflowContinue = async () => {
+    if (continuingWorkflow) return;
+    setContinuingWorkflow(true);
+    try {
+      await axios.post(`${API_BASE_URL}/workflows/execute/continue`, {}, { withCredentials: true });
+      const res = await axios.get(`${API_BASE_URL}/workflows/execute/status`, { withCredentials: true });
+      setWorkflowExecuteStatus(res.data as WorkflowExecuteStatus);
+    } catch (err) {
+      console.error('Failed to continue workflow:', err);
+    } finally {
+      setContinuingWorkflow(false);
     }
   };
 
@@ -722,9 +749,20 @@ export default function HomePage() {
           size="md"
         />
         {newSessionWorkflow && (
-          <Text size="sm" color="dimmed" align="center">
-            Workflow mode: providers are controlled by the workflow nodes for {`core/workflows/${newSessionWorkflow}`}
-          </Text>
+          <>
+            <Text size="sm" color="dimmed" align="center">
+              Workflow mode: providers are controlled by the workflow nodes for {`core/workflows/${newSessionWorkflow}`}
+            </Text>
+            <Select
+              label="Next Node Trigger"
+              value={newSessionNextNodeTrigger}
+              onChange={(value) => setNewSessionNextNodeTrigger((value as NextNodeTrigger) || 'auto_continue')}
+              data={[
+                { value: 'auto_continue', label: 'Auto continue' },
+                { value: 'start_by_prompt', label: 'Start by prompt' },
+              ]}
+            />
+          </>
         )}
         {workflowExecuteStatus && workflowSessionActive && (
           <Text
@@ -776,6 +814,16 @@ export default function HomePage() {
             <Button size="md" onClick={() => void handleStart()} disabled={!promptText.trim() || startingSession} loading={startingSession}>
                 Start
             </Button>
+            {workflowSessionActive && workflowExecuteStatus?.waiting_for_continue && (
+              <Button
+                size="md"
+                variant="light"
+                onClick={() => void handleWorkflowContinue()}
+                loading={continuingWorkflow}
+              >
+                Continue Next Node
+              </Button>
+            )}
         </Group>
       </Stack>
     </div>
