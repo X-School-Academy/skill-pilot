@@ -236,7 +236,7 @@ def build_node_prompt(
         [
             "",
             "When you finish:",
-            "Once you finish the task, ask user to comfirm the output result, then execute agent skill continue-workflow-execution."
+            "load agent skill continue-workflow-execution but not use it until explicitly instructed."
             if start_by_prompt_mode
             else None,
             f"1. Write your final output to {display_repo_relative(node_output_path(output_root, current_node_id, current_node_title), repo_root)}",
