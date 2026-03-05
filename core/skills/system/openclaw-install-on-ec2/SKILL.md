@@ -37,11 +37,18 @@ As a {Role, and Role-XYZ if have more roles}, I will {action description}
 
 - Discord bot token configured in `config/.env`:
   ```bash
-  core/bin/keys-safe-guard get_key_value DISCORD_BOT_TOKEN DISCORD_SERVER_ID DISCORD_USER_ID
+  core/bin/keys-safe-guard get_key_value OPENCLAW_DISCORD_BOT_TOKEN OPENCLAW_DISCORD_SERVER_ID OPENCLAW_DISCORD_USER_ID
   ```
   Run skill `create-discord-bot` if not set.
 
 - **OpenAI Codex account:** Confirm with user that they have a ChatGPT/Codex subscription — required for the OAuth step.
+
+## Workflow Usage Requirement
+
+When this skill is used in a workflow agent node:
+
+- Output result as plain text. If the user asked to save it to a file, write it there.
+- Include concise context in the output (OpenClaw version, service health, OAuth status, Discord pairing status, and gateway access details) so downstream agents can safely continue.
 
 ## Skip Condition
 
@@ -92,10 +99,10 @@ Capture the output as `OPENCLAW_GATEWAY_TOKEN`. Show it to the user and ask them
 
 Run locally:
 ```bash
-core/bin/keys-safe-guard get_key_value DISCORD_BOT_TOKEN DISCORD_SERVER_ID DISCORD_USER_ID
+core/bin/keys-safe-guard get_key_value OPENCLAW_DISCORD_BOT_TOKEN OPENCLAW_DISCORD_SERVER_ID OPENCLAW_DISCORD_USER_ID
 ```
 
-Use these values to construct the config. Do not log `DISCORD_BOT_TOKEN` in full.
+Use these values to construct the config. Do not log `OPENCLAW_DISCORD_BOT_TOKEN` in full.
 
 ### Step 4: Write openclaw.json on EC2
 
@@ -104,9 +111,9 @@ Pass secret values as shell variables to avoid them appearing in the heredoc lit
 
 ```bash
 GATEWAY_TOKEN="<OPENCLAW_GATEWAY_TOKEN>"
-DISCORD_TOKEN="<DISCORD_BOT_TOKEN>"
-SERVER_ID="<DISCORD_SERVER_ID>"
-USER_ID="<DISCORD_USER_ID>"
+DISCORD_TOKEN="<OPENCLAW_DISCORD_BOT_TOKEN>"
+SERVER_ID="<OPENCLAW_DISCORD_SERVER_ID>"
+USER_ID="<OPENCLAW_DISCORD_USER_ID>"
 
 mkdir -p ~/.openclaw
 cat > ~/.openclaw/openclaw.json << ENDCONFIG

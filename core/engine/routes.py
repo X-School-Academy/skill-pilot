@@ -16,6 +16,7 @@ import struct
 import subprocess
 import sys
 import termios
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -42,8 +43,17 @@ from workflow_editor_utils import (
     safe_workflow_path,
     validate_workflow_doc,
 )
+from mcp_servers.mcp_to_skills.workflow_execution import (
+    build_node_prompt,
+    create_run_output_dir,
+    load_workflow_graph,
+    node_name,
+    node_output_path,
+    parse_task_workspace,
+)
 
 from llm_service import (
+    _resolve_provider_env,
     build_chat_system_message,
     build_code_system_message,
     build_llm_command,
@@ -89,6 +99,7 @@ _IMAGE_FETCH_TIMEOUT_SECONDS = 3.0
 _IMAGE_FETCH_MAX_BYTES = 5 * 1024 * 1024
 TMUX_SESSION_PREFIX = "webui-live-"
 NATIVE_TMUX_SESSION_PREFIX = "native-terminal-"
+WORKFLOW_EXECUTE_SESSION_NAME = "sp-workflow-execute"
 TMUX_SESSION_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 _last_heartbeat_time: float = time.time()
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -113,6 +124,29 @@ _AI_PROVIDERS_PATH = _REPO_ROOT / "config" / "ai_providers.json5"
 _CONFIG_ENV_PATH = _REPO_ROOT / "config" / ".env"
 _AUTH_COOKIE_NAME = "auth_token"
 _AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
+_WORKFLOW_EXECUTE_LOCK = threading.Lock()
+_WORKFLOW_EXECUTE_STOP = threading.Event()
+_WORKFLOW_EXECUTE_CONTINUE = threading.Event()
+_WORKFLOW_EXECUTE_STATE: Dict[str, Any] = {
+    "thread": None,
+    "token": "",
+    "status": "idle",
+    "session_name": WORKFLOW_EXECUTE_SESSION_NAME,
+    "workflow": "",
+    "run_id": "",
+    "output_root": "",
+    "error": "",
+    "started_at": 0.0,
+    "finished_at": 0.0,
+    "next_node_trigger": "auto_continue",
+    "waiting_for_continue": False,
+    "current_node_id": 0,
+    "current_node_name": "",
+    "current_output_file": "",
+    "current_provider_id": "",
+    "current_provider_bin": "",
+    "has_remaining_nodes": False,
+}
 
 _DEFAULT_SETTINGS: Dict[str, Any] = {
     "security": {
@@ -378,6 +412,25 @@ def _list_webui_tmux_sessions() -> List[Dict[str, Any]]:
     return sessions
 
 
+def _list_live_tmux_sessions() -> List[Dict[str, Any]]:
+    sessions = _list_webui_tmux_sessions()
+    if not any(session["name"] == WORKFLOW_EXECUTE_SESSION_NAME for session in sessions):
+        try:
+            if _tmux_session_exists(WORKFLOW_EXECUTE_SESSION_NAME):
+                sessions.append(
+                    {
+                        "name": WORKFLOW_EXECUTE_SESSION_NAME,
+                        "attached": False,
+                        "created_at": 0,
+                        "windows": 1,
+                    }
+                )
+        except RuntimeError:
+            pass
+    sessions.sort(key=lambda item: item["name"])
+    return sessions
+
+
 def _list_native_tmux_sessions() -> List[Dict[str, Any]]:
     proc = _run_tmux_command(
         [
@@ -451,6 +504,8 @@ def _list_external_tmux_sessions() -> List[Dict[str, Any]]:
         name = parts[0].strip() if parts else ""
         if name.startswith(TMUX_SESSION_PREFIX):
             continue
+        if name == WORKFLOW_EXECUTE_SESSION_NAME:
+            continue
         if not name:
             continue
         attached_raw = parts[1].strip() if len(parts) > 1 else "0"
@@ -494,25 +549,41 @@ def _build_tmux_attach_command_any(session_name: str, readonly: bool = False) ->
     return f"tmux attach -t {shlex.quote(safe_name)}{readonly_flag}"
 
 
+def _create_named_tmux_session(session_name: str) -> str:
+    safe_name = _validate_tmux_session_name_any(session_name)
+    _run_tmux_command(
+        ["new-session", "-d", "-s", safe_name, "/bin/bash"],
+        check=True,
+    )
+    return safe_name
+
+
+def _send_tmux_command_literal(session_name: str, command: str) -> None:
+    safe_name = _validate_tmux_session_name_any(session_name)
+    safe_command = _coerce_command(command)
+    _run_tmux_command(["set-buffer", "--", safe_command], check=True)
+    _run_tmux_command(["paste-buffer", "-t", safe_name], check=True)
+    _run_tmux_command(["send-keys", "-t", safe_name, "Enter"], check=True)
+    _run_tmux_command(["delete-buffer"], check=False)
+
+
 def _create_webui_tmux_session(command: str) -> str:
     session_name = f"{TMUX_SESSION_PREFIX}{int(time.time())}-{secrets.token_hex(2)}"
-    safe_command = _coerce_command(command)
     _run_tmux_command(
         ["new-session", "-d", "-s", session_name, "/bin/bash"],
         check=True,
     )
-    _run_tmux_command(["send-keys", "-t", session_name, safe_command, "Enter"], check=True)
+    _send_tmux_command_literal(session_name, command)
     return session_name
 
 
 def _create_native_tmux_session(command: str) -> str:
     session_name = f"{NATIVE_TMUX_SESSION_PREFIX}{int(time.time())}-{secrets.token_hex(2)}"
-    safe_command = _coerce_command(command)
     _run_tmux_command(
         ["new-session", "-d", "-s", session_name, "/bin/bash"],
         check=True,
     )
-    _run_tmux_command(["send-keys", "-t", session_name, safe_command, "Enter"], check=True)
+    _send_tmux_command_literal(session_name, command)
     return session_name
 
 
@@ -525,6 +596,266 @@ def _kill_tmux_session(session_name: str) -> bool:
     if "can't find session" in message:
         return False
     raise RuntimeError((proc.stderr or proc.stdout or "").strip() or "unable to kill tmux session")
+
+
+def _kill_tmux_session_any(session_name: str) -> bool:
+    safe_name = _validate_tmux_session_name_any(session_name)
+    proc = _run_tmux_command(["kill-session", "-t", safe_name], check=False)
+    if proc.returncode == 0:
+        return True
+    message = (proc.stderr or proc.stdout or "").lower()
+    if "can't find session" in message:
+        return False
+    raise RuntimeError((proc.stderr or proc.stdout or "").strip() or "unable to kill tmux session")
+
+
+def _pane_current_command_any(session_name: str) -> str:
+    safe_name = _validate_tmux_session_name_any(session_name)
+    proc = _run_tmux_command(["display-message", "-p", "-t", safe_name, "#{pane_current_command}"], check=False)
+    if proc.returncode != 0:
+        return ""
+    return (proc.stdout or "").strip().lower()
+
+
+def _provider_exit_session_shortcut(provider: Dict[str, Any]) -> str:
+    raw = provider.get("exit-session")
+    if not isinstance(raw, str) or not raw.strip():
+        raw = provider.get("exit_session")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return "ctrl+c"
+
+
+def _send_exit_session_shortcut_any(session_name: str, provider: Dict[str, Any]) -> str:
+    safe_name = _validate_tmux_session_name_any(session_name)
+    raw = _provider_exit_session_shortcut(provider)
+    steps = [step.strip().lower() for step in raw.splitlines() if step.strip()]
+    if not steps:
+        steps = ["ctrl+c"]
+    time.sleep(1.5)
+    for step in steps:
+        if step in {"ctrl+c", "^c", "c-c"}:
+            _run_tmux_command(["send-keys", "-t", safe_name, "C-c"], check=False)
+        elif step in {"enter", "return"}:
+            _run_tmux_command(["send-keys", "-t", safe_name, "Enter"], check=False)
+        elif step in {"esc", "escape"}:
+            _run_tmux_command(["send-keys", "-t", safe_name, "Escape"], check=False)
+            time.sleep(1.0)
+            continue
+        else:
+            _run_tmux_command(["send-keys", "-t", safe_name, step, "Enter"], check=False)
+        time.sleep(0.35)
+    return raw
+
+
+def _build_provider_command(
+    *,
+    provider_id: str,
+    prompt: str,
+    sandbox: Any,
+    auto: Any,
+    network: Any,
+) -> tuple[Dict[str, Any], str, str]:
+    provider = get_provider(provider_id)
+    cmd_list = build_terminal_command(
+        provider,
+        prompt,
+        auto_allow=auto,
+        network_allow=network,
+        sandbox_mode=sandbox,
+    )
+    env_overrides: Dict[str, str] = {}
+    if provider.get("id") == "opencode" and auto:
+        opencode_config = str(_REPO_ROOT / "config" / "opencode-yolo.json")
+        env_overrides["OPENCODE_CONFIG"] = opencode_config
+        display_command = f"OPENCODE_CONFIG={shlex.quote(opencode_config)} {shlex.join(cmd_list)}"
+    else:
+        display_command = shlex.join(cmd_list)
+
+    launch_dir = _REPO_ROOT / ".skillpilot" / "temp" / "tmux-argv"
+    launch_dir.mkdir(parents=True, exist_ok=True)
+    payload_path = launch_dir / f"{int(time.time())}-{uuid4().hex[:8]}.json"
+    payload_path.write_text(
+        json.dumps({"argv": cmd_list, "env": env_overrides}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    launcher = _REPO_ROOT / "core" / "engine" / "exec_argv.py"
+    command = shlex.join(["python3", str(launcher), str(payload_path)])
+    return provider, command, display_command
+
+
+def _start_workflow_agent_in_session(
+    *,
+    session_name: str,
+    prompt: str,
+    provider_id: str,
+    sandbox: Any,
+    auto: Any,
+    network: Any,
+    previous_provider: Dict[str, Any] | None,
+) -> tuple[Dict[str, Any], str]:
+    safe_name = _validate_tmux_session_name_any(session_name)
+    if previous_provider is not None:
+        previous_provider_bin = str(previous_provider.get("bin") or "").strip().lower()
+        shortcut = _send_exit_session_shortcut_any(safe_name, previous_provider)
+        logger.info(
+            "[workflow-execute] session_rotate session=%s previous_provider=%s exit_shortcut=%s",
+            safe_name,
+            str(previous_provider.get("id") or ""),
+            shortcut,
+        )
+        time.sleep(1.0)
+        if previous_provider_bin and _pane_current_command_any(safe_name) == previous_provider_bin:
+            _send_exit_session_shortcut_any(safe_name, previous_provider)
+            time.sleep(1.0)
+        if previous_provider_bin and _pane_current_command_any(safe_name) == previous_provider_bin:
+            raise RuntimeError(
+                f"Failed to exit current agent session '{previous_provider_bin}' in tmux session '{safe_name}'."
+            )
+    provider, command, display_command = _build_provider_command(
+        provider_id=provider_id,
+        prompt=prompt,
+        sandbox=sandbox,
+        auto=auto,
+        network=network,
+    )
+    _send_tmux_command_literal(safe_name, command)
+    logger.info(
+        "[workflow-execute] session_launch session=%s provider=%s command=%s launcher=%s",
+        safe_name,
+        str(provider.get("id") or ""),
+        display_command,
+        command,
+    )
+    return provider, command
+
+
+def _workflow_execute_status() -> Dict[str, Any]:
+    with _WORKFLOW_EXECUTE_LOCK:
+        thread = _WORKFLOW_EXECUTE_STATE.get("thread")
+        data = {k: v for k, v in _WORKFLOW_EXECUTE_STATE.items() if k != "thread"}
+        data["thread_alive"] = bool(thread and thread.is_alive())
+        return data
+
+
+def _set_workflow_execute_state(**updates: Any) -> None:
+    with _WORKFLOW_EXECUTE_LOCK:
+        _WORKFLOW_EXECUTE_STATE.update(updates)
+
+
+def _reset_workflow_execute_state(status: str = "idle", error: str = "") -> None:
+    with _WORKFLOW_EXECUTE_LOCK:
+        _WORKFLOW_EXECUTE_STATE.update(
+            {
+                "thread": None,
+                "token": "",
+                "status": status,
+                "workflow": "",
+                "run_id": "",
+                "output_root": "",
+                "error": error,
+                "started_at": 0.0,
+                "finished_at": time.time() if status in {"finished", "error", "terminated"} else 0.0,
+                "next_node_trigger": "auto_continue",
+                "waiting_for_continue": False,
+                "current_node_id": 0,
+                "current_node_name": "",
+                "current_output_file": "",
+                "current_provider_id": "",
+                "current_provider_bin": "",
+                "has_remaining_nodes": False,
+            }
+        )
+
+
+def _notify_workflow_tmux_message(session_name: str, message: str) -> None:
+    safe_message = str(message or "").strip()
+    if not safe_message:
+        return
+    _send_tmux_command_literal(session_name, f"echo {shlex.quote(safe_message)}")
+
+
+def request_workflow_continue_signal(source: str = "api") -> Dict[str, Any]:
+    status = _workflow_execute_status()
+    if not status.get("thread_alive"):
+        return {
+            "accepted": False,
+            "status": status,
+            "message": "No active workflow execution thread.",
+        }
+    if status.get("next_node_trigger") != "start_by_prompt":
+        return {
+            "accepted": False,
+            "status": status,
+            "message": "Workflow is not using start-by-prompt mode.",
+        }
+
+    session_name = str(status.get("session_name") or WORKFLOW_EXECUTE_SESSION_NAME)
+    output_file = str(status.get("current_output_file") or "").strip()
+    waiting_for_continue = bool(status.get("waiting_for_continue"))
+    has_remaining_nodes = bool(status.get("has_remaining_nodes"))
+
+    if not waiting_for_continue:
+        return {
+            "accepted": False,
+            "status": status,
+            "message": "Workflow is not currently waiting for a continue signal.",
+        }
+    if not has_remaining_nodes:
+        return {
+            "accepted": False,
+            "status": status,
+            "message": "No remaining workflow nodes to continue.",
+        }
+
+    if not output_file:
+        try:
+            _notify_workflow_tmux_message(
+                session_name,
+                "User asked to continue to the next workflow node, but the current node output file is not ready. Please finish the current task first.",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[workflow-execute] continue_notify_failed session=%s error=%s", session_name, exc)
+        return {
+            "accepted": False,
+            "status": _workflow_execute_status(),
+            "message": "Current node output file is not ready.",
+        }
+
+    if not Path(output_file).exists():
+        try:
+            _notify_workflow_tmux_message(
+                session_name,
+                "User asked to continue to the next workflow node, but the current node output file is not ready. Please finish the current task first.",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[workflow-execute] continue_notify_failed session=%s error=%s", session_name, exc)
+        return {
+            "accepted": False,
+            "status": _workflow_execute_status(),
+            "message": "Current node output file is not ready.",
+        }
+
+    _WORKFLOW_EXECUTE_CONTINUE.set()
+    logger.info(
+        "[workflow-execute] continue_signal source=%s session=%s output_file=%s waiting_for_continue=%s",
+        source,
+        session_name,
+        output_file,
+        waiting_for_continue,
+    )
+    return {
+        "accepted": True,
+        "status": _workflow_execute_status(),
+        "message": "Continue signal accepted.",
+    }
+
+
+def _validate_writable_session_name(session_name: str) -> str:
+    value = (session_name or "").strip()
+    if value == WORKFLOW_EXECUTE_SESSION_NAME:
+        return _validate_tmux_session_name_any(value)
+    return _validate_tmux_session_name(value)
 
 
 def _cleanup_webui_tmux_sessions() -> int:
@@ -673,6 +1004,292 @@ async def _terminate_process(proc: subprocess.Popen[Any]) -> None:
                 return
 
 
+def _execute_workflow_in_terminal_thread(
+    *,
+    workflow_file: Path,
+    workflow_prompt: str,
+    session_name: str,
+    run_token: str,
+    sandbox: Any,
+    auto: Any,
+    network: Any,
+    next_node_trigger: str = "auto_continue",
+) -> None:
+    started_at = time.time()
+    graph = None
+    output_root: Path | None = None
+
+    def thread_is_current() -> bool:
+        with _WORKFLOW_EXECUTE_LOCK:
+            return _WORKFLOW_EXECUTE_STATE.get("thread") is threading.current_thread()
+
+    def run_is_current() -> bool:
+        with _WORKFLOW_EXECUTE_LOCK:
+            return (
+                _WORKFLOW_EXECUTE_STATE.get("thread") is threading.current_thread()
+                and _WORKFLOW_EXECUTE_STATE.get("token") == run_token
+            )
+
+    try:
+        graph = load_workflow_graph(workflow_file, WORKFLOWS_DIR)
+        run_id, output_root = create_run_output_dir(
+            _REPO_ROOT / ".skillpilot" / "temp" / "terminal-workflow",
+            cleanup_base_dir=True,
+        )
+        task_workspace = parse_task_workspace(workflow_prompt)
+        if run_is_current():
+            _set_workflow_execute_state(
+                status="running",
+                workflow=graph.workflow_relative_path,
+                run_id=run_id,
+                output_root=str(output_root),
+                error="",
+                started_at=started_at,
+                finished_at=0.0,
+                next_node_trigger=next_node_trigger,
+                waiting_for_continue=False,
+                current_node_id=0,
+                current_node_name="",
+                current_output_file="",
+                current_provider_id="",
+                current_provider_bin="",
+                has_remaining_nodes=False,
+            )
+        logger.info(
+            "[workflow-execute] thread_start workflow=%s workflow_name=%s session=%s run_id=%s output_root=%s",
+            graph.workflow_relative_path,
+            graph.workflow_name,
+            session_name,
+            run_id,
+            output_root,
+        )
+
+        node_status: Dict[int, str] = {node_id: "pending" for node_id in graph.upstream_agents}
+        pending_upstream_count: Dict[int, int] = {
+            node_id: len(up_ids) for node_id, up_ids in graph.upstream_agents.items()
+        }
+        has_failed_upstream: Dict[int, bool] = {node_id: False for node_id in graph.upstream_agents}
+        ready: List[int] = [node_id for node_id, count in pending_upstream_count.items() if count == 0]
+        previous_provider: Dict[str, Any] | None = None
+
+        while ready:
+            if not run_is_current():
+                raise RuntimeError("workflow execution superseded by a newer run")
+            if _WORKFLOW_EXECUTE_STOP.is_set():
+                raise RuntimeError("workflow execution stopped by user")
+            if not _tmux_session_exists(session_name):
+                raise RuntimeError(f"workflow tmux session was terminated: {session_name}")
+            ready.sort()
+            node_id = ready.pop(0)
+            if has_failed_upstream.get(node_id):
+                node_status[node_id] = "blocked"
+                continue
+
+            node = graph.id_to_node[node_id]
+            data = node.get("data") if isinstance(node.get("data"), dict) else {}
+            provider_id = str(data.get("provider_id") or "").strip()
+            upstream_node_ids = list(graph.upstream_agents[node_id])
+            prompt = build_node_prompt(
+                graph=graph,
+                current_node=node,
+                workflow_prompt=workflow_prompt,
+                output_root=output_root,
+                upstream_node_ids=upstream_node_ids,
+                task_workspace=task_workspace,
+                start_by_prompt_mode=(next_node_trigger == "start_by_prompt"),
+            )
+            output_file = node_output_path(output_root, node_id, node_name(node))
+            if output_file.exists():
+                try:
+                    output_file.unlink()
+                except OSError:
+                    pass
+
+            node_status[node_id] = "running"
+            if run_is_current():
+                _set_workflow_execute_state(
+                    status="running",
+                    waiting_for_continue=False,
+                    current_node_id=node_id,
+                    current_node_name=node_name(node),
+                    current_output_file=str(output_file),
+                    current_provider_id=provider_id,
+                    has_remaining_nodes=False,
+                )
+            logger.info(
+                "[workflow-execute] node_start node_id=%s node_name=%s provider_id=%s upstream_ids=%s output_file=%s",
+                node_id,
+                node_name(node),
+                provider_id,
+                upstream_node_ids,
+                output_file,
+            )
+            logger.info("[workflow-execute] node_prompt node_id=%s\n%s", node_id, prompt)
+            try:
+                previous_provider, _ = _start_workflow_agent_in_session(
+                    session_name=session_name,
+                    prompt=prompt,
+                    provider_id=provider_id,
+                    sandbox=sandbox,
+                    auto=auto,
+                    network=network,
+                    previous_provider=previous_provider,
+                )
+                if run_is_current():
+                    _set_workflow_execute_state(
+                        current_provider_id=str(previous_provider.get("id") or ""),
+                        current_provider_bin=str(previous_provider.get("bin") or ""),
+                    )
+
+                wait_started = time.time()
+                while True:
+                    if output_file.exists():
+                        break
+                    if not run_is_current():
+                        raise RuntimeError("workflow execution superseded by a newer run")
+                    if not _tmux_session_exists(session_name):
+                        raise RuntimeError(f"workflow tmux session was terminated during node {node_id}")
+                    if time.time() - wait_started > 3600:
+                        raise TimeoutError(f"timed out waiting for node output file: {output_file}")
+                    if _WORKFLOW_EXECUTE_STOP.is_set():
+                        raise RuntimeError("workflow execution stopped by user")
+                    _WORKFLOW_EXECUTE_STOP.wait(1.0)
+
+                output_text = output_file.read_text(encoding="utf-8", errors="replace")
+                logger.info("[workflow-execute] node_output node_id=%s output_file=%s\n%s", node_id, output_file, output_text)
+                node_status[node_id] = "done"
+            except (RuntimeError, TimeoutError):
+                raise  # session killed or timeout — abort workflow
+            except Exception as exc:  # noqa: BLE001
+                node_status[node_id] = "failed"
+                logger.error("[workflow-execute] node_failed node_id=%s error=%s", node_id, exc)
+                for downstream_id in graph.downstream_agents.get(node_id, []):
+                    has_failed_upstream[downstream_id] = True
+
+            for downstream_id in graph.downstream_agents.get(node_id, []):
+                pending_upstream_count[downstream_id] = max(0, pending_upstream_count[downstream_id] - 1)
+                if node_status[node_id] != "done":
+                    has_failed_upstream[downstream_id] = True
+                if pending_upstream_count[downstream_id] == 0:
+                    if has_failed_upstream[downstream_id]:
+                        node_status[downstream_id] = "blocked"
+                    else:
+                        ready.append(downstream_id)
+
+            has_remaining_nodes = len(ready) > 0
+            if node_status[node_id] == "done" and next_node_trigger == "start_by_prompt":
+                if has_remaining_nodes:
+                    if run_is_current():
+                        _set_workflow_execute_state(
+                            status="waiting_for_continue",
+                            waiting_for_continue=True,
+                            current_node_id=node_id,
+                            current_node_name=node_name(node),
+                            current_output_file=str(output_file),
+                            has_remaining_nodes=has_remaining_nodes,
+                        )
+                    while True:
+                        if not run_is_current():
+                            raise RuntimeError("workflow execution superseded by a newer run")
+                        if _WORKFLOW_EXECUTE_STOP.is_set():
+                            raise RuntimeError("workflow execution stopped by user")
+                        if not _tmux_session_exists(session_name):
+                            raise RuntimeError(f"workflow tmux session was terminated during node {node_id}")
+                        if _WORKFLOW_EXECUTE_CONTINUE.wait(1.0):
+                            _WORKFLOW_EXECUTE_CONTINUE.clear()
+                            break
+
+                    if previous_provider is not None:
+                        _send_exit_session_shortcut_any(session_name, previous_provider)
+                        previous_provider = None
+                    if run_is_current():
+                        _set_workflow_execute_state(status="running", waiting_for_continue=False)
+                else:
+                    if previous_provider is not None:
+                        _send_exit_session_shortcut_any(session_name, previous_provider)
+                        previous_provider = None
+                    _send_tmux_command_literal(session_name, "echo 'The workflow has completed.'")
+                    if run_is_current():
+                        _set_workflow_execute_state(
+                            status="running",
+                            waiting_for_continue=False,
+                            has_remaining_nodes=False,
+                        )
+
+        failed_nodes = [node_id for node_id, status in node_status.items() if status != "done"]
+        if failed_nodes:
+            raise RuntimeError(f"workflow finished with incomplete nodes: {failed_nodes}")
+
+        finished_at = time.time()
+        if run_is_current():
+            _set_workflow_execute_state(
+                status="finished",
+                finished_at=finished_at,
+                waiting_for_continue=False,
+                current_node_id=0,
+                current_node_name="",
+                current_output_file="",
+                current_provider_id="",
+                current_provider_bin="",
+                has_remaining_nodes=False,
+            )
+        logger.info(
+            "[workflow-execute] thread_finish workflow=%s session=%s run_id=%s duration_sec=%.3f",
+            graph.workflow_relative_path,
+            session_name,
+            run_id,
+            finished_at - started_at,
+        )
+    except Exception as exc:  # noqa: BLE001
+        finished_at = time.time()
+        if run_is_current():
+            _set_workflow_execute_state(
+                status="error",
+                error=str(exc),
+                finished_at=finished_at,
+                waiting_for_continue=False,
+            )
+        logger.exception("[workflow-execute] thread_error session=%s error=%s", session_name, exc)
+    finally:
+        with _WORKFLOW_EXECUTE_LOCK:
+            if (
+                _WORKFLOW_EXECUTE_STATE.get("thread") is threading.current_thread()
+                and _WORKFLOW_EXECUTE_STATE.get("token") == run_token
+            ):
+                _WORKFLOW_EXECUTE_STATE["thread"] = None
+
+
+def _stop_existing_workflow_execute_thread() -> None:
+    status = _workflow_execute_status()
+    thread = None
+    with _WORKFLOW_EXECUTE_LOCK:
+        thread = _WORKFLOW_EXECUTE_STATE.get("thread")
+    if thread and thread.is_alive():
+        logger.info("[workflow-execute] stopping_existing_thread status=%s", status.get("status"))
+    _WORKFLOW_EXECUTE_STOP.set()
+    _WORKFLOW_EXECUTE_CONTINUE.set()
+    try:
+        _kill_tmux_session_any(WORKFLOW_EXECUTE_SESSION_NAME)
+    except RuntimeError as exc:
+        logger.warning("[workflow-execute] failed_to_kill_existing_session session=%s error=%s", WORKFLOW_EXECUTE_SESSION_NAME, exc)
+    if thread and thread.is_alive():
+        thread.join(timeout=5.0)
+    _reset_workflow_execute_state(status="terminated")
+    _WORKFLOW_EXECUTE_CONTINUE.clear()
+
+
+def cleanup_stale_workflow_session() -> None:
+    """Kill any leftover sp-workflow-execute tmux session on engine startup."""
+    try:
+        if _tmux_session_exists(WORKFLOW_EXECUTE_SESSION_NAME):
+            _kill_tmux_session_any(WORKFLOW_EXECUTE_SESSION_NAME)
+            logger.info("[workflow-execute] cleanup_stale_session session=%s", WORKFLOW_EXECUTE_SESSION_NAME)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[workflow-execute] cleanup_stale_session_failed session=%s error=%s", WORKFLOW_EXECUTE_SESSION_NAME, exc)
+    _reset_workflow_execute_state(status="idle")
+    _WORKFLOW_EXECUTE_CONTINUE.clear()
+
+
 @router.get("/api/health")
 def health():
     return {"status": "ok", "timestamp": time.time()}
@@ -691,14 +1308,14 @@ def terminal_api(command: str = Query("top"), session: str | None = Query(None),
             if is_readonly:
                 safe_session = _validate_tmux_session_name_any(session)
             else:
-                safe_session = _validate_tmux_session_name(session)
+                safe_session = _validate_writable_session_name(session)
         except ValueError as exc:
             return JSONResponse(status_code=400, content={"error": str(exc)})
         readonly_param = "&readonly=1" if is_readonly else ""
         if is_readonly:
             attach_command = _build_tmux_attach_command_any(safe_session, readonly=True)
         else:
-            attach_command = _build_tmux_attach_command(safe_session)
+            attach_command = _build_tmux_attach_command_any(safe_session)
         return {
             "session": safe_session,
             "command": attach_command,
@@ -715,7 +1332,7 @@ def terminal_api(command: str = Query("top"), session: str | None = Query(None),
 @router.get("/api/terminal/tmux/sessions")
 def terminal_tmux_sessions():
     try:
-        sessions = _list_webui_tmux_sessions()
+        sessions = _list_live_tmux_sessions()
     except RuntimeError as exc:
         return JSONResponse(status_code=500, content={"error": str(exc), "sessions": []})
     return {"sessions": sessions}
@@ -749,11 +1366,13 @@ def terminal_tmux_create(payload: Dict[str, Any]):
             network_allow=network,
             sandbox_mode=sandbox,
         )
+        env_vars = _resolve_provider_env(provider)
         if provider.get("id") == "opencode" and auto:
-            opencode_config = str(_REPO_ROOT / "config" / "opencode-yolo.json")
-            command = f"OPENCODE_CONFIG={shlex.quote(opencode_config)} {shlex.join(cmd_list)}"
-        else:
-            command = shlex.join(cmd_list)
+            env_vars["OPENCODE_CONFIG"] = str(_REPO_ROOT / "config" / "opencode-yolo.json")
+        env_prefix = " ".join(f"{key}={shlex.quote(str(value))}" for key, value in env_vars.items())
+        command = shlex.join(cmd_list)
+        if env_prefix:
+            command = f"{env_prefix} {command}"
         logger.info("[tmux-create] provider=%s command=%s", provider.get("id"), command)
     else:
         command = _coerce_command(str(payload.get("command") or ""))
@@ -792,7 +1411,14 @@ def terminal_tmux_create(payload: Dict[str, Any]):
 @router.post("/api/terminal/tmux/kill")
 def terminal_tmux_kill(payload: Dict[str, Any]):
     try:
-        session_name = _validate_tmux_session_name(str(payload.get("session") or ""))
+        raw_session = str(payload.get("session") or "")
+        if raw_session.strip() == WORKFLOW_EXECUTE_SESSION_NAME:
+            session_name = _validate_tmux_session_name_any(raw_session)
+            removed = _kill_tmux_session_any(session_name)
+            if removed:
+                _reset_workflow_execute_state(status="terminated")
+            return {"status": "ok", "removed": removed, "session": session_name}
+        session_name = _validate_tmux_session_name(raw_session)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
     try:
@@ -831,6 +1457,20 @@ async def _heartbeat_watcher() -> None:
     global _last_heartbeat_time, _last_native_cleanup_time
     while True:
         await asyncio.sleep(5)
+        workflow_status = _workflow_execute_status()
+        if workflow_status.get("thread_alive"):
+            try:
+                session_exists = _tmux_session_exists(WORKFLOW_EXECUTE_SESSION_NAME)
+            except RuntimeError as exc:
+                logger.warning("[workflow-execute] session_check_failed session=%s error=%s", WORKFLOW_EXECUTE_SESSION_NAME, exc)
+                session_exists = True
+            if not session_exists:
+                logger.warning(
+                    "[workflow-execute] session_missing session=%s status=%s",
+                    WORKFLOW_EXECUTE_SESSION_NAME,
+                    workflow_status.get("status"),
+                )
+                _reset_workflow_execute_state(status="terminated", error="workflow tmux session was terminated")
         elapsed = time.time() - _last_heartbeat_time
         if elapsed > _HEARTBEAT_TIMEOUT_SECONDS:
             sessions = _list_webui_tmux_sessions()
@@ -1560,7 +2200,7 @@ async def terminal_ws(
             if is_readonly:
                 session_name = _validate_tmux_session_name_any(session)
             else:
-                session_name = _validate_tmux_session_name(session)
+                session_name = _validate_writable_session_name(session)
         except ValueError as exc:
             await websocket.send_text(json.dumps({"type": "error", "error": str(exc)}))
             await websocket.close(code=1008)
@@ -1577,7 +2217,7 @@ async def terminal_ws(
         if is_readonly:
             shell_command = _build_tmux_attach_command_any(session_name, readonly=True)
         else:
-            shell_command = _build_tmux_attach_command(session_name)
+            shell_command = _build_tmux_attach_command_any(session_name)
     else:
         shell_command = _coerce_command(command)
 
@@ -1764,6 +2404,74 @@ def _safe_tasks_path(task_path: str, *, must_exist: bool = True) -> Path:
     return candidate
 
 
+def _normalize_task_slug(value: str, *, default: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "-", (value or "").strip().lower()).strip("-")
+    return normalized or default
+
+
+def _normalize_task_folder_name(value: str) -> str:
+    if not value:
+        return ""
+    return _normalize_task_slug(value, default="task")
+
+
+def _normalize_task_file_name(value: str) -> str:
+    raw_name = (value or "").strip()
+    suffix = Path(raw_name).suffix.lower()
+    stem = raw_name[:-len(suffix)] if suffix else raw_name
+    safe_stem = _normalize_task_slug(stem, default="new-task")
+    safe_suffix = suffix if suffix not in {"", "."} else ".md"
+    return f"{safe_stem}{safe_suffix}"
+
+
+def _unique_task_file_path(parent: Path, file_name: str) -> Path:
+    candidate = parent / file_name
+    stem = candidate.stem
+    suffix = candidate.suffix
+    index = 1
+    while candidate.exists():
+        candidate = parent / f"{stem}_{index}{suffix}"
+        index += 1
+    return candidate
+
+
+def _unique_task_dir_path(folder_name: str) -> Path:
+    candidate = TASKS_DIR / folder_name
+    index = 1
+    while candidate.exists():
+        candidate = TASKS_DIR / f"{folder_name}_{index}"
+        index += 1
+    return candidate
+
+
+def _extract_task_create_parts(payload: Dict[str, Any]) -> tuple[str, str]:
+    folder = str(payload.get("folder") or "").strip()
+    file_name = str(payload.get("file") or "").strip()
+
+    if folder and any(sep in folder for sep in ("/", "\\")):
+        raise ValueError("Task folder supports only one subfolder level")
+    if file_name and any(sep in file_name for sep in ("/", "\\")):
+        raise ValueError("File name cannot include folder separators")
+
+    if file_name:
+        return folder, file_name
+
+    raw_path = str(payload.get("path") or "").strip().replace("\\", "/")
+    if not raw_path:
+        raise ValueError("Task file name is required")
+    if raw_path.endswith("/"):
+        raise ValueError("Task path must include a filename")
+
+    parts = [part for part in raw_path.strip("/").split("/") if part]
+    if not parts:
+        raise ValueError("Task file name is required")
+    if len(parts) > 2:
+        raise ValueError("Only root files or one subfolder are supported")
+    if len(parts) == 1:
+        return "", parts[0]
+    return parts[0], parts[1]
+
+
 def _is_text_bytes(data: bytes) -> bool:
     return b"\x00" not in data
 
@@ -1840,30 +2548,55 @@ def task_save(payload: Dict[str, Any]):
 
 @router.post("/api/tasks/create")
 def task_create(payload: Dict[str, Any]):
-    raw_path = str(payload.get("path") or "").strip().replace("\\", "/")
-    if not raw_path:
-        return JSONResponse(status_code=400, content={"error": "Task name is required"})
-    if raw_path.endswith("/"):
-        return JSONResponse(status_code=400, content={"error": "Task path must include a filename"})
-
-    clean_path = raw_path.strip("/")
-    if not clean_path:
-        return JSONResponse(status_code=400, content={"error": "Task name is required"})
-    if "." not in Path(clean_path).name:
-        clean_path = f"{clean_path}.md"
-
     try:
-        file_path = _safe_tasks_path(clean_path, must_exist=False)
+        raw_folder, raw_file_name = _extract_task_create_parts(payload)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
 
-    if file_path.exists():
-        return JSONResponse(status_code=409, content={"error": "Task already exists"})
+    TASKS_DIR.mkdir(parents=True, exist_ok=True)
+    folder_name = _normalize_task_folder_name(raw_folder)
+    file_name = _normalize_task_file_name(raw_file_name)
+    if folder_name:
+        preferred_dir = TASKS_DIR / folder_name
+        if preferred_dir.exists() and preferred_dir.is_dir():
+            parent_dir = preferred_dir
+        else:
+            parent_dir = preferred_dir if not preferred_dir.exists() else _unique_task_dir_path(folder_name)
+            parent_dir.mkdir(parents=False, exist_ok=False)
+    else:
+        parent_dir = TASKS_DIR
+        parent_dir.mkdir(parents=True, exist_ok=True)
 
-    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path = _unique_task_file_path(parent_dir, file_name)
     initial_content = "# New Task\n\n"
     file_path.write_text(initial_content, encoding="utf-8")
     return {"status": "ok", "path": str(file_path.relative_to(TASKS_DIR))}
+
+
+@router.post("/api/tasks/delete")
+def task_delete(payload: Dict[str, Any]):
+    raw_path = str(payload.get("path") or "").strip()
+    if not raw_path:
+        return JSONResponse(status_code=400, content={"error": "Missing task path"})
+
+    try:
+        file_path = _safe_tasks_path(raw_path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    file_path.unlink()
+    removed_folder = None
+    parent_dir = file_path.parent
+    if parent_dir != TASKS_DIR:
+        try:
+            parent_dir.rmdir()
+            removed_folder = str(parent_dir.relative_to(TASKS_DIR))
+        except OSError:
+            pass
+
+    return {"status": "ok", "deleted": raw_path, "removedFolder": removed_folder}
 
 
 @router.get("/api/tasks/file")
@@ -1997,6 +2730,117 @@ def workflows_content(workflow: str):
     if errors:
         return JSONResponse(status_code=400, content={"error": "Invalid workflow document", "errors": errors})
     return {"path": workflow, "content": content}
+
+
+@router.get("/api/workflows/execute/status")
+def workflows_execute_status():
+    return _workflow_execute_status()
+
+
+@router.post("/api/workflows/execute")
+def workflows_execute(payload: Dict[str, Any]):
+    workflow = str(payload.get("workflow") or "").strip()
+    workflow_prompt = str(payload.get("prompt") or "").strip()
+    native_terminal = _bool_with_default(payload.get("native_terminal"), False)
+    sandbox = payload.get("sandbox")
+    auto = payload.get("auto")
+    network = payload.get("network")
+    next_node_trigger = str(payload.get("next_node_trigger") or "auto_continue").strip().lower()
+
+    if not workflow:
+        return JSONResponse(status_code=400, content={"error": "workflow is required"})
+    if not workflow_prompt:
+        return JSONResponse(status_code=400, content={"error": "prompt is required"})
+    if next_node_trigger not in {"auto_continue", "start_by_prompt"}:
+        return JSONResponse(status_code=400, content={"error": "next_node_trigger must be auto_continue or start_by_prompt"})
+    if workflow.startswith("core/workflows/"):
+        workflow = workflow[len("core/workflows/") :]
+
+    try:
+        workflow_file = safe_workflow_path(WORKFLOWS_DIR, workflow)
+    except Exception as exc:  # noqa: BLE001
+        detail = getattr(exc, "detail", str(exc))
+        status_code = int(getattr(exc, "status_code", 400))
+        return JSONResponse(status_code=status_code, content={"error": str(detail)})
+
+    _stop_existing_workflow_execute_thread()
+
+    try:
+        session_name = _create_named_tmux_session(WORKFLOW_EXECUTE_SESSION_NAME)
+        attach_command = _build_tmux_attach_command_any(session_name)
+        native_status = _open_native_terminal_for_tmux(session_name) if native_terminal else {"requested": False, "opened": False}
+    except RuntimeError as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc)})
+
+    if native_terminal and "requested" not in native_status:
+        native_status["requested"] = True
+
+    _WORKFLOW_EXECUTE_STOP.clear()
+    _WORKFLOW_EXECUTE_CONTINUE.clear()
+    run_token = uuid4().hex
+    thread = threading.Thread(
+        target=_execute_workflow_in_terminal_thread,
+        kwargs={
+            "workflow_file": workflow_file,
+            "workflow_prompt": workflow_prompt,
+            "session_name": session_name,
+            "run_token": run_token,
+            "sandbox": sandbox,
+            "auto": auto,
+            "network": network,
+            "next_node_trigger": next_node_trigger,
+        },
+        daemon=True,
+        name="workflow-execute",
+    )
+    with _WORKFLOW_EXECUTE_LOCK:
+        _WORKFLOW_EXECUTE_STATE.update(
+            {
+                "thread": thread,
+                "token": run_token,
+                "status": "starting",
+                "session_name": session_name,
+                "workflow": workflow,
+                "run_id": "",
+                "output_root": "",
+                "error": "",
+                "started_at": time.time(),
+                "finished_at": 0.0,
+                "next_node_trigger": next_node_trigger,
+                "waiting_for_continue": False,
+                "current_node_id": 0,
+                "current_node_name": "",
+                "current_output_file": "",
+                "current_provider_id": "",
+                "current_provider_bin": "",
+                "has_remaining_nodes": False,
+            }
+        )
+    logger.info(
+        "[workflow-execute] request workflow=%s session=%s native_terminal=%s sandbox=%s auto=%s network=%s next_node_trigger=%s",
+        workflow,
+        session_name,
+        native_terminal,
+        sandbox,
+        auto,
+        network,
+        next_node_trigger,
+    )
+    thread.start()
+
+    return {
+        "session": {
+            "name": session_name,
+            "attach_command": attach_command,
+        },
+        "workflow_thread": _workflow_execute_status(),
+        "native_terminal": native_status,
+    }
+
+
+@router.post("/api/workflows/execute/continue")
+def workflows_execute_continue():
+    return request_workflow_continue_signal(source="api")
 
 
 @router.post("/api/workflows/validate")

@@ -36,6 +36,13 @@ Verify AWS credentials:
 core/bin/keys-safe-guard get_key_value AWS_ACCESS_KEY_ID
 ```
 
+## Workflow Usage Requirement
+
+When this skill is used in a workflow agent node:
+
+- Output result as plain text. If the user asked to save it to a file, write it there.
+- Include concise context in the output (tunnel status, local URL, health result, and required token/access notes) so downstream agents can safely continue.
+
 ## Skip Condition
 
 Check if a tunnel is already active:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import socket
 import stat
@@ -20,7 +21,7 @@ import json5
 
 from llm_service import build_terminal_command, get_provider, llm_get_text, load_llm_providers
 from safe_dotenv import loaded_env_key_names, safe_env
-from session_agent_store import get_session_agent_meta
+from session_agent_store import get_session_agent_meta, set_session_agent_meta
 
 from .sync import MCPClient, create_client, is_server_enabled, load_mcp_configs
 
@@ -248,11 +249,16 @@ class Bridge:
         steps = [step.strip().lower() for step in raw.splitlines() if step.strip()]
         if not steps:
             steps = ["ctrl+c"]
+        time.sleep(1.5)
         for step in steps:
             if step in {"ctrl+c", "^c", "c-c"}:
                 self._run_tmux(["send-keys", "-t", session_name, "C-c"], check=False)
             elif step in {"enter", "return"}:
                 self._run_tmux(["send-keys", "-t", session_name, "Enter"], check=False)
+            elif step in {"esc", "escape"}:
+                self._run_tmux(["send-keys", "-t", session_name, "Escape"], check=False)
+                time.sleep(1.0)
+                continue
             else:
                 self._run_tmux(["send-keys", "-t", session_name, step, "Enter"], check=False)
             time.sleep(0.35)
@@ -309,6 +315,108 @@ class Bridge:
         if not sessions:
             raise MCPError("No active web/native tmux session found")
         return str(sessions[0]["name"])
+
+    @staticmethod
+    def _validate_session_name_any(session_name: str) -> str:
+        value = (session_name or "").strip()
+        if not value:
+            raise MCPError("session_name is required")
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", value):
+            raise MCPError("invalid session_name format")
+        return value
+
+    def _start_or_replace_agent_session(
+        self,
+        *,
+        prompt: str,
+        session_name: str | None = None,
+        provider_id: str | None = None,
+        sandbox_override: Any = None,
+        auto_override: Any = None,
+        network_override: Any = None,
+    ) -> dict[str, Any]:
+        target_session = self._validate_session_name_any(session_name) if session_name else self._latest_agent_tmux_session_name()
+        session_meta = self._get_session_agent_meta(target_session)
+        provider_source = "explicit"
+
+        resolved_provider_id = (provider_id or "").strip()
+        if resolved_provider_id:
+            provider = self._provider_by_id(resolved_provider_id)
+            if provider is None:
+                raise MCPError(f"provider_id '{resolved_provider_id}' is not configured.")
+        else:
+            provider_id_from_meta = str(session_meta.get("provider_id") or "").strip()
+            if not provider_id_from_meta:
+                raise MCPError(
+                    f"No recorded agent metadata for session '{target_session}'. "
+                    "Provide provider_id or start a new session first."
+                )
+            provider = self._provider_by_id(provider_id_from_meta)
+            if provider is None:
+                raise MCPError(
+                    f"Recorded provider_id '{provider_id_from_meta}' for session '{target_session}' is not configured."
+                )
+            resolved_provider_id = provider_id_from_meta
+            provider_source = "session-meta"
+
+        provider_id_text = str(provider.get("id") or "").strip()
+        provider_bin = str(provider.get("bin") or "").strip()
+        sandbox = self._coerce_bool(sandbox_override, bool(session_meta.get("sandbox", False)))
+        auto = self._coerce_bool(auto_override, bool(session_meta.get("auto", False)))
+        network = self._coerce_bool(network_override, bool(session_meta.get("network", True)))
+        cmd_list = build_terminal_command(
+            provider,
+            prompt,
+            auto_allow=auto,
+            network_allow=network,
+            sandbox_mode=sandbox,
+        )
+        if provider_id_text == "opencode" and auto:
+            opencode_config = str(self._repo_root / "config" / "opencode-yolo.json")
+            command = f"OPENCODE_CONFIG={shlex.quote(opencode_config)} {shlex.join(cmd_list)}"
+        else:
+            command = shlex.join(cmd_list)
+
+        current_provider = None
+        current_provider_id = str(session_meta.get("provider_id") or "").strip()
+        if current_provider_id:
+            current_provider = self._provider_by_id(current_provider_id)
+        if current_provider is not None:
+            current_provider_bin = str(current_provider.get("bin") or "").strip()
+            exit_session_shortcut = self._send_exit_session_shortcut(target_session, current_provider)
+            time.sleep(1.0)
+            if self._provider_still_active(target_session, current_provider_bin):
+                self._send_exit_session_shortcut(target_session, current_provider)
+                time.sleep(1.0)
+            if self._provider_still_active(target_session, current_provider_bin):
+                raise MCPError(
+                    f"Failed to exit current agent session '{current_provider_bin}' in tmux session '{target_session}'. "
+                    "Try Ctrl+C manually in that terminal, then retry."
+                )
+        else:
+            exit_session_shortcut = ""
+
+        self._run_tmux(["send-keys", "-t", target_session, command, "Enter"], check=True)
+        set_session_agent_meta(
+            target_session,
+            {
+                "provider_id": provider_id_text,
+                "provider_bin": provider_bin,
+                "sandbox": sandbox,
+                "auto": auto,
+                "network": network,
+                "updated_at": int(time.time()),
+            },
+        )
+        return {
+            "session_name": target_session,
+            "provider_id": provider_id_text,
+            "provider_bin": provider_bin,
+            "provider_source": provider_source,
+            "exit_session_shortcut": exit_session_shortcut,
+            "command": command,
+            "wait_seconds": 1.0,
+        }
 
     def _load(self) -> None:
         servers, missing_env = load_mcp_configs(self._config_path)
@@ -416,62 +524,27 @@ class Bridge:
             prompt = str(payload.get("prompt") or "").strip()
             if not prompt:
                 raise MCPError("new_agent_session requires a non-empty prompt")
-
-            session_name = self._latest_agent_tmux_session_name()
-            session_meta = self._get_session_agent_meta(session_name)
-            provider_id_from_meta = str(session_meta.get("provider_id") or "").strip()
-            if not provider_id_from_meta:
-                raise MCPError(
-                    f"No recorded agent metadata for session '{session_name}'. Start a new session first."
-                )
-            provider = self._provider_by_id(provider_id_from_meta)
-            if provider is None:
-                raise MCPError(
-                    f"Recorded provider_id '{provider_id_from_meta}' for session '{session_name}' is not configured."
-                )
-            provider_source = "session-meta"
-            provider_id = str(provider.get("id") or "").strip()
-            provider_bin = str(provider.get("bin") or "").strip()
-            sandbox = bool(session_meta.get("sandbox", False))
-            auto = bool(session_meta.get("auto", False))
-            network = bool(session_meta.get("network", True))
-            cmd_list = build_terminal_command(
-                provider,
-                prompt,
-                auto_allow=auto,
-                network_allow=network,
-                sandbox_mode=sandbox,
+            session_name_raw = payload.get("session_name")
+            requested_provider_raw = payload.get("provider_id")
+            result = self._start_or_replace_agent_session(
+                prompt=prompt,
+                session_name=str(session_name_raw).strip() if isinstance(session_name_raw, str) else None,
+                provider_id=str(requested_provider_raw).strip() if isinstance(requested_provider_raw, str) else None,
+                sandbox_override=payload.get("sandbox"),
+                auto_override=payload.get("auto"),
+                network_override=payload.get("network"),
             )
-            if provider_id == "opencode" and auto:
-                opencode_config = str(self._repo_root / "config" / "opencode-yolo.json")
-                command = f"OPENCODE_CONFIG={shlex.quote(opencode_config)} {shlex.join(cmd_list)}"
-            else:
-                command = shlex.join(cmd_list)
-
-            exit_session_shortcut = self._send_exit_session_shortcut(session_name, provider)
-            time.sleep(1.0)
-            if self._provider_still_active(session_name, provider_bin):
-                # Retry once because some CLIs require a stronger/second interrupt cycle.
-                self._send_exit_session_shortcut(session_name, provider)
-                time.sleep(1.0)
-            if self._provider_still_active(session_name, provider_bin):
-                raise MCPError(
-                    f"Failed to exit current agent session '{provider_bin}' in tmux session '{session_name}'. "
-                    "Try Ctrl+C manually in that terminal, then retry."
-                )
-            self._run_tmux(["send-keys", "-t", session_name, command, "Enter"], check=True)
             return {
                 "status": "ok",
-                "result": {
-                    "session_name": session_name,
-                    "provider_id": provider_id,
-                    "provider_bin": provider_bin,
-                    "provider_source": provider_source,
-                    "exit_session_shortcut": exit_session_shortcut,
-                    "command": command,
-                    "wait_seconds": 1.0,
-                },
+                "result": result,
             }
+        if operation == "continue_workflow_terminal":
+            from routes import request_workflow_continue_signal  # lazy import to avoid module cycle at startup
+
+            source_raw = payload.get("source")
+            source = str(source_raw).strip() if isinstance(source_raw, str) else "cli"
+            result = request_workflow_continue_signal(source=source or "cli")
+            return {"status": "ok", "result": result}
         if operation == "safe_dotenv_key_names":
             return {"status": "ok", "result": {"keys": loaded_env_key_names()}}
 

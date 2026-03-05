@@ -27,7 +27,11 @@ if multiprocessing.parent_process() is None and os.getenv(_ENV_LOADED_FLAG) != "
 class _HeartbeatFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         msg = record.getMessage()
-        if "/api/heartbeat" in msg:
+        noisy_paths = (
+            "/api/heartbeat",
+            "/api/terminal/tmux/external-sessions",
+        )
+        if any(path in msg for path in noisy_paths):
             return False
         return True
 

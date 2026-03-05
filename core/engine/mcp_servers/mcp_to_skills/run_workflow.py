@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-import json
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 
-from workflow_editor_utils import validate_workflow_doc
+from .workflow_execution import (
+    build_node_prompt,
+    create_run_output_dir,
+    load_workflow_graph,
+    node_name,
+    node_output_path,
+    parse_task_workspace,
+)
 
 
 @dataclass
@@ -16,10 +22,12 @@ class WorkflowRunResult:
     workflow: str
     workflow_name: str
     duration_sec: float
+    run_id: str
+    output_root: str
     node_status: dict[int, str]
     node_outputs: dict[int, str]
-    final_outputs: list[dict[str, Any]]
-    errors: list[dict[str, Any]]
+    final_outputs: list[dict[str, object]]
+    errors: list[dict[str, object]]
 
 
 def resolve_workflow_file(workflow_arg: str, workflows_root: Path) -> Path:
@@ -27,13 +35,21 @@ def resolve_workflow_file(workflow_arg: str, workflows_root: Path) -> Path:
     if not raw:
         raise ValueError("workflow path is required")
 
-    candidate = Path(raw).expanduser()
-    if not candidate.is_absolute():
-        candidate = (workflows_root / candidate).resolve()
-    else:
-        candidate = candidate.resolve()
-
     root = workflows_root.resolve()
+    repo_root = root.parent.parent
+    input_path = Path(raw).expanduser()
+
+    if input_path.is_absolute():
+        candidate = input_path.resolve()
+    else:
+        normalized_raw = raw.replace("\\", "/")
+        if normalized_raw.startswith("core/workflows/"):
+            candidate = (repo_root / normalized_raw).resolve()
+        elif normalized_raw.startswith("core/"):
+            candidate = (repo_root / normalized_raw).resolve()
+        else:
+            candidate = (root / input_path).resolve()
+
     try:
         candidate.relative_to(root)
     except ValueError as exc:
@@ -44,156 +60,43 @@ def resolve_workflow_file(workflow_arg: str, workflows_root: Path) -> Path:
     return candidate
 
 
-def _node_type(node: dict[str, Any]) -> str:
-    return str(node.get("type") or "").strip().lower()
-
-
-def _node_name(node: dict[str, Any]) -> str:
-    ntype = _node_type(node)
-    if ntype == "start":
-        return "Start"
-    if ntype == "end":
-        return "End"
-    data = node.get("data") if isinstance(node.get("data"), dict) else {}
-    title = str(data.get("title") or "").strip()
-    if title:
-        return title
-    return f"Agent {node.get('id')}"
-
-
-def _build_prompt(
-    workflow_name: str,
-    workflow_prompt: str,
-    current_node: dict[str, Any],
-    upstream_nodes: list[dict[str, Any]],
-    upstream_outputs: dict[int, str],
-) -> str:
-    data = current_node.get("data") if isinstance(current_node.get("data"), dict) else {}
-    current_name = _node_name(current_node)
-    skill = str(data.get("skill") or "").strip()
-    responsibility = str(data.get("responsibility") or "").strip()
-
-    lines: list[str] = [
-        "You are running as a Agent inside a multi-step workflow.",
-        "",
-        f"Workflow name: {workflow_name}",
-        f"Current Agent: {current_name}",
-    ]
-    if skill:
-        lines.append(f"Current Agent skill: {skill}")
-    if responsibility:
-        lines.append(f"Current Agent role: {responsibility}")
-
-    lines.extend(
-        [
-            "",
-            "Global workflow instruction:",
-            workflow_prompt.strip(),
-            "",
-            "Upstream inputs from directly connected Agents:",
-        ]
-    )
-
-    if upstream_nodes:
-        for upstream_node in upstream_nodes:
-            upstream_id = int(upstream_node["id"])
-            upstream_name = _node_name(upstream_node)
-            upstream_data = upstream_node.get("data") if isinstance(upstream_node.get("data"), dict) else {}
-            upstream_role = str(upstream_data.get("responsibility") or "").strip()
-            upstream_text = upstream_outputs.get(upstream_id, "").strip()
-            lines.append(f"[from:{upstream_name}]")
-            if upstream_role:
-                lines.append(f"Role: {upstream_role}")
-            lines.append(f"Output: {upstream_text}")
-            lines.append("")
-    else:
-        lines.append("[from:none] No upstream Agent input.")
-
-    lines.extend(
-        [
-            "",
-            "Task:",
-            "1. Complete the work required by your current Agent skill.",
-            "2. Use the global workflow instruction plus upstream inputs as context.",
-            "3. Return a concise, structured result that downstream Agents can consume directly.",
-            "4. If inputs are missing or conflicting, state assumptions clearly before your final output.",
-        ]
-    )
-    return "\n".join(lines).strip()
-
-
 def run_workflow(
     workflow_file: Path,
     workflow_prompt: str,
     *,
     max_workers: int,
     infer_fn: Callable[[str, str | None], str],
+    output_base_dir: Path | None = None,
+    cleanup_base_dir: bool = False,
+    log_fn: Callable[[str], None] | None = None,
 ) -> WorkflowRunResult:
-    raw = workflow_file.read_text(encoding="utf-8", errors="replace")
-    try:
-        doc = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"invalid workflow JSON: {exc}") from exc
+    graph = load_workflow_graph(workflow_file)
+    repo_root = workflow_file.resolve().parents[2]
+    base_dir = output_base_dir or (repo_root / ".skillpilot" / "temp" / "background-workflow")
+    run_id, output_root = create_run_output_dir(base_dir, cleanup_base_dir=cleanup_base_dir)
+    task_workspace = parse_task_workspace(workflow_prompt)
 
-    if not isinstance(doc, dict):
-        raise ValueError("workflow document must be a JSON object")
+    def emit(message: str) -> None:
+        if log_fn is not None:
+            log_fn(message)
 
-    errors = validate_workflow_doc(doc)
-    if errors:
-        raise ValueError(f"workflow validation failed: {json.dumps(errors, ensure_ascii=True)}")
-
-    nodes = doc.get("nodes")
-    edges = doc.get("edges")
-    if not isinstance(nodes, list) or not isinstance(edges, list):
-        raise ValueError("workflow must include array fields: nodes, edges")
-
-    id_to_node: dict[int, dict[str, Any]] = {}
-    for node in nodes:
-        if not isinstance(node, dict):
-            continue
-        node_id = node.get("id")
-        if isinstance(node_id, int):
-            id_to_node[node_id] = node
-
-    # Agent dependency graph only (Start/End are orchestration nodes).
-    upstream_agents: dict[int, list[int]] = {}
-    downstream_agents: dict[int, list[int]] = {}
-    end_inputs: list[int] = []
-
-    for node_id, node in id_to_node.items():
-        if _node_type(node) == "agent":
-            upstream_agents[node_id] = []
-            downstream_agents[node_id] = []
-
-    for edge in edges:
-        if not isinstance(edge, dict):
-            continue
-        source = edge.get("source")
-        target = edge.get("target")
-        if not isinstance(source, int) or not isinstance(target, int):
-            continue
-        source_node = id_to_node.get(source)
-        target_node = id_to_node.get(target)
-        if source_node is None or target_node is None:
-            continue
-        source_type = _node_type(source_node)
-        target_type = _node_type(target_node)
-
-        if source_type == "agent" and target_type == "agent":
-            upstream_agents[target].append(source)
-            downstream_agents[source].append(target)
-        if source_type == "agent" and target_type == "end":
-            end_inputs.append(source)
+    emit(
+        "[workflow-run] start "
+        f"workflow={graph.workflow_relative_path} "
+        f"workflow_name={graph.workflow_name} "
+        f"run_id={run_id} "
+        f"output_root={output_root}"
+    )
 
     node_outputs: dict[int, str] = {}
-    node_status: dict[int, str] = {node_id: "pending" for node_id in upstream_agents}
+    node_status: dict[int, str] = {node_id: "pending" for node_id in graph.upstream_agents}
     blocked_reasons: dict[int, str] = {}
-    run_errors: list[dict[str, Any]] = []
+    run_errors: list[dict[str, object]] = []
 
     pending_upstream_count: dict[int, int] = {
-        node_id: len(up_ids) for node_id, up_ids in upstream_agents.items()
+        node_id: len(up_ids) for node_id, up_ids in graph.upstream_agents.items()
     }
-    has_failed_upstream: dict[int, bool] = {node_id: False for node_id in upstream_agents}
+    has_failed_upstream: dict[int, bool] = {node_id: False for node_id in graph.upstream_agents}
 
     ready: list[int] = [node_id for node_id, count in pending_upstream_count.items() if count == 0]
     for node_id in ready:
@@ -205,26 +108,47 @@ def run_workflow(
             return
         node_status[node_id] = "blocked"
         blocked_reasons[node_id] = reason
-        for downstream_id in downstream_agents.get(node_id, []):
+        emit(f"[workflow-run] node_blocked node_id={node_id} node_name={node_name(graph.id_to_node[node_id])} reason={reason}")
+        for downstream_id in graph.downstream_agents.get(node_id, []):
             has_failed_upstream[downstream_id] = True
             pending_upstream_count[downstream_id] = max(0, pending_upstream_count[downstream_id] - 1)
             if pending_upstream_count[downstream_id] == 0:
                 mark_blocked(downstream_id, f"upstream node {node_id} failed or was blocked")
 
     def execute_agent(node_id: int) -> str:
-        node = id_to_node[node_id]
+        node = graph.id_to_node[node_id]
         data = node.get("data") if isinstance(node.get("data"), dict) else {}
         provider_id = str(data.get("provider_id") or "").strip() or None
-
-        upstream_nodes = [id_to_node[uid] for uid in upstream_agents[node_id]]
-        prompt = _build_prompt(
-            workflow_name=str(doc.get("name") or "").strip() or workflow_file.stem,
-            workflow_prompt=workflow_prompt,
+        upstream_node_ids = list(graph.upstream_agents[node_id])
+        expected_output_file = node_output_path(output_root, node_id, node_name(node))
+        prompt = build_node_prompt(
+            graph=graph,
             current_node=node,
-            upstream_nodes=upstream_nodes,
-            upstream_outputs=node_outputs,
+            workflow_prompt=workflow_prompt,
+            output_root=output_root,
+            upstream_node_ids=upstream_node_ids,
+            task_workspace=task_workspace,
         )
-        return infer_fn(prompt, provider_id)
+
+        emit(
+            "[workflow-run] node_start "
+            f"node_id={node_id} "
+            f"node_name={node_name(node)} "
+            f"provider_id={provider_id or ''} "
+            f"upstream_ids={upstream_node_ids} "
+            f"expected_output={expected_output_file}"
+        )
+        emit(f"[workflow-run] node_prompt node_id={node_id}\n{prompt}")
+        raw_text = infer_fn(prompt, provider_id).strip()
+        emit(f"[workflow-run] node_response node_id={node_id}\n{raw_text}")
+        if not expected_output_file.exists() or not expected_output_file.is_file():
+            raise RuntimeError(
+                "agent did not create expected output file: "
+                f"{expected_output_file}"
+            )
+        output_text = expected_output_file.read_text(encoding="utf-8", errors="replace").strip()
+        emit(f"[workflow-run] node_output node_id={node_id} output_file={expected_output_file}\n{output_text}")
+        return output_text
 
     started_at = time.time()
     futures: dict[Future[str], int] = {}
@@ -232,6 +156,7 @@ def run_workflow(
 
     with ThreadPoolExecutor(max_workers=worker_count) as pool:
         while ready or futures:
+            ready.sort()
             while ready:
                 next_id = ready.pop(0)
                 if node_status.get(next_id) in {"blocked", "failed", "done"}:
@@ -253,21 +178,29 @@ def run_workflow(
                     text = done_future.result().strip()
                     node_outputs[node_id] = text
                     node_status[node_id] = "done"
+                    emit(f"[workflow-run] node_done node_id={node_id} node_name={node_name(graph.id_to_node[node_id])}")
                 except Exception as exc:  # noqa: BLE001
                     node_status[node_id] = "failed"
+                    error_text = str(exc)
+                    emit(
+                        "[workflow-run] node_failed "
+                        f"node_id={node_id} "
+                        f"node_name={node_name(graph.id_to_node[node_id])} "
+                        f"error={error_text}"
+                    )
                     run_errors.append(
                         {
                             "node_id": node_id,
-                            "node_name": _node_name(id_to_node[node_id]),
+                            "node_name": node_name(graph.id_to_node[node_id]),
                             "skill": str(
-                                (id_to_node[node_id].get("data") or {}).get("skill")  # type: ignore[union-attr]
+                                (graph.id_to_node[node_id].get("data") or {}).get("skill")  # type: ignore[union-attr]
                                 or ""
                             ),
-                            "error": str(exc),
+                            "error": error_text,
                         }
                     )
 
-                for downstream_id in downstream_agents.get(node_id, []):
+                for downstream_id in graph.downstream_agents.get(node_id, []):
                     pending_upstream_count[downstream_id] = max(0, pending_upstream_count[downstream_id] - 1)
                     if node_status[node_id] != "done":
                         has_failed_upstream[downstream_id] = True
@@ -282,13 +215,13 @@ def run_workflow(
                                 node_status[downstream_id] = "ready"
                             ready.append(downstream_id)
 
-    final_outputs: list[dict[str, Any]] = []
-    for node_id in end_inputs:
+    final_outputs: list[dict[str, object]] = []
+    for node_id in graph.end_inputs:
         if node_id in node_outputs:
             final_outputs.append(
                 {
                     "node_id": node_id,
-                    "node_name": _node_name(id_to_node[node_id]),
+                    "node_name": node_name(graph.id_to_node[node_id]),
                     "output": node_outputs[node_id],
                 }
             )
@@ -297,21 +230,29 @@ def run_workflow(
         run_errors.append(
             {
                 "node_id": node_id,
-                "node_name": _node_name(id_to_node[node_id]),
-                "skill": str(((id_to_node[node_id].get("data") or {}).get("skill"))),  # type: ignore[union-attr]
+                "node_name": node_name(graph.id_to_node[node_id]),
+                "skill": str(((graph.id_to_node[node_id].get("data") or {}).get("skill"))),  # type: ignore[union-attr]
                 "error": f"blocked: {reason}",
             }
         )
 
-    status = "ok"
-    if run_errors:
-        status = "error"
+    status = "ok" if not run_errors else "error"
+    duration_sec = round(time.time() - started_at, 3)
+    emit(
+        "[workflow-run] finish "
+        f"workflow={graph.workflow_relative_path} "
+        f"run_id={run_id} "
+        f"status={status} "
+        f"duration_sec={duration_sec}"
+    )
 
     return WorkflowRunResult(
         status=status,
-        workflow=str(workflow_file),
-        workflow_name=str(doc.get("name") or "").strip() or workflow_file.stem,
-        duration_sec=round(time.time() - started_at, 3),
+        workflow=str(graph.workflow_file),
+        workflow_name=graph.workflow_name,
+        duration_sec=duration_sec,
+        run_id=run_id,
+        output_root=str(output_root),
         node_status=node_status,
         node_outputs=node_outputs,
         final_outputs=final_outputs,

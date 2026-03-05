@@ -1,6 +1,6 @@
 ---
 name: create-discord-bot
-description: Create a Discord server and bot application, collect bot token, server ID, and user ID, then save credentials to .env via keys-safe-guard. Skip if DISCORD_BOT_TOKEN is already set. Use for any project that needs a Discord bot.
+description: Create a Discord server and bot application, collect bot token, server ID, and user ID, then save credentials to .env via keys-safe-guard. Skip if OPENCLAW_DISCORD_BOT_TOKEN is already set. Use for any project that needs a Discord bot.
 ---
 
 # Create Discord Bot
@@ -29,12 +29,19 @@ As a {Role, and Role-XYZ if have more roles}, I will {action description}
 
 - `playwright-cli` is ready (run skill `init-playwright` if unsure)
 
+## Workflow Usage Requirement
+
+When this skill is used in a workflow agent node:
+
+- Output result as plain text. If the user asked to save it to a file, write it there.
+- Include concise context in the output (created/reused bot status, which IDs were captured, and whether secrets were saved) so downstream agents can safely continue.
+
 ## Skip Condition
 
 Check if the token is already saved:
 
 ```bash
-core/bin/keys-safe-guard get_key_value DISCORD_BOT_TOKEN
+core/bin/keys-safe-guard get_key_value OPENCLAW_DISCORD_BOT_TOKEN
 ```
 
 If the output shows a non-empty value, ask user whether to skip or replace it.
@@ -44,7 +51,7 @@ If the output shows a non-empty value, ask user whether to skip or replace it.
 ### Step 1: Check existing token
 
 ```bash
-core/bin/keys-safe-guard get_key_value DISCORD_BOT_TOKEN 2>/dev/null || true
+core/bin/keys-safe-guard get_key_value OPENCLAW_DISCORD_BOT_TOKEN 2>/dev/null || true
 ```
 
 If set and user confirms to keep it, skip.
@@ -106,20 +113,20 @@ Right-click server icon → **Privacy Settings** → toggle **Direct Messages** 
 
 ```bash
 core/bin/keys-safe-guard put_key_values \
-  DISCORD_BOT_TOKEN=<bot-token> \
-  DISCORD_SERVER_ID=<server-id> \
-  DISCORD_USER_ID=<user-id>
+  OPENCLAW_DISCORD_BOT_TOKEN=<bot-token> \
+  OPENCLAW_DISCORD_SERVER_ID=<server-id> \
+  OPENCLAW_DISCORD_USER_ID=<user-id>
 ```
 
 Verify Server ID and User ID were saved (safe to display):
 ```bash
-core/bin/keys-safe-guard get_key_value DISCORD_SERVER_ID DISCORD_USER_ID
+core/bin/keys-safe-guard get_key_value OPENCLAW_DISCORD_SERVER_ID OPENCLAW_DISCORD_USER_ID
 ```
 
 Confirm token is set without printing its value:
 ```bash
-core/bin/keys-safe-guard get_key_value DISCORD_BOT_TOKEN | grep -c "DISCORD_BOT_TOKEN=." \
-  && echo "DISCORD_BOT_TOKEN: set" || echo "DISCORD_BOT_TOKEN: MISSING"
+core/bin/keys-safe-guard get_key_value OPENCLAW_DISCORD_BOT_TOKEN | grep -c "OPENCLAW_DISCORD_BOT_TOKEN=." \
+  && echo "OPENCLAW_DISCORD_BOT_TOKEN: set" || echo "OPENCLAW_DISCORD_BOT_TOKEN: MISSING"
 ```
 
 ### Step 9: Report result

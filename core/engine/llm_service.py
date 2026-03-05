@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shlex
 import subprocess
 import threading
 from json import JSONDecodeError
@@ -283,9 +284,20 @@ def build_terminal_command(
     if use_network_allow:
         args.extend(_resolve_arg(arg) for arg in network_args)
 
+    model = provider.get("model")
+    if model:
+        if isinstance(model, list):
+            args.extend(str(m) for m in model)
+        else:
+            args.extend(["--model", str(model)])
+
+    if provider.get("bin") == "gemini" and os.name == "nt":
+        prompt = prompt.replace("\r\n", "\\n").replace("\n", "\\n")
+
     terminal_args = _string_list(provider, "terminal-args")
     if terminal_args:
         for arg in terminal_args:
+            arg = _resolve_arg(arg)
             if "{{prompt}}" in arg:
                 args.append(arg.replace("{{prompt}}", prompt))
             else:
@@ -476,6 +488,14 @@ def llm_get_text(
     if not cmd[0]:
         raise RuntimeError("No LLM binary configured")
 
+    logger.info(
+        "[llm] invoke client_id=%s provider_id=%s command=%s",
+        client_id,
+        provider.get("id"),
+        shlex.join(cmd),
+    )
+    logger.info("[llm] prompt client_id=%s provider_id=%s\n%s", client_id, provider.get("id"), prompt)
+
     agent_cli_unset = configured_unset_keys()
     provider_env = _resolve_provider_env(provider)
     try:
@@ -491,6 +511,13 @@ def llm_get_text(
         raise RuntimeError(f"LLM command not found: {cmd[0]}") from exc
 
     output = ((proc.stdout or "") + (proc.stderr or "")).strip()
+    logger.info(
+        "[llm] output client_id=%s provider_id=%s returncode=%s\n%s",
+        client_id,
+        provider.get("id"),
+        proc.returncode,
+        output,
+    )
     parsed = _parse_stream_json_text(provider, output)
     if proc.returncode not in (0, None) and not parsed:
         raise RuntimeError(f"LLM command failed (provider={provider.get('id')}): {output}")

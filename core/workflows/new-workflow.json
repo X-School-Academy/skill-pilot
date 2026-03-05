@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "name": "new-workflow",
-  "updated_at": "2026-02-19T10:37:40Z",
+  "updated_at": "2026-03-03T22:45:36Z",
   "nodes": [
     {
       "id": 0,
@@ -15,8 +15,8 @@
       "id": 1,
       "type": "agent",
       "position": {
-        "x": 420,
-        "y": 280
+        "x": 432,
+        "y": 270
       },
       "data": {
         "title": "Agent 1",
@@ -28,8 +28,8 @@
       "id": -1,
       "type": "end",
       "position": {
-        "x": 760,
-        "y": 300
+        "x": 761,
+        "y": 323
       }
     }
   ],

@@ -160,6 +160,14 @@ interface SecuritySettings {
 }
 
 type FixedSecuritySection = 'schedules' | 'newSession' | 'remoteBot' | 'devSwarm';
+type NextNodeTrigger = 'auto_continue' | 'start_by_prompt';
+
+interface WorkflowExecuteStatus {
+  status: string;
+  error?: string;
+  next_node_trigger?: NextNodeTrigger;
+  waiting_for_continue?: boolean;
+}
 
 const SECURITY_SECTION_DEFS: { key: FixedSecuritySection; label: string; defaults: SecurityFlags }[] = [
   { key: 'schedules', label: 'Schedules', defaults: { sandbox: true, auto: true, network: true } },
@@ -180,6 +188,7 @@ export default function HomePage() {
   const [opened, setOpened] = useState(false);
   const [activeView, setActiveView] = useState<ActiveView>('home');
   const [promptText, setPromptText] = useState('');
+  const [newSessionWorkflow, setNewSessionWorkflow] = useState<string | null>(null);
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
   const [llmProvider, setLlmProvider] = useState<string | null>(null);
   const [liveSessionName, setLiveSessionName] = useState<string | null>(null);
@@ -231,6 +240,10 @@ export default function HomePage() {
   const [newSessionAuto, setNewSessionAuto] = useState(false);
   const [newSessionNetwork, setNewSessionNetwork] = useState(true);
   const [newSessionNativeTerminal, setNewSessionNativeTerminal] = useState(false);
+  const [workflowSessionActive, setWorkflowSessionActive] = useState(false);
+  const [workflowExecuteStatus, setWorkflowExecuteStatus] = useState<WorkflowExecuteStatus | null>(null);
+  const [newSessionNextNodeTrigger, setNewSessionNextNodeTrigger] = useState<NextNodeTrigger>('auto_continue');
+  const [continuingWorkflow, setContinuingWorkflow] = useState(false);
   const [defaultLlmProvider, setDefaultLlmProvider] = useState<string>('');
   const [profileData, setProfileData] = useState<Record<string, string>>({});
 
@@ -477,6 +490,25 @@ export default function HomePage() {
   }, [activeView, fetchExternalSessions]);
 
   useEffect(() => {
+    if (!workflowSessionActive) return;
+    const poll = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/workflows/execute/status`, { withCredentials: true });
+        const st = res.data as WorkflowExecuteStatus;
+        setWorkflowExecuteStatus(st);
+        if (st.status === 'finished' || st.status === 'error' || st.status === 'terminated') {
+          setWorkflowSessionActive(false);
+        }
+      } catch {
+        // ignore polling errors
+      }
+    };
+    void poll();
+    const intervalId = window.setInterval(() => void poll(), 3000);
+    return () => window.clearInterval(intervalId);
+  }, [workflowSessionActive]);
+
+  useEffect(() => {
     if (activeView === 'mcp-servers') {
       void fetchMcpServers();
     }
@@ -515,9 +547,11 @@ export default function HomePage() {
 
   useEffect(() => {
     if (router.isReady) {
-      const { prompt, new_session, view } = router.query;
+      const { prompt, new_session, view, workflow, next_node_trigger } = router.query;
       if (new_session === 'true' && prompt) {
         setPromptText(prompt as string);
+        setNewSessionWorkflow(typeof workflow === 'string' && workflow ? workflow : null);
+        setNewSessionNextNodeTrigger(next_node_trigger === 'start_by_prompt' ? 'start_by_prompt' : 'auto_continue');
         setActiveView('home');
       } else if (typeof view === 'string' && view) {
         const validViews: ActiveView[] = [
@@ -538,14 +572,26 @@ export default function HomePage() {
     const provider = llmProvider || 'gemini';
     setStartingSession(true);
     try {
-      const res = await axios.post(`${API_BASE_URL}/terminal/tmux/create`, {
-        provider_id: provider,
-        prompt: trimmedPrompt,
-        sandbox: newSessionSandbox,
-        auto: newSessionAuto,
-        network: newSessionNetwork,
-        native_terminal: newSessionNativeTerminal,
-      });
+      const endpoint = newSessionWorkflow ? `${API_BASE_URL}/workflows/execute` : `${API_BASE_URL}/terminal/tmux/create`;
+      const payload = newSessionWorkflow
+        ? {
+            workflow: newSessionWorkflow,
+            prompt: trimmedPrompt,
+            sandbox: newSessionSandbox,
+            auto: newSessionAuto,
+            network: newSessionNetwork,
+            native_terminal: newSessionNativeTerminal,
+            next_node_trigger: newSessionNextNodeTrigger,
+          }
+        : {
+            provider_id: provider,
+            prompt: trimmedPrompt,
+            sandbox: newSessionSandbox,
+            auto: newSessionAuto,
+            network: newSessionNetwork,
+            native_terminal: newSessionNativeTerminal,
+          };
+      const res = await axios.post(endpoint, payload);
       const sessionName: string | undefined = res.data?.session?.name;
       const nativeOpened: boolean = Boolean(res.data?.native_terminal?.opened);
       const nativeError: string = String(res.data?.native_terminal?.error || '');
@@ -561,12 +607,32 @@ export default function HomePage() {
           setLiveSessionName(sessionName);
           setActiveView('live-terminal');
         }
+        if (newSessionWorkflow) {
+          setWorkflowSessionActive(true);
+          setWorkflowExecuteStatus(null);
+        }
         setPromptText('');
+        setNewSessionWorkflow(null);
+        setNewSessionNextNodeTrigger('auto_continue');
       }
     } catch (err) {
-      console.error('Failed to create session:', err);
+      console.error('Failed to start session:', err);
     } finally {
       setStartingSession(false);
+    }
+  };
+
+  const handleWorkflowContinue = async () => {
+    if (continuingWorkflow) return;
+    setContinuingWorkflow(true);
+    try {
+      await axios.post(`${API_BASE_URL}/workflows/execute/continue`, {}, { withCredentials: true });
+      const res = await axios.get(`${API_BASE_URL}/workflows/execute/status`, { withCredentials: true });
+      setWorkflowExecuteStatus(res.data as WorkflowExecuteStatus);
+    } catch (err) {
+      console.error('Failed to continue workflow:', err);
+    } finally {
+      setContinuingWorkflow(false);
     }
   };
 
@@ -682,6 +748,42 @@ export default function HomePage() {
           maxRows={10}
           size="md"
         />
+        {newSessionWorkflow && (
+          <>
+            <Text size="sm" color="dimmed" align="center">
+              Workflow mode: providers are controlled by the workflow nodes for {`core/workflows/${newSessionWorkflow}`}
+            </Text>
+            <Select
+              label="Next Node Trigger"
+              value={newSessionNextNodeTrigger}
+              onChange={(value) => setNewSessionNextNodeTrigger((value as NextNodeTrigger) || 'auto_continue')}
+              data={[
+                { value: 'auto_continue', label: 'Auto continue' },
+                { value: 'start_by_prompt', label: 'Start by prompt' },
+              ]}
+            />
+          </>
+        )}
+        {workflowExecuteStatus && workflowSessionActive && (
+          <Text
+            size="sm"
+            align="center"
+            color={workflowExecuteStatus.status === 'error' || workflowExecuteStatus.status === 'terminated' ? 'red' : 'dimmed'}
+          >
+            Workflow status: {workflowExecuteStatus.status}
+            {workflowExecuteStatus.error ? ` - ${workflowExecuteStatus.error}` : ''}
+          </Text>
+        )}
+        {workflowExecuteStatus && !workflowSessionActive && (workflowExecuteStatus.status === 'finished' || workflowExecuteStatus.status === 'error' || workflowExecuteStatus.status === 'terminated') && (
+          <Text
+            size="sm"
+            align="center"
+            color={workflowExecuteStatus.status === 'finished' ? 'green' : 'red'}
+          >
+            Workflow {workflowExecuteStatus.status}
+            {workflowExecuteStatus.error ? ` - ${workflowExecuteStatus.error}` : ''}
+          </Text>
+        )}
         <Group position="center" spacing="lg">
           <Checkbox
             label="Sandbox"
@@ -712,6 +814,16 @@ export default function HomePage() {
             <Button size="md" onClick={() => void handleStart()} disabled={!promptText.trim() || startingSession} loading={startingSession}>
                 Start
             </Button>
+            {workflowSessionActive && workflowExecuteStatus?.waiting_for_continue && (
+              <Button
+                size="md"
+                variant="light"
+                onClick={() => void handleWorkflowContinue()}
+                loading={continuingWorkflow}
+              >
+                Continue Next Node
+              </Button>
+            )}
         </Group>
       </Stack>
     </div>
@@ -719,6 +831,16 @@ export default function HomePage() {
 
   const renderLiveTerminalView = () => (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '12px 16px 16px 16px' }}>
+      {workflowExecuteStatus && (workflowExecuteStatus.status === 'error' || workflowExecuteStatus.status === 'terminated') && (
+        <div style={{ padding: '8px 12px', marginBottom: 8, borderRadius: 6, background: '#fde8e8', color: '#c0392b', fontSize: 13 }}>
+          Workflow execution failed{workflowExecuteStatus.error ? `: ${workflowExecuteStatus.error}` : ''}
+        </div>
+      )}
+      {workflowExecuteStatus && workflowExecuteStatus.status === 'finished' && (
+        <div style={{ padding: '8px 12px', marginBottom: 8, borderRadius: 6, background: '#e8fde8', color: '#27ae60', fontSize: 13 }}>
+          Workflow completed
+        </div>
+      )}
       <div style={{ flex: 1, position: 'relative' }}>
         {liveSessionName && (
           <iframe
@@ -3096,6 +3218,7 @@ export default function HomePage() {
               <Select
                 placeholder="LLM"
                 value={llmProvider}
+                disabled={Boolean(newSessionWorkflow)}
                 onChange={(value) => {
                   if (!value) return;
                   setLlmProvider(value);
