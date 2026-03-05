@@ -36,14 +36,6 @@ When this skill is used in a workflow agent node:
 - Output result as plain text. If the user asked to save it to a file, write it there.
 - Include concise context in the output (what was checked, what is ready, and any blocking issue) so downstream agents can safely continue.
 
-## Skip Condition
-
-Run the test command directly. If it succeeds, skip remaining install steps and report ready.
-
-```bash
-playwright-cli --version
-```
-
 ## Instructions
 
 ### Step 1: Check if playwright-cli is installed
