@@ -77,7 +77,7 @@ pnpm exec playwright install chrome # install the official branded Google Chrome
 
 Warn user: "About to open Chrome Web Store — this is a trusted Google site."
 
-Ask user to open Chrome and install the **Playwright MCP Bridge** extension:
+Ask user to open Chrome and install the **Playwright MCP Bridge** extension by url below:
 ```
 https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm
 ```
