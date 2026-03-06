@@ -56,6 +56,18 @@ playwright-cli --version
 ```bash
 playwright-cli open https://www.google.com --extension --headed
 ```
+Notice:
+
+The Chrome extension may wait for the user to authenticate browser use, so this is a long-running command. If the command does not return, ask the user to check Chrome and approve the extension. Do not time it out; check the process periodically until it returns the text below or other errors.
+
+```markdown
+### Browser `default` opened with pid 44554.
+- default:
+  - browser-type: chrome
+  - user-data-dir: <in-memory>
+  - headed: true
+any more other response
+```
 
 ### Step 3: Check any errors
 

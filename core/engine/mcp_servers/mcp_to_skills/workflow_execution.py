@@ -94,7 +94,7 @@ def safe_node_filename_prefix(name: str) -> str:
 
 def node_output_path(output_root: Path, node_id: int, node_label: str | None = None) -> Path:
     prefix = safe_node_filename_prefix(node_label or "")
-    return output_root / f"{prefix}-id-{int(node_id)}.md"
+    return output_root / f"{prefix}.md"
 
 
 def write_node_output(output_root: Path, node_id: int, text: str, node_label: str | None = None) -> Path:

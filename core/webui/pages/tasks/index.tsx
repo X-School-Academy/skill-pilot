@@ -83,6 +83,26 @@ const taskProjectPath = (path: string): string => {
 
 const workflowProjectPath = (name: string): string => `core/workflows/${name}.json`;
 
+const getAncestorDirectoryPaths = (path: string): string[] => {
+  const segments = path.split('/').filter(Boolean);
+  if (segments.length <= 1) return [];
+  const ancestors: string[] = [];
+  for (let i = 1; i < segments.length; i += 1) {
+    ancestors.push(segments.slice(0, i).join('/'));
+  }
+  return ancestors;
+};
+
+const collectDirectoryPaths = (items: FileItem[]): string[] => {
+  const paths: string[] = [];
+  for (const item of items) {
+    if (item.type !== 'dir') continue;
+    paths.push(item.path);
+    if (item.children) paths.push(...collectDirectoryPaths(item.children));
+  }
+  return paths;
+};
+
 const listFilesInDirectory = (items: FileItem[], directoryPath: string): FileItem[] => {
   if (!directoryPath) {
     return items.filter((item) => item.type === 'file');
@@ -110,6 +130,7 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(false);
   const [treeLoading, setTreeLoading] = useState(false);
   const [sortByTime, setSortByTime] = useState(true);
+  const [expandedFolders, setExpandedFolders] = useState<string[]>([]);
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
   const [llmProvider, setLlmProvider] = useState<string | null>(null);
   const [editorSaving, setEditorSaving] = useState(false);
@@ -172,6 +193,18 @@ export default function TasksPage() {
       window.removeEventListener('mouseup', stopResizing);
     };
   }, [isResizing]);
+
+  useEffect(() => {
+    if (!currentTask) return;
+    const ancestorPaths = getAncestorDirectoryPaths(currentTask);
+    if (ancestorPaths.length === 0) return;
+    setExpandedFolders((prev) => Array.from(new Set([...prev, ...ancestorPaths])));
+  }, [currentTask]);
+
+  useEffect(() => {
+    const validPaths = new Set(collectDirectoryPaths(treeData));
+    setExpandedFolders((prev) => prev.filter((path) => validPaths.has(path)));
+  }, [treeData]);
 
   const fetchTree = async () => {
     setTreeLoading(true);
@@ -376,7 +409,14 @@ export default function TasksPage() {
           label={item.name}
           icon={<IconFolder size="1.2rem" stroke={1.5} color={theme.colors.blue[6]} />}
           childrenOffset={16}
-          opened={Boolean(currentTask && (currentTask === item.path || currentTask.startsWith(`${item.path}/`)))}
+          opened={expandedFolders.includes(item.path)}
+          onChange={(nextOpened) => {
+            setExpandedFolders((prev) => (
+              nextOpened
+                ? Array.from(new Set([...prev, item.path]))
+                : prev.filter((path) => path !== item.path)
+            ));
+          }}
         >
           {item.children && renderTree(item.children)}
         </NavLink>

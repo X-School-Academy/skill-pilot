@@ -67,7 +67,7 @@ def run_workflow(
     max_workers: int,
     infer_fn: Callable[[str, str | None], str],
     output_base_dir: Path | None = None,
-    cleanup_base_dir: bool = False,
+    cleanup_base_dir: bool = True,
     log_fn: Callable[[str], None] | None = None,
 ) -> WorkflowRunResult:
     graph = load_workflow_graph(workflow_file)
