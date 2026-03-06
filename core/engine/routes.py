@@ -1414,9 +1414,16 @@ def terminal_tmux_kill(payload: Dict[str, Any]):
         raw_session = str(payload.get("session") or "")
         if raw_session.strip() == WORKFLOW_EXECUTE_SESSION_NAME:
             session_name = _validate_tmux_session_name_any(raw_session)
+            with _WORKFLOW_EXECUTE_LOCK:
+                thread = _WORKFLOW_EXECUTE_STATE.get("thread")
+            _WORKFLOW_EXECUTE_STOP.set()
+            _WORKFLOW_EXECUTE_CONTINUE.set()
             removed = _kill_tmux_session_any(session_name)
+            if thread and thread.is_alive():
+                thread.join(timeout=5.0)
             if removed:
                 _reset_workflow_execute_state(status="terminated")
+            _WORKFLOW_EXECUTE_CONTINUE.clear()
             return {"status": "ok", "removed": removed, "session": session_name}
         session_name = _validate_tmux_session_name(raw_session)
     except ValueError as exc:
