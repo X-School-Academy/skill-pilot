@@ -3536,15 +3536,21 @@ async def discord_token_save(request: Request):
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         logger.error("keys-safe-guard failed: %s", result.stderr)
+        detail = (result.stderr or result.stdout or "").strip()
+        if detail:
+            detail = f"\n\nDetails:\n{detail}"
         return JSONResponse(
             status_code=500,
             content={
                 "error": (
-                    "Could not save token: GUI auth dialog unavailable, failed, or was cancelled. "
+                    "Could not save token with keys-safe-guard. "
+                    "If safe guard is enabled, this request needs either a GUI permission dialog or passwordless sudo. "
+                    "Otherwise disable safe guard and retry.\n"
                     "To set the token manually, run as root:\n"
                     "  sudo nano config/.env\n"
                     "then add or update the line:\n"
                     "  DISCORD_BOT_TOKEN=<your-token>"
+                    f"{detail}"
                 )
             },
         )

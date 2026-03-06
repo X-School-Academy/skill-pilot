@@ -1,6 +1,6 @@
 ---
 name: key-safe
-description: Manage LLM security key protection for config/.env using core/bin/keys-safe-guard actions (enable, disable, get_key_names, put_key_values). Supports --gui flag for native OS auth dialogs (macOS osascript, Linux pkexec/zenity/kdialog). Use when the user asks to secure, inspect, or update protected env keys safely, with or without a GUI password prompt.
+description: Manage LLM security key protection for config/.env using core/bin/keys-safe-guard actions (enable, disable, get_key_names, put_key_values). Supports native GUI elevation for desktop sessions and clear fallback behavior for Python/background calls when safe guard is enabled.
 ---
 
 # AI Builder - Key Safe
@@ -14,6 +14,7 @@ Manage secure key operations for `config/.env` using the project key safe comman
 - User asks to update or insert one or more env keys safely
 - User asks for secure key operations related to LLM/provider credentials
 - User asks to use a GUI popup / dialog for the sudo password prompt
+- A Python or background process needs to read or write protected env keys
 
 ## Your Roles in This Skill
 
@@ -49,12 +50,22 @@ Add `--gui` when the user:
 - Mentions they don't want to type their password in the terminal
 - Asks for a "graphical" or "visual" sudo/auth prompt
 
-`--gui` triggers a native OS auth dialog for privilege elevation:
+`--gui` forces a native OS auth dialog for privilege elevation:
 - **macOS**: system admin dialog via `osascript`
 - **Linux**: `pkexec` (polkit) dialog, or `sudo -A` with `zenity`/`kdialog` askpass
-- **Fallback**: if GUI is unavailable (SSH session, no display, dialog cancelled), it falls back silently to terminal `sudo`
+- **No fallback**: if GUI is unavailable (SSH session, no display, dialog cancelled), the command fails instead of hanging on terminal `sudo`
 
 `--gui` can be placed before or after the action name.
+
+Important runtime behavior when safe guard is enabled and elevation is required:
+
+- Interactive terminal session:
+  - `core/bin/keys-safe-guard ...` uses terminal `sudo`
+- Python/background process with a desktop GUI session:
+  - `core/bin/keys-safe-guard ...` automatically opens a native GUI permission dialog, even without `--gui`
+- Python/background process without a desktop GUI session:
+  - the command cannot ask for a password interactively
+  - tell the user to either configure passwordless sudo for the machine or disable safe guard first
 
 ### Step 3: Execute only the required action
 
@@ -120,4 +131,5 @@ Use system skill `core-engine` for this operation flow.
 - Keep secrets out of logs and responses
 - Use `get_key_names` for inspection whenever values are not required
 - Follow user constraints about password-prompting commands
-- Use `--gui` when the user asks for a popup/dialog prompt; otherwise omit it and let terminal sudo handle authentication
+- Use `--gui` when the user explicitly wants a popup/dialog, or when you know the command will run in a background/non-interactive desktop process
+- If a protected key operation must run without a GUI and without a terminal, do not keep retrying; tell the user to set passwordless sudo or disable safe guard
