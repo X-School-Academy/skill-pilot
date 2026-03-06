@@ -162,6 +162,11 @@ function getNodeLabel(node: WorkflowNode): string {
   return node.data?.title || `Agent ${node.id}`;
 }
 
+function normalizeNodeName(value: string): string {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return normalized || 'node';
+}
+
 function canSource(node: WorkflowNode): boolean {
   return node.type !== 'end';
 }
@@ -843,7 +848,11 @@ export default function WorkflowsPage() {
 
   const handleSave = async () => {
     const localErrors: ValidationError[] = [];
+    const normalizedNameToIds = new Map<string, number[]>();
     for (const node of workflow.nodes) {
+      const nodeLabel = getNodeLabel(node);
+      const normalizedName = normalizeNodeName(nodeLabel);
+      normalizedNameToIds.set(normalizedName, [...(normalizedNameToIds.get(normalizedName) || []), node.id]);
       if (node.type !== 'agent') continue;
       if (!(node.data?.title || '').trim()) {
         localErrors.push({
@@ -869,6 +878,18 @@ export default function WorkflowsPage() {
           edge_ids: [],
         });
       }
+    }
+    const duplicateNameIds = Array.from(normalizedNameToIds.values())
+      .filter((ids) => ids.length > 1)
+      .flat()
+      .sort((a, b) => a - b);
+    if (duplicateNameIds.length > 0) {
+      localErrors.push({
+        rule: 'NODE_NAME_DUPLICATE',
+        message: 'Node names must be unique after normalization.',
+        node_ids: duplicateNameIds,
+        edge_ids: [],
+      });
     }
     if (localErrors.length > 0) {
       setErrors(localErrors);

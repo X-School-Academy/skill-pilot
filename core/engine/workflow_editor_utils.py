@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 
 _FILENAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*\.json$")
+_NORMALIZED_NODE_NAME_RE = re.compile(r"[^a-z0-9]+")
 
 
 def _node_type(node: Dict[str, Any]) -> str:
@@ -101,6 +102,11 @@ def is_valid_workflow_filename(filename: str) -> bool:
     return bool(_FILENAME_RE.fullmatch(filename or ""))
 
 
+def normalize_workflow_node_name(name: str) -> str:
+    normalized = _NORMALIZED_NODE_NAME_RE.sub("-", str(name or "").strip().lower()).strip("-")
+    return normalized or "node"
+
+
 def resolve_filename_collision(root: Path, filename: str) -> str:
     if not filename.endswith(".json"):
         filename = normalize_workflow_filename(filename)
@@ -130,6 +136,7 @@ def validate_workflow_doc(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     id_to_node: Dict[int, Dict[str, Any]] = {}
     duplicate_node_ids: Set[int] = set()
+    normalized_name_to_ids: Dict[str, List[int]] = {}
     start_count = 0
     end_count = 0
 
@@ -155,6 +162,16 @@ def validate_workflow_doc(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
             duplicate_node_ids.add(node_id)
         else:
             id_to_node[node_id] = node
+
+        if node_type == "start":
+            raw_node_name = "Start"
+        elif node_type == "end":
+            raw_node_name = "End"
+        else:
+            data = node.get("data") if isinstance(node.get("data"), dict) else {}
+            raw_node_name = str(data.get("title") or "").strip() or f"Agent {node_id}"
+        normalized_name = normalize_workflow_node_name(raw_node_name)
+        normalized_name_to_ids.setdefault(normalized_name, []).append(node_id)
 
         if node_type == "start":
             start_count += 1
@@ -196,6 +213,23 @@ def validate_workflow_doc(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     if duplicate_node_ids:
         errors.append(_err("NODE_DUPLICATE", "Node ids must be unique.", sorted(duplicate_node_ids)))
+
+    duplicate_name_ids = sorted(
+        {
+            node_id
+            for node_ids in normalized_name_to_ids.values()
+            if len(node_ids) > 1
+            for node_id in node_ids
+        }
+    )
+    if duplicate_name_ids:
+        errors.append(
+            _err(
+                "NODE_NAME_DUPLICATE",
+                "Node names must be unique after normalization.",
+                duplicate_name_ids,
+            )
+        )
 
     if start_count != 1:
         errors.append(_err("START_COUNT", "Workflow must contain exactly one Start node."))
