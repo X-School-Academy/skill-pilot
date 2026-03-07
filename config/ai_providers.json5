@@ -50,7 +50,9 @@
         '--print',
         '{{prompt}}',
       ],
-      "env": {},
+      "env": {
+        "PLAYWRIGHT_MCP_EXTENSION_TOKEN": "${PLAYWRIGHT_MCP_EXTENSION_TOKEN}",
+      },
       'exit-session': 'esc\nctrl+c\nctrl+c',
     },
     /*
@@ -71,6 +73,9 @@
         '--json',
         '{{prompt}}',
       ],
+      env: {
+        'PLAYWRIGHT_MCP_EXTENSION_TOKEN': '${PLAYWRIGHT_MCP_EXTENSION_TOKEN}',
+      },
       'exit-session': 'esc\nctrl+c\nctrl+c',
     },
     {
@@ -87,6 +92,9 @@
         '{{prompt}}',
       ],
       model: 'auto-gemini-3',
+      env: {
+        'PLAYWRIGHT_MCP_EXTENSION_TOKEN': '${PLAYWRIGHT_MCP_EXTENSION_TOKEN}',
+      },
       'exit-session': 'esc\nctrl+c\nctrl+c',
     },
     // opencode usage: OPENCODE_CONFIG={ROOT-SKILL-PILOT}/config/opencode-yolo.json opencode
@@ -103,7 +111,8 @@
       'exit-session': 'esc\nctrl+c\nctrl+c',
       env:{
         'OPENAI_API_KEY': '',
-        'OPENAI_BASE_URL': ''
+        'OPENAI_BASE_URL': '',
+        'PLAYWRIGHT_MCP_EXTENSION_TOKEN': '${PLAYWRIGHT_MCP_EXTENSION_TOKEN}',
       }
     },
     // Claude Code via Claude-compatible API endpoint (disabled by default — configure env vars to enable)
@@ -124,9 +133,10 @@
         '{{prompt}}',
       ],
       env: {
-        'ANTHROPIC_BASE_URL': '${ANTHROPIC_BASE_URL}',
-        'ANTHROPIC_AUTH_TOKEN': '${ANTHROPIC_AUTH_TOKEN}',
+        'ANTHROPIC_BASE_URL': '${ANTHROPIC_COMPAT_BASE_URL}',
+        'ANTHROPIC_AUTH_TOKEN': '${ANTHROPIC_COMPAT_AUTH_TOKEN}',
         'ANTHROPIC_API_KEY': '',
+        "PLAYWRIGHT_MCP_EXTENSION_TOKEN": "${PLAYWRIGHT_MCP_EXTENSION_TOKEN}",
       },
       'exit-session': 'esc\nctrl+c\nctrl+c',
     },
@@ -146,8 +156,9 @@
         '{{prompt}}',
       ],
       env: {
-        'OPENAI_API_KEY': '${OPENAI_API_KEY}',
-        'OPENAI_BASE_URL': '${OPENAI_BASE_URL}',
+        'OPENAI_API_KEY': '${OPENAI_COMPAT_API_KEY}',
+        'OPENAI_BASE_URL': '${OPENAI_COMPAT_BASE_URL}',
+        "PLAYWRIGHT_MCP_EXTENSION_TOKEN": "${PLAYWRIGHT_MCP_EXTENSION_TOKEN}",
       },
       'exit-session': 'esc\nctrl+c\nctrl+c',
     },
