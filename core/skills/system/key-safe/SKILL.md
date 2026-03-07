@@ -43,12 +43,16 @@ Map user intent to one action:
 3. `get_key_names`
 4. `put_key_values`
 
-### Step 2: Determine whether to use GUI mode
+### Step 2: Always use GUI mode for agent-invoked commands
 
-Add `--gui` when the user:
-- Explicitly asks for a popup, dialog, or GUI password prompt
-- Mentions they don't want to type their password in the terminal
-- Asks for a "graphical" or "visual" sudo/auth prompt
+Default rule: if an AI agent invokes `core/bin/keys-safe-guard`, include `--gui` on every command unless the action is `get_key_names`.
+
+Use this rule even when the user does not explicitly mention GUI mode. Do not wait for the user to ask for a popup or dialog.
+
+Why:
+- AI agents should not depend on terminal password entry
+- GUI auth avoids hanging background or non-interactive runs
+- The project standard for this skill is to prefer native OS elevation dialogs whenever elevation might be needed
 
 `--gui` forces a native OS auth dialog for privilege elevation:
 - **macOS**: system admin dialog via `osascript`
@@ -57,10 +61,18 @@ Add `--gui` when the user:
 
 `--gui` can be placed before or after the action name.
 
+Action rules:
+
+- `enable`: always run with `--gui`
+- `disable`: always run with `--gui`
+- `put_key_values`: always run with `--gui`
+- `get_key_names`: may omit `--gui` because it is read-only and the flag has no effect
+
 Important runtime behavior when safe guard is enabled and elevation is required:
 
 - Interactive terminal session:
-  - `core/bin/keys-safe-guard ...` uses terminal `sudo`
+  - if the AI agent follows this skill and passes `--gui`, the command uses the native GUI auth dialog
+  - if a human runs the command manually without `--gui`, it may fall back to terminal `sudo`
 - Python/background process with a desktop GUI session:
   - `core/bin/keys-safe-guard ...` automatically opens a native GUI permission dialog, even without `--gui`
 - Python/background process without a desktop GUI session:
@@ -72,12 +84,10 @@ Important runtime behavior when safe guard is enabled and elevation is required:
 From repo root, run:
 
 ```bash
-core/bin/keys-safe-guard enable
 core/bin/keys-safe-guard --gui enable
 ```
 
 ```bash
-core/bin/keys-safe-guard disable
 core/bin/keys-safe-guard --gui disable
 ```
 
@@ -86,13 +96,12 @@ core/bin/keys-safe-guard get_key_names
 ```
 
 ```bash
-core/bin/keys-safe-guard put_key_values KEY1=VALUE1 KEY2=VALUE2
 core/bin/keys-safe-guard --gui put_key_values KEY1=VALUE1 KEY2=VALUE2
 ```
 
 Use exactly one action per user request unless the user explicitly asks for a sequence.
 
-Note: `get_key_names` reads from engine memory and does not require elevated privileges — `--gui` has no effect on it.
+Note: `get_key_names` reads from engine memory and does not require elevated privileges, so `--gui` is optional and has no effect for that action.
 
 ### Step 4: Prevent secret leakage
 
@@ -121,5 +130,7 @@ Return:
 - Keep secrets out of logs and responses
 - Use `get_key_names` for inspection whenever values are not required
 - Follow user constraints about password-prompting commands
-- Use `--gui` when the user explicitly wants a popup/dialog, or when you know the command will run in a background/non-interactive desktop process
+- If an AI agent invokes `core/bin/keys-safe-guard`, treat `--gui` as mandatory for every action except `get_key_names`
+- Do not rely on terminal password prompts for agent-driven `enable`, `disable`, or `put_key_values`
+- In a non-GUI environment, do not keep retrying GUI mode; tell the user they need passwordless sudo or need to disable safe guard from an interactive GUI-capable session first
 - If a protected key operation must run without a GUI and without a terminal, do not keep retrying; tell the user to set passwordless sudo or disable safe guard
