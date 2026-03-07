@@ -62,40 +62,40 @@ Treat this as an **initialization flow**, not a blocking foreground command:
 
 - Start it in a background process.
 - Do **not** wait for the command to sit there until timeout.
-- This init command is only for extension setup. Once setup is complete, normal browser automation should use direct commands such as `playwright-cli open`.
+- This init command is only for extension setup. Once setup is complete, normal browser automation should use direct commands such as `playwright-cli open --extension --headed`.
 
 Interpret the result as follows:
 
 - If it returns quickly with `Browser \`default\` opened with pid ...`, the browser bridge is ready.
 - If it returns within about 10 seconds with `Extension connection timeout. Make sure the "Playwright MCP Bridge" extension is installed.`, go to Step 3 and instruct the user to install the Chrome extension.
 - If it stays open for more than about 10 seconds with no return, assume the browser is waiting for permission and is showing the extension token page. Go to Step 3 and instruct the user to copy-paste the `PLAYWRIGHT_MCP_EXTENSION_TOKEN` value.
-- If get error, Chrome is not installed, then got the the Step 3 to install the Google Chrome
+- If you get an error that Chrome is not installed, then go to Step 3 to install Google Chrome.
 
 ### Step 3: Check any errors
 
-**If get error, Chrome is not installed**
+**If you get an error that Chrome is not installed**
 
 ```bash
 pnpm exec playwright install chrome # install the official branded Google Chrome browser
 ```
 
-One the chrome installed, then go to Step 2 and test browser + extension bridge
+Once Chrome is installed, go to Step 2 and test the browser + extension bridge.
 
-**If the chrome extension is not installed:**
+**If the Chrome extension is not installed:**
 
-Ask user to open Chrome and install the **Playwright MCP Bridge** extension by url below:
+Ask the user to open Chrome and install the **Playwright MCP Bridge** extension using the URL below:
 ```
 https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm
 ```
 
-Let user to confirm once the installation is ready, then go to Step 2 and test browser + extension bridge 
+Ask the user to confirm once the installation is complete, then go to Step 2 and test the browser + extension bridge.
 
-If the extension is ready and wait for authentication, give user to options
+If the extension is ready and waiting for authentication, give the user two options:
 
-1. Ask user to copy and paste the token then save it for auto authentication.
-2. Ask User to click the connect button for one-time approval.
+1. Ask the user to copy and paste the token, then save it for automatic authentication.
+2. Ask the user to click the connect button for one-time approval.
 
-The token format shown in the chrome extension screen
+The token format shown on the Chrome extension screen is:
 ```bash
 PLAYWRIGHT_MCP_EXTENSION_TOKEN=xxxxxxxx_xxxxxxx_xxx_xxxxxxxxxxxxxxxxxxxxxx
 ```
@@ -134,7 +134,7 @@ Repeat until `playwright-cli open --extension --headed` works immediately withou
 playwright-cli list
 ```
 
-the output should be 
+The output should be:
 
 ```markdown
 ### Browsers
@@ -159,7 +159,7 @@ Token setup: verified and saved with key-safe, or manual approval required
 Open any web URL using: `playwright-cli goto URL` by agent skill `playwright-cli`
 ```
 
-If user requested file output, write the same content to the specified path.
+If the user requested file output, write the same content to the specified path.
 
 ## Common Issues
 
