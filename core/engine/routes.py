@@ -796,6 +796,7 @@ def request_workflow_continue_signal(source: str = "api") -> Dict[str, Any]:
     output_file = str(status.get("current_output_file") or "").strip()
     waiting_for_continue = bool(status.get("waiting_for_continue"))
     has_remaining_nodes = bool(status.get("has_remaining_nodes"))
+    current_provider_id = str(status.get("current_provider_id") or "").strip()
 
     if not waiting_for_continue:
         return {
@@ -837,6 +838,26 @@ def request_workflow_continue_signal(source: str = "api") -> Dict[str, Any]:
             "status": _workflow_execute_status(),
             "message": "Current node output file is not ready.",
         }
+
+    if current_provider_id:
+        try:
+            provider = get_provider(current_provider_id)
+            shortcut = _send_exit_session_shortcut_any(session_name, provider)
+            logger.info(
+                "[workflow-execute] continue_exit_signal source=%s session=%s provider=%s exit_shortcut=%s",
+                source,
+                session_name,
+                current_provider_id,
+                shortcut,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "[workflow-execute] continue_exit_signal_failed source=%s session=%s provider=%s error=%s",
+                source,
+                session_name,
+                current_provider_id,
+                exc,
+            )
 
     _WORKFLOW_EXECUTE_CONTINUE.set()
     logger.info(
@@ -1117,6 +1138,30 @@ def _execute_workflow_in_terminal_thread(
                             node_status[downstream_id] = "blocked"
                         else:
                             ready.append(downstream_id)
+                has_remaining_nodes = len(ready) > 0
+                if next_node_trigger == "start_by_prompt" and has_remaining_nodes:
+                    if run_is_current():
+                        _set_workflow_execute_state(
+                            status="waiting_for_continue",
+                            waiting_for_continue=True,
+                            current_node_id=node_id,
+                            current_node_name=node_name(node),
+                            current_output_file=str(output_file),
+                            current_provider_id=provider_id,
+                            has_remaining_nodes=True,
+                        )
+                    while True:
+                        if not run_is_current():
+                            raise RuntimeError("workflow execution superseded by a newer run")
+                        if _WORKFLOW_EXECUTE_STOP.is_set():
+                            raise RuntimeError("workflow execution stopped by user")
+                        if not _tmux_session_exists(session_name):
+                            raise RuntimeError(f"workflow tmux session was terminated during node {node_id}")
+                        if _WORKFLOW_EXECUTE_CONTINUE.wait(1.0):
+                            _WORKFLOW_EXECUTE_CONTINUE.clear()
+                            break
+                    if run_is_current():
+                        _set_workflow_execute_state(status="running", waiting_for_continue=False)
                 continue
             prompt = build_node_prompt(
                 graph=graph,
