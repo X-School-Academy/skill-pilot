@@ -109,16 +109,6 @@ Return:
 3. Non-sensitive output summary
 4. Any required next step (for example engine restart after safeguard changes)
 
-### Step 6: Reload engine after key updates
-
-If action is `put_key_values`, `enable`, or `disable`, apply engine reload so in-memory env is synchronized:
-
-```bash
-core/bin/tool-cli engine-reload
-```
-
-Use system skill `core-engine` for this operation flow.
-
 ## Expected Output
 
 - Correct key-safe action execution
