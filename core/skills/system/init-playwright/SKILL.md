@@ -23,7 +23,7 @@ before any browser automation is attempted.
 
 As an expert in your assigned roles, you must announce your actions before performing them using the following format:
 
-As a {Role, and Role-XYZ if have more roles}, I will {action description}
+As a {Role, and Role-XYZ if you have more roles}, I will {action description}
 
 ## Other Agent Skills Required
 
@@ -114,19 +114,27 @@ Browser `default` opened with pid 44554.
 
 If verification succeeds, use the `key-safe` skill to save `PLAYWRIGHT_MCP_EXTENSION_TOKEN` into `config/.env`.
 
-After the token has been verified and saved, future browser automation should run normally with direct commands such as:
+Otherwise, the command will return `Extension connection timeout. Make sure the "Playwright MCP Bridge" extension is installed.`, but the user sees `Invalid token provided` in the web browser.
+
+In this case, ask the user to check the web browser if it shows the message `Invalid token provided`.
+
+If it is showing `Invalid token provided`, issue another command without the token:
 
 ```bash
 playwright-cli open --extension --headed
 ```
 
-No manual approval should be needed unless the token is changed or becomes invalid.
+Then tell the user the token is invalid and ask for a new token.
 
-If the token fails verification, do not save it. Tell the user the token is invalid and ask for a new token.
+If the user does not want to paste a token, tell them they can manually approve the extension each time browser automation starts. 
 
-If the user does not want to paste a token, tell them they can manually approve the extension each time browser automation starts.
+Or the user can set the `PLAYWRIGHT_MCP_EXTENSION_TOKEN` token in `config/.env` manually, then restart the service with the shell command `core/bin/tool-cli engine-reload`, and refresh the webui to restart the task afterward.
 
-Repeat until `playwright-cli open --extension --headed` works immediately without waiting for approval.
+Until the command below gets the correct response, then go to Step 4.
+
+```bash
+PLAYWRIGHT_MCP_EXTENSION_TOKEN=token-string playwright-cli open --extension --headed
+```
 
 ### Step 4: Report result of the browser opened
 
