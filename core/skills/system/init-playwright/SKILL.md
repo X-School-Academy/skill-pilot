@@ -5,7 +5,7 @@ description: Initialize and verify playwright-cli with Chrome and the Playwright
 
 # Init Playwright CLI
 
-Verify that `playwright-cli`, Chrome, and the Playwright MCP Bridge extension are all working
+Verify that `playwright-cli`, Chrome, and the Playwright MCP Bridge extension are ready
 before any browser automation is attempted.
 
 ## When to Use This Skill
@@ -25,9 +25,10 @@ As an expert in your assigned roles, you must announce your actions before perfo
 
 As a {Role, and Role-XYZ if have more roles}, I will {action description}
 
-## Preconditions
+## Other Agent Skills Required
 
-None — this skill is self-contained.
+- `key-safe`
+- `playwright-cli`
 
 ## Workflow Usage Requirement
 
@@ -54,20 +55,15 @@ playwright-cli --version
 ### Step 2: Test browser + extension bridge
 
 ```bash
-playwright-cli open https://www.google.com --extension --headed
+playwright-cli open --extension --headed
 ```
-Notice:
 
-The Chrome extension may wait for the user to authenticate browser use, so this is a long-running command. If the command does not return, ask the user to check Chrome and approve the extension. Do not time it out; check the process periodically until it returns the text below or other errors.
+Treat this as an immediate readiness check:
 
-```markdown
-### Browser `default` opened with pid 44554.
-- default:
-  - browser-type: chrome
-  - user-data-dir: <in-memory>
-  - headed: true
-any more other response
-```
+- If it returns quickly with `Browser \`default\` opened with pid ...`, the browser bridge is ready.
+- If it does **not** return immediately, assume the extension is missing or waiting for user permission.
+
+In that case, instruct the user to install or approve the **Playwright MCP Bridge** extension, then continue with Step 3.
 
 ### Step 3: Check any errors
 
@@ -77,7 +73,7 @@ any more other response
 pnpm exec playwright install chrome # install the official branded Google Chrome browser
 ```
 
-**Or if "Extension connection timeout" error appears:**
+**If the open command does not return immediately, or if "Extension connection timeout" appears:**
 
 Warn user: "About to open Chrome Web Store — this is a trusted Google site."
 
@@ -86,18 +82,50 @@ Ask user to open Chrome and install the **Playwright MCP Bridge** extension by u
 https://chromewebstore.google.com/detail/playwright-mcp-bridge/mmlmfjhmonkocbjadbfplnigmagldckm
 ```
 
-Once installed, retry the open command. Repeat until the browser opens successfully.
+After install, ask the user to paste:
 
-Check any errors until run `playwright-cli open https://www.google.com --extension --headed` without error and the Google website is opened.
-
-### Step 4: Report result
-
-Capture the playwright-cli version:
 ```bash
-playwright-cli --version
+PLAYWRIGHT_MCP_EXTENSION_TOKEN=token-string
 ```
 
-Output result as plain text, say "playwright-cli and Google chrome extension has installed, open any web URL using: `playwright-cli open URL --extension --headed`". If the user asked to save it to a file, write it there.
+If the user provides a token, verify it first without saving anything:
+
+```bash
+PLAYWRIGHT_MCP_EXTENSION_TOKEN=token-string playwright-cli open --extension --headed
+```
+
+The verification is successful only if the command responds immediately with text like:
+
+```text
+Browser `default` opened with pid 44554.
+```
+
+If verification succeeds, use the `key-safe` skill to save `PLAYWRIGHT_MCP_EXTENSION_TOKEN` into `config/.env`.
+
+If the token fails verification, do not save it. Tell the user the token is invalid and ask for a new token.
+
+If the user does not want to paste a token, tell them they can manually approve the extension every time browser automation starts.
+
+Repeat until `playwright-cli open --extension --headed` works immediately without waiting for approval.
+
+### Step 4: Report result of the browser opened
+
+```bash
+playwright-cli list
+```
+
+the output should be 
+
+```markdown
+### Browsers
+- default:
+  - status: open
+  - browser-type: chrome
+  - user-data-dir: <in-memory>
+  - headed: true
+```
+
+Output result as plain text, say "Default Google Chrome has been opened and is ready to use. Open any web URL using: `playwright-cli goto URL` by agent skill `playwright-cli`." If the user asked to save it to a file, write it there.
 
 ## Output
 
@@ -105,9 +133,10 @@ Plain text result shown to user (example):
 
 ```
 Playwright CLI: ready
-Chrome: installed
+Chrome: Opened and ready to use
 MCP Bridge extension: connected
-Open any web URL using: `playwright-cli open URL --extension --headed`
+Token setup: verified and saved with key-safe, or manual approval required
+Open any web URL using: `playwright-cli goto URL` by agent skill `playwright-cli`
 ```
 
 If user requested file output, write the same content to the specified path.
@@ -116,4 +145,5 @@ If user requested file output, write the same content to the specified path.
 
 - **pnpm not found**: use `npm install -g @playwright/cli@latest` instead
 - **Extension keeps timing out**: ensure the MCP Bridge extension is enabled in Chrome and not paused
+- **No token provided**: browser automation can still work, but the user may need to manually approve the extension each time
 - **Chrome opens but page doesn't load**: check network connectivity

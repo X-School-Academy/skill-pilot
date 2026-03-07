@@ -9,8 +9,8 @@ allowed-tools: Bash(playwright-cli:*)
 ## Quick start
 
 ```bash
-# open new browser
-playwright-cli open
+# open new browser when none is open
+playwright-cli open --extension --headed
 # navigate to a page
 playwright-cli goto https://playwright.dev
 # interact with the page using refs from the snapshot
@@ -28,9 +28,9 @@ playwright-cli close
 ### Core
 
 ```bash
-playwright-cli open
+playwright-cli open --extension --headed
 # open and navigate right away
-playwright-cli open https://example.com/
+playwright-cli open https://example.com/ --extension --headed
 playwright-cli goto https://playwright.dev
 playwright-cli type "search query"
 playwright-cli click e3
@@ -169,8 +169,8 @@ playwright-cli open --browser=chrome
 playwright-cli open --browser=firefox
 playwright-cli open --browser=webkit
 playwright-cli open --browser=msedge
-# Connect to browser via extension
-playwright-cli open --extension
+# Default browser-open command when no browser is open yet
+playwright-cli open --extension --headed
 
 # Use persistent profile (by default profile is in-memory)
 playwright-cli open --persistent
@@ -207,7 +207,7 @@ playwright-cli kill-all
 ## Example: Form submission
 
 ```bash
-playwright-cli open https://example.com/form
+playwright-cli open https://example.com/form --extension --headed
 playwright-cli snapshot
 
 playwright-cli fill e1 "user@example.com"
@@ -220,7 +220,7 @@ playwright-cli close
 ## Example: Multi-tab workflow
 
 ```bash
-playwright-cli open https://example.com
+playwright-cli open https://example.com --extension --headed
 playwright-cli tab-new https://example.com/other
 playwright-cli tab-list
 playwright-cli tab-select 0
@@ -231,7 +231,7 @@ playwright-cli close
 ## Example: Debugging with DevTools
 
 ```bash
-playwright-cli open https://example.com
+playwright-cli open https://example.com --extension --headed
 playwright-cli click e4
 playwright-cli fill e7 "test"
 playwright-cli console
@@ -240,7 +240,7 @@ playwright-cli close
 ```
 
 ```bash
-playwright-cli open https://example.com
+playwright-cli open https://example.com --extension --headed
 playwright-cli tracing-start
 playwright-cli click e4
 playwright-cli fill e7 "test"
@@ -257,3 +257,13 @@ playwright-cli close
 * **Test generation** [references/test-generation.md](references/test-generation.md)
 * **Tracing** [references/tracing.md](references/tracing.md)
 * **Video recording** [references/video-recording.md](references/video-recording.md)
+
+## Default browser-open rule
+
+If no browser session is already open, start one with:
+
+```bash
+playwright-cli open --extension --headed
+```
+
+Use `playwright-cli goto URL` after that to navigate. Only use another `open` variant when the user explicitly needs a different browser, profile, config, or startup URL.

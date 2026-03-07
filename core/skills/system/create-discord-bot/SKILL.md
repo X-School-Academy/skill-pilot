@@ -20,6 +20,11 @@ then securely save the bot token, server ID, and user ID to `config/.env`.
 - **SysOps Engineer**: Guide browser-based setup and save credentials securely
 - **Security Engineer**: Store token via keys-safe-guard only — never print full token value
 
+## Other Agent Skills Required
+
+- `key-safe`
+- `playwright-cli`
+
 ## Role Communication
 
 As an expert in your assigned roles, you must announce your actions before performing them using the following format:
@@ -83,7 +88,7 @@ Do not ask the user to manually click through routine setup pages when AI can do
 Open Discord in a headed browser:
 
 ```bash
-playwright-cli open https://discord.com/app --extension --headed
+playwright-cli goto https://discord.com/app
 ```
 
 AI should:
@@ -99,8 +104,8 @@ Only ask the user for manual help if Discord blocks one of those steps.
 
 ### Step 5: Create bot application in the Developer Portal
 
-```
-playwright-cli open https://discord.com/developers/applications --extension --headed
+```bash
+playwright-cli goto https://discord.com/developers/applications
 ```
 
 AI should perform:
