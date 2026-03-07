@@ -33,7 +33,7 @@ As a {Role, and Role-XYZ if have more roles}, I will {action description}
 
 ## Preconditions
 
-- `playwright-cli` is ready (run skill `init-playwright` if unsure)
+- `playwright-cli` is ready (run skill `init-playwright` if not installed)
 - Only use official Discord domains: `https://discord.com` and `https://discord.com/developers`
 
 ## Workflow Usage Requirement
@@ -54,6 +54,8 @@ core/bin/keys-safe-guard get_key_value OPENCLAW_DISCORD_BOT_TOKEN
 If the output shows a non-empty value, ask user whether to skip or replace it.
 
 ## Instructions
+
+Only ask the user for manual help if you cannot finish a step or need to verify as a human.
 
 ### Step 1: Check existing token
 
@@ -88,19 +90,21 @@ Do not ask the user to manually click through routine setup pages when AI can do
 Open Discord in a headed browser:
 
 ```bash
-playwright-cli goto https://discord.com/app
+playwright-cli goto https://discord.com/channels/@me
 ```
 
 AI should:
 1. Wait for the user to sign in if Discord shows the login screen.
 2. Detect whether a suitable server already exists.
-3. If no server exists, create one automatically:
-   - click **+**
+  - the server name contains `openclaw` or `skillpilot` depending on the workflow purpose
+  - the user has admin permission: open the server by clicking the server name in the left top to see if having `Server Settings` menu
+  - then ask user to conform the server name or create a new one
+3. If no server exists or need to create a new one, create one automatically:
+   - ask user to confirm to create a new server, or user tell to use any exist server
+   - click `Add a Server` button in the left tool bar
    - choose **Create My Own**
    - choose **For me and my friends**
-   - name it clearly, for example `OpenClaw` or the project name
-
-Only ask the user for manual help if Discord blocks one of those steps.
+   - name it clearly, default `OpenClaw` or `SkillPilot` depending on the workflow purpose
 
 ### Step 5: Create bot application in the Developer Portal
 
@@ -110,14 +114,16 @@ playwright-cli goto https://discord.com/developers/applications
 
 AI should perform:
 1. Wait for the user to sign in if the Developer Portal requires login.
-2. Click **New Application** → enter a clear name → **Create**
-3. Open the **Bot** tab and create the bot user if Discord shows an add/create bot button.
-4. Confirm or set the bot username.
-5. Enable **Privileged Gateway Intents**:
+2. Click `skip` in the onboard screen if have, and go to the developer portal directly.
+3. Click **New Application** → enter a clear name (`OpenClaw` or `SkillPilot` depending on the context) → **Create** (Tick the acccept terms checkbox first on behalf of the user)
+4. Open the **Bot** tab under overview 
+  - create a new bot (by the `create` button in the top right) if the current bot is not avaible
+  - Confirm or set the bot username.
+5. Scroll to **Privileged Gateway Intents**:
    - ✅ Message Content Intent (required)
    - ✅ Server Members Intent (recommended)
-6. Click **Reset Token** and confirm the reset dialog.
-7. Capture the token immediately.
+7. Click **Reset Token** and confirm the reset dialog (Ask user to verify if need).
+8. Capture the token immediately.
 
 Token handling rules:
 - Prefer reading or copying the token directly from the page via automation.
@@ -147,12 +153,12 @@ AI should try to collect IDs with the least manual work:
 3. Capture the user ID from the signed-in user profile/avatar menu if accessible
 
 If Discord blocks automated copy or context-menu access, ask the user only for the missing values:
-1. Right-click server icon → **Copy Server ID**
+1. Right-click server icon → **Copy Server ID** or find from url `https://discord.com/channels/{SERVER_ID}/{CHANNEL_ID}`
 2. Right-click own avatar → **Copy User ID**
 
 ### Step 8: Allow DMs from server members
 
-Right-click server icon → **Privacy Settings** → toggle **Direct Messages** ON.
+Right-click server icon → **Privacy Settings** → toggle **Direct Messages** ON if it is OFF
 
 ### Step 9: Save credentials to .env
 
