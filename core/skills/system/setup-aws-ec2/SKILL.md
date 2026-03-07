@@ -30,9 +30,7 @@ As a {Role, and Role-XYZ if have more roles}, I will {action description}
 - AWS credentials configured in `config/.env` — run skill `enable-aws-cli` if needed
 
 Verify:
-```bash
-core/bin/keys-safe-guard get_key_value AWS_ACCESS_KEY_ID AWS_REGION
-```
+- Use skill `key-safe` to confirm `AWS_ACCESS_KEY_ID` and `AWS_REGION` are available.
 
 ## Workflow Usage Requirement
 
@@ -59,7 +57,7 @@ If running, report it and exit. If stopped, offer to start it.
 Ask user to confirm or provide:
 - **Instance name** (default: `app-server`)
 - **Instance type** (default: `t4g.small`; show pricing if unsure)
-- **Region** (read from `.env` via `core/bin/keys-safe-guard get_key_value AWS_REGION`)
+- **Region** (read from `.env` via skill `key-safe`)
 - **VPC name** (default: `vpc-<instance-name>`)
 - **Security group extra ports** (default: SSH only; ask if any ports should be open)
 
@@ -74,9 +72,7 @@ t4g.small — 2 vCPU, 2 GiB RAM, ARM Graviton2
 
 ### Step 2: Read region from .env
 
-```bash
-core/bin/keys-safe-guard get_key_value AWS_REGION
-```
+Use skill `key-safe` to get `AWS_REGION`.
 
 Use this value for all AWS API calls via `aws-ec2` skill.
 

@@ -32,9 +32,7 @@ As a {Role, and Role-XYZ if have more roles}, I will {action description}
 - Have the EC2 public IP and gateway token ready (from the install step output)
 
 Verify AWS credentials:
-```bash
-core/bin/keys-safe-guard get_key_value AWS_ACCESS_KEY_ID
-```
+- Use skill `key-safe` to confirm `AWS_ACCESS_KEY_ID` is available.
 
 ## Workflow Usage Requirement
 

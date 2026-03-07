@@ -36,9 +36,7 @@ As a {Role, and Role-XYZ if have more roles}, I will {action description}
   Run skill `connect-ec2-ssh` if no session is active.
 
 - Discord bot token configured in `config/.env`:
-  ```bash
-  core/bin/keys-safe-guard get_key_value OPENCLAW_DISCORD_BOT_TOKEN OPENCLAW_DISCORD_SERVER_ID OPENCLAW_DISCORD_USER_ID
-  ```
+  Use skill `key-safe` to get `OPENCLAW_DISCORD_BOT_TOKEN`, `OPENCLAW_DISCORD_SERVER_ID`, and `OPENCLAW_DISCORD_USER_ID`.
   Run skill `create-discord-bot` if not set.
 
 - **OpenAI Codex account:** Confirm with user that they have a ChatGPT/Codex subscription — required for the OAuth step.
@@ -98,9 +96,10 @@ Capture the output as `OPENCLAW_GATEWAY_TOKEN`. Show it to the user and ask them
 ### Step 3: Read Discord credentials from local .env
 
 Run locally:
-```bash
-core/bin/keys-safe-guard get_key_value OPENCLAW_DISCORD_BOT_TOKEN OPENCLAW_DISCORD_SERVER_ID OPENCLAW_DISCORD_USER_ID
-```
+Use skill `key-safe` to get:
+- `OPENCLAW_DISCORD_BOT_TOKEN`
+- `OPENCLAW_DISCORD_SERVER_ID`
+- `OPENCLAW_DISCORD_USER_ID`
 
 Use these values to construct the config. Do not log `OPENCLAW_DISCORD_BOT_TOKEN` in full.
 

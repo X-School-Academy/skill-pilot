@@ -32,9 +32,7 @@ As a {Role, and Role-XYZ if have more roles}, I will {action description}
   (from skill `setup-aws-ec2` output or provided by user)
 
 Verify AWS credentials:
-```bash
-core/bin/keys-safe-guard get_key_value AWS_ACCESS_KEY_ID AWS_REGION
-```
+- Use skill `key-safe` to confirm `AWS_ACCESS_KEY_ID` and `AWS_REGION` are available.
 
 ## Workflow Usage Requirement
 
@@ -60,9 +58,7 @@ Ask user (or read from previous skill output) for:
 - **SSH profile name** (default: `ec2-tmp`)
 
 Read region if not provided:
-```bash
-core/bin/keys-safe-guard get_key_value AWS_REGION
-```
+- Use skill `key-safe` to get `AWS_REGION`.
 
 ### Step 2: Generate temporary SSH key
 
