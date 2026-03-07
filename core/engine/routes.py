@@ -3554,10 +3554,10 @@ async def discord_token_save(request: Request):
                 )
             },
         )
-    # Keep the running engine environment in sync.
+    # Keep the running engine environment in sync for callers that still rely on this route.
     os.environ["DISCORD_BOT_TOKEN"] = token
 
-    return {"status": "ok", "message": "Token saved. Restart the engine to connect the bot."}
+    return {"status": "ok", "message": "Token saved and applied to the running engine."}
 
 
 @router.post("/api/create_course_plan")

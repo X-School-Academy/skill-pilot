@@ -20,7 +20,7 @@ from typing import Any
 import json5
 
 from llm_service import build_terminal_command, get_provider, llm_get_text, load_llm_providers
-from safe_dotenv import loaded_env_key_names, safe_env
+from safe_dotenv import apply_env_key_values, loaded_env_key_names, safe_env
 from session_agent_store import get_session_agent_meta, set_session_agent_meta
 
 from .sync import MCPClient, create_client, is_server_enabled, load_mcp_configs
@@ -547,6 +547,19 @@ class Bridge:
             return {"status": "ok", "result": result}
         if operation == "safe_dotenv_key_names":
             return {"status": "ok", "result": {"keys": loaded_env_key_names()}}
+        if operation == "safe_dotenv_set_key_values":
+            updates_raw = payload.get("updates")
+            if not isinstance(updates_raw, dict) or not updates_raw:
+                raise MCPError("safe_dotenv_set_key_values requires a non-empty updates object")
+            updates: dict[str, str] = {}
+            for key, value in updates_raw.items():
+                if not isinstance(key, str) or not key:
+                    raise MCPError("safe_dotenv_set_key_values update keys must be non-empty strings")
+                if not isinstance(value, str):
+                    raise MCPError(f"safe_dotenv_set_key_values value for '{key}' must be a string")
+                updates[key] = value
+            applied = apply_env_key_values(updates)
+            return {"status": "ok", "result": {"updated": applied}}
 
         server_id = payload.get("server_id")
         if not isinstance(server_id, str) or not server_id:

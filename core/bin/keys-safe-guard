@@ -7,6 +7,7 @@ ENV_FILE="${REPO_ROOT}/config/.env"
 PYTHON_BIN="${REPO_ROOT}/core/bin/python"
 MANAGE_SCRIPT="${REPO_ROOT}/core/engine/safe_dotenv/manage.py"
 TOOL_CLI="${REPO_ROOT}/core/bin/tool-cli"
+ENGINE_SOCKET="${REPO_ROOT}/.skillpilot/temp/engine.sock"
 
 # --- Argument parsing ---
 USE_GUI=false
@@ -324,6 +325,28 @@ do_put_key_values() {
     echo "put_key_values requires one or more KEY=VALUE arguments."
     usage
     return 2
+  fi
+
+  local payload response status
+  if [[ -S "${ENGINE_SOCKET}" ]]; then
+    payload="$("${PYTHON_BIN}" -c '
+import json, sys
+updates = {}
+for item in sys.argv[1:]:
+    key, value = item.split("=", 1)
+    updates[key] = value
+print(json.dumps({"operation": "safe_dotenv_set_key_values", "updates": updates}, separators=(",", ":")))
+' "${remaining_args[@]}")"
+    if ! response="$("${TOOL_CLI}" request "${payload}" 2>/dev/null)"; then
+      echo "Unable to update engine environment in memory. Aborting before writing ${ENV_FILE}." >&2
+      return 1
+    fi
+    status="$("${PYTHON_BIN}" -c 'import json,sys; d=json.loads(sys.stdin.read()); print(d.get("status",""))' <<< "${response}" 2>/dev/null || true)"
+    if [[ "${status}" != "ok" ]]; then
+      echo "Engine refused in-memory env update. Aborting before writing ${ENV_FILE}." >&2
+      echo "${response}" >&2
+      return 1
+    fi
   fi
 
   # When the env file is writable by the current user (key safe guard not enabled),
