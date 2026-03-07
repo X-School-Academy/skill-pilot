@@ -243,6 +243,7 @@ export default function HomePage() {
   const [workflowSessionActive, setWorkflowSessionActive] = useState(false);
   const [workflowExecuteStatus, setWorkflowExecuteStatus] = useState<WorkflowExecuteStatus | null>(null);
   const [newSessionNextNodeTrigger, setNewSessionNextNodeTrigger] = useState<NextNodeTrigger>('auto_continue');
+  const [newSessionWorkflowResumeAvailable, setNewSessionWorkflowResumeAvailable] = useState(false);
   const [newSessionWorkflowResume, setNewSessionWorkflowResume] = useState(false);
   const [continuingWorkflow, setContinuingWorkflow] = useState(false);
   const [defaultLlmProvider, setDefaultLlmProvider] = useState<string>('');
@@ -548,11 +549,12 @@ export default function HomePage() {
 
   useEffect(() => {
     if (router.isReady) {
-      const { prompt, new_session, view, workflow, next_node_trigger, resume } = router.query;
+      const { prompt, new_session, view, workflow, next_node_trigger, resume, resume_available } = router.query;
       if (new_session === 'true' && prompt) {
         setPromptText(prompt as string);
         setNewSessionWorkflow(typeof workflow === 'string' && workflow ? workflow : null);
         setNewSessionNextNodeTrigger(next_node_trigger === 'start_by_prompt' ? 'start_by_prompt' : 'auto_continue');
+        setNewSessionWorkflowResumeAvailable(resume_available === 'true');
         setNewSessionWorkflowResume(resume === 'true');
         setActiveView('home');
       } else if (typeof view === 'string' && view) {
@@ -617,6 +619,7 @@ export default function HomePage() {
         setPromptText('');
         setNewSessionWorkflow(null);
         setNewSessionNextNodeTrigger('auto_continue');
+        setNewSessionWorkflowResumeAvailable(false);
         setNewSessionWorkflowResume(false);
       }
     } catch (err) {
@@ -829,6 +832,16 @@ export default function HomePage() {
               </Button>
             )}
         </Group>
+        {newSessionWorkflow && newSessionWorkflowResumeAvailable && (
+          <Group position="center">
+            <Checkbox
+              label="Resume"
+              checked={newSessionWorkflowResume}
+              onChange={(e) => setNewSessionWorkflowResume(e.currentTarget.checked)}
+              size="xs"
+            />
+          </Group>
+        )}
       </Stack>
     </div>
   );

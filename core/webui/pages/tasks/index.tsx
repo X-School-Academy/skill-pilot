@@ -157,8 +157,6 @@ export default function TasksPage() {
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
   const [executeNextNodeTrigger, setExecuteNextNodeTrigger] = useState<NextNodeTrigger>('auto_continue');
   const [selectedReferenceFiles, setSelectedReferenceFiles] = useState<string[]>([]);
-  const [executeResumeAvailable, setExecuteResumeAvailable] = useState(false);
-  const [executeResume, setExecuteResume] = useState(false);
   const [navbarWidth, setNavbarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
 
@@ -465,8 +463,6 @@ export default function TasksPage() {
     setSelectedWorkflow(null);
     setExecuteNextNodeTrigger('auto_continue');
     setSelectedReferenceFiles([]);
-    setExecuteResumeAvailable(false);
-    setExecuteResume(false);
     setExecuteOpened(true);
     setNotice('');
     setEditorError('');
@@ -489,17 +485,6 @@ export default function TasksPage() {
       workflowPath: executeMode === 'workflow' && target ? workflowProjectPath(target) : undefined,
     });
     if (!saveResult.saved) return;
-    if (executeMode === 'workflow') {
-      if (saveResult.workflowResumeAvailable && !executeResumeAvailable) {
-        setExecuteResumeAvailable(true);
-        setExecuteResume(false);
-        return;
-      }
-      if (!saveResult.workflowResumeAvailable && executeResumeAvailable) {
-        setExecuteResumeAvailable(false);
-        setExecuteResume(false);
-      }
-    }
 
     const instructionPath = taskProjectPath(currentTask);
     const workspacePath = currentDirectory ? taskProjectPath(currentDirectory) : 'workspace/tasks';
@@ -514,7 +499,7 @@ export default function TasksPage() {
     setExecuteOpened(false);
     if (executeMode === 'workflow') {
       void router.push(
-        `/?new_session=true&prompt=${encodeURIComponent(prompt)}&workflow=${encodeURIComponent(`${target}.json`)}&next_node_trigger=${encodeURIComponent(executeNextNodeTrigger)}&resume=${executeResume ? 'true' : 'false'}`,
+        `/?new_session=true&prompt=${encodeURIComponent(prompt)}&workflow=${encodeURIComponent(`${target}.json`)}&next_node_trigger=${encodeURIComponent(executeNextNodeTrigger)}&resume=false&resume_available=${saveResult.workflowResumeAvailable ? 'true' : 'false'}`,
       );
       return;
     }
@@ -815,18 +800,6 @@ export default function TasksPage() {
               <Text size="sm" color="dimmed">No other files found in this directory.</Text>
             )}
           </div>
-
-          {executeMode === 'workflow' && executeResumeAvailable ? (
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={executeResume}
-                onChange={(e) => setExecuteResume(e.currentTarget.checked)}
-              />
-              <span>Resume</span>
-            </label>
-          ) : null}
-
           <Group position="right">
             <Button variant="default" onClick={() => setExecuteOpened(false)}>Cancel</Button>
             <Button
