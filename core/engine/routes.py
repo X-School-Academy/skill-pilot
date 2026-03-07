@@ -50,6 +50,7 @@ from mcp_servers.mcp_to_skills.workflow_execution import (
     node_name,
     node_output_path,
     parse_instruction_file_path,
+    parse_reference_file_paths,
     parse_task_workspace,
     workflow_task_output_dir,
 )
@@ -1057,8 +1058,16 @@ def _execute_workflow_in_terminal_thread(
     try:
         graph = load_workflow_graph(workflow_file, WORKFLOWS_DIR)
         instruction_file_path = parse_instruction_file_path(workflow_prompt)
+        reference_file_paths = parse_reference_file_paths(workflow_prompt)
         if instruction_file_path:
-            task_run_id, _ = workflow_task_output_dir(_terminal_workflow_base_dir(), instruction_file_path)
+            workflow_project_path = f"core/workflows/{graph.workflow_relative_path}"
+            task_run_id, _ = workflow_task_output_dir(
+                _terminal_workflow_base_dir(),
+                instruction_file_path,
+                workflow_project_path,
+                repo_root=_REPO_ROOT,
+                reference_file_paths=reference_file_paths,
+            )
             run_id, output_root = create_run_output_dir(
                 _terminal_workflow_base_dir(),
                 run_id=task_run_id,
@@ -2513,8 +2522,25 @@ def _task_instruction_project_path(task_path: str) -> str:
     return f"workspace/tasks/{trimmed}" if trimmed else "workspace/tasks"
 
 
-def _task_workflow_output_dir(task_path: str) -> tuple[str, Path]:
-    return workflow_task_output_dir(_terminal_workflow_base_dir(), _task_instruction_project_path(task_path))
+def _task_workflow_project_path(workflow_path: str) -> str:
+    trimmed = str(workflow_path or "").strip().replace("\\", "/").lstrip("/")
+    if trimmed.startswith("core/workflows/"):
+        return trimmed
+    return f"core/workflows/{trimmed}" if trimmed else "core/workflows"
+
+
+def _task_workflow_output_dir(
+    task_path: str,
+    workflow_path: str,
+    reference_file_paths: list[str] | None = None,
+) -> tuple[str, Path]:
+    return workflow_task_output_dir(
+        _terminal_workflow_base_dir(),
+        _task_instruction_project_path(task_path),
+        _task_workflow_project_path(workflow_path),
+        repo_root=_REPO_ROOT,
+        reference_file_paths=reference_file_paths,
+    )
 
 
 def _unique_task_file_path(parent: Path, file_name: str) -> Path:
@@ -2622,12 +2648,19 @@ def task_content(path: str):
 @router.post("/api/tasks/save")
 def task_save(payload: Dict[str, Any]):
     raw_path = str(payload.get("path") or "").strip()
+    workflow_path = str(payload.get("workflow_path") or "").strip()
+    reference_files_raw = payload.get("reference_files")
     content = payload.get("content")
     check_workflow_resume = _bool_with_default(payload.get("check_workflow_resume"), False)
     if not raw_path:
         return JSONResponse(status_code=400, content={"error": "Missing task path"})
     if not isinstance(content, str):
         return JSONResponse(status_code=400, content={"error": "Invalid content"})
+    reference_file_paths = [
+        str(item).strip()
+        for item in (reference_files_raw if isinstance(reference_files_raw, list) else [])
+        if isinstance(item, str) and str(item).strip()
+    ]
 
     try:
         file_path = _safe_tasks_path(raw_path)
@@ -2639,7 +2672,9 @@ def task_save(payload: Dict[str, Any]):
     file_path.write_text(content, encoding="utf-8")
     response: Dict[str, Any] = {"status": "ok"}
     if check_workflow_resume:
-        run_id, output_root = _task_workflow_output_dir(raw_path)
+        if not workflow_path:
+            return JSONResponse(status_code=400, content={"error": "workflow_path is required when checking workflow resume"})
+        run_id, output_root = _task_workflow_output_dir(raw_path, workflow_path, reference_file_paths)
         response.update(
             {
                 "workflow_resume_available": output_root.exists(),

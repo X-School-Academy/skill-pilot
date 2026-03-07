@@ -309,7 +309,7 @@ export default function TasksPage() {
     }
   };
 
-  const saveCurrentTaskContent = async (options?: { checkWorkflowResume?: boolean }): Promise<SaveTaskResult> => {
+  const saveCurrentTaskContent = async (options?: { checkWorkflowResume?: boolean; workflowPath?: string }): Promise<SaveTaskResult> => {
     if (!currentTask || selectedKind === 'image' || selectedKind === 'audio' || selectedKind === 'video') {
       return { saved: true, workflowResumeAvailable: false };
     }
@@ -321,6 +321,8 @@ export default function TasksPage() {
         path: currentTask,
         content: editorContent,
         check_workflow_resume: Boolean(options?.checkWorkflowResume),
+        workflow_path: options?.workflowPath || '',
+        reference_files: selectedReferenceFiles.map((path) => taskProjectPath(path)),
       });
       setNotice('Saved.');
       await fetchTree();
@@ -482,7 +484,10 @@ export default function TasksPage() {
     if (!currentTask) return;
     const target = executeMode === 'skill' ? selectedSkill : selectedWorkflow;
     if (!target) return;
-    const saveResult = await saveCurrentTaskContent({ checkWorkflowResume: executeMode === 'workflow' });
+    const saveResult = await saveCurrentTaskContent({
+      checkWorkflowResume: executeMode === 'workflow',
+      workflowPath: executeMode === 'workflow' && target ? workflowProjectPath(target) : undefined,
+    });
     if (!saveResult.saved) return;
     if (executeMode === 'workflow') {
       if (saveResult.workflowResumeAvailable && !executeResumeAvailable) {

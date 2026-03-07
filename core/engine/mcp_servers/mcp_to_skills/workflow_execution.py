@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -14,6 +15,8 @@ from workflow_editor_utils import validate_workflow_doc
 
 _WORKSPACE_LINE_RE = re.compile(r"(?mi)^Workspace path:\s*(.+?)\s*$")
 _INSTRUCTION_LINE_RE = re.compile(r"(?mi)^Follow the instructions defined at\s+(.+?)\s*$")
+_REFERENCE_FILES_BLOCK_RE = re.compile(r"(?mis)^Reference files:\s*\n((?:- .+\n?)*)")
+_REFERENCE_FILE_LINE_RE = re.compile(r"(?mi)^-\s+(.+?)\s*$")
 _SAFE_FILENAME_RE = re.compile(r"[^a-z0-9]+")
 
 
@@ -64,6 +67,21 @@ def parse_instruction_file_path(workflow_prompt: str) -> str | None:
     return value or None
 
 
+def parse_reference_file_paths(workflow_prompt: str) -> list[str]:
+    match = _REFERENCE_FILES_BLOCK_RE.search(str(workflow_prompt or ""))
+    if not match:
+        return []
+    block = match.group(1)
+    results: list[str] = []
+    for item in _REFERENCE_FILE_LINE_RE.findall(block):
+        value = str(item or "").strip()
+        if value.endswith("."):
+            value = value[:-1].rstrip()
+        if value:
+            results.append(value)
+    return results
+
+
 def repo_root_from_workflow_file(workflow_file: Path) -> Path:
     current = workflow_file.resolve()
     for parent in current.parents:
@@ -81,16 +99,67 @@ def display_repo_relative(path: Path, repo_root: Path) -> str:
         return str(candidate)
 
 
-def workflow_task_run_id(instruction_file_path: str) -> str:
+def _read_project_file_content(repo_root: Path, project_path: str) -> str:
+    trimmed = str(project_path or "").strip().replace("\\", "/").lstrip("/")
+    if not trimmed:
+        return ""
+    candidate = (repo_root / trimmed).resolve()
+    root = repo_root.resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return ""
+    try:
+        return candidate.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def workflow_task_run_id(
+    instruction_file_path: str,
+    workflow_file_path: str | None = None,
+    *,
+    repo_root: Path | None = None,
+    reference_file_paths: list[str] | None = None,
+) -> str:
     value = str(instruction_file_path or "").strip().lower()
     if value.endswith(".md"):
         value = value[:-3]
-    value = _SAFE_FILENAME_RE.sub("-", value).strip("-")
-    return value or "workflow-task"
+    value = _SAFE_FILENAME_RE.sub("-", value).strip("-") or "workflow-task"
+    normalized_instruction = str(instruction_file_path or "").strip()
+    normalized_workflow = str(workflow_file_path or "").strip()
+    normalized_refs = [str(item or "").strip() for item in (reference_file_paths or []) if str(item or "").strip()]
+    fingerprint_payload: dict[str, Any] = {
+        "workflow_file": normalized_workflow,
+        "instruction_file": normalized_instruction,
+        "reference_files": normalized_refs,
+    }
+    if repo_root is not None:
+        fingerprint_payload["instruction_content"] = _read_project_file_content(repo_root, normalized_instruction)
+        fingerprint_payload["reference_contents"] = [
+            {"path": path, "content": _read_project_file_content(repo_root, path)}
+            for path in normalized_refs
+        ]
+    suffix = hashlib.sha1(
+        json.dumps(fingerprint_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()[:10]
+    return f"{value}-{suffix}"
 
 
-def workflow_task_output_dir(base_dir: Path, instruction_file_path: str) -> tuple[str, Path]:
-    run_id = workflow_task_run_id(instruction_file_path)
+def workflow_task_output_dir(
+    base_dir: Path,
+    instruction_file_path: str,
+    workflow_file_path: str | None = None,
+    *,
+    repo_root: Path | None = None,
+    reference_file_paths: list[str] | None = None,
+) -> tuple[str, Path]:
+    run_id = workflow_task_run_id(
+        instruction_file_path,
+        workflow_file_path,
+        repo_root=repo_root,
+        reference_file_paths=reference_file_paths,
+    )
     return run_id, base_dir / run_id
 
 
