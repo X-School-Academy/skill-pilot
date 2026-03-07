@@ -817,10 +817,18 @@ export default function HomePage() {
             size="xs"
           />
         </Group>
-        <Group position="center">
+        <Group position="center" spacing="md" align="center">
             <Button size="md" onClick={() => void handleStart()} disabled={!promptText.trim() || startingSession} loading={startingSession}>
                 Start
             </Button>
+            {newSessionWorkflow && newSessionWorkflowResumeAvailable && (
+              <Checkbox
+                label="Resume Workflow"
+                checked={newSessionWorkflowResume}
+                onChange={(e) => setNewSessionWorkflowResume(e.currentTarget.checked)}
+                size="xs"
+              />
+            )}
             {workflowSessionActive && workflowExecuteStatus?.waiting_for_continue && (
               <Button
                 size="md"
@@ -832,16 +840,6 @@ export default function HomePage() {
               </Button>
             )}
         </Group>
-        {newSessionWorkflow && newSessionWorkflowResumeAvailable && (
-          <Group position="center">
-            <Checkbox
-              label="Resume"
-              checked={newSessionWorkflowResume}
-              onChange={(e) => setNewSessionWorkflowResume(e.currentTarget.checked)}
-              size="xs"
-            />
-          </Group>
-        )}
       </Stack>
     </div>
   );
