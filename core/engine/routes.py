@@ -49,7 +49,9 @@ from mcp_servers.mcp_to_skills.workflow_execution import (
     load_workflow_graph,
     node_name,
     node_output_path,
+    parse_instruction_file_path,
     parse_task_workspace,
+    workflow_task_output_dir,
 )
 
 from llm_service import (
@@ -1010,6 +1012,7 @@ def _execute_workflow_in_terminal_thread(
     workflow_prompt: str,
     session_name: str,
     run_token: str,
+    resume: bool,
     sandbox: Any,
     auto: Any,
     network: Any,
@@ -1032,10 +1035,19 @@ def _execute_workflow_in_terminal_thread(
 
     try:
         graph = load_workflow_graph(workflow_file, WORKFLOWS_DIR)
-        run_id, output_root = create_run_output_dir(
-            _REPO_ROOT / ".skillpilot" / "temp" / "terminal-workflow",
-            cleanup_base_dir=True,
-        )
+        instruction_file_path = parse_instruction_file_path(workflow_prompt)
+        if instruction_file_path:
+            task_run_id, _ = workflow_task_output_dir(_terminal_workflow_base_dir(), instruction_file_path)
+            run_id, output_root = create_run_output_dir(
+                _terminal_workflow_base_dir(),
+                run_id=task_run_id,
+                cleanup_output_dir=not resume,
+            )
+        else:
+            run_id, output_root = create_run_output_dir(
+                _terminal_workflow_base_dir(),
+                cleanup_base_dir=True,
+            )
         task_workspace = parse_task_workspace(workflow_prompt)
         if run_is_current():
             _set_workflow_execute_state(
@@ -1089,6 +1101,23 @@ def _execute_workflow_in_terminal_thread(
             data = node.get("data") if isinstance(node.get("data"), dict) else {}
             provider_id = str(data.get("provider_id") or "").strip()
             upstream_node_ids = list(graph.upstream_agents[node_id])
+            output_file = node_output_path(output_root, node_id, node_name(node))
+            if resume and output_file.exists():
+                logger.info(
+                    "[workflow-execute] node_resume_skip node_id=%s node_name=%s output_file=%s",
+                    node_id,
+                    node_name(node),
+                    output_file,
+                )
+                node_status[node_id] = "done"
+                for downstream_id in graph.downstream_agents.get(node_id, []):
+                    pending_upstream_count[downstream_id] = max(0, pending_upstream_count[downstream_id] - 1)
+                    if pending_upstream_count[downstream_id] == 0:
+                        if has_failed_upstream[downstream_id]:
+                            node_status[downstream_id] = "blocked"
+                        else:
+                            ready.append(downstream_id)
+                continue
             prompt = build_node_prompt(
                 graph=graph,
                 current_node=node,
@@ -1098,7 +1127,6 @@ def _execute_workflow_in_terminal_thread(
                 task_workspace=task_workspace,
                 start_by_prompt_mode=(next_node_trigger == "start_by_prompt"),
             )
-            output_file = node_output_path(output_root, node_id, node_name(node))
             if output_file.exists():
                 try:
                     output_file.unlink()
@@ -2431,6 +2459,19 @@ def _normalize_task_file_name(value: str) -> str:
     return f"{safe_stem}{safe_suffix}"
 
 
+def _terminal_workflow_base_dir() -> Path:
+    return _REPO_ROOT / ".skillpilot" / "temp" / "terminal-workflow"
+
+
+def _task_instruction_project_path(task_path: str) -> str:
+    trimmed = str(task_path or "").strip().replace("\\", "/").lstrip("/")
+    return f"workspace/tasks/{trimmed}" if trimmed else "workspace/tasks"
+
+
+def _task_workflow_output_dir(task_path: str) -> tuple[str, Path]:
+    return workflow_task_output_dir(_terminal_workflow_base_dir(), _task_instruction_project_path(task_path))
+
+
 def _unique_task_file_path(parent: Path, file_name: str) -> Path:
     candidate = parent / file_name
     stem = candidate.stem
@@ -2537,6 +2578,7 @@ def task_content(path: str):
 def task_save(payload: Dict[str, Any]):
     raw_path = str(payload.get("path") or "").strip()
     content = payload.get("content")
+    check_workflow_resume = _bool_with_default(payload.get("check_workflow_resume"), False)
     if not raw_path:
         return JSONResponse(status_code=400, content={"error": "Missing task path"})
     if not isinstance(content, str):
@@ -2550,7 +2592,17 @@ def task_save(payload: Dict[str, Any]):
         return JSONResponse(status_code=404, content={"error": str(exc)})
 
     file_path.write_text(content, encoding="utf-8")
-    return {"status": "ok"}
+    response: Dict[str, Any] = {"status": "ok"}
+    if check_workflow_resume:
+        run_id, output_root = _task_workflow_output_dir(raw_path)
+        response.update(
+            {
+                "workflow_resume_available": output_root.exists(),
+                "workflow_run_id": run_id,
+                "workflow_output_root": str(output_root),
+            }
+        )
+    return response
 
 
 @router.post("/api/tasks/create")
@@ -2749,6 +2801,7 @@ def workflows_execute(payload: Dict[str, Any]):
     workflow = str(payload.get("workflow") or "").strip()
     workflow_prompt = str(payload.get("prompt") or "").strip()
     native_terminal = _bool_with_default(payload.get("native_terminal"), False)
+    resume = _bool_with_default(payload.get("resume"), False)
     sandbox = payload.get("sandbox")
     auto = payload.get("auto")
     network = payload.get("network")
@@ -2792,6 +2845,7 @@ def workflows_execute(payload: Dict[str, Any]):
             "workflow_prompt": workflow_prompt,
             "session_name": session_name,
             "run_token": run_token,
+            "resume": resume,
             "sandbox": sandbox,
             "auto": auto,
             "network": network,

@@ -243,6 +243,7 @@ export default function HomePage() {
   const [workflowSessionActive, setWorkflowSessionActive] = useState(false);
   const [workflowExecuteStatus, setWorkflowExecuteStatus] = useState<WorkflowExecuteStatus | null>(null);
   const [newSessionNextNodeTrigger, setNewSessionNextNodeTrigger] = useState<NextNodeTrigger>('auto_continue');
+  const [newSessionWorkflowResume, setNewSessionWorkflowResume] = useState(false);
   const [continuingWorkflow, setContinuingWorkflow] = useState(false);
   const [defaultLlmProvider, setDefaultLlmProvider] = useState<string>('');
   const [profileData, setProfileData] = useState<Record<string, string>>({});
@@ -547,11 +548,12 @@ export default function HomePage() {
 
   useEffect(() => {
     if (router.isReady) {
-      const { prompt, new_session, view, workflow, next_node_trigger } = router.query;
+      const { prompt, new_session, view, workflow, next_node_trigger, resume } = router.query;
       if (new_session === 'true' && prompt) {
         setPromptText(prompt as string);
         setNewSessionWorkflow(typeof workflow === 'string' && workflow ? workflow : null);
         setNewSessionNextNodeTrigger(next_node_trigger === 'start_by_prompt' ? 'start_by_prompt' : 'auto_continue');
+        setNewSessionWorkflowResume(resume === 'true');
         setActiveView('home');
       } else if (typeof view === 'string' && view) {
         const validViews: ActiveView[] = [
@@ -582,6 +584,7 @@ export default function HomePage() {
             network: newSessionNetwork,
             native_terminal: newSessionNativeTerminal,
             next_node_trigger: newSessionNextNodeTrigger,
+            resume: newSessionWorkflowResume,
           }
         : {
             provider_id: provider,
@@ -614,6 +617,7 @@ export default function HomePage() {
         setPromptText('');
         setNewSessionWorkflow(null);
         setNewSessionNextNodeTrigger('auto_continue');
+        setNewSessionWorkflowResume(false);
       }
     } catch (err) {
       console.error('Failed to start session:', err);

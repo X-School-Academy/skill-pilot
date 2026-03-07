@@ -13,6 +13,7 @@ from workflow_editor_utils import validate_workflow_doc
 
 
 _WORKSPACE_LINE_RE = re.compile(r"(?mi)^Workspace path:\s*(.+?)\s*$")
+_INSTRUCTION_LINE_RE = re.compile(r"(?mi)^Follow the instructions defined at\s+(.+?)\s*$")
 _SAFE_FILENAME_RE = re.compile(r"[^a-z0-9]+")
 
 
@@ -53,6 +54,16 @@ def parse_task_workspace(workflow_prompt: str) -> str | None:
     return value or None
 
 
+def parse_instruction_file_path(workflow_prompt: str) -> str | None:
+    match = _INSTRUCTION_LINE_RE.search(str(workflow_prompt or ""))
+    if not match:
+        return None
+    value = match.group(1).strip()
+    if value.endswith("."):
+        value = value[:-1].rstrip()
+    return value or None
+
+
 def repo_root_from_workflow_file(workflow_file: Path) -> Path:
     current = workflow_file.resolve()
     for parent in current.parents:
@@ -70,7 +81,26 @@ def display_repo_relative(path: Path, repo_root: Path) -> str:
         return str(candidate)
 
 
-def create_run_output_dir(base_dir: Path, *, cleanup_base_dir: bool = False) -> tuple[str, Path]:
+def workflow_task_run_id(instruction_file_path: str) -> str:
+    value = str(instruction_file_path or "").strip().lower()
+    if value.endswith(".md"):
+        value = value[:-3]
+    value = _SAFE_FILENAME_RE.sub("-", value).strip("-")
+    return value or "workflow-task"
+
+
+def workflow_task_output_dir(base_dir: Path, instruction_file_path: str) -> tuple[str, Path]:
+    run_id = workflow_task_run_id(instruction_file_path)
+    return run_id, base_dir / run_id
+
+
+def create_run_output_dir(
+    base_dir: Path,
+    *,
+    cleanup_base_dir: bool = False,
+    run_id: str | None = None,
+    cleanup_output_dir: bool = False,
+) -> tuple[str, Path]:
     if cleanup_base_dir and base_dir.exists():
         for child in base_dir.iterdir():
             if child.is_dir():
@@ -81,10 +111,18 @@ def create_run_output_dir(base_dir: Path, *, cleanup_base_dir: bool = False) -> 
                 except OSError:
                     pass
     base_dir.mkdir(parents=True, exist_ok=True)
-    run_id = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:8]
-    output_root = base_dir / run_id
+    chosen_run_id = run_id or (time.strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:8])
+    output_root = base_dir / chosen_run_id
+    if cleanup_output_dir and output_root.exists():
+        if output_root.is_dir():
+            shutil.rmtree(output_root, ignore_errors=True)
+        else:
+            try:
+                output_root.unlink()
+            except OSError:
+                pass
     output_root.mkdir(parents=True, exist_ok=True)
-    return run_id, output_root
+    return chosen_run_id, output_root
 
 
 def safe_node_filename_prefix(name: str) -> str:

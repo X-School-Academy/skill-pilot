@@ -59,6 +59,11 @@ interface LlmProvider {
   name: string;
 }
 
+interface SaveTaskResult {
+  saved: boolean;
+  workflowResumeAvailable: boolean;
+}
+
 type ExecuteMode = 'skill' | 'workflow';
 type NextNodeTrigger = 'auto_continue' | 'start_by_prompt';
 
@@ -152,6 +157,8 @@ export default function TasksPage() {
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
   const [executeNextNodeTrigger, setExecuteNextNodeTrigger] = useState<NextNodeTrigger>('auto_continue');
   const [selectedReferenceFiles, setSelectedReferenceFiles] = useState<string[]>([]);
+  const [executeResumeAvailable, setExecuteResumeAvailable] = useState(false);
+  const [executeResume, setExecuteResume] = useState(false);
   const [navbarWidth, setNavbarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
 
@@ -302,21 +309,30 @@ export default function TasksPage() {
     }
   };
 
-  const saveCurrentTaskContent = async (): Promise<boolean> => {
-    if (!currentTask || selectedKind === 'image' || selectedKind === 'audio' || selectedKind === 'video') return true;
+  const saveCurrentTaskContent = async (options?: { checkWorkflowResume?: boolean }): Promise<SaveTaskResult> => {
+    if (!currentTask || selectedKind === 'image' || selectedKind === 'audio' || selectedKind === 'video') {
+      return { saved: true, workflowResumeAvailable: false };
+    }
     setEditorSaving(true);
     setEditorError('');
     setNotice('');
     try {
-      await axios.post(`${API_BASE_URL}/tasks/save`, { path: currentTask, content: editorContent });
+      const res = await axios.post(`${API_BASE_URL}/tasks/save`, {
+        path: currentTask,
+        content: editorContent,
+        check_workflow_resume: Boolean(options?.checkWorkflowResume),
+      });
       setNotice('Saved.');
       await fetchTree();
       await fetchContent(currentTask);
-      return true;
+      return {
+        saved: true,
+        workflowResumeAvailable: Boolean(res.data?.workflow_resume_available),
+      };
     } catch (err: any) {
       console.error('Failed to save task content:', err);
       setEditorError(err?.response?.data?.error || 'Failed to save task content.');
-      return false;
+      return { saved: false, workflowResumeAvailable: false };
     } finally {
       setEditorSaving(false);
     }
@@ -447,6 +463,8 @@ export default function TasksPage() {
     setSelectedWorkflow(null);
     setExecuteNextNodeTrigger('auto_continue');
     setSelectedReferenceFiles([]);
+    setExecuteResumeAvailable(false);
+    setExecuteResume(false);
     setExecuteOpened(true);
     setNotice('');
     setEditorError('');
@@ -464,8 +482,19 @@ export default function TasksPage() {
     if (!currentTask) return;
     const target = executeMode === 'skill' ? selectedSkill : selectedWorkflow;
     if (!target) return;
-    const saved = await saveCurrentTaskContent();
-    if (!saved) return;
+    const saveResult = await saveCurrentTaskContent({ checkWorkflowResume: executeMode === 'workflow' });
+    if (!saveResult.saved) return;
+    if (executeMode === 'workflow') {
+      if (saveResult.workflowResumeAvailable && !executeResumeAvailable) {
+        setExecuteResumeAvailable(true);
+        setExecuteResume(false);
+        return;
+      }
+      if (!saveResult.workflowResumeAvailable && executeResumeAvailable) {
+        setExecuteResumeAvailable(false);
+        setExecuteResume(false);
+      }
+    }
 
     const instructionPath = taskProjectPath(currentTask);
     const workspacePath = currentDirectory ? taskProjectPath(currentDirectory) : 'workspace/tasks';
@@ -480,7 +509,7 @@ export default function TasksPage() {
     setExecuteOpened(false);
     if (executeMode === 'workflow') {
       void router.push(
-        `/?new_session=true&prompt=${encodeURIComponent(prompt)}&workflow=${encodeURIComponent(`${target}.json`)}&next_node_trigger=${encodeURIComponent(executeNextNodeTrigger)}`,
+        `/?new_session=true&prompt=${encodeURIComponent(prompt)}&workflow=${encodeURIComponent(`${target}.json`)}&next_node_trigger=${encodeURIComponent(executeNextNodeTrigger)}&resume=${executeResume ? 'true' : 'false'}`,
       );
       return;
     }
@@ -781,6 +810,17 @@ export default function TasksPage() {
               <Text size="sm" color="dimmed">No other files found in this directory.</Text>
             )}
           </div>
+
+          {executeMode === 'workflow' && executeResumeAvailable ? (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={executeResume}
+                onChange={(e) => setExecuteResume(e.currentTarget.checked)}
+              />
+              <span>Resume</span>
+            </label>
+          ) : null}
 
           <Group position="right">
             <Button variant="default" onClick={() => setExecuteOpened(false)}>Cancel</Button>
