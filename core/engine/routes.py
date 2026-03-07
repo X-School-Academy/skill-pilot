@@ -651,6 +651,14 @@ def _send_exit_session_shortcut_any(session_name: str, provider: Dict[str, Any])
     return raw
 
 
+def _maybe_send_exit_session_shortcut_any(session_name: str, provider: Dict[str, Any]) -> str:
+    provider_bin = str(provider.get("bin") or "").strip().lower()
+    current_command = _pane_current_command_any(session_name)
+    if provider_bin and current_command and current_command != provider_bin:
+        return ""
+    return _send_exit_session_shortcut_any(session_name, provider)
+
+
 def _build_provider_command(
     *,
     provider_id: str,
@@ -843,14 +851,15 @@ def request_workflow_continue_signal(source: str = "api") -> Dict[str, Any]:
     if current_provider_id:
         try:
             provider = get_provider(current_provider_id)
-            shortcut = _send_exit_session_shortcut_any(session_name, provider)
-            logger.info(
-                "[workflow-execute] continue_exit_signal source=%s session=%s provider=%s exit_shortcut=%s",
-                source,
-                session_name,
-                current_provider_id,
-                shortcut,
-            )
+            shortcut = _maybe_send_exit_session_shortcut_any(session_name, provider)
+            if shortcut:
+                logger.info(
+                    "[workflow-execute] continue_exit_signal source=%s session=%s provider=%s exit_shortcut=%s",
+                    source,
+                    session_name,
+                    current_provider_id,
+                    shortcut,
+                )
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "[workflow-execute] continue_exit_signal_failed source=%s session=%s provider=%s error=%s",
@@ -1147,30 +1156,6 @@ def _execute_workflow_in_terminal_thread(
                             node_status[downstream_id] = "blocked"
                         else:
                             ready.append(downstream_id)
-                has_remaining_nodes = len(ready) > 0
-                if next_node_trigger == "start_by_prompt" and has_remaining_nodes:
-                    if run_is_current():
-                        _set_workflow_execute_state(
-                            status="waiting_for_continue",
-                            waiting_for_continue=True,
-                            current_node_id=node_id,
-                            current_node_name=node_name(node),
-                            current_output_file=str(output_file),
-                            current_provider_id=provider_id,
-                            has_remaining_nodes=True,
-                        )
-                    while True:
-                        if not run_is_current():
-                            raise RuntimeError("workflow execution superseded by a newer run")
-                        if _WORKFLOW_EXECUTE_STOP.is_set():
-                            raise RuntimeError("workflow execution stopped by user")
-                        if not _tmux_session_exists(session_name):
-                            raise RuntimeError(f"workflow tmux session was terminated during node {node_id}")
-                        if _WORKFLOW_EXECUTE_CONTINUE.wait(1.0):
-                            _WORKFLOW_EXECUTE_CONTINUE.clear()
-                            break
-                    if run_is_current():
-                        _set_workflow_execute_state(status="running", waiting_for_continue=False)
                 continue
             prompt = build_node_prompt(
                 graph=graph,
@@ -1282,13 +1267,13 @@ def _execute_workflow_in_terminal_thread(
                             break
 
                     if previous_provider is not None:
-                        _send_exit_session_shortcut_any(session_name, previous_provider)
+                        _maybe_send_exit_session_shortcut_any(session_name, previous_provider)
                         previous_provider = None
                     if run_is_current():
                         _set_workflow_execute_state(status="running", waiting_for_continue=False)
                 else:
                     if previous_provider is not None:
-                        _send_exit_session_shortcut_any(session_name, previous_provider)
+                        _maybe_send_exit_session_shortcut_any(session_name, previous_provider)
                         previous_provider = None
                     _send_tmux_command_literal(session_name, "echo 'The workflow has completed.'")
                     if run_is_current():

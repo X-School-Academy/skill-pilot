@@ -128,7 +128,7 @@ def workflow_task_run_id(
     value = _SAFE_FILENAME_RE.sub("-", value).strip("-") or "workflow-task"
     normalized_instruction = str(instruction_file_path or "").strip()
     normalized_workflow = str(workflow_file_path or "").strip()
-    normalized_refs = [str(item or "").strip() for item in (reference_file_paths or []) if str(item or "").strip()]
+    normalized_refs = sorted({str(item or "").strip() for item in (reference_file_paths or []) if str(item or "").strip()})
     fingerprint_payload: dict[str, Any] = {
         "workflow_file": normalized_workflow,
         "instruction_file": normalized_instruction,

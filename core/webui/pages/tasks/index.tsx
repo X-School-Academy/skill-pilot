@@ -311,6 +311,8 @@ export default function TasksPage() {
     if (!currentTask || selectedKind === 'image' || selectedKind === 'audio' || selectedKind === 'video') {
       return { saved: true, workflowResumeAvailable: false };
     }
+    const projectReferenceFiles = Array.from(new Set(selectedReferenceFiles.map((path) => taskProjectPath(path))))
+      .sort((a, b) => a.localeCompare(b));
     setEditorSaving(true);
     setEditorError('');
     setNotice('');
@@ -320,7 +322,7 @@ export default function TasksPage() {
         content: editorContent,
         check_workflow_resume: Boolean(options?.checkWorkflowResume),
         workflow_path: options?.workflowPath || '',
-        reference_files: selectedReferenceFiles.map((path) => taskProjectPath(path)),
+        reference_files: projectReferenceFiles,
       });
       setNotice('Saved.');
       await fetchTree();
@@ -488,7 +490,8 @@ export default function TasksPage() {
 
     const instructionPath = taskProjectPath(currentTask);
     const workspacePath = currentDirectory ? taskProjectPath(currentDirectory) : 'workspace/tasks';
-    const projectReferenceFiles = selectedReferenceFiles.map((path) => taskProjectPath(path));
+    const projectReferenceFiles = Array.from(new Set(selectedReferenceFiles.map((path) => taskProjectPath(path))))
+      .sort((a, b) => a.localeCompare(b));
     const referenceSection = selectedReferenceFiles.length > 0
       ? `\n\nReference files:\n- ${projectReferenceFiles.join('\n- ')}`
       : '';
