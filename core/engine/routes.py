@@ -652,11 +652,25 @@ def _send_exit_session_shortcut_any(session_name: str, provider: Dict[str, Any])
 
 
 def _maybe_send_exit_session_shortcut_any(session_name: str, provider: Dict[str, Any]) -> str:
+    safe_name = _validate_tmux_session_name_any(session_name)
+    provider_id = str(provider.get("id") or "").strip()
     provider_bin = str(provider.get("bin") or "").strip().lower()
-    current_command = _pane_current_command_any(session_name)
-    if provider_bin and current_command and current_command != provider_bin:
-        return ""
-    return _send_exit_session_shortcut_any(session_name, provider)
+    current_command = _pane_current_command_any(safe_name)
+    logger.info(
+        "[workflow-execute] exit_session_check session=%s provider=%s provider_bin=%s current_command=%s",
+        safe_name,
+        provider_id,
+        provider_bin,
+        current_command,
+    )
+    shortcut = _send_exit_session_shortcut_any(safe_name, provider)
+    logger.info(
+        "[workflow-execute] exit_session_sent session=%s provider=%s shortcut=%r",
+        safe_name,
+        provider_id,
+        shortcut,
+    )
+    return shortcut
 
 
 def _build_provider_command(
@@ -805,8 +819,6 @@ def request_workflow_continue_signal(source: str = "api") -> Dict[str, Any]:
     output_file = str(status.get("current_output_file") or "").strip()
     waiting_for_continue = bool(status.get("waiting_for_continue"))
     has_remaining_nodes = bool(status.get("has_remaining_nodes"))
-    current_provider_id = str(status.get("current_provider_id") or "").strip()
-
     if not waiting_for_continue:
         return {
             "accepted": False,
@@ -847,27 +859,6 @@ def request_workflow_continue_signal(source: str = "api") -> Dict[str, Any]:
             "status": _workflow_execute_status(),
             "message": "Current node output file is not ready.",
         }
-
-    if current_provider_id:
-        try:
-            provider = get_provider(current_provider_id)
-            shortcut = _maybe_send_exit_session_shortcut_any(session_name, provider)
-            if shortcut:
-                logger.info(
-                    "[workflow-execute] continue_exit_signal source=%s session=%s provider=%s exit_shortcut=%s",
-                    source,
-                    session_name,
-                    current_provider_id,
-                    shortcut,
-                )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "[workflow-execute] continue_exit_signal_failed source=%s session=%s provider=%s error=%s",
-                source,
-                session_name,
-                current_provider_id,
-                exc,
-            )
 
     _WORKFLOW_EXECUTE_CONTINUE.set()
     logger.info(
