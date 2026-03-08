@@ -35,8 +35,8 @@ Follow these steps in order:
 
 Map user intent:
 
-1. `engine-restart`: restart engine process from in-memory environment only
-2. `engine-reload`: read latest `.env` into memory, then restart engine process
+1. `engine-restart`: restart engine process from in-memory environment only to reload config json/json5 files if user has updated these file manually
+2. `engine-reload`: read latest `.env` and config into memory, then restart engine process if user has updated `.env` manually 
 
 ### Step 2: Execute command
 
@@ -69,4 +69,4 @@ Return command output and note that active sessions may reconnect during restart
 
 - Use signal-based control via engine socket, not manual process killing
 - Keep restart and reload semantics explicit
-- Prefer `engine-reload` after key changes in `config/.env`
+- Prefer `engine-reload` after key changes in `config/.env` manually

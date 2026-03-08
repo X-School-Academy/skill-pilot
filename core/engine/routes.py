@@ -49,7 +49,10 @@ from mcp_servers.mcp_to_skills.workflow_execution import (
     load_workflow_graph,
     node_name,
     node_output_path,
+    parse_instruction_file_path,
+    parse_reference_file_paths,
     parse_task_workspace,
+    workflow_task_output_dir,
 )
 
 from llm_service import (
@@ -648,6 +651,28 @@ def _send_exit_session_shortcut_any(session_name: str, provider: Dict[str, Any])
     return raw
 
 
+def _maybe_send_exit_session_shortcut_any(session_name: str, provider: Dict[str, Any]) -> str:
+    safe_name = _validate_tmux_session_name_any(session_name)
+    provider_id = str(provider.get("id") or "").strip()
+    provider_bin = str(provider.get("bin") or "").strip().lower()
+    current_command = _pane_current_command_any(safe_name)
+    logger.info(
+        "[workflow-execute] exit_session_check session=%s provider=%s provider_bin=%s current_command=%s",
+        safe_name,
+        provider_id,
+        provider_bin,
+        current_command,
+    )
+    shortcut = _send_exit_session_shortcut_any(safe_name, provider)
+    logger.info(
+        "[workflow-execute] exit_session_sent session=%s provider=%s shortcut=%r",
+        safe_name,
+        provider_id,
+        shortcut,
+    )
+    return shortcut
+
+
 def _build_provider_command(
     *,
     provider_id: str,
@@ -794,7 +819,6 @@ def request_workflow_continue_signal(source: str = "api") -> Dict[str, Any]:
     output_file = str(status.get("current_output_file") or "").strip()
     waiting_for_continue = bool(status.get("waiting_for_continue"))
     has_remaining_nodes = bool(status.get("has_remaining_nodes"))
-
     if not waiting_for_continue:
         return {
             "accepted": False,
@@ -1010,6 +1034,7 @@ def _execute_workflow_in_terminal_thread(
     workflow_prompt: str,
     session_name: str,
     run_token: str,
+    resume: bool,
     sandbox: Any,
     auto: Any,
     network: Any,
@@ -1032,10 +1057,27 @@ def _execute_workflow_in_terminal_thread(
 
     try:
         graph = load_workflow_graph(workflow_file, WORKFLOWS_DIR)
-        run_id, output_root = create_run_output_dir(
-            _REPO_ROOT / ".skillpilot" / "temp" / "terminal-workflow",
-            cleanup_base_dir=True,
-        )
+        instruction_file_path = parse_instruction_file_path(workflow_prompt)
+        reference_file_paths = parse_reference_file_paths(workflow_prompt)
+        if instruction_file_path:
+            workflow_project_path = f"core/workflows/{graph.workflow_relative_path}"
+            task_run_id, _ = workflow_task_output_dir(
+                _terminal_workflow_base_dir(),
+                instruction_file_path,
+                workflow_project_path,
+                repo_root=_REPO_ROOT,
+                reference_file_paths=reference_file_paths,
+            )
+            run_id, output_root = create_run_output_dir(
+                _terminal_workflow_base_dir(),
+                run_id=task_run_id,
+                cleanup_output_dir=not resume,
+            )
+        else:
+            run_id, output_root = create_run_output_dir(
+                _terminal_workflow_base_dir(),
+                cleanup_base_dir=True,
+            )
         task_workspace = parse_task_workspace(workflow_prompt)
         if run_is_current():
             _set_workflow_execute_state(
@@ -1089,6 +1131,23 @@ def _execute_workflow_in_terminal_thread(
             data = node.get("data") if isinstance(node.get("data"), dict) else {}
             provider_id = str(data.get("provider_id") or "").strip()
             upstream_node_ids = list(graph.upstream_agents[node_id])
+            output_file = node_output_path(output_root, node_id, node_name(node))
+            if resume and output_file.exists():
+                logger.info(
+                    "[workflow-execute] node_resume_skip node_id=%s node_name=%s output_file=%s",
+                    node_id,
+                    node_name(node),
+                    output_file,
+                )
+                node_status[node_id] = "done"
+                for downstream_id in graph.downstream_agents.get(node_id, []):
+                    pending_upstream_count[downstream_id] = max(0, pending_upstream_count[downstream_id] - 1)
+                    if pending_upstream_count[downstream_id] == 0:
+                        if has_failed_upstream[downstream_id]:
+                            node_status[downstream_id] = "blocked"
+                        else:
+                            ready.append(downstream_id)
+                continue
             prompt = build_node_prompt(
                 graph=graph,
                 current_node=node,
@@ -1098,7 +1157,6 @@ def _execute_workflow_in_terminal_thread(
                 task_workspace=task_workspace,
                 start_by_prompt_mode=(next_node_trigger == "start_by_prompt"),
             )
-            output_file = node_output_path(output_root, node_id, node_name(node))
             if output_file.exists():
                 try:
                     output_file.unlink()
@@ -1200,13 +1258,13 @@ def _execute_workflow_in_terminal_thread(
                             break
 
                     if previous_provider is not None:
-                        _send_exit_session_shortcut_any(session_name, previous_provider)
+                        _maybe_send_exit_session_shortcut_any(session_name, previous_provider)
                         previous_provider = None
                     if run_is_current():
                         _set_workflow_execute_state(status="running", waiting_for_continue=False)
                 else:
                     if previous_provider is not None:
-                        _send_exit_session_shortcut_any(session_name, previous_provider)
+                        _maybe_send_exit_session_shortcut_any(session_name, previous_provider)
                         previous_provider = None
                     _send_tmux_command_literal(session_name, "echo 'The workflow has completed.'")
                     if run_is_current():
@@ -2431,6 +2489,36 @@ def _normalize_task_file_name(value: str) -> str:
     return f"{safe_stem}{safe_suffix}"
 
 
+def _terminal_workflow_base_dir() -> Path:
+    return _REPO_ROOT / ".skillpilot" / "temp" / "terminal-workflow"
+
+
+def _task_instruction_project_path(task_path: str) -> str:
+    trimmed = str(task_path or "").strip().replace("\\", "/").lstrip("/")
+    return f"workspace/tasks/{trimmed}" if trimmed else "workspace/tasks"
+
+
+def _task_workflow_project_path(workflow_path: str) -> str:
+    trimmed = str(workflow_path or "").strip().replace("\\", "/").lstrip("/")
+    if trimmed.startswith("core/workflows/"):
+        return trimmed
+    return f"core/workflows/{trimmed}" if trimmed else "core/workflows"
+
+
+def _task_workflow_output_dir(
+    task_path: str,
+    workflow_path: str,
+    reference_file_paths: list[str] | None = None,
+) -> tuple[str, Path]:
+    return workflow_task_output_dir(
+        _terminal_workflow_base_dir(),
+        _task_instruction_project_path(task_path),
+        _task_workflow_project_path(workflow_path),
+        repo_root=_REPO_ROOT,
+        reference_file_paths=reference_file_paths,
+    )
+
+
 def _unique_task_file_path(parent: Path, file_name: str) -> Path:
     candidate = parent / file_name
     stem = candidate.stem
@@ -2536,11 +2624,19 @@ def task_content(path: str):
 @router.post("/api/tasks/save")
 def task_save(payload: Dict[str, Any]):
     raw_path = str(payload.get("path") or "").strip()
+    workflow_path = str(payload.get("workflow_path") or "").strip()
+    reference_files_raw = payload.get("reference_files")
     content = payload.get("content")
+    check_workflow_resume = _bool_with_default(payload.get("check_workflow_resume"), False)
     if not raw_path:
         return JSONResponse(status_code=400, content={"error": "Missing task path"})
     if not isinstance(content, str):
         return JSONResponse(status_code=400, content={"error": "Invalid content"})
+    reference_file_paths = [
+        str(item).strip()
+        for item in (reference_files_raw if isinstance(reference_files_raw, list) else [])
+        if isinstance(item, str) and str(item).strip()
+    ]
 
     try:
         file_path = _safe_tasks_path(raw_path)
@@ -2550,7 +2646,19 @@ def task_save(payload: Dict[str, Any]):
         return JSONResponse(status_code=404, content={"error": str(exc)})
 
     file_path.write_text(content, encoding="utf-8")
-    return {"status": "ok"}
+    response: Dict[str, Any] = {"status": "ok"}
+    if check_workflow_resume:
+        if not workflow_path:
+            return JSONResponse(status_code=400, content={"error": "workflow_path is required when checking workflow resume"})
+        run_id, output_root = _task_workflow_output_dir(raw_path, workflow_path, reference_file_paths)
+        response.update(
+            {
+                "workflow_resume_available": output_root.exists(),
+                "workflow_run_id": run_id,
+                "workflow_output_root": str(output_root),
+            }
+        )
+    return response
 
 
 @router.post("/api/tasks/create")
@@ -2749,6 +2857,7 @@ def workflows_execute(payload: Dict[str, Any]):
     workflow = str(payload.get("workflow") or "").strip()
     workflow_prompt = str(payload.get("prompt") or "").strip()
     native_terminal = _bool_with_default(payload.get("native_terminal"), False)
+    resume = _bool_with_default(payload.get("resume"), False)
     sandbox = payload.get("sandbox")
     auto = payload.get("auto")
     network = payload.get("network")
@@ -2792,6 +2901,7 @@ def workflows_execute(payload: Dict[str, Any]):
             "workflow_prompt": workflow_prompt,
             "session_name": session_name,
             "run_token": run_token,
+            "resume": resume,
             "sandbox": sandbox,
             "auto": auto,
             "network": network,
@@ -3536,22 +3646,28 @@ async def discord_token_save(request: Request):
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         logger.error("keys-safe-guard failed: %s", result.stderr)
+        detail = (result.stderr or result.stdout or "").strip()
+        if detail:
+            detail = f"\n\nDetails:\n{detail}"
         return JSONResponse(
             status_code=500,
             content={
                 "error": (
-                    "Could not save token: GUI auth dialog unavailable, failed, or was cancelled. "
+                    "Could not save token with keys-safe-guard. "
+                    "If safe guard is enabled, this request needs either a GUI permission dialog or passwordless sudo. "
+                    "Otherwise disable safe guard and retry.\n"
                     "To set the token manually, run as root:\n"
                     "  sudo nano config/.env\n"
                     "then add or update the line:\n"
                     "  DISCORD_BOT_TOKEN=<your-token>"
+                    f"{detail}"
                 )
             },
         )
-    # Keep the running engine environment in sync.
+    # Keep the running engine environment in sync for callers that still rely on this route.
     os.environ["DISCORD_BOT_TOKEN"] = token
 
-    return {"status": "ok", "message": "Token saved. Restart the engine to connect the bot."}
+    return {"status": "ok", "message": "Token saved and applied to the running engine."}
 
 
 @router.post("/api/create_course_plan")

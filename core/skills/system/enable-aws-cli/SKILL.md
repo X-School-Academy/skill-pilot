@@ -17,7 +17,7 @@ Guide the user to obtain AWS credentials, save them securely to `config/.env`, a
 ## Your Roles in This Skill
 
 - **SysOps Engineer**: Configure AWS credentials and activate MCP tooling
-- **Security Engineer**: Ensure credentials are stored via keys-safe-guard only
+- **Security Engineer**: Ensure credentials are stored only through skill `key-safe`
 
 ## Role Communication
 
@@ -40,9 +40,7 @@ When this skill is used in a workflow agent node:
 
 Check if credentials are already configured:
 
-```bash
-core/bin/keys-safe-guard get_key_value AWS_ACCESS_KEY_ID AWS_REGION
-```
+- Use skill `key-safe` to get `AWS_ACCESS_KEY_ID` and `AWS_REGION`.
 
 If both are non-empty, ask user whether to skip or replace them.
 
@@ -50,9 +48,7 @@ If both are non-empty, ask user whether to skip or replace them.
 
 ### Step 1: Check existing credentials
 
-```bash
-core/bin/keys-safe-guard get_key_value AWS_ACCESS_KEY_ID AWS_REGION 2>/dev/null || true
-```
+Use skill `key-safe` to get `AWS_ACCESS_KEY_ID` and `AWS_REGION`.
 
 If both are set and user confirms to keep them, skip to Step 6 (sync only).
 
@@ -93,13 +89,11 @@ Common options if user is unsure:
 
 ### Step 6: Save credentials to .env — one password prompt
 
-```bash
-core/bin/keys-safe-guard put_key_values \
-  AWS_ACCESS_KEY_ID=<access-key-id> \
-  AWS_SECRET_ACCESS_KEY=<secret-access-key> \
-  AWS_REGION=<region> \
-  DISABLE_AWS_API_MCP_SERVER=false
-```
+Use skill `key-safe` to save:
+- `AWS_ACCESS_KEY_ID=<access-key-id>`
+- `AWS_SECRET_ACCESS_KEY=<secret-access-key>`
+- `AWS_REGION=<region>`
+- `DISABLE_AWS_API_MCP_SERVER=false`
 
 ### Step 7: Sync MCP and install aws-api skill
 

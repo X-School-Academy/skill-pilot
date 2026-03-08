@@ -1,6 +1,6 @@
 ---
 name: key-safe
-description: Manage LLM security key protection for config/.env using core/bin/keys-safe-guard actions (enable, disable, get_key_names, put_key_values). Supports --gui flag for native OS auth dialogs (macOS osascript, Linux pkexec/zenity/kdialog). Use when the user asks to secure, inspect, or update protected env keys safely, with or without a GUI password prompt.
+description: Manage LLM security key protection for config/.env using core/bin/keys-safe-guard actions (enable, disable, get_key_names, put_key_values). Supports native GUI elevation for desktop sessions and clear fallback behavior for Python/background calls when safe guard is enabled.
 ---
 
 # AI Builder - Key Safe
@@ -14,6 +14,7 @@ Manage secure key operations for `config/.env` using the project key safe comman
 - User asks to update or insert one or more env keys safely
 - User asks for secure key operations related to LLM/provider credentials
 - User asks to use a GUI popup / dialog for the sudo password prompt
+- A Python or background process needs to read or write protected env keys
 
 ## Your Roles in This Skill
 
@@ -42,31 +43,51 @@ Map user intent to one action:
 3. `get_key_names`
 4. `put_key_values`
 
-### Step 2: Determine whether to use GUI mode
+### Step 2: Always use GUI mode for agent-invoked commands
 
-Add `--gui` when the user:
-- Explicitly asks for a popup, dialog, or GUI password prompt
-- Mentions they don't want to type their password in the terminal
-- Asks for a "graphical" or "visual" sudo/auth prompt
+Default rule: if an AI agent invokes `core/bin/keys-safe-guard`, include `--gui` on every command unless the action is `get_key_names`.
 
-`--gui` triggers a native OS auth dialog for privilege elevation:
+Use this rule even when the user does not explicitly mention GUI mode. Do not wait for the user to ask for a popup or dialog.
+
+Why:
+- AI agents should not depend on terminal password entry
+- GUI auth avoids hanging background or non-interactive runs
+- The project standard for this skill is to prefer native OS elevation dialogs whenever elevation might be needed
+
+`--gui` forces a native OS auth dialog for privilege elevation:
 - **macOS**: system admin dialog via `osascript`
 - **Linux**: `pkexec` (polkit) dialog, or `sudo -A` with `zenity`/`kdialog` askpass
-- **Fallback**: if GUI is unavailable (SSH session, no display, dialog cancelled), it falls back silently to terminal `sudo`
+- **No fallback**: if GUI is unavailable (SSH session, no display, dialog cancelled), the command fails instead of hanging on terminal `sudo`
 
 `--gui` can be placed before or after the action name.
+
+Action rules:
+
+- `enable`: always run with `--gui`
+- `disable`: always run with `--gui`
+- `put_key_values`: always run with `--gui`
+- `get_key_names`: may omit `--gui` because it is read-only and the flag has no effect
+
+Important runtime behavior when safe guard is enabled and elevation is required:
+
+- Interactive terminal session:
+  - if the AI agent follows this skill and passes `--gui`, the command uses the native GUI auth dialog
+  - if a human runs the command manually without `--gui`, it may fall back to terminal `sudo`
+- Python/background process with a desktop GUI session:
+  - `core/bin/keys-safe-guard ...` automatically opens a native GUI permission dialog, even without `--gui`
+- Python/background process without a desktop GUI session:
+  - the command cannot ask for a password interactively
+  - tell the user to either configure passwordless sudo for the machine or disable safe guard first
 
 ### Step 3: Execute only the required action
 
 From repo root, run:
 
 ```bash
-core/bin/keys-safe-guard enable
 core/bin/keys-safe-guard --gui enable
 ```
 
 ```bash
-core/bin/keys-safe-guard disable
 core/bin/keys-safe-guard --gui disable
 ```
 
@@ -75,13 +96,12 @@ core/bin/keys-safe-guard get_key_names
 ```
 
 ```bash
-core/bin/keys-safe-guard put_key_values KEY1=VALUE1 KEY2=VALUE2
 core/bin/keys-safe-guard --gui put_key_values KEY1=VALUE1 KEY2=VALUE2
 ```
 
 Use exactly one action per user request unless the user explicitly asks for a sequence.
 
-Note: `get_key_names` reads from engine memory and does not require elevated privileges — `--gui` has no effect on it.
+Note: `get_key_names` reads from engine memory and does not require elevated privileges, so `--gui` is optional and has no effect for that action.
 
 ### Step 4: Prevent secret leakage
 
@@ -98,16 +118,6 @@ Return:
 3. Non-sensitive output summary
 4. Any required next step (for example engine restart after safeguard changes)
 
-### Step 6: Reload engine after key updates
-
-If action is `put_key_values`, `enable`, or `disable`, apply engine reload so in-memory env is synchronized:
-
-```bash
-core/bin/tool-cli engine-reload
-```
-
-Use system skill `core-engine` for this operation flow.
-
 ## Expected Output
 
 - Correct key-safe action execution
@@ -120,4 +130,7 @@ Use system skill `core-engine` for this operation flow.
 - Keep secrets out of logs and responses
 - Use `get_key_names` for inspection whenever values are not required
 - Follow user constraints about password-prompting commands
-- Use `--gui` when the user asks for a popup/dialog prompt; otherwise omit it and let terminal sudo handle authentication
+- If an AI agent invokes `core/bin/keys-safe-guard`, treat `--gui` as mandatory for every action except `get_key_names`
+- Do not rely on terminal password prompts for agent-driven `enable`, `disable`, or `put_key_values`
+- In a non-GUI environment, do not keep retrying GUI mode; tell the user they need passwordless sudo or need to disable safe guard from an interactive GUI-capable session first
+- If a protected key operation must run without a GUI and without a terminal, do not keep retrying; tell the user to set passwordless sudo or disable safe guard

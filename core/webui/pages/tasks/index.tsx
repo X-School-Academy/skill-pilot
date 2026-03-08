@@ -59,6 +59,11 @@ interface LlmProvider {
   name: string;
 }
 
+interface SaveTaskResult {
+  saved: boolean;
+  workflowResumeAvailable: boolean;
+}
+
 type ExecuteMode = 'skill' | 'workflow';
 type NextNodeTrigger = 'auto_continue' | 'start_by_prompt';
 
@@ -302,21 +307,34 @@ export default function TasksPage() {
     }
   };
 
-  const saveCurrentTaskContent = async (): Promise<boolean> => {
-    if (!currentTask || selectedKind === 'image' || selectedKind === 'audio' || selectedKind === 'video') return true;
+  const saveCurrentTaskContent = async (options?: { checkWorkflowResume?: boolean; workflowPath?: string }): Promise<SaveTaskResult> => {
+    if (!currentTask || selectedKind === 'image' || selectedKind === 'audio' || selectedKind === 'video') {
+      return { saved: true, workflowResumeAvailable: false };
+    }
+    const projectReferenceFiles = Array.from(new Set(selectedReferenceFiles.map((path) => taskProjectPath(path))))
+      .sort((a, b) => a.localeCompare(b));
     setEditorSaving(true);
     setEditorError('');
     setNotice('');
     try {
-      await axios.post(`${API_BASE_URL}/tasks/save`, { path: currentTask, content: editorContent });
+      const res = await axios.post(`${API_BASE_URL}/tasks/save`, {
+        path: currentTask,
+        content: editorContent,
+        check_workflow_resume: Boolean(options?.checkWorkflowResume),
+        workflow_path: options?.workflowPath || '',
+        reference_files: projectReferenceFiles,
+      });
       setNotice('Saved.');
       await fetchTree();
       await fetchContent(currentTask);
-      return true;
+      return {
+        saved: true,
+        workflowResumeAvailable: Boolean(res.data?.workflow_resume_available),
+      };
     } catch (err: any) {
       console.error('Failed to save task content:', err);
       setEditorError(err?.response?.data?.error || 'Failed to save task content.');
-      return false;
+      return { saved: false, workflowResumeAvailable: false };
     } finally {
       setEditorSaving(false);
     }
@@ -464,12 +482,16 @@ export default function TasksPage() {
     if (!currentTask) return;
     const target = executeMode === 'skill' ? selectedSkill : selectedWorkflow;
     if (!target) return;
-    const saved = await saveCurrentTaskContent();
-    if (!saved) return;
+    const saveResult = await saveCurrentTaskContent({
+      checkWorkflowResume: executeMode === 'workflow',
+      workflowPath: executeMode === 'workflow' && target ? workflowProjectPath(target) : undefined,
+    });
+    if (!saveResult.saved) return;
 
     const instructionPath = taskProjectPath(currentTask);
     const workspacePath = currentDirectory ? taskProjectPath(currentDirectory) : 'workspace/tasks';
-    const projectReferenceFiles = selectedReferenceFiles.map((path) => taskProjectPath(path));
+    const projectReferenceFiles = Array.from(new Set(selectedReferenceFiles.map((path) => taskProjectPath(path))))
+      .sort((a, b) => a.localeCompare(b));
     const referenceSection = selectedReferenceFiles.length > 0
       ? `\n\nReference files:\n- ${projectReferenceFiles.join('\n- ')}`
       : '';
@@ -480,7 +502,7 @@ export default function TasksPage() {
     setExecuteOpened(false);
     if (executeMode === 'workflow') {
       void router.push(
-        `/?new_session=true&prompt=${encodeURIComponent(prompt)}&workflow=${encodeURIComponent(`${target}.json`)}&next_node_trigger=${encodeURIComponent(executeNextNodeTrigger)}`,
+        `/?new_session=true&prompt=${encodeURIComponent(prompt)}&workflow=${encodeURIComponent(`${target}.json`)}&next_node_trigger=${encodeURIComponent(executeNextNodeTrigger)}&resume=false&resume_available=${saveResult.workflowResumeAvailable ? 'true' : 'false'}`,
       );
       return;
     }
@@ -781,7 +803,6 @@ export default function TasksPage() {
               <Text size="sm" color="dimmed">No other files found in this directory.</Text>
             )}
           </div>
-
           <Group position="right">
             <Button variant="default" onClick={() => setExecuteOpened(false)}>Cancel</Button>
             <Button

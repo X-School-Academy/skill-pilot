@@ -7,6 +7,7 @@ ENV_FILE="${REPO_ROOT}/config/.env"
 PYTHON_BIN="${REPO_ROOT}/core/bin/python"
 MANAGE_SCRIPT="${REPO_ROOT}/core/engine/safe_dotenv/manage.py"
 TOOL_CLI="${REPO_ROOT}/core/bin/tool-cli"
+ENGINE_SOCKET="${REPO_ROOT}/.skillpilot/temp/engine.sock"
 
 # --- Argument parsing ---
 USE_GUI=false
@@ -41,7 +42,7 @@ Options:
   --gui                       Request privilege elevation via GUI dialog when available.
                               macOS: osascript admin dialog.
                               Linux: pkexec (polkit) or sudo -A with zenity/kdialog askpass.
-                              Falls back to terminal sudo when GUI is unavailable or fails.
+                              Fails instead of falling back to terminal sudo.
 
 Actions:
   enable (default)            Enable key safe guard on config/.env
@@ -57,6 +58,10 @@ EOF
 # ---------------------------------------------------------------------------
 # GUI detection helpers (based on gui-sudo-detect skill)
 # ---------------------------------------------------------------------------
+
+_has_interactive_tty() {
+  [[ -t 0 && -t 1 && -t 2 ]]
+}
 
 _is_ssh() {
   [[ -n "${SSH_CONNECTION-}" || -n "${SSH_TTY-}" ]]
@@ -90,6 +95,17 @@ _can_use_gui() {
   fi
 }
 
+_print_noninteractive_auth_error() {
+  cat >&2 <<'EOF'
+Error: key safe guard needs elevated access, but this process has no interactive terminal and no GUI auth dialog is available.
+
+If you are calling core/bin/keys-safe-guard from AI Agent or another background process, choose one of these:
+  1. Run it from a desktop GUI session so the native permission dialog can open.
+  2. Configure passwordless sudo for the key-safe operation on this machine.
+  3. Disable key safe guard first: core/bin/keys-safe-guard disable
+EOF
+}
+
 # ---------------------------------------------------------------------------
 # run_elevated_script <script_file> [arg1 arg2 ...]
 #
@@ -99,15 +115,31 @@ _can_use_gui() {
 #   Linux  : pkexec (polkit) → sudo -A with zenity/kdialog askpass
 # When --gui is set, fails immediately (non-zero) if GUI is unavailable or cancelled —
 # never blocks on terminal sudo, safe to call from background services.
-# Without --gui, falls back to interactive terminal sudo (for direct terminal use).
+# Without --gui:
+#   - interactive terminal sessions use terminal sudo
+#   - non-interactive/background sessions auto-use GUI when available
+#   - non-interactive/no-GUI sessions require passwordless sudo or disabling safe guard
 # ---------------------------------------------------------------------------
 run_elevated_script() {
   local script_file="$1"
   shift
-  local os rc
+  local os rc effective_gui
   os="$(uname -s)"
+  effective_gui="$USE_GUI"
 
-  if [[ "$USE_GUI" == "true" ]]; then
+  if [[ "$effective_gui" != "true" && ! _has_interactive_tty ]]; then
+    if _can_use_gui; then
+      effective_gui="true"
+    else
+      if sudo -n bash "$script_file" "$@" 2>/dev/null; then
+        return 0
+      fi
+      _print_noninteractive_auth_error
+      return 1
+    fi
+  fi
+
+  if [[ "$effective_gui" == "true" ]]; then
     # When --gui is set we must never fall back to blocking terminal sudo —
     # the caller may be a background service with no visible terminal.
     # Any failure path must exit non-zero so the caller can handle the error.
@@ -293,6 +325,28 @@ do_put_key_values() {
     echo "put_key_values requires one or more KEY=VALUE arguments."
     usage
     return 2
+  fi
+
+  local payload response status
+  if [[ -S "${ENGINE_SOCKET}" ]]; then
+    payload="$("${PYTHON_BIN}" -c '
+import json, sys
+updates = {}
+for item in sys.argv[1:]:
+    key, value = item.split("=", 1)
+    updates[key] = value
+print(json.dumps({"operation": "safe_dotenv_set_key_values", "updates": updates}, separators=(",", ":")))
+' "${remaining_args[@]}")"
+    if ! response="$("${TOOL_CLI}" request "${payload}" 2>/dev/null)"; then
+      echo "Unable to update engine environment in memory. Aborting before writing ${ENV_FILE}." >&2
+      return 1
+    fi
+    status="$("${PYTHON_BIN}" -c 'import json,sys; d=json.loads(sys.stdin.read()); print(d.get("status",""))' <<< "${response}" 2>/dev/null || true)"
+    if [[ "${status}" != "ok" ]]; then
+      echo "Engine refused in-memory env update. Aborting before writing ${ENV_FILE}." >&2
+      echo "${response}" >&2
+      return 1
+    fi
   fi
 
   # When the env file is writable by the current user (key safe guard not enabled),

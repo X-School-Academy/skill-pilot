@@ -37,6 +37,25 @@ def loaded_env_key_names() -> list[str]:
     return sorted(names)
 
 
+def apply_env_key_values(updates: dict[str, str]) -> list[str]:
+    applied_keys: list[str] = []
+    if not updates:
+        return applied_keys
+
+    for key, value in updates.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            continue
+        os.environ[key] = value
+        applied_keys.append(key)
+
+    if applied_keys:
+        existing = set(loaded_env_key_names())
+        existing.update(applied_keys)
+        os.environ[_LOADED_KEYS_ENV] = ",".join(sorted(existing))
+
+    return applied_keys
+
+
 def safe_env(*, extra: dict[str, str] | None = None, unset_keys: list[str] | None = None) -> dict[str, str]:
     env = dict(os.environ)
     to_unset: set[str] = set(unset_keys or [])
@@ -164,18 +183,14 @@ def load_env_with_safeguard(path: str | Path, *, override: bool = False, require
 
     values = dotenv_values(stream=StringIO(raw))
     loaded = False
-    applied_keys: list[str] = []
+    updates: dict[str, str] = {}
     for key, val in values.items():
         if not isinstance(key, str) or not isinstance(val, str):
             continue
         if override or key not in os.environ:
-            os.environ[key] = val
-            loaded = True
-            applied_keys.append(key)
+            updates[key] = val
 
-    existing = set(loaded_env_key_names())
-    existing.update(applied_keys)
-    if existing:
-        os.environ[_LOADED_KEYS_ENV] = ",".join(sorted(existing))
+    applied_keys = apply_env_key_values(updates)
+    loaded = bool(applied_keys)
 
     return loaded
