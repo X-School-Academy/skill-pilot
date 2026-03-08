@@ -56,7 +56,6 @@ from mcp_servers.mcp_to_skills.workflow_execution import (
 )
 
 from llm_service import (
-    _resolve_provider_env,
     build_chat_system_message,
     build_code_system_message,
     build_llm_command,
@@ -617,7 +616,82 @@ def _pane_current_command_any(session_name: str) -> str:
     proc = _run_tmux_command(["display-message", "-p", "-t", safe_name, "#{pane_current_command}"], check=False)
     if proc.returncode != 0:
         return ""
+    pane_command = (proc.stdout or "").strip().lower()
+    if pane_command and pane_command not in {"python", "python3", "bash", "sh"}:
+        return pane_command
+    detected = _detect_agent_bin_for_session_any(safe_name)
+    return detected or pane_command
+
+
+def _known_provider_bins() -> set[str]:
+    bins: set[str] = set()
+    for provider in load_llm_providers():
+        bin_name = str(provider.get("bin") or "").strip().lower()
+        if bin_name:
+            bins.add(bin_name)
+    return bins
+
+
+def _ps_children_pids(parent_pid: int) -> list[int]:
+    if parent_pid <= 1 or shutil.which("pgrep") is None:
+        return []
+    proc = subprocess.run(
+        ["pgrep", "-P", str(parent_pid)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=safe_env(),
+    )
+    if proc.returncode != 0:
+        return []
+    child_pids: list[int] = []
+    for line in (proc.stdout or "").splitlines():
+        raw = line.strip()
+        if raw.isdigit():
+            child_pids.append(int(raw))
+    return child_pids
+
+
+def _ps_command(pid: int) -> str:
+    if pid <= 1:
+        return ""
+    proc = subprocess.run(
+        ["ps", "-p", str(pid), "-o", "comm="],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=safe_env(),
+    )
+    if proc.returncode != 0:
+        return ""
     return (proc.stdout or "").strip().lower()
+
+
+def _detect_agent_bin_for_session_any(session_name: str) -> str:
+    safe_name = _validate_tmux_session_name_any(session_name)
+    pane_proc = _run_tmux_command(["display-message", "-p", "-t", safe_name, "#{pane_pid}"], check=False)
+    if pane_proc.returncode != 0:
+        return ""
+    pane_pid_raw = (pane_proc.stdout or "").strip()
+    if not pane_pid_raw.isdigit():
+        return ""
+    known_bins = _known_provider_bins()
+    if not known_bins:
+        return ""
+
+    queue = _ps_children_pids(int(pane_pid_raw))
+    seen = set(queue)
+    matches: list[str] = []
+    while queue:
+        pid = queue.pop(0)
+        command = os.path.basename(_ps_command(pid))
+        if command in known_bins:
+            matches.append(command)
+        for child_pid in _ps_children_pids(pid):
+            if child_pid not in seen:
+                seen.add(child_pid)
+                queue.append(child_pid)
+    return matches[-1] if matches else ""
 
 
 def _provider_exit_session_shortcut(provider: Dict[str, Any]) -> str:
@@ -1411,38 +1485,32 @@ def terminal_tmux_create(payload: Dict[str, Any]):
     provider_id = (str(payload.get("provider_id") or "")).strip() or None
     native_terminal = _bool_with_default(payload.get("native_terminal"), False)
     provider: Dict[str, Any] | None = None
+    launch_command = ""
     sandbox = payload.get("sandbox")
     auto = payload.get("auto")
     network = payload.get("network")
 
     if prompt:
-        provider = get_provider(provider_id)
-        cmd_list = build_terminal_command(
-            provider,
-            prompt,
-            auto_allow=auto,
-            network_allow=network,
-            sandbox_mode=sandbox,
+        provider, launch_command, command = _build_provider_command(
+            provider_id=provider_id or "",
+            prompt=prompt,
+            sandbox=sandbox,
+            auto=auto,
+            network=network,
         )
-        env_vars = _resolve_provider_env(provider)
-        if provider.get("id") == "opencode" and auto:
-            env_vars["OPENCODE_CONFIG"] = str(_REPO_ROOT / "config" / "opencode-yolo.json")
-        env_prefix = " ".join(f"{key}={shlex.quote(str(value))}" for key, value in env_vars.items())
-        command = shlex.join(cmd_list)
-        if env_prefix:
-            command = f"{env_prefix} {command}"
         logger.info("[tmux-create] provider=%s command=%s", provider.get("id"), command)
     else:
-        command = _coerce_command(str(payload.get("command") or ""))
+        launch_command = _coerce_command(str(payload.get("command") or ""))
+        command = launch_command
         logger.info("[tmux-create] raw command=%s", command)
 
     try:
         if native_terminal:
-            session_name = _create_native_tmux_session(command)
+            session_name = _create_native_tmux_session(launch_command)
             native_status = _open_native_terminal_for_tmux(session_name)
             attach_command = _build_tmux_attach_command_any(session_name)
         else:
-            session_name = _create_webui_tmux_session(command)
+            session_name = _create_webui_tmux_session(launch_command)
             native_status = {"requested": False, "opened": False}
             attach_command = _build_tmux_attach_command(session_name)
     except RuntimeError as exc:
