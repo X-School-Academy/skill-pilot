@@ -30,7 +30,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { label: 'Live Sessions',    href: '/terminals',                                  icon: <IconTerminal2 size="1rem" /> },
   { dividerBefore: 'Workspace', label: 'Learning', href: '/courses',                icon: <IconSchool size="1rem" /> },
   { label: 'Vibe Coding',      href: '/vibe-coding',                               icon: <IconBriefcase size="1rem" /> },
-  { label: 'Research',         href: '/?view=research',      view: 'research',      icon: <IconSearch size="1rem" /> },
+  { label: 'Research',         href: '/research',                                  icon: <IconSearch size="1rem" /> },
   { label: 'Tasks',            href: '/tasks',                                    icon: <IconChecklist size="1rem" /> },
   { dividerBefore: 'Skill Pilot', label: 'Development', href: '/?view=development', view: 'development', icon: <IconCode size="1rem" /> },
   { dividerBefore: 'Commercial Project', label: 'Dev Swarm', href: '/dev-swarm',    icon: <IconRocket size="1rem" /> },

@@ -182,7 +182,7 @@ export default function TerminalsPage() {
     },
     { dividerBefore: 'Workspace', label: 'Learning', icon: <IconSchool size="1rem" />, action: () => { void router.push('/courses'); } },
     { label: 'Vibe Coding', icon: <IconBriefcase size="1rem" />, action: () => { void router.push('/vibe-coding'); } },
-    { label: 'Research', icon: <IconSearch size="1rem" />, action: () => { void router.push('/?view=research'); } },
+    { label: 'Research', icon: <IconSearch size="1rem" />, action: () => { void router.push('/research'); } },
     { label: 'Tasks', icon: <IconChecklist size="1rem" />, action: () => { void router.push('/tasks'); } },
     { dividerBefore: 'System', label: 'Development', icon: <IconCode size="1rem" />, action: () => { void router.push('/?view=development'); } },
     { dividerBefore: 'Commercial Project', label: 'Dev Swarm', icon: <IconRocket size="1rem" />, action: () => { void router.push('/dev-swarm'); } },

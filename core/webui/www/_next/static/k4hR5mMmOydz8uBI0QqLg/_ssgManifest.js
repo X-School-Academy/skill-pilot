@@ -1,0 +1,1 @@
+self.__SSG_MANIFEST=new Set(["\u002F","\u002Fcourses","\u002Fembedded\u002Fvscode-extension","\u002Fembedded\u002Fvscode-markdown","\u002Fresearch","\u002Ftasks","\u002Fterminals","\u002Fvibe-coding","\u002Fworkflows"]);self.__SSG_MANIFEST_CB&&self.__SSG_MANIFEST_CB()

@@ -107,6 +107,7 @@ def ensure_auth_token() -> str:
 COURSES_DIR = Path(os.getenv("COURSES_DIR", PROJECT_DIR / "workspace" / "learning")).resolve()
 TASKS_DIR = Path(os.getenv("TASKS_DIR", PROJECT_DIR / "workspace" / "tasks")).resolve()
 VIBE_CODING_DIR = Path(os.getenv("VIBE_CODING_DIR", PROJECT_DIR / "workspace" / "vibe-coding")).resolve()
+RESEARCH_DIR = Path(os.getenv("RESEARCH_DIR", PROJECT_DIR / "workspace" / "research")).resolve()
 WORKFLOWS_DIR = Path(os.getenv("WORKFLOWS_DIR", PROJECT_DIR / "core" / "workflows")).resolve()
 LLM_PROVIDERS_FILE = Path(
     os.getenv("LLM_PROVIDERS_FILE", PROJECT_DIR / "config" / "ai_providers.json5")
