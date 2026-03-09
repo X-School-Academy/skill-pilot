@@ -73,6 +73,7 @@ from settings import (
     COURSES_DIR,
     PROJECT_DIR,
     TASKS_DIR,
+    VIBE_CODING_DIR,
     WORKFLOWS_DIR,
     LOCAL_DEV_TOKEN,
     TERMINAL_AUTO_IMAGE_URL_PREVIEW,
@@ -2607,6 +2608,51 @@ def _unique_task_dir_path(folder_name: str) -> Path:
     return candidate
 
 
+def _safe_vibe_coding_path(task_path: str, *, must_exist: bool = True) -> Path:
+    if not task_path:
+        raise ValueError("Missing vibe coding path")
+    candidate = (VIBE_CODING_DIR / task_path).resolve()
+    if candidate != VIBE_CODING_DIR and VIBE_CODING_DIR not in candidate.parents:
+        raise ValueError("Invalid vibe coding path")
+    if must_exist and (not candidate.exists() or not candidate.is_file()):
+        raise FileNotFoundError("Vibe coding file not found")
+    return candidate
+
+
+def _normalize_vibe_project_name(value: str) -> str:
+    return _normalize_task_slug(value, default="project")
+
+
+def _vibe_instruction_project_path(task_path: str) -> str:
+    trimmed = str(task_path or "").strip().replace("\\", "/").lstrip("/")
+    return f"workspace/vibe-coding/{trimmed}" if trimmed else "workspace/vibe-coding"
+
+
+def _unique_vibe_project_dir_path(project_name: str) -> Path:
+    candidate = VIBE_CODING_DIR / project_name
+    index = 1
+    while candidate.exists():
+        candidate = VIBE_CODING_DIR / f"{project_name}_{index}"
+        index += 1
+    return candidate
+
+
+def _ensure_vibe_project_file(project_name: str, file_name: str) -> tuple[Path, Path, str]:
+    normalized_project = _normalize_vibe_project_name(project_name)
+    if not normalized_project:
+        raise ValueError("Project name is required")
+    project_dir = VIBE_CODING_DIR / normalized_project
+    project_dir.mkdir(parents=True, exist_ok=True)
+    file_path = project_dir / file_name
+    return project_dir, file_path, normalized_project
+
+
+def _remove_project_dir(project_dir: Path) -> None:
+    if project_dir == VIBE_CODING_DIR or VIBE_CODING_DIR not in project_dir.parents:
+        raise ValueError("Invalid project directory")
+    shutil.rmtree(project_dir)
+
+
 def _extract_task_create_parts(payload: Dict[str, Any]) -> tuple[str, str]:
     folder = str(payload.get("folder") or "").strip()
     file_name = str(payload.get("file") or "").strip()
@@ -2786,6 +2832,170 @@ def task_delete(payload: Dict[str, Any]):
 def task_file(path: str):
     try:
         file_path = _safe_tasks_path(path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    media_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+    return FileResponse(file_path, media_type=media_type, filename=file_path.name)
+
+
+@router.get("/api/vibe-coding/tree")
+def vibe_coding_tree():
+    if not VIBE_CODING_DIR.exists():
+        return {"items": []}
+    return {"items": build_tree(VIBE_CODING_DIR, VIBE_CODING_DIR)}
+
+
+@router.get("/api/vibe-coding/latest")
+def vibe_coding_latest():
+    if not VIBE_CODING_DIR.exists():
+        return {"path": None}
+    latest = find_latest_course(VIBE_CODING_DIR, VIBE_CODING_DIR)
+    if not latest:
+        return {"path": None}
+    return {"path": latest[0]}
+
+
+@router.get("/api/vibe-coding/content")
+def vibe_coding_content(path: str):
+    try:
+        file_path = _safe_vibe_coding_path(path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    raw = file_path.read_bytes()
+    if not _is_text_bytes(raw):
+        return JSONResponse(status_code=400, content={"error": "Binary files are not editable"})
+
+    return {
+        "path": path,
+        "kind": _task_type_from_path(path),
+        "content": raw.decode("utf-8", errors="replace"),
+    }
+
+
+@router.post("/api/vibe-coding/save")
+def vibe_coding_save(payload: Dict[str, Any]):
+    raw_path = str(payload.get("path") or "").strip()
+    content = payload.get("content")
+    if not raw_path:
+        return JSONResponse(status_code=400, content={"error": "Missing vibe coding path"})
+    if not isinstance(content, str):
+        return JSONResponse(status_code=400, content={"error": "Invalid content"})
+
+    try:
+        file_path = _safe_vibe_coding_path(raw_path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    file_path.write_text(content, encoding="utf-8")
+    return {"status": "ok"}
+
+
+@router.post("/api/vibe-coding/create-project")
+def vibe_coding_create_project(payload: Dict[str, Any]):
+    project_name = str(payload.get("project_name") or "").strip()
+    requirements = str(payload.get("requirements") or "")
+    if not project_name:
+        return JSONResponse(status_code=400, content={"error": "Project name is required"})
+
+    VIBE_CODING_DIR.mkdir(parents=True, exist_ok=True)
+    normalized_project = _normalize_vibe_project_name(project_name)
+    project_dir = _unique_vibe_project_dir_path(normalized_project)
+    project_dir.mkdir(parents=False, exist_ok=False)
+    file_path = project_dir / "requirements.md"
+    file_path.write_text(requirements, encoding="utf-8")
+    return {
+        "status": "ok",
+        "path": str(file_path.relative_to(VIBE_CODING_DIR)),
+        "project": project_dir.name,
+    }
+
+
+@router.post("/api/vibe-coding/create-update-request")
+def vibe_coding_create_update_request(payload: Dict[str, Any]):
+    project_name = str(payload.get("project_name") or "").strip()
+    content = str(payload.get("content") or "")
+    try:
+        _, file_path, normalized_project = _ensure_vibe_project_file(project_name, "update.md")
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+    file_path.write_text(content, encoding="utf-8")
+    return {
+        "status": "ok",
+        "path": str(file_path.relative_to(VIBE_CODING_DIR)),
+        "project": normalized_project,
+    }
+
+
+@router.post("/api/vibe-coding/create-issue-report")
+def vibe_coding_create_issue_report(payload: Dict[str, Any]):
+    project_name = str(payload.get("project_name") or "").strip()
+    content = str(payload.get("content") or "")
+    try:
+        _, file_path, normalized_project = _ensure_vibe_project_file(project_name, "issues.md")
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+    file_path.write_text(content, encoding="utf-8")
+    return {
+        "status": "ok",
+        "path": str(file_path.relative_to(VIBE_CODING_DIR)),
+        "project": normalized_project,
+    }
+
+
+@router.post("/api/vibe-coding/delete")
+def vibe_coding_delete(payload: Dict[str, Any]):
+    raw_path = str(payload.get("path") or "").strip()
+    confirm_text = str(payload.get("confirm_text") or "").strip().lower()
+    if not raw_path:
+        return JSONResponse(status_code=400, content={"error": "Missing vibe coding path"})
+
+    try:
+        file_path = _safe_vibe_coding_path(raw_path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    project_dir = file_path.parent
+    if file_path.name == "requirements.md":
+        if confirm_text != "delete":
+            return JSONResponse(status_code=400, content={"error": "Type 'delete' to confirm removing the project"})
+        try:
+            _remove_project_dir(project_dir)
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"error": str(exc)})
+        return {
+            "status": "ok",
+            "deleted": raw_path,
+            "removedFolder": str(project_dir.relative_to(VIBE_CODING_DIR)),
+        }
+
+    file_path.unlink()
+    removed_folder = None
+    if project_dir != VIBE_CODING_DIR:
+        try:
+            project_dir.rmdir()
+            removed_folder = str(project_dir.relative_to(VIBE_CODING_DIR))
+        except OSError:
+            pass
+
+    return {"status": "ok", "deleted": raw_path, "removedFolder": removed_folder}
+
+
+@router.get("/api/vibe-coding/file")
+def vibe_coding_file(path: str):
+    try:
+        file_path = _safe_vibe_coding_path(path)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
     except FileNotFoundError as exc:

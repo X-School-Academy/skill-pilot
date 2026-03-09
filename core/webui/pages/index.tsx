@@ -669,7 +669,7 @@ export default function HomePage() {
     },
     { label: 'Live Sessions', icon: <IconTerminal2 size="1rem" />, action: () => { void router.push('/terminals'); } },
     { dividerBefore: 'Workspace', label: 'Learning', icon: <IconSchool size="1rem" />, action: () => router.push('/courses') },
-    { label: 'Projects', view: 'projects', icon: <IconBriefcase size="1rem" /> },
+    { label: 'Vibe Coding', icon: <IconBriefcase size="1rem" />, action: () => router.push('/vibe-coding') },
     { label: 'Research', view: 'research', icon: <IconSearch size="1rem" /> },
     { label: 'Tasks', icon: <IconChecklist size="1rem" />, action: () => router.push('/tasks') },
     { dividerBefore: 'Skill Pilot', label: 'Development', view: 'development', icon: <IconCode size="1rem" /> },

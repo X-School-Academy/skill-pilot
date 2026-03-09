@@ -29,7 +29,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { label: 'New Session',      href: '/',                                           icon: <IconPlus size="1rem" /> },
   { label: 'Live Sessions',    href: '/terminals',                                  icon: <IconTerminal2 size="1rem" /> },
   { dividerBefore: 'Workspace', label: 'Learning', href: '/courses',                icon: <IconSchool size="1rem" /> },
-  { label: 'Projects',         href: '/?view=projects',      view: 'projects',      icon: <IconBriefcase size="1rem" /> },
+  { label: 'Vibe Coding',      href: '/vibe-coding',                               icon: <IconBriefcase size="1rem" /> },
   { label: 'Research',         href: '/?view=research',      view: 'research',      icon: <IconSearch size="1rem" /> },
   { label: 'Tasks',            href: '/tasks',                                    icon: <IconChecklist size="1rem" /> },
   { dividerBefore: 'Skill Pilot', label: 'Development', href: '/?view=development', view: 'development', icon: <IconCode size="1rem" /> },
