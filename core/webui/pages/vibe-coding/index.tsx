@@ -232,7 +232,7 @@ export default function VibeCodingPage() {
         router.push(`/vibe-coding?task=${encodeURIComponent(res.data.path)}`, undefined, { shallow: true });
       } else {
         setEditorContent('');
-        setNotice('No projects available. Use New to create one.');
+        setNotice('');
       }
     } catch (err) {
       console.error('Failed to fetch latest vibe coding file:', err);
@@ -604,6 +604,58 @@ export default function VibeCodingPage() {
   };
 
   const renderMainContent = () => {
+    if (!currentTask) {
+      if (loading) return null;
+      if (treeData.length === 0) {
+        return (
+          <div
+            style={{
+              minHeight: '60vh',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <div
+              style={{
+                width: '100%',
+                maxWidth: 560,
+                padding: '36px 32px',
+                borderRadius: 20,
+                border: `1px solid ${theme.colorScheme === 'dark' ? theme.colors.dark[4] : '#d6def8'}`,
+                background: theme.colorScheme === 'dark'
+                  ? 'linear-gradient(180deg, rgba(37,38,43,0.98) 0%, rgba(28,29,33,0.98) 100%)'
+                  : 'linear-gradient(180deg, #fbfcff 0%, #f2f6ff 100%)',
+                boxShadow: theme.colorScheme === 'dark'
+                  ? '0 24px 60px rgba(0, 0, 0, 0.28)'
+                  : '0 24px 60px rgba(50, 84, 160, 0.12)',
+                textAlign: 'center',
+              }}
+            >
+              <Text
+                size="xs"
+                weight={700}
+                transform="uppercase"
+                style={{ letterSpacing: '0.12em', color: theme.colors.blue[6] }}
+              >
+                Vibe Coding Workspace
+              </Text>
+              <Text size={28} weight={800} mt={10}>
+                Start your first project
+              </Text>
+              <Text size="sm" color="dimmed" mt={12} style={{ maxWidth: 420, margin: '12px auto 0 auto', lineHeight: 1.6 }}>
+                Create a project requirement, then refine, plan, implement, review, test, and deploy from the same workspace.
+              </Text>
+              <Group position="center" mt="xl">
+                <Button onClick={openProjectModal}>New Project</Button>
+              </Group>
+            </div>
+          </div>
+        );
+      }
+      return <Text align="center" py="xl" color="dimmed">Select a project file from the sidebar to begin.</Text>;
+    }
+
     if (selectedKind === 'image' && currentTask) {
       return (
         <>

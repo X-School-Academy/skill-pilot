@@ -259,7 +259,7 @@ export default function TasksPage() {
       } else {
         setTaskTitle('');
         setEditorContent('');
-        setNotice('No task files available. Use + to create one.');
+        setNotice('');
       }
     } catch (err) {
       console.error('Failed to fetch latest task:', err);
@@ -510,6 +510,66 @@ export default function TasksPage() {
   };
 
   const renderMainContent = () => {
+    if (!currentTask) {
+      if (loading) return null;
+      if (treeData.length === 0) {
+        return (
+          <div
+            style={{
+              minHeight: '60vh',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <div
+              style={{
+                width: '100%',
+                maxWidth: 560,
+                padding: '36px 32px',
+                borderRadius: 20,
+                border: `1px solid ${theme.colorScheme === 'dark' ? theme.colors.dark[4] : '#d6def8'}`,
+                background: theme.colorScheme === 'dark'
+                  ? 'linear-gradient(180deg, rgba(37,38,43,0.98) 0%, rgba(28,29,33,0.98) 100%)'
+                  : 'linear-gradient(180deg, #fbfcff 0%, #f2f6ff 100%)',
+                boxShadow: theme.colorScheme === 'dark'
+                  ? '0 24px 60px rgba(0, 0, 0, 0.28)'
+                  : '0 24px 60px rgba(50, 84, 160, 0.12)',
+                textAlign: 'center',
+              }}
+            >
+              <Text
+                size="xs"
+                weight={700}
+                transform="uppercase"
+                style={{ letterSpacing: '0.12em', color: theme.colors.blue[6] }}
+              >
+                Tasks Workspace
+              </Text>
+              <Text size={28} weight={800} mt={10}>
+                Start your first task
+              </Text>
+              <Text size="sm" color="dimmed" mt={12} style={{ maxWidth: 420, margin: '12px auto 0 auto', lineHeight: 1.6 }}>
+                Create a task file, then edit it directly or execute it with a skill or workflow from the same screen.
+              </Text>
+              <Group position="center" mt="xl">
+                <Button
+                  onClick={() => {
+                    setNewTaskFolder(currentTaskFolder);
+                    setNewTaskFile('new task');
+                    setAddTaskOpened(true);
+                  }}
+                >
+                  New Task
+                </Button>
+              </Group>
+            </div>
+          </div>
+        );
+      }
+      return <Text align="center" py="xl" color="dimmed">Select a task file from the sidebar to begin.</Text>;
+    }
+
     if (selectedKind === 'image' && currentTask) {
       return (
         <>
