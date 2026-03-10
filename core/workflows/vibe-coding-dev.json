@@ -1,0 +1,207 @@
+{
+  "version": "1.0",
+  "name": "vibe-coding-dev",
+  "updated_at": "2026-03-10T08:40:00Z",
+  "nodes": [
+    {
+      "id": 0,
+      "type": "start",
+      "position": {
+        "x": 80,
+        "y": 320
+      }
+    },
+    {
+      "id": 1,
+      "type": "agent",
+      "position": {
+        "x": 320,
+        "y": 320
+      },
+      "data": {
+        "title": "Create Project",
+        "provider_id": "claude",
+        "skill": "vibe-coding-project-create",
+        "responsibility": ""
+      }
+    },
+    {
+      "id": 2,
+      "type": "agent",
+      "position": {
+        "x": 560,
+        "y": 320
+      },
+      "data": {
+        "title": "Refine Requirement",
+        "provider_id": "claude",
+        "skill": "vibe-coding-project-refine",
+        "responsibility": ""
+      }
+    },
+    {
+      "id": 3,
+      "type": "agent",
+      "position": {
+        "x": 800,
+        "y": 320
+      },
+      "data": {
+        "title": "Initialize Project",
+        "provider_id": "claude",
+        "skill": "vibe-coding-project-initial",
+        "responsibility": ""
+      }
+    },
+    {
+      "id": 4,
+      "type": "agent",
+      "position": {
+        "x": 1040,
+        "y": 320
+      },
+      "data": {
+        "title": "Plan Project",
+        "provider_id": "claude",
+        "skill": "vibe-coding-project-plan",
+        "responsibility": ""
+      }
+    },
+    {
+      "id": 5,
+      "type": "agent",
+      "position": {
+        "x": 1280,
+        "y": 320
+      },
+      "data": {
+        "title": "Implement Project",
+        "provider_id": "claude",
+        "skill": "vibe-coding-project-implement",
+        "responsibility": ""
+      }
+    },
+    {
+      "id": 6,
+      "type": "agent",
+      "position": {
+        "x": 1520,
+        "y": 220
+      },
+      "data": {
+        "title": "Review Project",
+        "provider_id": "claude",
+        "skill": "vibe-coding-project-review",
+        "responsibility": ""
+      }
+    },
+    {
+      "id": 7,
+      "type": "agent",
+      "position": {
+        "x": 1520,
+        "y": 420
+      },
+      "data": {
+        "title": "Test Project",
+        "provider_id": "claude",
+        "skill": "vibe-coding-project-test",
+        "responsibility": ""
+      }
+    },
+    {
+      "id": 8,
+      "type": "agent",
+      "position": {
+        "x": 1760,
+        "y": 320
+      },
+      "data": {
+        "title": "Deploy Project",
+        "provider_id": "claude",
+        "skill": "vibe-coding-project-deploy",
+        "responsibility": ""
+      }
+    },
+    {
+      "id": -1,
+      "type": "end",
+      "position": {
+        "x": 2000,
+        "y": 320
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "0->1",
+      "source": 0,
+      "target": 1,
+      "source_anchor": "right",
+      "target_anchor": "left"
+    },
+    {
+      "id": "1->2",
+      "source": 1,
+      "target": 2,
+      "source_anchor": "right",
+      "target_anchor": "left"
+    },
+    {
+      "id": "2->3",
+      "source": 2,
+      "target": 3,
+      "source_anchor": "right",
+      "target_anchor": "left"
+    },
+    {
+      "id": "3->4",
+      "source": 3,
+      "target": 4,
+      "source_anchor": "right",
+      "target_anchor": "left"
+    },
+    {
+      "id": "4->5",
+      "source": 4,
+      "target": 5,
+      "source_anchor": "right",
+      "target_anchor": "left"
+    },
+    {
+      "id": "5->6",
+      "source": 5,
+      "target": 6,
+      "source_anchor": "top",
+      "target_anchor": "left"
+    },
+    {
+      "id": "5->7",
+      "source": 5,
+      "target": 7,
+      "source_anchor": "bottom",
+      "target_anchor": "left"
+    },
+    {
+      "id": "6->8",
+      "source": 6,
+      "target": 8,
+      "source_anchor": "right",
+      "target_anchor": "top"
+    },
+    {
+      "id": "7->8",
+      "source": 7,
+      "target": 8,
+      "source_anchor": "right",
+      "target_anchor": "bottom"
+    },
+    {
+      "id": "8->-1",
+      "source": 8,
+      "target": -1,
+      "source_anchor": "right",
+      "target_anchor": "left"
+    }
+  ]
+}
