@@ -3,7 +3,7 @@ name: skill-pilot-freeze-core-feature
 description: Create or update compact feature knowledge files under core/features/ from user instructions and project inspection. Use when a user wants to freeze a product feature into a searchable markdown reference for humans and AI.
 ---
 
-# AI Builder - Skill Pilot Freeze Feature
+# AI Builder - Skill Pilot Freeze Core Feature
 
 Create or update a compact feature file in `core/features/` so users and AI agents can quickly understand a feature and locate related code.
 
@@ -31,6 +31,7 @@ This communication pattern ensures transparency and allows for human-in-the-loop
 
 - Treat each feature as a user-level capability unless it is clearly technical-only.
 - Keep each feature file small enough for efficient LLM use.
+- Prefer linking to related feature files instead of repeating large amounts of detail.
 - Include enough code keywords that an agent can locate relevant code with `find`, `grep`, `rg`, `sed`, or `cat`.
 - Use file paths relative to the project root only. Do not include line numbers.
 - Use sub-feature files only when the parent feature would otherwise become too large.
@@ -42,6 +43,7 @@ This communication pattern ensures transparency and allows for human-in-the-loop
 - Content that includes:
   - A short feature brief
   - User-facing scope or behavior summary
+  - Related feature file names for adjacent or dependent behavior
   - Code references using project-root-relative file paths, function names, and search keywords only
 
 ## Instructions
@@ -80,6 +82,7 @@ Create or update `core/features/{feature-name}.md` with concise sections such as
 - `## Brief`
 - `## User Value`
 - `## Main Behavior`
+- `## Related Features`
 - `## Code References`
 
 Content rules:
@@ -87,6 +90,8 @@ Content rules:
 - `Brief` must be short and understandable by a non-technical user.
 - Focus on what the feature does, not internal implementation history.
 - Keep bullets compact and information-dense.
+- `Related Features` is required when adjacent flows, dependencies, or companion screens exist.
+- Use `Related Features` to point to other feature files instead of copying their details into the current file.
 - `Code References` must include only:
   - file paths relative to project root
   - function, component, route, class, or keyword names
@@ -97,6 +102,7 @@ Content rules:
 
 - Remove filler text and repeated statements.
 - Prefer stable search terms over prose-heavy explanations.
+- Move cross-feature detail into `Related Features` references instead of expanding the current file.
 - If the file becomes too large, split part of it into one or more sub-feature files using the double-hyphen naming rule.
 - Make sure the final document is small enough to fit comfortably in an LLM context window.
 
@@ -105,6 +111,7 @@ Content rules:
 - Confirm the file is under `core/features/`.
 - Confirm the file name follows the lowercase-and-hyphen rule.
 - Confirm the feature is described at user level unless it is truly technical-only.
+- Confirm related behavior is referenced through `## Related Features` instead of duplicated in full.
 - Confirm code references use root-relative paths and keywords only.
 - Confirm there are no line numbers and no oversized sections.
 
