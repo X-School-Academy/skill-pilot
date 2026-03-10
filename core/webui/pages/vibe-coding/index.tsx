@@ -47,6 +47,7 @@ axios.defaults.withCredentials = true;
 
 type FileKind = 'markdown' | 'text' | 'image' | 'audio' | 'video';
 type RequestMode = 'update' | 'issue';
+type ExecuteMode = 'skill' | 'workflow';
 
 interface FileItem {
   name: string;
@@ -63,7 +64,8 @@ interface LlmProvider {
 
 interface VibeAction {
   label: string;
-  prompt: string;
+  defaultSkill: string;
+  skillPromptSuffix: string;
 }
 
 const detectFileKind = (path: string): FileKind => {
@@ -74,6 +76,13 @@ const detectFileKind = (path: string): FileKind => {
   if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.webm') || lower.endsWith('.m4v') || lower.endsWith('.avi') || lower.endsWith('.mkv')) return 'video';
   return 'text';
 };
+
+const workflowBaseName = (path: string): string => {
+  const filename = path.split('/').pop() || path;
+  return filename.endsWith('.json') ? filename.slice(0, -5) : filename;
+};
+
+const workflowProjectPath = (name: string): string => `core/workflows/${name}.json`;
 
 const vibeProjectPath = (path: string): string => {
   const trimmed = path.replace(/^\/+/, '');
@@ -127,6 +136,13 @@ export default function VibeCodingPage() {
   const [requestContent, setRequestContent] = useState('');
   const [creatingEntry, setCreatingEntry] = useState(false);
   const [deletingFile, setDeletingFile] = useState(false);
+  const [executeOpened, setExecuteOpened] = useState(false);
+  const [executeMode, setExecuteMode] = useState<ExecuteMode>('skill');
+  const [skillOptions, setSkillOptions] = useState<string[]>([]);
+  const [workflowOptions, setWorkflowOptions] = useState<string[]>([]);
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
+  const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<VibeAction | null>(null);
   const [navbarWidth, setNavbarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
 
@@ -216,7 +232,7 @@ export default function VibeCodingPage() {
         router.push(`/vibe-coding?task=${encodeURIComponent(res.data.path)}`, undefined, { shallow: true });
       } else {
         setEditorContent('');
-        setNotice('No projects available. Use New to create one.');
+        setNotice('');
       }
     } catch (err) {
       console.error('Failed to fetch latest vibe coding file:', err);
@@ -234,6 +250,31 @@ export default function VibeCodingPage() {
       setLlmProvider(defaultId);
     } catch (err) {
       console.error('Failed to fetch LLM providers:', err);
+    }
+  };
+
+  const fetchExecuteOptions = async () => {
+    try {
+      const [skillsRes, workflowsRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/config/skills`),
+        axios.get(`${API_BASE_URL}/workflows/tree`),
+      ]);
+
+      const nextSkills: string[] = [];
+      for (const category of skillsRes.data.categories || []) {
+        for (const skill of category.skills || []) {
+          if (skill?.name) nextSkills.push(String(skill.name));
+        }
+      }
+      setSkillOptions(nextSkills.sort((a, b) => a.localeCompare(b)));
+
+      const nextWorkflows = (workflowsRes.data.items || [])
+        .filter((item: FileItem) => item.type === 'file')
+        .map((item: FileItem) => workflowBaseName(item.path))
+        .sort((a: string, b: string) => a.localeCompare(b));
+      setWorkflowOptions(nextWorkflows);
+    } catch (err) {
+      console.error('Failed to fetch execute options:', err);
     }
   };
 
@@ -358,16 +399,41 @@ export default function VibeCodingPage() {
     }
   };
 
-  const runAction = async (action: VibeAction) => {
-    if (!currentTask) return;
+  const openExecuteModal = (action: VibeAction) => {
+    setPendingAction(action);
+    setExecuteMode('skill');
+    setSelectedSkill(action.defaultSkill);
+    setSelectedWorkflow(null);
+    setExecuteOpened(true);
+  };
+
+  const runAction = async () => {
+    if (!currentTask || !pendingAction) return;
+    const target = executeMode === 'skill' ? selectedSkill : selectedWorkflow;
+    if (!target) return;
+
     const saved = await saveCurrentContent();
     if (!saved) return;
-    void router.push(`/?new_session=true&prompt=${encodeURIComponent(action.prompt)}`);
+
+    const workspacePath = currentProject ? vibeProjectPath(currentProject) : 'workspace/vibe-coding';
+    const prompt = executeMode === 'skill'
+      ? `Use agent skill ${target} ${pendingAction.skillPromptSuffix}`
+      : `Execute workflow ${workflowProjectPath(target)}. ${pendingAction.skillPromptSuffix.charAt(0).toUpperCase()}${pendingAction.skillPromptSuffix.slice(1)}\n\nYour Workspace path: ${workspacePath}\n\nIf you create any intermediate files, save them inside the project workspace above.`;
+
+    setExecuteOpened(false);
+    if (executeMode === 'workflow') {
+      void router.push(
+        `/?new_session=true&prompt=${encodeURIComponent(prompt)}&workflow=${encodeURIComponent(`${target}.json`)}&next_node_trigger=${encodeURIComponent('auto_continue')}&resume=false&resume_available=false`,
+      );
+      return;
+    }
+    void router.push(`/?new_session=true&prompt=${encodeURIComponent(prompt)}`);
   };
 
   useEffect(() => {
     fetchTree();
     fetchLlmProviders();
+    fetchExecuteOptions();
   }, []);
 
   useEffect(() => {
@@ -451,15 +517,18 @@ export default function VibeCodingPage() {
       return [
         {
           label: 'Refine',
-          prompt: `Use agent skill vibe-coding-project-refine to refine the ${currentInstructionPath}`,
+          defaultSkill: 'vibe-coding-project-refine',
+          skillPromptSuffix: `to refine the ${currentInstructionPath}`,
         },
         {
           label: 'Initial',
-          prompt: `Use agent skill vibe-coding-project-initial to init the project defined at ${currentInstructionPath}`,
+          defaultSkill: 'vibe-coding-project-initial',
+          skillPromptSuffix: `to init the project defined at ${currentInstructionPath}`,
         },
         {
           label: 'Plan',
-          prompt: `Use agent skill vibe-coding-project-plan to make a development plan for requirement ${currentInstructionPath}`,
+          defaultSkill: 'vibe-coding-project-plan',
+          skillPromptSuffix: `to make a development plan for requirement ${currentInstructionPath}`,
         },
       ];
     }
@@ -467,7 +536,8 @@ export default function VibeCodingPage() {
       return [
         {
           label: 'Implement',
-          prompt: `Use agent skill vibe-coding-project-implement to implement the code as the ${currentInstructionPath}`,
+          defaultSkill: 'vibe-coding-project-implement',
+          skillPromptSuffix: `to implement the code as the ${currentInstructionPath}`,
         },
       ];
     }
@@ -475,15 +545,18 @@ export default function VibeCodingPage() {
       return [
         {
           label: 'Review',
-          prompt: `Use agent skill vibe-coding-project-review to review the code of the implementation of the ${currentInstructionPath}`,
+          defaultSkill: 'vibe-coding-project-review',
+          skillPromptSuffix: `to review the code of the implementation of the ${currentInstructionPath}`,
         },
         {
           label: 'Test',
-          prompt: `Use agent skill vibe-coding-project-test to test the code of the implementation of the ${currentInstructionPath}`,
+          defaultSkill: 'vibe-coding-project-test',
+          skillPromptSuffix: `to test the code of the implementation of the ${currentInstructionPath}`,
         },
         {
           label: 'Deploy',
-          prompt: `Use agent skill vibe-coding-project-deploy to deploy the code of the implementation of the ${currentInstructionPath}`,
+          defaultSkill: 'vibe-coding-project-deploy',
+          skillPromptSuffix: `to deploy the code of the implementation of the ${currentInstructionPath}`,
         },
       ];
     }
@@ -491,7 +564,8 @@ export default function VibeCodingPage() {
       return [
         {
           label: 'Update Code',
-          prompt: `Use agent skill vibe-coding-project-update to update the code based on the update request defined in ${currentInstructionPath}`,
+          defaultSkill: 'vibe-coding-project-update',
+          skillPromptSuffix: `to update the code based on the update request defined in ${currentInstructionPath}`,
         },
       ];
     }
@@ -499,7 +573,8 @@ export default function VibeCodingPage() {
       return [
         {
           label: 'Fix Issues',
-          prompt: `Use agent skill vibe-coding-project-fix-issues to fix the issues defined in ${currentInstructionPath}`,
+          defaultSkill: 'vibe-coding-project-fix-issues',
+          skillPromptSuffix: `to fix the issues defined in ${currentInstructionPath}`,
         },
       ];
     }
@@ -519,7 +594,7 @@ export default function VibeCodingPage() {
             key={action.label}
             size="xs"
             variant="default"
-            onClick={() => void runAction(action)}
+            onClick={() => openExecuteModal(action)}
           >
             {action.label}
           </Button>
@@ -529,6 +604,58 @@ export default function VibeCodingPage() {
   };
 
   const renderMainContent = () => {
+    if (!currentTask) {
+      if (loading) return null;
+      if (treeData.length === 0) {
+        return (
+          <div
+            style={{
+              minHeight: '60vh',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <div
+              style={{
+                width: '100%',
+                maxWidth: 560,
+                padding: '36px 32px',
+                borderRadius: 20,
+                border: `1px solid ${theme.colorScheme === 'dark' ? theme.colors.dark[4] : '#d6def8'}`,
+                background: theme.colorScheme === 'dark'
+                  ? 'linear-gradient(180deg, rgba(37,38,43,0.98) 0%, rgba(28,29,33,0.98) 100%)'
+                  : 'linear-gradient(180deg, #fbfcff 0%, #f2f6ff 100%)',
+                boxShadow: theme.colorScheme === 'dark'
+                  ? '0 24px 60px rgba(0, 0, 0, 0.28)'
+                  : '0 24px 60px rgba(50, 84, 160, 0.12)',
+                textAlign: 'center',
+              }}
+            >
+              <Text
+                size="xs"
+                weight={700}
+                transform="uppercase"
+                style={{ letterSpacing: '0.12em', color: theme.colors.blue[6] }}
+              >
+                Vibe Coding Workspace
+              </Text>
+              <Text size={28} weight={800} mt={10}>
+                Start your first project
+              </Text>
+              <Text size="sm" color="dimmed" mt={12} style={{ maxWidth: 420, margin: '12px auto 0 auto', lineHeight: 1.6 }}>
+                Create a project requirement, then refine, plan, implement, review, test, and deploy from the same workspace.
+              </Text>
+              <Group position="center" mt="xl">
+                <Button onClick={openProjectModal}>New Project</Button>
+              </Group>
+            </div>
+          </div>
+        );
+      }
+      return <Text align="center" py="xl" color="dimmed">Select a project file from the sidebar to begin.</Text>;
+    }
+
     if (selectedKind === 'image' && currentTask) {
       return (
         <>
@@ -587,7 +714,7 @@ export default function VibeCodingPage() {
                 key={action.label}
                 size="xs"
                 variant="default"
-                onClick={() => void runAction(action)}
+                onClick={() => openExecuteModal(action)}
               >
                 {action.label}
               </Button>
@@ -763,6 +890,70 @@ export default function VibeCodingPage() {
             disabled={!requestProject.trim()}
           >
             Create
+          </Button>
+        </Group>
+      </Modal>
+
+      <Modal
+        opened={executeOpened}
+        onClose={() => setExecuteOpened(false)}
+        title={pendingAction ? pendingAction.label : 'Run Action'}
+        centered
+        size="lg"
+      >
+        <Stack spacing="md">
+          <div>
+            <Text size="sm" weight={700} mb={4}>Run By</Text>
+            <Group mt="xs">
+              <Radio
+                value="skill"
+                checked={executeMode === 'skill'}
+                onChange={() => setExecuteMode('skill')}
+                label="Skill"
+              />
+              <Radio
+                value="workflow"
+                checked={executeMode === 'workflow'}
+                onChange={() => setExecuteMode('workflow')}
+                label="Workflow"
+              />
+            </Group>
+          </div>
+
+          {executeMode === 'skill' ? (
+            <Select
+              label="Skill"
+              placeholder="Select a skill"
+              value={selectedSkill}
+              onChange={setSelectedSkill}
+              data={skillOptions.map((item) => ({ value: item, label: item }))}
+              searchable
+              clearable={false}
+            />
+          ) : (
+            <Select
+              label="Workflow"
+              placeholder="Select a workflow"
+              value={selectedWorkflow}
+              onChange={setSelectedWorkflow}
+              data={workflowOptions.map((item) => ({ value: item, label: item }))}
+              searchable
+              clearable
+            />
+          )}
+
+          <div>
+            <Text size="sm" weight={700} mb={4}>Instruction File</Text>
+            <Text size="sm">{currentInstructionPath || '(no file selected)'}</Text>
+          </div>
+        </Stack>
+        <Group position="right" mt="md">
+          <Button variant="default" onClick={() => setExecuteOpened(false)}>Cancel</Button>
+          <Button
+            onClick={() => void runAction()}
+            disabled={!currentTask || (executeMode === 'skill' ? !selectedSkill : !selectedWorkflow)}
+          >
+            Run
           </Button>
         </Group>
       </Modal>
