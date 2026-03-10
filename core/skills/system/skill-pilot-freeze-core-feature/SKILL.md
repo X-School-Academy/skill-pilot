@@ -1,6 +1,6 @@
 ---
 name: skill-pilot-freeze-core-feature
-description: Create or update compact feature knowledge files under core/features/ from user instructions and project inspection. Use when a user wants to freeze a product feature into a searchable markdown reference for humans and AI.
+description: Create or update files under core/features/ from user instructions and project inspection. Use when a user wants to freeze a core feature
 ---
 
 # AI Builder - Skill Pilot Freeze Core Feature
