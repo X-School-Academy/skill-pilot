@@ -672,7 +672,7 @@ export default function HomePage() {
     { label: 'Vibe Coding', icon: <IconBriefcase size="1rem" />, action: () => router.push('/vibe-coding') },
     { label: 'Research', icon: <IconSearch size="1rem" />, action: () => router.push('/research') },
     { label: 'Tasks', icon: <IconChecklist size="1rem" />, action: () => router.push('/tasks') },
-    { dividerBefore: 'Skill Pilot', label: 'Development', view: 'development', icon: <IconCode size="1rem" /> },
+    { dividerBefore: 'Skill Pilot', label: 'Development', icon: <IconCode size="1rem" />, action: () => router.push('/skill-pilot-development') },
     { dividerBefore: 'Commercial Project', label: 'Dev Swarm', icon: <IconRocket size="1rem" />, action: () => router.push('/dev-swarm') },
     { dividerBefore: '', label: 'Processes', view: 'processes', icon: <IconProgress size="1rem" /> },
     { label: 'Discord Bot', view: 'discord-bot', icon: <IconBrandDiscord size="1rem" /> },
