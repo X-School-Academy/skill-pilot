@@ -521,6 +521,11 @@ export default function VibeCodingPage() {
           skillPromptSuffix: `to refine the ${currentInstructionPath}`,
         },
         {
+          label: 'Brainstorm',
+          defaultSkill: 'vibe-coding-project-brainstorm',
+          skillPromptSuffix: `to brainstorm ideas and alternatives for the ${currentInstructionPath}`,
+        },
+        {
           label: 'Initial',
           defaultSkill: 'vibe-coding-project-initial',
           skillPromptSuffix: `to init the project defined at ${currentInstructionPath}`,
@@ -566,6 +571,15 @@ export default function VibeCodingPage() {
           label: 'Update Code',
           defaultSkill: 'vibe-coding-project-update',
           skillPromptSuffix: `to update the code based on the update request defined in ${currentInstructionPath}`,
+        },
+      ];
+    }
+    if (currentFileName === 'brainstorm.md') {
+      return [
+        {
+          label: 'Apply to Requirements',
+          defaultSkill: 'vibe-coding-project-apply-brainstorm',
+          skillPromptSuffix: `to merge brainstorm ideas from ${currentInstructionPath} into the project requirements`,
         },
       ];
     }
