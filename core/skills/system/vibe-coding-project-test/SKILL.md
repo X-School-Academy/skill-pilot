@@ -38,7 +38,14 @@ Read the referenced `implement.md` and identify the affected flows.
 
 ### Step 2: Run Relevant Checks
 
-Execute the most relevant tests, targeted manual checks, or static validation for the touched functionality.
+Use integration testing as the highest priority method. The following list is in priority order — use higher-priority methods first and cover as much code as possible:
+
+1. **Integration testing** (highest priority): Use agent skill `playwright-cli` for end-to-end validation of web pages, interactive flows, and any browser-accessible interfaces. For Flutter projects, use `flutter test integration_test` instead.
+2. **HTTP API testing**: Use `curl` for testing any HTTP API endpoints.
+3. **WebSocket testing**: Use `wscat` for testing WebSocket connections. Install with `pnpm install -g wscat` if not available.
+4. **Unit testing**: Write code tests for major complex logic functions.
+
+Apply whichever methods are relevant to the project. Not every project needs all methods.
 
 ### Step 3: Report Results
 
