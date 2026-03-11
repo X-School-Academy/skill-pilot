@@ -25,12 +25,29 @@ As a {Role} [and {Role}, ...], I will {action description}
 
 This communication pattern ensures transparency and allows for human-in-the-loop oversight at key decision points.
 
+## Feature Context
+
+The feature's `requirements.md` may list related feature files under `core/features/`. When referenced, read only the mentioned feature files for context — do not read all files in `core/features/`. If a file has already been loaded in this session, do not read it again unless it was updated or the user asks.
+
 ## Instructions
 
 ### Step 1: Read the requirement
 
 Read the referenced `requirements.md`.
 
-### Step 2: Create a feature branch
+### Step 2: Verify branch readiness
 
-Create a new branch that matches the feature scope and naming convention.
+Before creating a new branch, confirm the working tree is on the user branch with no uncommitted changes:
+
+- If not on the user branch, switch to the user branch first.
+- If there are uncommitted changes, ask the user whether to commit them or stash them before proceeding.
+
+### Step 3: Create and switch to the feature branch
+
+Detect the trigger context and create the appropriate branch from the user branch:
+
+- **New feature** (driven by `requirements.md`): create `feature/{feature-name}`
+- **Update** (driven by `update.md`): create `update/{feature-name}`
+- **Bug fix** (driven by `issues.md`): create `fix/{feature-name}`
+
+Switch to the new branch and continue working on it.

@@ -416,9 +416,10 @@ export default function VibeCodingPage() {
     if (!saved) return;
 
     const workspacePath = currentProject ? vibeProjectPath(currentProject) : 'workspace/vibe-coding';
+    const projectLabel = currentProject ? `\nVibe coding project name: ${currentProject}` : '';
     const prompt = executeMode === 'skill'
-      ? `Use agent skill ${target} ${pendingAction.skillPromptSuffix}`
-      : `Execute workflow ${workflowProjectPath(target)}. ${pendingAction.skillPromptSuffix.charAt(0).toUpperCase()}${pendingAction.skillPromptSuffix.slice(1)}\n\nYour Workspace path: ${workspacePath}\n\nIf you create any intermediate files, save them inside the project workspace above.`;
+      ? `Use agent skill ${target} ${pendingAction.skillPromptSuffix}${projectLabel}`
+      : `Execute workflow ${workflowProjectPath(target)}. ${pendingAction.skillPromptSuffix.charAt(0).toUpperCase()}${pendingAction.skillPromptSuffix.slice(1)}\n\nYour Workspace path: ${workspacePath}${projectLabel}\n\nIf you create any intermediate files, save them inside the project workspace above.`;
 
     setExecuteOpened(false);
     if (executeMode === 'workflow') {

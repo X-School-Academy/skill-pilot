@@ -27,6 +27,10 @@ As a {Role} [and {Role}, ...], I will {action description}
 
 This communication pattern ensures transparency and allows for human-in-the-loop oversight at key decision points.
 
+## Project Boundary
+
+The vibe coding project is a separate project located at `workspace/vibe-coding/{project-name}/`. When building, reviewing, testing, or modifying the project, do NOT read or modify files outside of the project folder unless the user explicitly asks.
+
 ## Instructions
 
 ### Step 1: Review the Requirement
@@ -39,7 +43,18 @@ Create or confirm the local project structure needed for implementation.
 
 ### Step 3: Initialize Version Control
 
-If the project is not already in a repository, initialize git. If the user expects GitHub setup, prepare or document the GitHub initialization path clearly before proceeding.
+Ask the user how they want to manage the project's code with git. The default is to use the Skill Pilot root project repository (no separate repo).
+
+**If the user provides an existing git URL:**
+- Clone and merge the repo into the project folder.
+- Set it up as a git submodule of the root project.
+
+**If the user asks to create a new GitHub repo:**
+- Use agent skill `playwright-cli` to create the repo from the GitHub website.
+- Then add it as a git submodule of the root project.
+
+**Otherwise (default):**
+- The project lives inside the root Skill Pilot repository with no separate git setup needed.
 
 ### Step 4: Record the Initial State
 

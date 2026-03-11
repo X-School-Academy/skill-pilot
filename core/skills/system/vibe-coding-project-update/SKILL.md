@@ -26,6 +26,10 @@ As a {Role} [and {Role}, ...], I will {action description}
 
 This communication pattern ensures transparency and allows for human-in-the-loop oversight at key decision points.
 
+## Project Boundary
+
+The vibe coding project is a separate project located at `workspace/vibe-coding/{project-name}/`. When building, reviewing, testing, or modifying the project, do NOT read or modify files outside of the project folder unless the user explicitly asks.
+
 ## Instructions
 
 ### Step 1: Read the Update Request
@@ -40,6 +44,12 @@ Apply the requested changes with minimal unrelated modifications.
 
 Run the most relevant targeted checks for the changed behavior.
 
-### Step 4: Summarize What Changed
+### Step 4: Sync Stage Files
+
+1. Update `requirements.md`, `plan.md`, and `implement.md` to reflect any changes made by this update.
+2. If the update was driven by `update.md`, create `update-plan.md` and `update-impl.md` as the plan and implementation records specific to this update cycle.
+3. Note: `update.md`, `update-plan.md`, and `update-impl.md` are temporary files that the user may remove after review.
+
+### Step 5: Summarize What Changed
 
 Report the updated behavior, verification, and any remaining risks.

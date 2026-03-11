@@ -26,6 +26,10 @@ As a {Role} [and {Role}, ...], I will {action description}
 
 This communication pattern ensures transparency and allows for human-in-the-loop oversight at key decision points.
 
+## Project Boundary
+
+The vibe coding project is a separate project located at `workspace/vibe-coding/{project-name}/`. When building, reviewing, testing, or modifying the project, do NOT read or modify files outside of the project folder unless the user explicitly asks.
+
 ## Instructions
 
 ### Step 1: Read the Issue File
@@ -40,6 +44,12 @@ Implement targeted fixes for the reported problems.
 
 Run the most relevant checks to confirm the issues are resolved.
 
-### Step 4: Summarize the Result
+### Step 4: Sync Stage Files
+
+1. Update `requirements.md`, `plan.md`, and `implement.md` to reflect any changes made by the fixes.
+2. If the fixes were driven by `issues.md`, create `issues-plan.md` and `issues-impl.md` as the plan and implementation records specific to this fix cycle.
+3. Note: `issues.md`, `issues-plan.md`, and `issues-impl.md` are temporary files that the user may remove after review.
+
+### Step 5: Summarize the Result
 
 Report which issues were fixed, how they were verified, and any remaining follow-up items.
