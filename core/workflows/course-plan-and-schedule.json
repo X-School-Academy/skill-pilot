@@ -1,0 +1,74 @@
+{
+  "version": "1.0",
+  "name": "course-plan-and-schedule",
+  "updated_at": "2026-03-10T09:10:00Z",
+  "nodes": [
+    {
+      "id": 0,
+      "type": "start",
+      "position": {
+        "x": 80,
+        "y": 240
+      }
+    },
+    {
+      "id": 1,
+      "type": "agent",
+      "position": {
+        "x": 360,
+        "y": 240
+      },
+      "data": {
+        "title": "Plan Course",
+        "provider_id": "claude",
+        "skill": "course-planner",
+        "responsibility": ""
+      }
+    },
+    {
+      "id": 2,
+      "type": "agent",
+      "position": {
+        "x": 700,
+        "y": 240
+      },
+      "data": {
+        "title": "Schedule Course",
+        "provider_id": "claude",
+        "skill": "schedule-course",
+        "responsibility": ""
+      }
+    },
+    {
+      "id": -1,
+      "type": "end",
+      "position": {
+        "x": 1020,
+        "y": 240
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "0->1",
+      "source": 0,
+      "target": 1,
+      "source_anchor": "right",
+      "target_anchor": "left"
+    },
+    {
+      "id": "1->2",
+      "source": 1,
+      "target": 2,
+      "source_anchor": "right",
+      "target_anchor": "left"
+    },
+    {
+      "id": "2->-1",
+      "source": 2,
+      "target": -1,
+      "source_anchor": "right",
+      "target_anchor": "left"
+    }
+  ]
+}

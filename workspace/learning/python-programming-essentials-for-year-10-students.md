@@ -3,7 +3,7 @@
 title: Python Programming Essentials for Year 10 Students
 slug: python-programming-essentials-for-year-10-students
 duration: 45 minutes
-last_step: 3
+last_step: 5
 ```
 
 ```markdown {"during":1000}

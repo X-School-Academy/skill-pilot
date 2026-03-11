@@ -13,6 +13,7 @@ from settings import (
 CHARS_PER_TOKEN = 3
 MAX_BUFFER_CHARS = DISCORD_MAX_BUFFER_TOKENS * CHARS_PER_TOKEN
 SUMMARISE_TRIGGER_CHARS = int(MAX_BUFFER_CHARS * 0.75)
+MEMORY_MESSAGE_PREFIX = "Conversation memory from earlier messages:"
 
 SUMMARISE_SYSTEM_PROMPT = (
     "You are a conversation summariser. Condense the following conversation messages "
@@ -57,7 +58,10 @@ class ChatSession:
     def get_llm_messages(self) -> List[Dict[str, Any]]:
         messages: List[Dict[str, Any]] = []
         if self.summary:
-            messages.append({"role": "system", "content": self.summary})
+            messages.append({
+                "role": "assistant",
+                "content": self._format_memory_message(self.summary),
+            })
         for msg in self.buffer:
             role = msg["role"]
             if role == "system":
@@ -156,8 +160,14 @@ class ChatSession:
             for e in post_summary
         ]
 
-        # Keep only the most recent messages in the buffer.
+        # Keep only the most recent live messages, but preserve overflow as
+        # retained memory so a restart does not silently drop context.
         if len(self.buffer) > DISCORD_BUFFER_MSG_COUNT:
+            overflow = self.buffer[:-DISCORD_BUFFER_MSG_COUNT]
+            self.summary = self._merge_memory_text(
+                self.summary,
+                self._build_reload_memory(overflow),
+            )
             self.buffer = self.buffer[-DISCORD_BUFFER_MSG_COUNT:]
 
         self._recalc_chars()
@@ -202,6 +212,25 @@ class ChatSession:
 
     def _recalc_chars(self) -> None:
         self._total_chars = sum(len(m["message"]) for m in self.buffer)
+
+    @staticmethod
+    def _format_memory_message(summary: str) -> str:
+        return f"{MEMORY_MESSAGE_PREFIX}\n{summary}"
+
+    @staticmethod
+    def _merge_memory_text(existing: str, addition: str) -> str:
+        existing = existing.strip()
+        addition = addition.strip()
+        if existing and addition:
+            return f"{existing}\n\n{addition}"
+        return addition or existing
+
+    @staticmethod
+    def _build_reload_memory(messages: List[Dict[str, str]]) -> str:
+        if not messages:
+            return ""
+        lines = [f"{m['role']}: {m['message']}" for m in messages]
+        return "Retained from pre-restart buffer:\n" + "\n".join(lines)
 
 
 class SessionManager:
