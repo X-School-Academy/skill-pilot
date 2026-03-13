@@ -162,6 +162,28 @@
       },
       'exit-session': 'esc\nctrl+c\nctrl+c',
     },
+    // Ollama
+    {
+      id: 'ollama',
+      name: 'Ollama',
+      bin: 'codex',
+      model: 'your-ollama-model',
+      disabled: true,
+      'sandbox-args': ['--sandbox', 'workspace-write'],
+      'auto-args': ['--ask-for-approval', 'never'],
+      'network-args': ['--config', 'sandbox_workspace_write.network_access=true'],
+      args: [
+        'exec',
+        '--json',
+        '{{prompt}}',
+      ],
+      env: {
+        'OPENAI_API_KEY': 'ollama',
+        'OPENAI_BASE_URL': 'http://localhost:11434/v1/',
+        "PLAYWRIGHT_MCP_EXTENSION_TOKEN": "${PLAYWRIGHT_MCP_EXTENSION_TOKEN}",
+      },
+      'exit-session': 'esc\nctrl+c\nctrl+c',
+    },
 
   ],
 

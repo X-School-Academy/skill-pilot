@@ -46,7 +46,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { apiUrl } from '../libs/api-base';
-import { getSelectedProvider, setSelectedProvider } from '../libs/llm';
+import { resolveSelectedProvider, setSelectedProvider } from '../libs/llm';
 
 const API_BASE_URL = apiUrl('/api');
 axios.defaults.withCredentials = true;
@@ -277,10 +277,7 @@ export default function HomePage() {
       const serverDefault: string = res.data.default || '';
       setLlmProviders(providers);
       setDefaultLlmProvider(serverDefault);
-      const stored = getSelectedProvider();
-      const storedIsValid = stored ? providers.some((provider) => provider.id === stored) : false;
-      const geminiId = providers.find((provider) => provider.id === 'gemini')?.id || null;
-      const defaultId = storedIsValid ? stored : (geminiId || providers[0]?.id || null);
+      const defaultId = resolveSelectedProvider(providers, serverDefault, 'gemini');
       if (defaultId) {
         setSelectedProvider(defaultId);
       }

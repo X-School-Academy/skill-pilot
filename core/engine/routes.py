@@ -56,11 +56,13 @@ from mcp_servers.mcp_to_skills.workflow_execution import (
 )
 
 from llm_service import (
+    _resolve_provider_env,
     build_chat_system_message,
     build_code_system_message,
     build_llm_command,
     build_terminal_command,
     build_translate_system_message,
+    format_command_for_log,
     get_default_llm_provider_id,
     get_provider,
     llm_stream,
@@ -767,13 +769,13 @@ def _build_provider_command(
         network_allow=network,
         sandbox_mode=sandbox,
     )
-    env_overrides: Dict[str, str] = {}
+    env_overrides: Dict[str, str] = _resolve_provider_env(provider)
     if provider.get("id") == "opencode" and auto:
         opencode_config = str(_REPO_ROOT / "config" / "opencode-yolo.json")
         env_overrides["OPENCODE_CONFIG"] = opencode_config
-        display_command = f"OPENCODE_CONFIG={shlex.quote(opencode_config)} {shlex.join(cmd_list)}"
+        display_command = format_command_for_log(cmd_list, env_overrides)
     else:
-        display_command = shlex.join(cmd_list)
+        display_command = format_command_for_log(cmd_list, env_overrides)
 
     launch_dir = _REPO_ROOT / ".skillpilot" / "temp" / "tmux-argv"
     launch_dir.mkdir(parents=True, exist_ok=True)

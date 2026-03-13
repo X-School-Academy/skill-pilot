@@ -10,7 +10,7 @@ import '@szhsin/react-menu/dist/index.css';
 import CodeBlock from '../../components/blocks/code.block';
 import ChatBlock from '../../components/blocks/chat.block';
 import { apiUrl } from '../../libs/api-base';
-import { dispatchLlmStatus, getClientId, getSelectedProvider, setSelectedProvider } from '../../libs/llm';
+import { dispatchLlmStatus, getClientId, resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
 
 const API_BASE_URL = apiUrl('/api');
 
@@ -141,8 +141,8 @@ const EmbeddedVSCodeExtension = (props: any) => {
       const res = await axios.get(`${API_BASE_URL}/llm/providers`);
       const providers: LlmProvider[] = res.data.providers || [];
       setLlmProviders(providers);
-      const stored = getSelectedProvider();
-      const defaultId = stored || providers[0]?.id || null;
+      const serverDefault: string = res.data.default || '';
+      const defaultId = resolveSelectedProvider(providers, serverDefault, 'gemini');
       if (defaultId) {
         setSelectedProvider(defaultId);
       }
