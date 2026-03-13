@@ -26,6 +26,10 @@ As a {Role} [and {Role}, ...], I will {action description}
 
 This communication pattern ensures transparency and allows for human-in-the-loop oversight at key decision points.
 
+## Project Boundary
+
+The vibe coding project is a separate project located at `workspace/vibe-coding/{project-name}/`. When building, reviewing, testing, or modifying the project, do NOT read or modify files outside of the project folder unless the user explicitly asks.
+
 ## Instructions
 
 ### Step 1: Read the Plan

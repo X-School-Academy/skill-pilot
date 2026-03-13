@@ -41,7 +41,7 @@ import {
 } from '@tabler/icons-react';
 import CourseBlock from '../../components/blocks/course.block';
 import { apiUrl } from '../../libs/api-base';
-import { dispatchLlmStatus, getClientId, getSelectedProvider, setSelectedProvider } from '../../libs/llm';
+import { dispatchLlmStatus, getClientId, resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
 
 const API_BASE_URL = apiUrl('/api');
 
@@ -277,8 +277,8 @@ export default function CoursesPage() {
       const res = await axios.get(`${API_BASE_URL}/llm/providers`);
       const providers: LlmProvider[] = res.data.providers || [];
       setLlmProviders(providers);
-      const stored = getSelectedProvider();
-      const defaultId = stored || providers[0]?.id || null;
+      const serverDefault: string = res.data.default || '';
+      const defaultId = resolveSelectedProvider(providers, serverDefault, 'gemini');
       if (defaultId) {
         setSelectedProvider(defaultId);
       }

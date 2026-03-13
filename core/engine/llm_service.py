@@ -326,6 +326,62 @@ def _resolve_provider_env(provider: Dict[str, Any]) -> Dict[str, str]:
     return resolved
 
 
+def _provider_uses_codex_json(provider: Dict[str, Any]) -> bool:
+    return str(provider.get("bin") or "").strip().lower() == "codex" and "--json" in _string_list(provider, "args")
+
+
+def _provider_uses_gemini_json(provider: Dict[str, Any]) -> bool:
+    return str(provider.get("bin") or "").strip().lower() == "gemini" and "stream-json" in _string_list(provider, "args")
+
+
+def _provider_uses_claude_json(provider: Dict[str, Any]) -> bool:
+    return str(provider.get("bin") or "").strip().lower() == "claude" and any(
+        arg.startswith("--output-format=stream-json") for arg in _string_list(provider, "args")
+    )
+
+
+def _provider_uses_opencode_json(provider: Dict[str, Any]) -> bool:
+    return str(provider.get("bin") or "").strip().lower() == "opencode" and any(
+        arg == "json" or arg.startswith("--format=json") for arg in _string_list(provider, "args")
+    )
+
+
+def format_command_for_log(cmd: List[str], env: Optional[Dict[str, str]] = None) -> str:
+    ordered_env_parts: List[str] = []
+    if env:
+        filtered_env = {
+            key: value
+            for key, value in env.items()
+            if value and not re.fullmatch(r"\$\{[A-Za-z0-9_]+\}", value)
+        }
+        priority_keys = ["OPENAI_BASE_URL", "OPENAI_API_KEY"]
+        seen_keys = set()
+        for key in priority_keys:
+            value = filtered_env.get(key)
+            if value is None:
+                continue
+            ordered_env_parts.append(f"{key}={shlex.quote(value)}")
+            seen_keys.add(key)
+        for key in sorted(filtered_env):
+            if key in seen_keys:
+                continue
+            ordered_env_parts.append(f"{key}={shlex.quote(filtered_env[key])}")
+
+    rendered_cmd: List[str] = []
+    index = 0
+    while index < len(cmd):
+        current = cmd[index]
+        if current == "--model" and index + 1 < len(cmd):
+            rendered_cmd.append(f"--model={shlex.quote(cmd[index + 1])}")
+            index += 2
+            continue
+        rendered_cmd.append(shlex.quote(current))
+        index += 1
+
+    parts = ordered_env_parts + rendered_cmd
+    return " ".join(part for part in parts if part)
+
+
 def build_code_system_message(message: str, lang: str) -> str:
     if "TODO" in message:
         return (
@@ -377,13 +433,9 @@ def build_translate_system_message(lang: str, to_lang: str) -> str:
 
 
 def _parse_stream_json_text(provider: Dict[str, Any], output: str) -> str:
-    provider_id = provider.get("id")
-    args = provider.get("args", [])
-    is_codex_json = provider_id == "codex" and "--json" in args
-    is_gemini_json = provider_id == "gemini" and "stream-json" in args
-    is_claude_json = provider_id == "claude" and any(
-        str(arg).startswith("--output-format=stream-json") for arg in args
-    )
+    is_codex_json = _provider_uses_codex_json(provider)
+    is_gemini_json = _provider_uses_gemini_json(provider)
+    is_claude_json = _provider_uses_claude_json(provider)
 
     if not (is_codex_json or is_gemini_json or is_claude_json):
         return output.strip()
@@ -492,7 +544,7 @@ def llm_get_text(
         "[llm] invoke client_id=%s provider_id=%s command=%s",
         client_id,
         provider.get("id"),
-        shlex.join(cmd),
+        format_command_for_log(cmd, _resolve_provider_env(provider)),
     )
     logger.info("[llm] prompt client_id=%s provider_id=%s\n%s", client_id, provider.get("id"), prompt)
 
@@ -566,6 +618,12 @@ def llm_stream(
     collected_output = bytearray()
     agent_cli_unset = configured_unset_keys()
     provider_env = _resolve_provider_env(provider)
+    logger.info(
+        "[llm] stream_invoke client_id=%s provider_id=%s command=%s",
+        client_id,
+        provider.get("id"),
+        format_command_for_log(cmd, provider_env),
+    )
     try:
         proc = subprocess.Popen(
             cmd,
@@ -585,14 +643,10 @@ def llm_stream(
 
     try:
         assert proc.stdout is not None
-        is_codex_json = provider.get("id") == "codex" and "--json" in provider.get("args", [])
-        is_gemini_json = provider.get("id") == "gemini" and "stream-json" in provider.get("args", [])
-        is_claude_json = provider.get("id") == "claude" and any(
-            arg.startswith("--output-format=stream-json") for arg in provider.get("args", [])
-        )
-        is_opencode_json = provider.get("id") == "opencode" and any(
-            arg == "json" or arg.startswith("--format=json") for arg in provider.get("args", [])
-        )
+        is_codex_json = _provider_uses_codex_json(provider)
+        is_gemini_json = _provider_uses_gemini_json(provider)
+        is_claude_json = _provider_uses_claude_json(provider)
+        is_opencode_json = _provider_uses_opencode_json(provider)
         if not is_codex_json and not is_gemini_json and not is_claude_json and not is_opencode_json:
             while True:
                 chunk = proc.stdout.read(1024)
@@ -712,12 +766,19 @@ def run_llm_once(
         sandbox_mode=sandbox_mode,
     )
     agent_cli_unset = configured_unset_keys()
+    provider_env = _resolve_provider_env(provider)
+    logger.info(
+        "[llm] run_once client_id=%s provider_id=%s command=%s",
+        client_id,
+        provider.get("id"),
+        format_command_for_log(cmd, provider_env),
+    )
     proc = subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         shell=False,
-        env=safe_env(unset_keys=agent_cli_unset),
+        env=safe_env(extra=provider_env, unset_keys=agent_cli_unset),
         **_popen_kwargs(),
     )
     output = (proc.stdout or "") + (proc.stderr or "")

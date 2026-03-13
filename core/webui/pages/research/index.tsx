@@ -38,7 +38,7 @@ import {
   IconSortAscending,
 } from '@tabler/icons-react';
 import { apiUrl } from '../../libs/api-base';
-import { getSelectedProvider, setSelectedProvider } from '../../libs/llm';
+import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
 
 const API_BASE_URL = apiUrl('/api');
 axios.defaults.withCredentials = true;
@@ -238,8 +238,8 @@ export default function ResearchPage() {
       const res = await axios.get(`${API_BASE_URL}/llm/providers`);
       const providers: LlmProvider[] = res.data.providers || [];
       setLlmProviders(providers);
-      const stored = getSelectedProvider();
-      const defaultId = stored || providers[0]?.id || null;
+      const serverDefault: string = res.data.default || '';
+      const defaultId = resolveSelectedProvider(providers, serverDefault, 'gemini');
       if (defaultId) setSelectedProvider(defaultId);
       setLlmProvider(defaultId);
     } catch (err) {

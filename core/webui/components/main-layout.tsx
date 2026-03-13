@@ -13,7 +13,7 @@ import {
 } from '@tabler/icons-react';
 import axios from 'axios';
 import { apiUrl } from '../libs/api-base';
-import { getSelectedProvider, setSelectedProvider } from '../libs/llm';
+import { resolveSelectedProvider, setSelectedProvider } from '../libs/llm';
 
 interface LlmProvider { id: string; name: string; }
 
@@ -63,11 +63,9 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
     axios.get(apiUrl('/api/llm/providers'))
       .then((res) => {
         const providers: LlmProvider[] = res.data.providers || [];
+        const serverDefault: string = res.data.default || '';
         setLlmProviders(providers);
-        const stored = getSelectedProvider();
-        const storedIsValid = stored ? providers.some((p) => p.id === stored) : false;
-        const geminiId = providers.find((p) => p.id === 'gemini')?.id ?? null;
-        const defaultId = storedIsValid ? stored : (geminiId ?? providers[0]?.id ?? null);
+        const defaultId = resolveSelectedProvider(providers, serverDefault, 'gemini');
         if (defaultId) setSelectedProvider(defaultId);
         setLlmProvider(defaultId);
       })

@@ -40,7 +40,7 @@ import {
   IconSortAscending,
 } from '@tabler/icons-react';
 import { apiUrl } from '../../libs/api-base';
-import { getSelectedProvider, setSelectedProvider } from '../../libs/llm';
+import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
 
 const API_BASE_URL = apiUrl('/api');
 axios.defaults.withCredentials = true;
@@ -244,8 +244,8 @@ export default function VibeCodingPage() {
       const res = await axios.get(`${API_BASE_URL}/llm/providers`);
       const providers: LlmProvider[] = res.data.providers || [];
       setLlmProviders(providers);
-      const stored = getSelectedProvider();
-      const defaultId = stored || providers[0]?.id || null;
+      const serverDefault: string = res.data.default || '';
+      const defaultId = resolveSelectedProvider(providers, serverDefault, 'gemini');
       if (defaultId) setSelectedProvider(defaultId);
       setLlmProvider(defaultId);
     } catch (err) {
@@ -416,9 +416,10 @@ export default function VibeCodingPage() {
     if (!saved) return;
 
     const workspacePath = currentProject ? vibeProjectPath(currentProject) : 'workspace/vibe-coding';
+    const projectLabel = currentProject ? `\nVibe coding project name: ${currentProject}` : '';
     const prompt = executeMode === 'skill'
-      ? `Use agent skill ${target} ${pendingAction.skillPromptSuffix}`
-      : `Execute workflow ${workflowProjectPath(target)}. ${pendingAction.skillPromptSuffix.charAt(0).toUpperCase()}${pendingAction.skillPromptSuffix.slice(1)}\n\nYour Workspace path: ${workspacePath}\n\nIf you create any intermediate files, save them inside the project workspace above.`;
+      ? `Use agent skill ${target} ${pendingAction.skillPromptSuffix}${projectLabel}`
+      : `Execute workflow ${workflowProjectPath(target)}. ${pendingAction.skillPromptSuffix.charAt(0).toUpperCase()}${pendingAction.skillPromptSuffix.slice(1)}\n\nYour Workspace path: ${workspacePath}${projectLabel}\n\nIf you create any intermediate files, save them inside the project workspace above.`;
 
     setExecuteOpened(false);
     if (executeMode === 'workflow') {

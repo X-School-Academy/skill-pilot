@@ -1,6 +1,10 @@
 const PROVIDER_KEY = 'juniorit_llm_provider';
 const CLIENT_ID_KEY = 'juniorit_llm_client_id';
 
+type ProviderOption = {
+  id: string;
+};
+
 export const getClientId = (): string => {
   if (typeof window === 'undefined') return 'server';
   let id = localStorage.getItem(CLIENT_ID_KEY);
@@ -19,6 +23,19 @@ export const getSelectedProvider = (): string | null => {
 export const setSelectedProvider = (providerId: string) => {
   if (typeof window === 'undefined') return;
   localStorage.setItem(PROVIDER_KEY, providerId);
+};
+
+export const resolveSelectedProvider = (
+  providers: ProviderOption[],
+  serverDefault?: string | null,
+  fallbackId?: string | null,
+): string | null => {
+  const validIds = new Set(providers.map((provider) => provider.id).filter(Boolean));
+  const stored = getSelectedProvider();
+  if (stored && validIds.has(stored)) return stored;
+  if (serverDefault && validIds.has(serverDefault)) return serverDefault;
+  if (fallbackId && validIds.has(fallbackId)) return fallbackId;
+  return providers[0]?.id || null;
 };
 
 export const dispatchLlmStatus = (running: boolean) => {

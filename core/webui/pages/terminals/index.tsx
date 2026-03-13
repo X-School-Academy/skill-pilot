@@ -36,7 +36,7 @@ import {
   IconVectorBezier2,
 } from '@tabler/icons-react';
 import { apiUrl } from '../../libs/api-base';
-import { getSelectedProvider, setSelectedProvider } from '../../libs/llm';
+import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
 
 const API_BASE_URL = apiUrl('/api');
 
@@ -79,10 +79,8 @@ export default function TerminalsPage() {
       const res = await axios.get(`${API_BASE_URL}/llm/providers`);
       const providers: LlmProvider[] = res.data.providers || [];
       setLlmProviders(providers);
-      const stored = getSelectedProvider();
-      const storedIsValid = stored ? providers.some((provider) => provider.id === stored) : false;
-      const geminiId = providers.find((provider) => provider.id === 'gemini')?.id || null;
-      const defaultId = storedIsValid ? stored : (geminiId || providers[0]?.id || null);
+      const serverDefault: string = res.data.default || '';
+      const defaultId = resolveSelectedProvider(providers, serverDefault, 'gemini');
       if (defaultId) {
         setSelectedProvider(defaultId);
       }
