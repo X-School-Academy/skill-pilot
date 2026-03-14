@@ -47,6 +47,11 @@ def _load_pyobjc() -> Dict[str, Any]:
             NSBezierPath,
             NSColor,
             NSMakeRect,
+            NSEvent,
+            NSEventMaskFlagsChanged,
+            NSEventModifierFlagOption,
+            NSCursor,
+            NSImage,
             NSScreen,
             NSScreenSaverWindowLevel,
             NSView,
@@ -66,6 +71,11 @@ def _load_pyobjc() -> Dict[str, Any]:
         "NSBezierPath": NSBezierPath,
         "NSColor": NSColor,
         "NSMakeRect": NSMakeRect,
+        "NSEvent": NSEvent,
+        "NSEventMaskFlagsChanged": NSEventMaskFlagsChanged,
+        "NSEventModifierFlagOption": NSEventModifierFlagOption,
+        "NSCursor": NSCursor,
+        "NSImage": NSImage,
         "NSScreen": NSScreen,
         "NSScreenSaverWindowLevel": NSScreenSaverWindowLevel,
         "NSView": NSView,
@@ -161,6 +171,11 @@ def main() -> int:
     NSBezierPath = pyobjc["NSBezierPath"]
     NSColor = pyobjc["NSColor"]
     NSMakeRect = pyobjc["NSMakeRect"]
+    NSEvent = pyobjc["NSEvent"]
+    NSEventMaskFlagsChanged = pyobjc["NSEventMaskFlagsChanged"]
+    NSEventModifierFlagOption = pyobjc["NSEventModifierFlagOption"]
+    NSCursor = pyobjc["NSCursor"]
+    NSImage = pyobjc["NSImage"]
     NSScreen = pyobjc["NSScreen"]
     NSScreenSaverWindowLevel = pyobjc["NSScreenSaverWindowLevel"]
     NSView = pyobjc["NSView"]
@@ -197,6 +212,9 @@ def main() -> int:
     state: Dict[str, Any] = {
         "mode": args.mode,
         "active": False,
+        "cursor": None,
+        "overlays": [],
+        "option_down": False,
         "windows": [],
         "stopping": False,
         "state_path": state_path,
@@ -231,7 +249,6 @@ def main() -> int:
             self._fixed_cocoa_rect = None
             self._drag_start = None
             self._drag_end = None
-            self._manual_rects = []
             return self
 
         def isOpaque(self):
@@ -244,6 +261,15 @@ def main() -> int:
             self._screen_origin = config.get("screen_origin", (0.0, 0.0))
             self._interactive = bool(config.get("interactive", False))
             self._fixed_cocoa_rect = config.get("fixed_cocoa_rect")
+            self.setNeedsDisplay_(True)
+
+        def setActive_(self, active):
+            self._interactive = bool(active)
+            self.setNeedsDisplay_(True)
+
+        def clearSelection(self):
+            self._drag_start = None
+            self._drag_end = None
             self.setNeedsDisplay_(True)
 
         def _draw_rect(self, rect, color):
@@ -266,12 +292,9 @@ def main() -> int:
         def drawRect_(self, _rect):
             self._draw_fixed_if_present()
 
-            for manual_rect in self._manual_rects:
-                self._draw_rect(manual_rect, NSColor.systemGreenColor())
-
             if self._drag_start is not None and self._drag_end is not None:
                 preview = _normalize_local_rect(self._drag_start, self._drag_end)
-                self._draw_rect(preview, NSColor.systemYellowColor())
+                self._draw_rect(preview, NSColor.redColor())
 
         def mouseDown_(self, event):
             if not self._interactive:
@@ -301,8 +324,6 @@ def main() -> int:
             if local_rect[2] < 1 or local_rect[3] < 1:
                 self.setNeedsDisplay_(True)
                 return
-
-            self._manual_rects.append(local_rect)
 
             local_x, local_y, width, height = local_rect
             global_cocoa_x = self._screen_origin[0] + local_x
@@ -350,6 +371,7 @@ def main() -> int:
             self.setBackgroundColor_(NSColor.clearColor())
             self.setHasShadow_(False)
             self.setLevel_(NSScreenSaverWindowLevel)
+            self.setIgnoresMouseEvents_(True)
             self.setCollectionBehavior_(
                 NSWindowCollectionBehaviorCanJoinAllSpaces
                 | NSWindowCollectionBehaviorFullScreenAuxiliary
@@ -357,10 +379,74 @@ def main() -> int:
             self.setReleasedWhenClosed_(False)
             return self
 
+    def _make_cursor():
+        size = 16.0
+        image = NSImage.alloc().initWithSize_((size, size))
+        image.lockFocus()
+        NSColor.clearColor().setFill()
+        NSBezierPath.bezierPathWithRect_(NSMakeRect(0, 0, size, size)).fill()
+        NSColor.redColor().setFill()
+        NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(2, 2, size - 4, size - 4)).fill()
+        image.unlockFocus()
+        return NSCursor.alloc().initWithImage_hotSpot_(image, (size / 2.0, size / 2.0))
+
+    def _activate_manual_mode() -> None:
+        if state["active"]:
+            return
+        screens = list(NSScreen.screens())
+        if not screens:
+            return
+        if state["cursor"] is None:
+            state["cursor"] = _make_cursor()
+        try:
+            state["cursor"].push()
+        except Exception:
+            pass
+        state["overlays"] = []
+        for screen in screens:
+            frame = screen.frame()
+            screen_origin = (float(frame.origin.x), float(frame.origin.y))
+            view = OverlayView.alloc().initWithFrame_(
+                NSMakeRect(0, 0, frame.size.width, frame.size.height)
+            )
+            view.configure_(
+                {
+                    "screen_origin": screen_origin,
+                    "interactive": False,
+                    "fixed_cocoa_rect": None,
+                }
+            )
+            window = OverlayWindow.alloc().initWithFrame_(frame)
+            window.setContentView_(view)
+            view.clearSelection()
+            view.setActive_(True)
+            window.setIgnoresMouseEvents_(False)
+            window.orderFrontRegardless()
+            state["overlays"].append((window, view))
+        state["active"] = True
+
+    def _deactivate_manual_mode() -> None:
+        if not state["active"]:
+            return
+        for window, view in state.get("overlays", []):
+            view.setActive_(False)
+            view.clearSelection()
+            window.setIgnoresMouseEvents_(True)
+            window.orderOut_(None)
+        state["overlays"] = []
+        try:
+            NSCursor.pop()
+        except Exception:
+            pass
+        state["active"] = False
+
     def _shutdown() -> None:
         if state["stopping"]:
             return
         state["stopping"] = True
+
+        if args.mode == "manual":
+            _deactivate_manual_mode()
 
         for window in state.get("windows", []):
             try:
@@ -386,29 +472,30 @@ def main() -> int:
         except Exception:
             pass
 
-    interactive = args.mode == "manual"
+    if args.mode == "quick":
+        for screen in screens:
+            frame = screen.frame()
+            screen_origin = (float(frame.origin.x), float(frame.origin.y))
 
-    for screen in screens:
-        frame = screen.frame()
-        screen_origin = (float(frame.origin.x), float(frame.origin.y))
+            view = OverlayView.alloc().initWithFrame_(
+                NSMakeRect(0, 0, frame.size.width, frame.size.height)
+            )
+            view.configure_(
+                {
+                    "screen_origin": screen_origin,
+                    "interactive": False,
+                    "fixed_cocoa_rect": quick_cocoa_bbox,
+                }
+            )
 
-        view = OverlayView.alloc().initWithFrame_(NSMakeRect(0, 0, frame.size.width, frame.size.height))
-        view.configure_(
-            {
-                "screen_origin": screen_origin,
-                "interactive": interactive,
-                "fixed_cocoa_rect": quick_cocoa_bbox if args.mode == "quick" else None,
-            }
-        )
+            window = OverlayWindow.alloc().initWithFrame_(frame)
+            window.setContentView_(view)
+            window.setIgnoresMouseEvents_(True)
+            window.orderFrontRegardless()
 
-        window = OverlayWindow.alloc().initWithFrame_(frame)
-        window.setContentView_(view)
-        window.setIgnoresMouseEvents_(not interactive)
-        window.orderFrontRegardless()
+            state["windows"].append(window)
 
-        state["windows"].append(window)
-
-    state["active"] = True
+    state["active"] = args.mode == "quick"
 
     if args.mode == "quick":
         duration = max(0.1, args.duration)
@@ -431,13 +518,28 @@ def main() -> int:
         )
         AppHelper.callLater(duration, _shutdown)
     else:
+        def _flags_changed(event):
+            flags = event.modifierFlags()
+            option_down = bool(flags & NSEventModifierFlagOption)
+            if option_down != state["option_down"]:
+                state["option_down"] = option_down
+            if option_down:
+                _activate_manual_mode()
+            else:
+                _deactivate_manual_mode()
+
+        NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
+            NSEventMaskFlagsChanged,
+            _flags_changed,
+        )
+
         print(
             json.dumps(
                 {
                     "status": "running",
                     "mode": "manual",
                     "state_path": state_path,
-                    "hint": "Drag with mouse to draw rectangles. Stop the process when done.",
+                    "hint": "Hold Option and drag with the mouse to draw. Release Option to hide and clear.",
                 },
                 ensure_ascii=True,
             ),
@@ -445,7 +547,7 @@ def main() -> int:
         )
 
     try:
-        AppHelper.runEventLoop()
+        AppHelper.runEventLoop(installInterrupt=False)
     finally:
         _shutdown()
 
