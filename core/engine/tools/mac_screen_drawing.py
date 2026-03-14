@@ -43,6 +43,7 @@ def _load_pyobjc() -> Dict[str, Any]:
         import objc  # type: ignore
         from AppKit import (  # type: ignore
             NSApplication,
+            NSApplicationActivationPolicyAccessory,
             NSBackingStoreBuffered,
             NSBezierPath,
             NSColor,
@@ -67,6 +68,7 @@ def _load_pyobjc() -> Dict[str, Any]:
     return {
         "objc": objc,
         "NSApplication": NSApplication,
+        "NSApplicationActivationPolicyAccessory": NSApplicationActivationPolicyAccessory,
         "NSBackingStoreBuffered": NSBackingStoreBuffered,
         "NSBezierPath": NSBezierPath,
         "NSColor": NSColor,
@@ -188,8 +190,10 @@ def main() -> int:
     ]
     NSWindowStyleMaskBorderless = pyobjc["NSWindowStyleMaskBorderless"]
     AppHelper = pyobjc["AppHelper"]
+    NSApplicationActivationPolicyAccessory = pyobjc["NSApplicationActivationPolicyAccessory"]
 
     app = NSApplication.sharedApplication()
+    app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
     screens = list(NSScreen.screens())
     if not screens:
         print("No displays detected.", file=sys.stderr)
