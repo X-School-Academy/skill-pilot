@@ -175,21 +175,30 @@ print(uuid.uuid4())
 PY
 ```
 
-Add provider credentials for your selected provider (if needed):
+Add provider credentials for your selected provider (if needed). The compatible API and Ollama providers in `config/ai_providers.json5` read these env vars directly:
 
-OpenAI-compatible:
+OpenAI-compatible for `codex-compat`:
 
 ```dotenv
-OPENAI_BASE_URL=https://your-openai-compatible-endpoint
-OPENAI_API_KEY=<your-openai-key>
+OPENAI_COMPAT_BASE_URL=https://your-openai-compatible-endpoint
+OPENAI_COMPAT_API_KEY=<your-openai-key>
 ```
 
-Claude-compatible:
+Claude-compatible for `claude-compat`:
 
 ```dotenv
-ANTHROPIC_BASE_URL=https://your-claude-compatible-endpoint
-ANTHROPIC_AUTH_TOKEN=<your-claude-token>
+ANTHROPIC_COMPAT_BASE_URL=https://your-claude-compatible-endpoint
+ANTHROPIC_COMPAT_AUTH_TOKEN=<your-claude-token>
 ANTHROPIC_API_KEY=
+```
+
+Ollama:
+
+```dotenv
+# Defaults already point to local Ollama in config/ai_providers.json5
+# Change only if your Ollama endpoint differs.
+OPENAI_BASE_URL=http://localhost:11434/v1/
+OPENAI_API_KEY=ollama
 ```
 
 Recommended permission:
@@ -224,14 +233,55 @@ If binding to non-localhost hosts, decide whether to enforce HTTPS (`ONLY_ALLOW_
 - Set `default.llm` to your chosen provider id:
   - Native CLI mode: `claude`, `copilot`, `codex`, `gemini`, or `opencode`
   - Compatible API mode: `claude-compat` or `codex-compat`
+  - Local Ollama mode: `ollama`
 - Set `disabled: true` for unused LLM providers.
 - Keep your selected provider enabled (`disabled: false` or omit `disabled`).
+- The built-in compatible providers are disabled by default. To enable one, edit its entry under `llm` and either remove `disabled: true` or change it to `disabled: false`.
 
-Compatibility mapping used by `skillpilot.sh` init:
+Example selections:
 
-- If you pick `claude` and provide a Claude-compatible API URL/key, default becomes `claude-compat`.
-- If you pick `codex` and provide an OpenAI-compatible API URL/key, default becomes `codex-compat`.
-- `opencode` can also use OpenAI-compatible env vars, but provider id remains `opencode`.
+```json5
+default: {
+  llm: 'ollama',
+  tts: 'openai',
+  image: 'openai',
+}
+```
+
+```json5
+{
+  id: 'ollama',
+  disabled: false,
+  model: 'llama3.2',
+  env: {
+    OPENAI_API_KEY: 'ollama',
+    OPENAI_BASE_URL: 'http://localhost:11434/v1/',
+  },
+}
+```
+
+```json5
+{
+  id: 'codex-compat',
+  disabled: false,
+  model: 'your-openai-compatible-model',
+}
+```
+
+```json5
+{
+  id: 'claude-compat',
+  disabled: false,
+  model: 'your-claude-compatible-model',
+}
+```
+
+Provider notes:
+
+- `claude-compat` reads `ANTHROPIC_COMPAT_BASE_URL` and `ANTHROPIC_COMPAT_AUTH_TOKEN`.
+- `codex-compat` reads `OPENAI_COMPAT_BASE_URL` and `OPENAI_COMPAT_API_KEY`.
+- `ollama` is preconfigured to use `http://localhost:11434/v1/` via the Codex CLI adapter; update its `model` to the Ollama model you actually installed.
+- `opencode` can also be pointed at an OpenAI-compatible endpoint by editing its `env` block in `config/ai_providers.json5`.
 
 ## 9. Start services
 
