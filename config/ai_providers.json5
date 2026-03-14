@@ -208,7 +208,7 @@
     // Ollama
     {
       id: 'ollama-cloud',
-      name: 'Ollama Cloud',
+      name: 'Codex Ollama Cloud',
       bin: 'codex',
       model: 'kimi-k2.5:cloud',
       disabled: false,
