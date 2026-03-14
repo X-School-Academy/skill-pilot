@@ -522,19 +522,24 @@ def main() -> int:
         )
         AppHelper.callLater(duration, _shutdown)
     else:
-        def _flags_changed(event):
+        def _handle_flags_changed(event):
             flags = event.modifierFlags()
             option_down = bool(flags & NSEventModifierFlagOption)
             if option_down != state["option_down"]:
                 state["option_down"] = option_down
-            if option_down:
-                _activate_manual_mode()
-            else:
-                _deactivate_manual_mode()
+                if option_down:
+                    _activate_manual_mode()
+                else:
+                    _deactivate_manual_mode()
+            return event
 
         NSEvent.addGlobalMonitorForEventsMatchingMask_handler_(
             NSEventMaskFlagsChanged,
-            _flags_changed,
+            _handle_flags_changed,
+        )
+        NSEvent.addLocalMonitorForEventsMatchingMask_handler_(
+            NSEventMaskFlagsChanged,
+            _handle_flags_changed,
         )
 
         print(
@@ -543,7 +548,7 @@ def main() -> int:
                     "status": "running",
                     "mode": "manual",
                     "state_path": state_path,
-                    "hint": "Hold Option and drag with the mouse to draw. Release Option to hide and clear.",
+                    "hint": "Hold Option and drag with the mouse to draw. Release Option to hide.",
                 },
                 ensure_ascii=True,
             ),
