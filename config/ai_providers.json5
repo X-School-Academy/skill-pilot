@@ -55,6 +55,25 @@
       },
       'exit-session': 'esc\nctrl+c\nctrl+c',
     },
+    {
+      id: 'copilot',
+      name: 'GitHub Copilot CLI',
+      bin: 'copilot',
+      'sandbox-args': [],
+      'auto-args': ['--no-ask-user'],
+      'network-args': ['--allow-all-urls'],
+      args: [
+        '-p',
+        '{{prompt}}',
+        '-s',
+        '--allow-all-tools',
+      ],
+      'terminal-args': ['-i', '{{prompt}}'],
+      env: {
+        'PLAYWRIGHT_MCP_EXTENSION_TOKEN': '${PLAYWRIGHT_MCP_EXTENSION_TOKEN}',
+      },
+      'exit-session': 'esc\nctrl+c\nctrl+c',
+    },
     /*
     # Using OpenAI codex with ENV vars below for any openai compatible api 
     OPENAI_API_KEY

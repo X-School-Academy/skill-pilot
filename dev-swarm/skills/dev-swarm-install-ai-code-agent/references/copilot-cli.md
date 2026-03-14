@@ -6,9 +6,9 @@ GitHub's Copilot CLI tool for AI-assisted coding.
 
 ### Windows
 
-**Option 1: npm**
+**Option 1: pnpm**
 ```bash
-npm install -g @github/copilot
+pnpm install -g @github/copilot
 ```
 
 **Option 2: WinGet**
@@ -18,9 +18,9 @@ winget install GitHub.Copilot
 
 ### macOS, Linux
 
-**Option 1: npm**
+**Option 1: pnpm**
 ```bash
-npm install -g @github/copilot
+pnpm install -g @github/copilot
 ```
 
 **Option 2: Install Script**
@@ -49,8 +49,7 @@ copilot --version
 
 1. Run `copilot` in your terminal
 2. Authenticate with GitHub
-3. Ensure you have an active GitHub Copilot subscription
-4. Follow the setup wizard
+3. Follow the setup wizard
 
 ## Documentation
 

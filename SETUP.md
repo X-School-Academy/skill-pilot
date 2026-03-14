@@ -6,7 +6,7 @@ Use this guide if `install.sh` or `skillpilot.sh` init cannot finish automatical
 
 - Supported OS: macOS or Linux (Windows users should use WSL first).
 - Have at least one ready:
-1. Claude Code, Codex, Gemini CLI, or OpenCode CLI
+1. Claude Code, GitHub Copilot CLI, Codex, Gemini CLI, or OpenCode CLI
 2. OpenAI-compatible or Claude-compatible API URL and key
 
 If you have neither an agent CLI nor API credentials, setup cannot complete.
@@ -98,6 +98,7 @@ pnpm install -g @playwright/cli@latest
 Supported providers checked by `skillpilot.sh`:
 
 - `claude`
+- `copilot`
 - `codex`
 - `gemini`
 - `opencode`
@@ -106,15 +107,21 @@ Install commands used by the init flow:
 
 ```bash
 curl -fsSL https://claude.ai/install.sh | bash
-brew install codex
+pnpm install -g @github/copilot
+pnpm install -g @openai/codex
+pnpm install -g @google/gemini-cli
+pnpm install -g opencode-ai
 ```
 
 Notes:
 
-- `brew install codex` requires Homebrew.
-- For Gemini CLI and OpenCode CLI, install from their official docs, then verify with:
+- `pnpm install -g ...` requires `pnpm` and a working Node.js installation.
+- Verify installed CLIs with:
 
 ```bash
+command -v claude
+command -v copilot
+command -v codex
 command -v gemini
 command -v opencode
 ```
@@ -215,7 +222,7 @@ If binding to non-localhost hosts, decide whether to enforce HTTPS (`ONLY_ALLOW_
 ## 8. Update `config/ai_providers.json5`
 
 - Set `default.llm` to your chosen provider id:
-  - Native CLI mode: `claude`, `codex`, `gemini`, or `opencode`
+  - Native CLI mode: `claude`, `copilot`, `codex`, `gemini`, or `opencode`
   - Compatible API mode: `claude-compat` or `codex-compat`
 - Set `disabled: true` for unused LLM providers.
 - Keep your selected provider enabled (`disabled: false` or omit `disabled`).

@@ -39,6 +39,15 @@ def _default_config() -> Dict[str, Any]:
                 "sandbox-args": ["--settings", "claude-sandbox-settings.json"],
             },
             {
+                "id": "copilot",
+                "name": "Copilot CLI",
+                "bin": "copilot",
+                "args": ["-p", "{{prompt}}", "-s", "--allow-all-tools"],
+                "auto-args": ["--no-ask-user"],
+                "network-args": ["--allow-all-urls"],
+                "sandbox-args": [],
+            },
+            {
                 "id": "codex",
                 "name": "OpenAI Codex",
                 "bin": "codex",
