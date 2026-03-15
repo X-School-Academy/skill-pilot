@@ -1,5 +1,21 @@
 # Skill Pilot Knowledge Points
-*Everything you need to know to build an AI agent by vibe coding — no coding syntax required.*
+*Everything you need to know to learn, build, and do real things with AI agents — no coding syntax required.*
+
+---
+
+> ### The Three Stages of Working with AI
+>
+> | Stage | What It Means | Example |
+> |---|---|---|
+> | **Vibe Learning** | Pick up just enough basic vocabulary and concepts to guide AI — not to become an expert yourself, but to know what to ask and how to describe what you want. The AI holds the deep knowledge; you learn how to direct it. | *"What is an API key and why do I need one?"* |
+> | **Vibe Coding** | Build a real software project by describing what you want — the AI writes, tests, and fixes all the code | *"Build me a personal finance tracker web app"* |
+> | **Vibe Doing** | Get real-world tasks done by guiding AI agents with just a few words or one click — no complex setup, no configuration. You say what you want, the agent figures out how and does it. | *"Deploy my app to AWS and send me the live link"* |
+>
+> **The key insight:** You do not need to learn how to code or become a cloud engineer. You only need to understand concepts well enough to have a clear conversation with the AI. Think of yourself as the director — the AI is the expert doing the work.
+>
+> You don't need to master all three at once. Start with learning just enough, build something simple, then let the agent do real work for you.
+
+---
 
 ---
 
@@ -319,21 +335,146 @@
 
 ---
 
-## 21. Learning Path Suggestion
+## 21. Vibe Coding — Projects You Can Build
 
-To build an AI agent project from zero (vibe coding approach), learn these in order:
+You don't need to know how to code. Just describe what you want and the agent builds it. Here are real project types students have built with Skill Pilot:
 
-1. **Terminal basics** → bash, SSH, tmux
-2. **Version control** → git, GitHub, .gitignore, branches, commits
-3. **Secrets & config** → .env, environment variables, API keys
-4. **Package managers** → npm/pnpm (frontend), pip/uv (Python backend)
-5. **AI fundamentals** → LLM, token, context window, prompt, tool calling
-6. **MCP & agents** → MCP server, MCP tool, agent skill, multi-agent
-7. **Backend basics** → REST API, WebSocket, HTTP, FastAPI/Node.js
-8. **Frontend basics** → Next.js, React, Tailwind CSS
-9. **Cloud & infra** → AWS, EC2, Docker, SSH tunnel
-10. **Media AI** → TTS, vision model, image generation, ffmpeg
-11. **Security** → prompt injection, secret management, ignore files
+### Personal & Productivity
+| Project | What It Is |
+|---|---|
+| **Personal portfolio website** | A website showing your work, bio, and contact info — deployed live on the internet |
+| **Daily journal app** | A private web app to write and search your notes |
+| **Habit tracker** | Track daily goals with streaks, charts, and reminders |
+| **Personal finance tracker** | Log income and expenses, see charts of where your money goes |
+| **Recipe book app** | Store and search your favourite recipes with photos |
+
+### Learning & School
+| Project | What It Is |
+|---|---|
+| **Flashcard study app** | Digital flashcards with spaced repetition, like a personal Anki |
+| **Quiz generator** | Paste in any text and get a multiple-choice quiz automatically |
+| **Study timer (Pomodoro)** | Focus timer with session tracking and break reminders |
+| **School timetable planner** | Visual weekly schedule with subject colour coding |
+
+### Creative & Media
+| Project | What It Is |
+|---|---|
+| **AI image gallery** | Generate images from text and display them in a beautiful gallery |
+| **Lyrics-to-song creator** | Turn your lyrics into a real singing audio file |
+| **Slideshow video maker** | Combine images and music into a polished video automatically |
+| **Talking avatar creator** | Upload a face photo and make it talk with any audio |
+| **Podcast transcript tool** | Upload an audio file and get a full searchable transcript |
+
+### Tools & Automation
+| Project | What It Is |
+|---|---|
+| **Discord bot** | A bot that responds to commands, posts updates, or runs mini-games in your server |
+| **URL shortener** | Your own personal link shortener like bit.ly |
+| **File converter web app** | Drag and drop files to convert between formats (PDF, image, audio, etc.) |
+| **Chat with your documents** | Upload PDFs or notes and ask AI questions about them |
+| **Local AI chatbot** | Your own private ChatGPT-style chatbot running entirely on your machine |
+
+### Business & Side Projects
+| Project | What It Is |
+|---|---|
+| **Landing page for a product** | A clean, modern product page with sign-up form |
+| **Simple e-commerce store** | Product listings, cart, and checkout flow |
+| **Booking/appointment system** | Let people book time slots with you online |
+| **Content scheduling tool** | Plan and queue social media posts |
+
+---
+
+## 22. Vibe Doing — Real-World Tasks You Can Automate
+
+Vibe doing goes beyond building apps. You guide the agent with a few plain words — or even a single click — and it handles everything: browsing, clicking, uploading, deploying, generating. No configuration. No steps. Just say what outcome you want.
+
+### Content Creation
+| Task | What the Agent Does |
+|---|---|
+| **Create a presentation (slides)** | Takes your bullet points and generates a full slide deck — layout, design, and content included |
+| **Generate a PDF report** | Turns your notes or data into a formatted, professional PDF document |
+| **Create a short video from text** | Writes a script, generates voiceover, adds visuals, and produces an MP4 video |
+| **Create an AI avatar video** | Makes a face image talk and lip-sync to any audio or text you provide |
+| **Generate a song from lyrics** | Turns your words into a real vocal singing audio file |
+| **Make a slideshow video** | Combines your images with music and transitions into a polished video |
+| **Record your screen** | Captures your screen as a video while you work |
+
+### File & Data Tasks
+| Task | What the Agent Does |
+|---|---|
+| **Extract text from audio/video** | Transcribes spoken words into searchable text with timestamps |
+| **Analyse an image** | Describes what's in a photo, reads text in images, or answers questions about it |
+| **Analyse a video** | Watches a video and answers questions about it or summarises it |
+| **Convert and compress media** | Converts files between formats, resizes videos, extracts audio from video |
+| **Extract vocals from a song** | Separates the singing voice from the background music in any audio file |
+| **Batch rename or organise files** | Renames or sorts hundreds of files automatically based on your rules |
+
+### Web & Research Tasks
+| Task | What the Agent Does |
+|---|---|
+| **Deep research a topic** | Searches the web, reads multiple sources, and writes a structured research report |
+| **Scrape and summarise a website** | Visits a URL, reads the content, and gives you a clear summary |
+| **Fill out a web form automatically** | Opens a browser and completes a form on your behalf |
+| **Take a screenshot of any webpage** | Captures exactly what a webpage looks like at any moment |
+| **Monitor a website for changes** | Checks a page on a schedule and alerts you if content changes |
+
+### Cloud & Deployment
+| Task | What the Agent Does |
+|---|---|
+| **Deploy a web app to AWS EC2** | Spins up a cloud server, installs your app, and gives you a live public URL |
+| **Set up a cloud server from scratch** | Creates an EC2 instance with all software installed and configured via SSH |
+| **Auto-install OpenClaw on EC2** | Runs the full OpenClaw installation on a remote server automatically |
+| **Open an SSH tunnel** | Securely connects your local machine to a remote server's port in seconds |
+| **Upload files to cloud storage (S3)** | Sends files to AWS S3 bucket storage with a single instruction |
+| **Check server status** | Connects to a remote server and reports what's running, disk space, memory usage |
+
+### Communication & Sharing
+| Task | What the Agent Does |
+|---|---|
+| **Post to Discord** | Sends a message, file, or announcement to a Discord channel automatically |
+| **Send a webhook notification** | Fires off an HTTP event to trigger other services (e.g., Zapier, Slack, email) |
+| **Generate and email a report** | Creates a formatted report and sends it via email or webhook |
+
+### Developer Tasks (Vibe Doing for Builders)
+| Task | What the Agent Does |
+|---|---|
+| **Review code for bugs** | Reads your codebase and finds issues, security risks, and improvements |
+| **Write and run tests** | Creates automated tests for your project and runs them, reporting what passed or failed |
+| **Commit and push to GitHub** | Stages your changes, writes a commit message, and pushes to your repo |
+| **Create a GitHub pull request** | Opens a PR with a proper title and description, ready for review |
+| **Publish an npm package** | Bundles and publishes your JavaScript library to the npm registry |
+| **Run a headless AI coding agent** | Spawns another AI agent (Claude Code, Gemini CLI, Codex) to work on a task in the background |
+
+---
+
+## 23. Learning Path Suggestion
+
+To go from complete beginner to vibe doing real projects, follow this journey:
+
+### Stage 1 — Vibe Learning (Start Here)
+> Goal: learn just enough to talk to AI clearly. You don't need to deeply understand any of this — you only need to know what these things *are* so you can describe what you want.
+
+1. What is an AI agent? What is an LLM? *(so you can pick the right tool)*
+2. Tokens, context window, prompts *(so you understand why instructions need to be clear and concise)*
+3. What are API keys? *(so you don't accidentally expose secrets)*
+4. What is a terminal? What is SSH? *(so you can describe where you want things to run)*
+5. What is git and GitHub? *(so you can tell the agent to save and share your work)*
+6. What is cloud / AWS / EC2? *(so you can ask the agent to deploy something without confusion)*
+
+### Stage 2 — Vibe Coding (Build Your First Project)
+5. Terminal basics — bash, SSH, tmux
+6. Version control — git, GitHub, commits, branches
+7. Secrets & config — .env, environment variables
+8. Package managers — pnpm (frontend), uv (Python backend)
+9. Pick a starter project from the list above and build it
+
+### Stage 3 — Vibe Doing (Get Real Things Done)
+10. MCP & agent skills — what they are and how to use them
+11. Cloud basics — AWS, EC2, SSH tunnels, S3
+12. Media AI — TTS, image generation, video creation, ffmpeg
+13. Browser automation — Playwright, screenshots, form filling
+14. Security awareness — prompt injection, ignore files, least privilege
+15. Multi-agent workflows — chaining agents to do complex tasks end to end
 
 ---
 
