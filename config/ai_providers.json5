@@ -205,7 +205,7 @@
       },
       'exit-session': 'esc\nctrl+c\nctrl+c',
     },
-    // Ollama
+    // Ollama: by running `ollama run kimi-k2.5:cloud`
     {
       id: 'ollama-cloud',
       name: 'Codex Ollama Cloud',
