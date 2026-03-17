@@ -66,6 +66,7 @@ Use the shown `describe-instances` command only as a reference pattern; perform 
 Ask user to confirm or provide:
 - **Instance name** (default: `app-server`)
 - **Instance type** (default: `t4g.small`; show pricing if unsure)
+- **Root disk size** (default: `20 GiB` gp3)
 - **Region** (read from `.env` via skill `key-safe`)
 - **VPC name** (default: `vpc-<instance-name>`)
 - **Security group extra ports** (default: SSH only; ask if any ports should be open)
