@@ -429,6 +429,23 @@ class Bridge:
                 continue
             self._enabled.add(server_id)
 
+    def refresh_config(self) -> dict[str, Any]:
+        previous_enabled = set(self._enabled)
+        self._load()
+
+        active_enabled = set(self._enabled)
+        stale_server_ids = [server_id for server_id in self._clients if server_id not in active_enabled]
+        for server_id in stale_server_ids:
+            client = self._clients.pop(server_id, None)
+            if client is not None:
+                client.close()
+
+        return {
+            "enabled_servers": sorted(active_enabled),
+            "disabled_servers": sorted(previous_enabled - active_enabled),
+            "newly_enabled_servers": sorted(active_enabled - previous_enabled),
+        }
+
     def _get_client(self, server_id: str) -> MCPClient:
         if server_id not in self._enabled:
             raise MCPError(f"server_id is not enabled or not available: {server_id}")
@@ -469,6 +486,9 @@ class Bridge:
             from .sync import sync_mcp_tools
 
             summary = sync_mcp_tools(repo_root=repo_root)
+            refresh_summary = self.refresh_config()
+            if isinstance(summary, dict):
+                summary["bridge_refresh"] = refresh_summary
             return {"status": "ok", "result": summary}
         if operation in {"engine_restart", "engine_reload"}:
             control_pid = self._resolve_engine_control_pid()
