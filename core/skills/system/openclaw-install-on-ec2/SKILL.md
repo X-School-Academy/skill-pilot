@@ -306,7 +306,7 @@ Discord bot:         paired and responding
   sudo systemctl restart openclaw
   ```
 
-  If the crash still occurs, create swap at `2G` first. If `2G` is already present or still insufficient, increase it in `1G` steps (`3G`, `4G`, `5G`, and so on) and retry after each change:
+  If the crash still occurs, create swap at `2G` first. If `2G` is already present or still insufficient, increase it in `1G` steps (`3G`, `4G`, `5G`, and so on, and increase `--max-old-space-size` as needed) and retry after each change:
   ```bash
   ls -lh /swapfile
   sudo swapon -s
