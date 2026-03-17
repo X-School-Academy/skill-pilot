@@ -10,6 +10,7 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 _LOADED_KEYS_ENV = "SAFE_DOTENV_LOADED_KEYS"
+_TRACKING_META_KEYS = {_LOADED_KEYS_ENV, "SAFE_DOTENV_UNSET_KEYS"}
 
 
 def configured_unset_keys() -> list[str]:
@@ -22,19 +23,32 @@ def configured_unset_keys() -> list[str]:
     return keys
 
 
-def loaded_env_key_names() -> list[str]:
-    raw = os.environ.get(_LOADED_KEYS_ENV, "")
+def _normalize_key_names(keys: list[str]) -> list[str]:
     names: list[str] = []
     seen: set[str] = set()
-    for key in raw.split(","):
-        item = key.strip()
-        if not item:
+    for key in keys:
+        if not isinstance(key, str):
             continue
-        if item in seen:
+        item = key.strip()
+        if not item or item in seen or item in _TRACKING_META_KEYS:
             continue
         seen.add(item)
         names.append(item)
     return sorted(names)
+
+
+def loaded_env_key_names() -> list[str]:
+    raw = os.environ.get(_LOADED_KEYS_ENV, "")
+    return _normalize_key_names(raw.split(","))
+
+
+def remember_loaded_env_key_names(keys: list[str]) -> list[str]:
+    merged = _normalize_key_names([*loaded_env_key_names(), *keys])
+    if merged:
+        os.environ[_LOADED_KEYS_ENV] = ",".join(merged)
+    else:
+        os.environ.pop(_LOADED_KEYS_ENV, None)
+    return merged
 
 
 def apply_env_key_values(updates: dict[str, str]) -> list[str]:
@@ -49,9 +63,7 @@ def apply_env_key_values(updates: dict[str, str]) -> list[str]:
         applied_keys.append(key)
 
     if applied_keys:
-        existing = set(loaded_env_key_names())
-        existing.update(applied_keys)
-        os.environ[_LOADED_KEYS_ENV] = ",".join(sorted(existing))
+        remember_loaded_env_key_names(applied_keys)
 
     return applied_keys
 
@@ -138,6 +150,8 @@ def read_protected_file_gui(path: str) -> str:
 
 def load_env_with_safeguard(path: str | Path, *, override: bool = False, require_gui_auth: bool = False) -> bool:
     if os.getenv("IN_KEYS_SAFE_GUARD", "").strip() == "1" and configured_unset_keys():
+        if not loaded_env_key_names():
+            remember_loaded_env_key_names([key for key in configured_unset_keys() if key != "IN_KEYS_SAFE_GUARD"])
         print("[safe_dotenv] IN_KEYS_SAFE_GUARD=1 with preloaded env detected; skip loading .env again.", file=sys.stderr)
         return False
 
@@ -184,12 +198,15 @@ def load_env_with_safeguard(path: str | Path, *, override: bool = False, require
     values = dotenv_values(stream=StringIO(raw))
     loaded = False
     updates: dict[str, str] = {}
+    tracked_keys: list[str] = []
     for key, val in values.items():
         if not isinstance(key, str) or not isinstance(val, str):
             continue
+        tracked_keys.append(key)
         if override or key not in os.environ:
             updates[key] = val
 
+    remember_loaded_env_key_names(tracked_keys)
     applied_keys = apply_env_key_values(updates)
     loaded = bool(applied_keys)
 

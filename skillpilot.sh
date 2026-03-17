@@ -903,6 +903,8 @@ load_guarded_env() {
     return
   fi
 
+  unset SAFE_DOTENV_LOADED_KEYS SAFE_DOTENV_UNSET_KEYS
+
   local env_content=""
   if [[ -r "${ENGINE_ENV_FILE}" ]]; then
     env_content="$(cat "${ENGINE_ENV_FILE}")"
@@ -937,11 +939,17 @@ for key, value in values.items():
         sys.stdout.write("\0")
 ')
 
-  export IN_KEYS_SAFE_GUARD=1
-  loaded_keys+=("IN_KEYS_SAFE_GUARD")
   if ((${#loaded_keys[@]} > 0)); then
+    local loaded_key_csv
+    loaded_key_csv="$(IFS=,; echo "${loaded_keys[*]}")"
+    export SAFE_DOTENV_LOADED_KEYS="${loaded_key_csv}"
+  fi
+
+  export IN_KEYS_SAFE_GUARD=1
+  local unset_keys=("${loaded_keys[@]}" "IN_KEYS_SAFE_GUARD")
+  if ((${#unset_keys[@]} > 0)); then
     local key_csv
-    key_csv="$(IFS=,; echo "${loaded_keys[*]}")"
+    key_csv="$(IFS=,; echo "${unset_keys[*]}")"
     export SAFE_DOTENV_UNSET_KEYS="${key_csv}"
   fi
 }
