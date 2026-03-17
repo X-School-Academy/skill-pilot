@@ -996,19 +996,60 @@ open_in_browser() {
   fi
 }
 
+wait_for_http_ready() {
+  local url="$1"
+  local timeout_seconds="${2:-30}"
+  local start_ts now
+
+  start_ts="$(date +%s)"
+  while true; do
+    if curl -fsS -m 2 -o /dev/null "${url}" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    now="$(date +%s)"
+    if (( now - start_ts >= timeout_seconds )); then
+      return 1
+    fi
+    sleep 1
+  done
+}
+
 open_or_print_webui_url() {
   local mode="$1"
-  local base_url url
+  local base_url url ready_url ready_url_with_auth
   base_url="$(get_webui_base_url "${mode}")"
   if [[ -n "${AUTH_TOKEN:-}" ]]; then
     url="${base_url}?token=${AUTH_TOKEN}"
   else
     url="${base_url}"
   fi
+
+  if [[ "${mode}" == "dev" ]]; then
+    ready_url="${base_url}"
+  else
+    ready_url="${base_url}api/health"
+  fi
+
+  if [[ -n "${AUTH_TOKEN:-}" ]]; then
+    if [[ "${ready_url}" == *\?* ]]; then
+      ready_url_with_auth="${ready_url}&token=${AUTH_TOKEN}"
+    else
+      ready_url_with_auth="${ready_url}?token=${AUTH_TOKEN}"
+    fi
+  else
+    ready_url_with_auth="${ready_url}"
+  fi
+
   echo ""
   if has_gui_env; then
-    echo "Prepare to launch browser in 2 seconds: ${base_url}"
-    sleep 2
+    echo "Waiting for Skill Pilot to become reachable: ${ready_url}"
+    if wait_for_http_ready "${ready_url_with_auth}" 45; then
+      echo "Skill Pilot is reachable."
+    else
+      echo "Timed out waiting for Skill Pilot to answer at ${ready_url}."
+      echo "Opening the browser anyway."
+    fi
     echo "Opening WebUI in browser: ${base_url}"
     open_in_browser "${url}"
   else
