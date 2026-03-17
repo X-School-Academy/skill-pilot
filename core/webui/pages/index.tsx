@@ -207,7 +207,10 @@ export default function HomePage() {
   const [skillDisabled, setSkillDisabled] = useState<Set<string>>(new Set());
   const [skillSaving, setSkillSaving] = useState(false);
   const [skillSaveOutput, setSkillSaveOutput] = useState('');
-  const [skillActiveTab, setSkillActiveTab] = useState('system');
+  const [skillActiveTab, setSkillActiveTab] = useState('all');
+  const [skillSearchText, setSkillSearchText] = useState('');
+  const [skillAppliedSearch, setSkillAppliedSearch] = useState('');
+  const [skillSearchFocused, setSkillSearchFocused] = useState(false);
   const [skillSubScreen, setSkillSubScreen] = useState<null | { mode: 'use' | 'view' | 'edit'; skillName: string; categoryId: string; createSkill?: boolean }>(null);
   const [skillContent, setSkillContent] = useState('');
   const [skillUsePrompt, setSkillUsePrompt] = useState('');
@@ -1319,6 +1322,10 @@ export default function HomePage() {
     });
   };
 
+  const runSkillSearch = (value?: string) => {
+    setSkillAppliedSearch((value ?? skillSearchText).trim());
+  };
+
   const skillSave = async () => {
     setSkillSaving(true);
     setSkillSaveOutput('');
@@ -1577,7 +1584,29 @@ export default function HomePage() {
       }
     }
 
-    const activeCategory = skillCategories.find((c) => c.id === skillActiveTab);
+    const skillTabs = [
+      { id: 'all', label: 'All', skills: skillCategories.flatMap((cat) => cat.skills.map((skill) => ({ ...skill, categoryId: cat.id }))) },
+      ...skillCategories.map((cat) => ({
+        id: cat.id,
+        label: cat.label,
+        skills: cat.skills.map((skill) => ({ ...skill, categoryId: cat.id })),
+      })),
+    ];
+    const activeTab = skillTabs.find((tab) => tab.id === skillActiveTab) || skillTabs[0];
+    const normalizedSkillSearch = skillSearchText.trim().toLowerCase();
+    const skillSuggestions = normalizedSkillSearch
+      ? activeTab.skills.filter((skill) => (
+        skill.name.toLowerCase().includes(normalizedSkillSearch) ||
+        skill.description.toLowerCase().includes(normalizedSkillSearch)
+      ))
+      : activeTab.skills;
+    const normalizedAppliedSearch = skillAppliedSearch.trim().toLowerCase();
+    const displayedSkills = normalizedAppliedSearch
+      ? activeTab.skills.filter((skill) => (
+        skill.name.toLowerCase().includes(normalizedAppliedSearch) ||
+        skill.description.toLowerCase().includes(normalizedAppliedSearch)
+      ))
+      : activeTab.skills;
     return (
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         <Group position="apart" mb={12}>
@@ -1598,36 +1627,118 @@ export default function HomePage() {
         </Group>
 
         <div style={{ display: 'flex', gap: 0, borderBottom: `2px solid ${theme.colors.gray[3]}`, marginBottom: 16 }}>
-          {skillCategories.map((cat) => (
+          {skillTabs.map((tab) => (
             <button
-              key={cat.id}
+              key={tab.id}
               type="button"
-              onClick={() => setSkillActiveTab(cat.id)}
+              onClick={() => setSkillActiveTab(tab.id)}
               style={{
                 padding: '8px 16px',
                 fontSize: 13,
-                fontWeight: skillActiveTab === cat.id ? 700 : 400,
+                fontWeight: skillActiveTab === tab.id ? 700 : 400,
                 cursor: 'pointer',
                 border: 'none',
-                borderBottom: skillActiveTab === cat.id ? `2px solid ${theme.colors.blue[6]}` : '2px solid transparent',
+                borderBottom: skillActiveTab === tab.id ? `2px solid ${theme.colors.blue[6]}` : '2px solid transparent',
                 marginBottom: -2,
                 background: 'transparent',
-                color: skillActiveTab === cat.id ? theme.colors.blue[6] : 'inherit',
+                color: skillActiveTab === tab.id ? theme.colors.blue[6] : 'inherit',
               }}
             >
-              {cat.label} ({cat.skills.length})
+              {tab.label} ({tab.skills.length})
             </button>
           ))}
         </div>
 
+        <div style={{ position: 'relative', marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="text"
+              value={skillSearchText}
+              onChange={(e) => setSkillSearchText(e.target.value)}
+              onFocus={() => setSkillSearchFocused(true)}
+              onBlur={() => setTimeout(() => setSkillSearchFocused(false), 150)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  runSkillSearch();
+                }
+              }}
+              placeholder={`Search ${activeTab.label.toLowerCase()} skills...`}
+              style={{
+                flex: 1,
+                padding: '8px 10px',
+                fontSize: 13,
+                borderRadius: 8,
+                border: `1px solid ${theme.colors.gray[3]}`,
+                background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff',
+                color: 'inherit',
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => runSkillSearch()}
+              style={{
+                padding: '8px 16px',
+                fontSize: 12,
+                fontWeight: 600,
+                borderRadius: 8,
+                cursor: 'pointer',
+                border: `1px solid ${theme.colors.blue[5]}`,
+                background: theme.colors.blue[6],
+                color: '#fff',
+              }}
+            >
+              Search
+            </button>
+          </div>
+          {skillSearchFocused && skillSuggestions.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 88,
+              zIndex: 10,
+              maxHeight: 220,
+              overflowY: 'auto',
+              borderRadius: 8,
+              marginTop: 4,
+              border: `1px solid ${theme.colors.gray[3]}`,
+              background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            }}>
+              {skillSuggestions.slice(0, 12).map((skill) => (
+                <div
+                  key={`${skill.categoryId}:${skill.name}`}
+                  onMouseDown={() => {
+                    setSkillSearchText(skill.name);
+                    runSkillSearch(skill.name);
+                  }}
+                  style={{
+                    padding: '8px 10px',
+                    cursor: 'pointer',
+                    borderBottom: `1px solid ${theme.colors.gray[2]}`,
+                  }}
+                >
+                  <Text size="sm" weight={600}>{skill.name}</Text>
+                  <Text size="xs" color="dimmed" lineClamp={1}>{skill.description}</Text>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-          {activeCategory && activeCategory.skills.length === 0 && (
+          {activeTab.skills.length === 0 && (
             <Text size="sm" color="dimmed">No skills in this category.</Text>
           )}
 
-          {activeCategory && activeCategory.skills.map((skill) => (
+          {activeTab.skills.length > 0 && displayedSkills.length === 0 && (
+            <Text size="sm" color="dimmed">No skills match this search in the current category.</Text>
+          )}
+
+          {displayedSkills.map((skill) => (
             <div
-              key={skill.name}
+              key={`${skill.categoryId}:${skill.name}`}
               style={{
                 border: `1px solid ${theme.colors.gray[3]}`,
                 borderRadius: 8,
@@ -1657,7 +1768,7 @@ export default function HomePage() {
                   <button
                     key={action}
                     type="button"
-                    onClick={() => void skillOpenSubScreen(action.toLowerCase() as 'use' | 'view' | 'edit', skill.name, activeCategory!.id)}
+                    onClick={() => void skillOpenSubScreen(action.toLowerCase() as 'use' | 'view' | 'edit', skill.name, skill.categoryId)}
                     style={{
                       padding: '5px 14px', fontSize: 12, fontWeight: 500, borderRadius: 6, cursor: 'pointer',
                       border: `1px solid ${theme.colors.gray[4]}`,
