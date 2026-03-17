@@ -119,6 +119,12 @@ const TerminalPage = () => {
     handleClose();
   }, [sessionName, handleClose]);
 
+  const handleBackground = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const processesUrl = "http://127.0.0.1:3000/?view=processes";
+    window.open(processesUrl, "_blank", "noopener,noreferrer");
+  }, []);
+
   useEffect(() => {
     if (!isOpen) return;
     if (!terminalContainerRef.current) return;
@@ -416,13 +422,32 @@ const TerminalPage = () => {
                   Kill Session
                 </button>
               )}
-              <button
-                type="button"
-                onClick={handleClose}
-                className="rounded bg-[#3a3f52] px-3 py-1 text-xs hover:opacity-90"
-              >
-                {isReadonly ? "Close" : sessionName ? "Detach" : "Close"}
-              </button>
+              {sessionName && !isReadonly && (
+                <button
+                  type="button"
+                  onClick={handleBackground}
+                  className="rounded bg-[#1f4f8b] px-3 py-1 text-xs hover:opacity-90"
+                >
+                  Processes
+                </button>
+              )}
+              {sessionName && !isReadonly ? (
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="rounded bg-[#3a3f52] px-3 py-1 text-xs hover:opacity-90"
+                >
+                  Detach
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="rounded bg-[#3a3f52] px-3 py-1 text-xs hover:opacity-90"
+                >
+                  Close
+                </button>
+              )}
             </div>
           </div>
           <div ref={terminalContainerRef} className="flex-1 bg-[#0b0f19]" />
