@@ -1050,7 +1050,7 @@ open_or_print_webui_url() {
       echo "Timed out waiting for Skill Pilot to answer at ${ready_url}."
       echo "Opening the browser anyway."
     fi
-    echo "Opening WebUI in browser: ${base_url}"
+    echo "Opening WebUI in browser: ${url}"
     open_in_browser "${url}"
   else
     echo "WebUI ready. Open this URL in your browser:"
@@ -1122,7 +1122,6 @@ case "${ACTION}" in
     echo ""
     echo "To stop Skill Pilot at any time, run:"
     echo "  ./skillpilot.sh stop"
-    press_any_key "Press any key to open Skill Pilot in your browser."
     if ((IS_DEV == 1)); then
       open_or_print_webui_url "dev"
     else
