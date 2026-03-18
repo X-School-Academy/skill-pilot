@@ -247,6 +247,7 @@ Gateway token:       <show full token — user must save it>
 Systemd service:     active (enabled, auto-restart on failure)
 OpenAI Codex:        authenticated via OAuth
 Discord bot:         paired and responding
+WebUI URL:           admin webui url with auth token
 ```
 
 ## Common Issues
