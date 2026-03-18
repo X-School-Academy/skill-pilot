@@ -1,0 +1,116 @@
+{
+  "version": "1.0",
+  "name": "new-workflow",
+  "updated_at": "2026-03-18T00:25:14Z",
+  "nodes": [
+    {
+      "id": 0,
+      "type": "start",
+      "position": {
+        "x": 674,
+        "y": 10
+      }
+    },
+    {
+      "id": -1,
+      "type": "end",
+      "position": {
+        "x": 671,
+        "y": 713
+      }
+    },
+    {
+      "id": 5,
+      "type": "agent",
+      "position": {
+        "x": 799,
+        "y": 101
+      },
+      "data": {
+        "title": "Setup EC2",
+        "provider_id": "claude",
+        "skill": "setup-aws-ec2",
+        "responsibility": ""
+      }
+    },
+    {
+      "id": 6,
+      "type": "agent",
+      "position": {
+        "x": 518,
+        "y": 377
+      },
+      "data": {
+        "title": "Connect to EC2",
+        "provider_id": "claude",
+        "skill": "connect-ec2-ssh",
+        "responsibility": ""
+      }
+    },
+    {
+      "id": 7,
+      "type": "agent",
+      "position": {
+        "x": 195,
+        "y": 355
+      },
+      "data": {
+        "title": "Install OpenClaw",
+        "provider_id": "claude",
+        "skill": "openclaw-install-on-ec2",
+        "responsibility": ""
+      }
+    },
+    {
+      "id": 8,
+      "type": "agent",
+      "position": {
+        "x": 251,
+        "y": 687
+      },
+      "data": {
+        "title": "Create-SSH Tunnel",
+        "provider_id": "claude",
+        "skill": "openclaw-connect-tunnel",
+        "responsibility": ""
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "5->6",
+      "source": 5,
+      "target": 6,
+      "source_anchor": "left",
+      "target_anchor": "right"
+    },
+    {
+      "id": "6->7",
+      "source": 6,
+      "target": 7,
+      "source_anchor": "left",
+      "target_anchor": "right"
+    },
+    {
+      "id": "7->8",
+      "source": 7,
+      "target": 8,
+      "source_anchor": "bottom",
+      "target_anchor": "top"
+    },
+    {
+      "id": "8->-1",
+      "source": 8,
+      "target": -1,
+      "source_anchor": "right",
+      "target_anchor": "left"
+    },
+    {
+      "id": "0->5",
+      "source": 0,
+      "target": 5,
+      "source_anchor": "right",
+      "target_anchor": "top"
+    }
+  ]
+}
