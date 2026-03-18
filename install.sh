@@ -218,6 +218,24 @@ install_curl()  { pkg_install curl; }
 install_wget()  { pkg_install wget; }
 install_tmux()  { pkg_install tmux; }
 
+install_gxmessage_linux() {
+  if command -v gxmessage >/dev/null 2>&1; then
+    return 0
+  fi
+  require_sudo || return 1
+  if ! command -v apt-get >/dev/null 2>&1; then
+    warn "apt-get not found — skipping gxmessage installation."
+    return 1
+  fi
+  if is_root; then
+    apt-get update -qq
+    apt-get install -y -qq gxmessage
+  else
+    sudo apt-get update -qq
+    sudo apt-get install -y -qq gxmessage
+  fi
+}
+
 install_uv() {
   export SHELL="${SHELL:-bash}"
   local tmpscript
@@ -850,7 +868,20 @@ main() {
     "wget" \
     "install_wget"
 
-  # Screen 12 — Playwright CLI
+  # Screen 12 — gxmessage (Linux only)
+  if [ "$OS_KIND" = "linux" ]; then
+    install_step \
+      "gxmessage — Linux Confirmation Dialogs" \
+      "$(printf '%s\n%s\n\n%s\n%s' \
+        "Skill Pilot uses gxmessage on Linux when it needs a simple" \
+        "desktop confirmation window for actions that should pause." \
+        "This keeps confirmations lightweight and avoids extra Python" \
+        "GUI dependencies for headless or mixed environments.")" \
+      "gxmessage" \
+      "install_gxmessage_linux"
+  fi
+
+  # Screen 13 — Playwright CLI
   install_step \
     "Playwright CLI — Browser Automation" \
     "$(printf '%s\n%s\n%s\n\n%s\n%s' \
