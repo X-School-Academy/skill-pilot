@@ -16,6 +16,8 @@ type TerminalTarget = {
   session: string | null;
 };
 
+const PROTECTED_SESSION_NAMES = new Set(["sp-engine", "sp-webui"]);
+
 const toWsBase = (base: string): string => {
   const normalized = base.replace("://localhost:", "://127.0.0.1:");
   if (normalized.startsWith("https://")) return `wss://${normalized.slice("https://".length)}`;
@@ -23,12 +25,16 @@ const toWsBase = (base: string): string => {
   return normalized;
 };
 
-type TerminalTargetExt = TerminalTarget & { readonly: boolean };
+type TerminalTargetExt = TerminalTarget & {
+  readonly: boolean;
+  allowKill: boolean;
+};
 
 const readTargetFromUrl = (): TerminalTargetExt => {
-  if (typeof window === "undefined") return { command: "top", session: null, readonly: false };
+  if (typeof window === "undefined") return { command: "top", session: null, readonly: false, allowKill: false };
   const params = new URLSearchParams(window.location.search);
   const isReadonly = params.get("readonly") === "1";
+  const allowKill = params.get("allowKill") === "1";
   const session = params.get("session");
   if (session && session.trim()) {
     const readonlyFlag = isReadonly ? " -r" : "";
@@ -36,6 +42,7 @@ const readTargetFromUrl = (): TerminalTargetExt => {
       command: `tmux attach -t ${session.trim()}${readonlyFlag}`,
       session: session.trim(),
       readonly: isReadonly,
+      allowKill,
     };
   }
   const value = params.get("command");
@@ -43,6 +50,7 @@ const readTargetFromUrl = (): TerminalTargetExt => {
     command: value && value.trim() ? value.trim() : "top",
     session: null,
     readonly: false,
+    allowKill: false,
   };
 };
 
@@ -59,6 +67,7 @@ const TerminalPage = () => {
   const [command, setCommand] = useState("top");
   const [sessionName, setSessionName] = useState<string | null>(null);
   const [isReadonly, setIsReadonly] = useState(false);
+  const [allowReadonlyKill, setAllowReadonlyKill] = useState(false);
 
   const fitAndReadSize = useCallback(() => {
     const fitAddon = fitAddonRef.current;
@@ -133,6 +142,7 @@ const TerminalPage = () => {
     setCommand(currentTarget.command);
     setSessionName(currentTarget.session);
     setIsReadonly(currentTarget.readonly);
+    setAllowReadonlyKill(currentTarget.allowKill);
 
     let disposed = false;
     let term: XTerm | null = null;
@@ -394,6 +404,13 @@ const TerminalPage = () => {
     );
   }
 
+  const canKillReadonlySession = Boolean(
+    isReadonly &&
+    sessionName &&
+    allowReadonlyKill &&
+    !PROTECTED_SESSION_NAMES.has(sessionName),
+  );
+
   return (
     <>
       <Head>
@@ -431,21 +448,20 @@ const TerminalPage = () => {
                   Processes
                 </button>
               )}
-              {sessionName && !isReadonly ? (
+              <button
+                type="button"
+                onClick={handleClose}
+                className="rounded bg-[#3a3f52] px-3 py-1 text-xs hover:opacity-90"
+              >
+                {sessionName && !isReadonly ? "Detach" : "Close"}
+              </button>
+              {canKillReadonlySession && (
                 <button
                   type="button"
-                  onClick={handleClose}
-                  className="rounded bg-[#3a3f52] px-3 py-1 text-xs hover:opacity-90"
+                  onClick={handleKillSession}
+                  className="rounded bg-[#8b1d24] px-3 py-1 text-xs hover:opacity-90"
                 >
-                  Detach
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="rounded bg-[#3a3f52] px-3 py-1 text-xs hover:opacity-90"
-                >
-                  Close
+                  Kill Session
                 </button>
               )}
             </div>

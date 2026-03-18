@@ -28,7 +28,7 @@ As a {Role, and Role-XYZ if have more roles}, I will {action description}
 ## Preconditions
 
 - AWS credentials configured — run skill `enable-aws-cli` if needed
-- OpenClaw installed and running on EC2 — run skill `openclaw-install-on-ec2` if needed
+- OpenClaw installed and running on EC2 — or run skill `openclaw-install-on-ec2` if needed
 - Have the EC2 public IP and gateway token ready (from the install step output)
 
 Verify AWS credentials:

@@ -1222,7 +1222,7 @@ export default function HomePage() {
           <div style={{ flex: 1, position: 'relative' }}>
             <iframe
               key={activeProcessSession}
-              src={`/terminal?session=${encodeURIComponent(activeProcessSession)}&readonly=1`}
+              src={`/terminal?session=${encodeURIComponent(activeProcessSession)}&readonly=1&allowKill=1`}
               style={{
                 width: '100%',
                 height: '100%',
@@ -1287,7 +1287,7 @@ export default function HomePage() {
               type="button"
               onClick={(e) => {
                 if (e.shiftKey) {
-                  window.open(`/terminal?session=${encodeURIComponent(session.name)}&readonly=1`, '_blank');
+                  window.open(`/terminal?session=${encodeURIComponent(session.name)}&readonly=1&allowKill=1`, '_blank');
                 } else {
                   setActiveProcessSession(session.name);
                 }

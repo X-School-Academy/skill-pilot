@@ -108,6 +108,7 @@ _IMAGE_FETCH_MAX_BYTES = 5 * 1024 * 1024
 TMUX_SESSION_PREFIX = "webui-live-"
 NATIVE_TMUX_SESSION_PREFIX = "native-terminal-"
 WORKFLOW_EXECUTE_SESSION_NAME = "sp-workflow-execute"
+PROTECTED_TMUX_SESSION_NAMES = {"sp-engine", "sp-webui"}
 TMUX_SESSION_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 _last_heartbeat_time: float = time.time()
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -615,6 +616,10 @@ def _kill_tmux_session_any(session_name: str) -> bool:
     if "can't find session" in message:
         return False
     raise RuntimeError((proc.stderr or proc.stdout or "").strip() or "unable to kill tmux session")
+
+
+def _is_protected_tmux_session(session_name: str) -> bool:
+    return session_name in PROTECTED_TMUX_SESSION_NAMES
 
 
 def _pane_current_command_any(session_name: str) -> str:
@@ -1557,11 +1562,16 @@ def terminal_tmux_kill(payload: Dict[str, Any]):
                 _reset_workflow_execute_state(status="terminated")
             _WORKFLOW_EXECUTE_CONTINUE.clear()
             return {"status": "ok", "removed": removed, "session": session_name}
-        session_name = _validate_tmux_session_name(raw_session)
+        session_name = _validate_tmux_session_name_any(raw_session)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
+    if _is_protected_tmux_session(session_name):
+        return JSONResponse(status_code=403, content={"error": f"tmux session '{session_name}' is protected"})
     try:
-        removed = _kill_tmux_session(session_name)
+        if session_name.startswith(TMUX_SESSION_PREFIX):
+            removed = _kill_tmux_session(session_name)
+        else:
+            removed = _kill_tmux_session_any(session_name)
     except RuntimeError as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})
     return {"status": "ok", "removed": removed, "session": session_name}
