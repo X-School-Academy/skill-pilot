@@ -161,6 +161,18 @@ function workflowBaseName(path: string): string {
   return file.replace(/\.json$/i, '');
 }
 
+function normalizeWorkflowFilenameInput(name: string): string {
+  return String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\.json$/i, '')
+    .replace(/_/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 function getNodeLabel(node: WorkflowNode): string {
   if (node.type === 'start') return 'Start';
   if (node.type === 'end') return 'End';
@@ -944,7 +956,17 @@ export default function WorkflowsPage() {
   };
 
   const handleDelete = useCallback(async () => {
-    if (!workflowPath) return;
+    if (!workflowPath) {
+      if (!hasUnsavedChangesRef.current) return;
+      if (!window.confirm('Discard this draft workflow?')) return;
+      setToolbarAction('delete');
+      try {
+        resetToFreshWorkflow();
+      } finally {
+        setToolbarAction(null);
+      }
+      return;
+    }
     if (!window.confirm(`Delete workflow ${workflowBaseName(workflowPath)}?`)) return;
 
     setToolbarAction('delete');
@@ -961,7 +983,7 @@ export default function WorkflowsPage() {
     } finally {
       setToolbarAction(null);
     }
-  }, [fetchTree, loadLatest, workflowPath]);
+  }, [fetchTree, loadLatest, resetToFreshWorkflow, workflowPath]);
 
   const selectedNode = workflow.nodes.find((n) => n.id === selectedNodeId) || null;
   const selectedNodeHasMissingSkill = Boolean(
@@ -969,6 +991,9 @@ export default function WorkflowsPage() {
     !(selectedNode.data?.skill || '').trim() &&
     !(selectedNode.data?.responsibility || '').trim(),
   );
+  const currentWorkflowName = workflowPath ? workflowBaseName(workflowPath) : '';
+  const normalizedFilenameInput = normalizeWorkflowFilenameInput(filenameInput);
+  const shouldShowRename = Boolean(workflowPath && normalizedFilenameInput && normalizedFilenameInput !== currentWorkflowName);
 
   return (
     <AppShell
@@ -1033,7 +1058,7 @@ export default function WorkflowsPage() {
               onClick={() => { void handleSave('save'); }}
               loading={toolbarAction === 'save'}
             >
-              Save
+              {shouldShowRename ? 'Rename' : 'Save'}
             </Button>
             <Button
               variant="light"
@@ -1049,9 +1074,9 @@ export default function WorkflowsPage() {
               leftIcon={<IconTrash size="1rem" />}
               onClick={() => { void handleDelete(); }}
               loading={toolbarAction === 'delete'}
-              disabled={!workflowPath}
+              disabled={!workflowPath && !hasUnsavedChanges}
             >
-              Delete
+              {workflowPath ? 'Delete' : 'Discard'}
             </Button>
           </Group>
         </Group>

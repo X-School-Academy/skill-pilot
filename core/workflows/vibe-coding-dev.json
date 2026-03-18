@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "name": "vibe-coding-dev",
-  "updated_at": "2026-03-10T08:40:00Z",
+  "updated_at": "2026-03-18T00:05:26Z",
   "nodes": [
     {
       "id": 0,
@@ -15,8 +15,8 @@
       "id": 1,
       "type": "agent",
       "position": {
-        "x": 320,
-        "y": 320
+        "x": 306,
+        "y": 272
       },
       "data": {
         "title": "Create Project",
