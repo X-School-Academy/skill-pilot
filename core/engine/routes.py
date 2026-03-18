@@ -885,6 +885,19 @@ def _notify_workflow_tmux_message(session_name: str, message: str) -> None:
     _send_tmux_command_literal(session_name, f"echo {shlex.quote(safe_message)}")
 
 
+def _await_workflow_continue_transition(timeout_s: float = 5.0) -> Dict[str, Any]:
+    deadline = time.time() + max(0.0, float(timeout_s))
+    latest = _workflow_execute_status()
+    while time.time() < deadline:
+        latest = _workflow_execute_status()
+        if not latest.get("thread_alive"):
+            return latest
+        if not bool(latest.get("waiting_for_continue")):
+            return latest
+        time.sleep(0.1)
+    return _workflow_execute_status()
+
+
 def request_workflow_continue_signal(source: str = "api") -> Dict[str, Any]:
     status = _workflow_execute_status()
     if not status.get("thread_alive"):
@@ -953,10 +966,14 @@ def request_workflow_continue_signal(source: str = "api") -> Dict[str, Any]:
         output_file,
         waiting_for_continue,
     )
+    updated_status = _await_workflow_continue_transition()
+    advanced = not bool(updated_status.get("waiting_for_continue"))
     return {
         "accepted": True,
-        "status": _workflow_execute_status(),
-        "message": "Continue signal accepted.",
+        "status": updated_status,
+        "message": "Continue signal accepted and workflow resumed."
+        if advanced
+        else "Continue signal accepted, but workflow is still waiting to advance.",
     }
 
 

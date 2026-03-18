@@ -130,7 +130,7 @@ const TerminalPage = () => {
 
   const handleBackground = useCallback(() => {
     if (typeof window === "undefined") return;
-    const processesUrl = "http://127.0.0.1:3000/?view=processes";
+    const processesUrl = "/?view=processes";
     window.open(processesUrl, "_blank", "noopener,noreferrer");
   }, []);
 

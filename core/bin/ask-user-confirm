@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEFAULT_MESSAGE="Skill Pilot needs your confirmation to continue."
+TITLE="Skill Pilot User Confirm"
+YES_TEXT="Yes, continue"
+NO_TEXT="No, stop and wait for user's instruction"
+
+message="${*:-$DEFAULT_MESSAGE}"
+
+print_headless_yes() {
+  printf '%s\n' "$message"
+  printf '%s\n' "$YES_TEXT"
+}
+
+has_gui_env() {
+  if [[ -n "${SSH_CONNECTION:-}" || -n "${SSH_TTY:-}" ]]; then
+    return 1
+  fi
+
+  case "$(uname -s)" in
+    Darwin)
+      return 0
+      ;;
+  Linux)
+      [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]
+      return
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+run_macos_dialog() {
+  /usr/bin/osascript - "$message" "$TITLE" <<'EOF'
+on run argv
+  set dialogMessage to item 1 of argv
+  set dialogTitle to item 2 of argv
+  tell application "System Events"
+    activate
+    set dialogResult to button returned of (display dialog dialogMessage with title dialogTitle buttons {"No", "Yes"} default button "Yes")
+  end tell
+  return dialogResult
+end run
+EOF
+}
+
+run_linux_dialog() {
+  gxmessage \
+    -center \
+    -title "$TITLE" \
+    -buttons "Yes:0,No:1" \
+    "$message"
+}
+
+if ! has_gui_env; then
+  print_headless_yes
+  exit 0
+fi
+
+case "$(uname -s)" in
+  Darwin)
+    if result="$(run_macos_dialog 2>/dev/null)"; then
+      if [[ "$result" == "Yes" ]]; then
+        printf '%s\n' "$YES_TEXT"
+        exit 0
+      fi
+      printf '%s\n' "$NO_TEXT"
+      exit 1
+    fi
+    print_headless_yes
+    exit 0
+    ;;
+  Linux)
+    if ! command -v gxmessage >/dev/null 2>&1; then
+      printf '%s\n' "$NO_TEXT"
+      exit 1
+    fi
+    if run_linux_dialog; then
+      printf '%s\n' "$YES_TEXT"
+      exit 0
+    fi
+    printf '%s\n' "$NO_TEXT"
+    exit 1
+    ;;
+  *)
+    print_headless_yes
+    exit 0
+    ;;
+esac
