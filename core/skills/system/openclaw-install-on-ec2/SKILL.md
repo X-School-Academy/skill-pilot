@@ -84,24 +84,37 @@ mkdir -p ~/.openclaw/workspace
 
 Capture the version string.
 
-### Step 2: Generate gateway token on EC2
+### Step 2: Generate gateway token on EC2 and store it with key-safe
 
 ```bash
 node -e "const c=require('crypto');console.log(c.randomBytes(32).toString('hex'))"
 ```
 
-Capture the output as `OPENCLAW_GATEWAY_TOKEN`. Show it to the user and ask them to save it
-(e.g. in a password manager or a local file of their choice).
+Capture the output as `OPENCLAW_GATEWAY_TOKEN`.
+
+Immediately save it locally with skill `key-safe` using `put_key_values`:
+
+```bash
+core/bin/keys-safe-guard --gui put_key_values OPENCLAW_GATEWAY_TOKEN=<generated-token>
+```
+
+Do not write the token into docs, chat summaries, local notes, or task files.
+When the value is needed later, retrieve it through skill `key-safe` or by running:
+
+```bash
+core/bin/keys-safe-guard --gui get_key_value OPENCLAW_GATEWAY_TOKEN
+```
 
 ### Step 3: Read Discord credentials from local .env
 
 Run locally:
 Use skill `key-safe` to get:
+- `OPENCLAW_GATEWAY_TOKEN`
 - `OPENCLAW_DISCORD_BOT_TOKEN`
 - `OPENCLAW_DISCORD_SERVER_ID`
 - `OPENCLAW_DISCORD_USER_ID`
 
-Use these values to construct the config. Do not log `OPENCLAW_DISCORD_BOT_TOKEN` in full.
+Use these values to construct the config. Do not log secret values in full.
 
 ### Step 4: Write openclaw.json on EC2
 
@@ -109,10 +122,10 @@ Use `terminal-send-session-input` to write `~/.openclaw/openclaw.json`.
 Pass secret values as shell variables to avoid them appearing in the heredoc literally:
 
 ```bash
-GATEWAY_TOKEN="<OPENCLAW_GATEWAY_TOKEN>"
-DISCORD_TOKEN="<OPENCLAW_DISCORD_BOT_TOKEN>"
-SERVER_ID="<OPENCLAW_DISCORD_SERVER_ID>"
-USER_ID="<OPENCLAW_DISCORD_USER_ID>"
+GATEWAY_TOKEN="<retrieve with key-safe>"
+DISCORD_TOKEN="<retrieve with key-safe>"
+SERVER_ID="<retrieve with key-safe>"
+USER_ID="<retrieve with key-safe>"
 
 mkdir -p ~/.openclaw
 cat > ~/.openclaw/openclaw.json << ENDCONFIG
