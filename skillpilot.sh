@@ -299,25 +299,35 @@ show_screen() {
 }
 
 install_free_cli_tools() {
-  # Accepts a list of agent names to install: gemini, codex, opencode
+  # Accepts a list of agent names to install: claude, copilot, gemini, codex, opencode
   local agents_to_install=("$@")
-  if ! command -v pnpm >/dev/null 2>&1; then
-    echo "pnpm not found — cannot install free CLI tools automatically."
-    return 0
-  fi
   local -A pkg_map=(
+    [copilot]="@github/copilot"
     [gemini]="@google/gemini-cli"
     [codex]="@openai/codex"
     [opencode]="opencode-ai"
   )
   for agent in "${agents_to_install[@]}"; do
+    if [[ "${agent}" == "claude" ]]; then
+      if ! command -v curl >/dev/null 2>&1; then
+        echo "curl not found — cannot install Claude Code automatically."
+        continue
+      fi
+      echo "Installing Claude Code..."
+      curl -fsSL https://claude.ai/install.sh | bash || echo "Claude installer failed."
+      continue
+    fi
     local pkg="${pkg_map[$agent]:-}"
     if [[ -z "$pkg" ]]; then
       echo "Unknown agent: $agent — skipping."
       continue
     fi
+    if ! command -v pnpm >/dev/null 2>&1; then
+      echo "pnpm not found — cannot install ${pkg} automatically."
+      continue
+    fi
     echo "Installing ${pkg}..."
-    pnpm add -g "${pkg}" || echo "${pkg} install failed."
+    pnpm install -g "${pkg}" || echo "${pkg} install failed."
   done
 }
 
@@ -557,6 +567,9 @@ detect_available_providers() {
   if command -v claude >/dev/null 2>&1; then
     AVAILABLE_PROVIDERS+=("claude")
   fi
+  if command -v copilot >/dev/null 2>&1; then
+    AVAILABLE_PROVIDERS+=("copilot")
+  fi
   if command -v codex >/dev/null 2>&1; then
     AVAILABLE_PROVIDERS+=("codex")
   fi
@@ -579,16 +592,24 @@ maybe_install_cli_tools() {
     fi
   fi
 
-  if command -v brew >/dev/null 2>&1; then
-    if ask_yes_no "Install OpenAI Codex CLI now with: brew install codex?" 1; then
-      if brew install codex; then
+  if command -v pnpm >/dev/null 2>&1; then
+    if ask_yes_no "Install GitHub Copilot CLI now with: pnpm install -g @github/copilot?" 1; then
+      if pnpm install -g @github/copilot; then
         installed_any=0
       else
-        echo "brew install codex failed."
+        echo "pnpm install -g @github/copilot failed."
+      fi
+    fi
+
+    if ask_yes_no "Install OpenAI Codex CLI now with: pnpm install -g @openai/codex?" 1; then
+      if pnpm install -g @openai/codex; then
+        installed_any=0
+      else
+        echo "pnpm install -g @openai/codex failed."
       fi
     fi
   else
-    echo "Homebrew is not available, skipping 'brew install codex'."
+    echo "pnpm is not available, skipping pnpm-based CLI installs."
   fi
 
   return "${installed_any}"
@@ -717,6 +738,7 @@ run_init_wizard_if_needed() {
   echo "Skill Pilot works with these AI code agent CLIs:"
   echo ""
   echo "  claude    Claude Code by Anthropic"
+  echo "  copilot   GitHub Copilot CLI"
   echo "  codex     OpenAI Codex CLI"
   echo "  gemini    Google Gemini CLI"
   echo "  opencode  OpenCode (open source, OpenAI-compatible)"
@@ -724,7 +746,7 @@ run_init_wizard_if_needed() {
   echo "Checking what you have installed..."
   echo ""
   detect_available_providers
-  local all_agents=("claude" "codex" "gemini" "opencode")
+  local all_agents=("claude" "copilot" "codex" "gemini" "opencode")
   for agent in "${all_agents[@]}"; do
     local found=0
     for p in "${AVAILABLE_PROVIDERS[@]}"; do
@@ -740,7 +762,7 @@ run_init_wizard_if_needed() {
 
   # Wizard Screen 5b — Install free CLI tools
   local missing_free=()
-  for agent in gemini codex opencode; do
+  for agent in claude copilot gemini codex opencode; do
     local found=0
     for p in "${AVAILABLE_PROVIDERS[@]}"; do
       [[ "$p" == "$agent" ]] && found=1 && break
@@ -755,16 +777,20 @@ run_init_wizard_if_needed() {
     echo "The following are not yet installed:"
     echo ""
     local -A agent_labels=(
+      [claude]="Claude Code        — free plan available"
+      [copilot]="GitHub Copilot CLI — free plan available"
       [gemini]="Google Gemini CLI — free tier available"
       [codex]="OpenAI Codex CLI  — free tier available"
       [opencode]="OpenCode           — free tier available"
     )
     local -A agent_pkgs=(
+      [claude]="curl -fsSL https://claude.ai/install.sh | bash"
+      [copilot]="@github/copilot"
       [gemini]="@google/gemini-cli"
       [codex]="@openai/codex"
       [opencode]="opencode-ai"
     )
-    for agent in gemini codex opencode; do
+    for agent in claude copilot gemini codex opencode; do
       local is_missing=0
       for m in "${missing_free[@]}"; do
         [[ "$m" == "$agent" ]] && is_missing=1 && break
@@ -784,7 +810,11 @@ run_init_wizard_if_needed() {
     echo "Press any key and I will install the missing ones for you:"
     echo ""
     for agent in "${missing_free[@]}"; do
-      echo "  pnpm add -g ${agent_pkgs[$agent]}"
+      if [[ "${agent}" == "claude" ]]; then
+        echo "  ${agent_pkgs[$agent]}"
+      else
+        echo "  pnpm install -g ${agent_pkgs[$agent]}"
+      fi
     done
     echo ""
     if ((${#AVAILABLE_PROVIDERS[@]} == 0)); then
@@ -873,6 +903,8 @@ load_guarded_env() {
     return
   fi
 
+  unset SAFE_DOTENV_LOADED_KEYS SAFE_DOTENV_UNSET_KEYS
+
   local env_content=""
   if [[ -r "${ENGINE_ENV_FILE}" ]]; then
     env_content="$(cat "${ENGINE_ENV_FILE}")"
@@ -907,11 +939,17 @@ for key, value in values.items():
         sys.stdout.write("\0")
 ')
 
-  export IN_KEYS_SAFE_GUARD=1
-  loaded_keys+=("IN_KEYS_SAFE_GUARD")
   if ((${#loaded_keys[@]} > 0)); then
+    local loaded_key_csv
+    loaded_key_csv="$(IFS=,; echo "${loaded_keys[*]}")"
+    export SAFE_DOTENV_LOADED_KEYS="${loaded_key_csv}"
+  fi
+
+  export IN_KEYS_SAFE_GUARD=1
+  local unset_keys=("${loaded_keys[@]}" "IN_KEYS_SAFE_GUARD")
+  if ((${#unset_keys[@]} > 0)); then
     local key_csv
-    key_csv="$(IFS=,; echo "${loaded_keys[*]}")"
+    key_csv="$(IFS=,; echo "${unset_keys[*]}")"
     export SAFE_DOTENV_UNSET_KEYS="${key_csv}"
   fi
 }
@@ -966,20 +1004,61 @@ open_in_browser() {
   fi
 }
 
+wait_for_http_ready() {
+  local url="$1"
+  local timeout_seconds="${2:-30}"
+  local start_ts now
+
+  start_ts="$(date +%s)"
+  while true; do
+    if curl -fsS -m 2 -o /dev/null "${url}" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    now="$(date +%s)"
+    if (( now - start_ts >= timeout_seconds )); then
+      return 1
+    fi
+    sleep 1
+  done
+}
+
 open_or_print_webui_url() {
   local mode="$1"
-  local base_url url
+  local base_url url ready_url ready_url_with_auth
   base_url="$(get_webui_base_url "${mode}")"
   if [[ -n "${AUTH_TOKEN:-}" ]]; then
     url="${base_url}?token=${AUTH_TOKEN}"
   else
     url="${base_url}"
   fi
+
+  if [[ "${mode}" == "dev" ]]; then
+    ready_url="${base_url}"
+  else
+    ready_url="${base_url}api/health"
+  fi
+
+  if [[ -n "${AUTH_TOKEN:-}" ]]; then
+    if [[ "${ready_url}" == *\?* ]]; then
+      ready_url_with_auth="${ready_url}&token=${AUTH_TOKEN}"
+    else
+      ready_url_with_auth="${ready_url}?token=${AUTH_TOKEN}"
+    fi
+  else
+    ready_url_with_auth="${ready_url}"
+  fi
+
   echo ""
   if has_gui_env; then
-    echo "Prepare to launch browser in 2 seconds: ${base_url}"
-    sleep 2
-    echo "Opening WebUI in browser: ${base_url}"
+    echo "Waiting for Skill Pilot to become reachable: ${ready_url}"
+    if wait_for_http_ready "${ready_url_with_auth}" 45; then
+      echo "Skill Pilot is reachable."
+    else
+      echo "Timed out waiting for Skill Pilot to answer at ${ready_url}."
+      echo "Opening the browser anyway."
+    fi
+    echo "Opening WebUI in browser: ${url}"
     open_in_browser "${url}"
   else
     echo "WebUI ready. Open this URL in your browser:"
@@ -1051,7 +1130,6 @@ case "${ACTION}" in
     echo ""
     echo "To stop Skill Pilot at any time, run:"
     echo "  ./skillpilot.sh stop"
-    press_any_key "Press any key to open Skill Pilot in your browser."
     if ((IS_DEV == 1)); then
       open_or_print_webui_url "dev"
     else

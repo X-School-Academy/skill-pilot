@@ -49,6 +49,13 @@ Template containing OS, software, and configuration for launching instances.
 
 Virtual firewalls controlling inbound and outbound traffic.
 
+## Execution Rule
+
+- Treat every AWS CLI command shown in this skill as reference for the intended AWS operation only.
+- Do not run raw `aws ...` shell commands directly from this skill.
+- Execute each AWS operation through agent skill `aws-api-call-aws`.
+- If an AWS command shape, flag, parameter, or failure is unclear, use agent skill `aws-api-suggest-aws-commands` to get the corrected command pattern, then run the resolved operation through `aws-api-call-aws`.
+
 ## Common Patterns
 
 ### Launch an Instance

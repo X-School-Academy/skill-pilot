@@ -55,6 +55,25 @@
       },
       'exit-session': 'esc\nctrl+c\nctrl+c',
     },
+    {
+      id: 'copilot',
+      name: 'GitHub Copilot CLI',
+      bin: 'copilot',
+      'sandbox-args': [],
+      'auto-args': ['--no-ask-user'],
+      'network-args': ['--allow-all-urls'],
+      args: [
+        '-p',
+        '{{prompt}}',
+        '-s',
+        '--allow-all-tools',
+      ],
+      'terminal-args': ['-i', '{{prompt}}'],
+      env: {
+        'PLAYWRIGHT_MCP_EXTENSION_TOKEN': '${PLAYWRIGHT_MCP_EXTENSION_TOKEN}',
+      },
+      'exit-session': 'esc\nctrl+c\nctrl+c',
+    },
     /*
     # Using OpenAI codex with ENV vars below for any openai compatible api 
     OPENAI_API_KEY
@@ -118,7 +137,7 @@
     // Claude Code via Claude-compatible API endpoint (disabled by default — configure env vars to enable)
     {
       id: 'claude-compat',
-      name: 'claude Compat',
+      name: 'Claude Compat',
       bin: 'claude',
       model: 'model-name',
       disabled: true,
@@ -135,6 +154,30 @@
       env: {
         'ANTHROPIC_BASE_URL': '${ANTHROPIC_COMPAT_BASE_URL}',
         'ANTHROPIC_AUTH_TOKEN': '${ANTHROPIC_COMPAT_AUTH_TOKEN}',
+        'ANTHROPIC_API_KEY': '',
+        "PLAYWRIGHT_MCP_EXTENSION_TOKEN": "${PLAYWRIGHT_MCP_EXTENSION_TOKEN}",
+      },
+      'exit-session': 'esc\nctrl+c\nctrl+c',
+    },
+    {
+      id: 'claude-openrouter',
+      name: 'Claude OpenRouter',
+      bin: 'claude',
+      model: 'openrouter/hunter-alpha',
+      disabled: false,
+      'sandbox-args': ['--settings', 'claude-sandbox-settings.json'],
+      'auto-args': ['--dangerously-skip-permissions'],
+      'network-args': [],
+      args: [
+        '--include-partial-messages',
+        '--output-format=stream-json',
+        '--verbose',
+        '--print',
+        '{{prompt}}',
+      ],
+      env: {
+        'ANTHROPIC_BASE_URL': 'https://openrouter.ai/api',
+        'ANTHROPIC_AUTH_TOKEN': '${OPENROUTER_API_KEY}',
         'ANTHROPIC_API_KEY': '',
         "PLAYWRIGHT_MCP_EXTENSION_TOKEN": "${PLAYWRIGHT_MCP_EXTENSION_TOKEN}",
       },
@@ -162,13 +205,13 @@
       },
       'exit-session': 'esc\nctrl+c\nctrl+c',
     },
-    // Ollama
+    // Ollama: by running `ollama run kimi-k2.5:cloud`
     {
-      id: 'ollama',
-      name: 'Ollama',
+      id: 'ollama-cloud',
+      name: 'Codex Ollama Cloud',
       bin: 'codex',
-      model: 'your-ollama-model',
-      disabled: true,
+      model: 'kimi-k2.5:cloud',
+      disabled: false,
       'sandbox-args': ['--sandbox', 'workspace-write'],
       'auto-args': ['--ask-for-approval', 'never'],
       'network-args': ['--config', 'sandbox_workspace_write.network_access=true'],

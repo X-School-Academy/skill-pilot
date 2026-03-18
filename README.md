@@ -14,7 +14,7 @@ Whether you are just starting out with AI, a professional who wants to automate 
 
 **Supported platforms:** macOS, Linux, Windows (via WSL only)
 
-**Supported AI agents:** Claude Code, Codex, Gemini CLI, OpenCode — or bring your own OpenAI-compatible or Claude-compatible API key
+**Supported AI agents:** Claude Code, GitHub Copilot CLI, Codex, Gemini CLI, OpenCode — or enable Ollama, OpenAI-compatible, and Claude-compatible providers in `config/ai_providers.json5`
 
 ### Auto Install
 
@@ -93,7 +93,7 @@ The most valuable skill in the next decade is knowing how to work with AI effect
 
 ## What Is Skill Pilot?
 
-Skill Pilot is an **AI-native workspace** you run locally. It connects your favorite AI coding agents (Claude Code, Codex, Gemini CLI, and more) to a structured environment of reusable skills, tools, and workflows.
+Skill Pilot is an **AI-native workspace** you run locally. It connects your favorite AI coding agents (Claude Code, GitHub Copilot CLI, Codex, Gemini CLI, and more) to a structured environment of reusable skills, tools, and workflows.
 
 Instead of using AI as a chat assistant, Skill Pilot turns AI into an active worker that:
 
@@ -214,8 +214,8 @@ skill-pilot/
 |---------|--------|
 | Skill Pilot Core Engine — Python FastAPI backend with LLM routing, session management, and MCP servers | ⭐⭐⭐⭐⭐ |
 | Skill Pilot WebUI — Next.js interface for chat, terminal, workflow editor, course viewer, and settings | ⭐⭐⭐⭐⭐ |
-| Multiple AI Code Agent Support — Claude Code, Codex, Gemini CLI, OpenCode CLI | ⭐⭐⭐⭐⭐ |
-| LLM API Support — OpenAI-compatible and Claude-compatible API endpoints | ⭐⭐⭐⭐⭐ |
+| Multiple AI Code Agent Support — Claude Code, GitHub Copilot CLI, Codex, Gemini CLI, OpenCode CLI | ⭐⭐⭐⭐⭐ |
+| LLM API Support — Ollama, OpenAI-compatible, and Claude-compatible endpoints via `config/ai_providers.json5` | ⭐⭐⭐⭐⭐ |
 | Background Process Management — tmux-based session lifecycle for long-running agents | ⭐⭐⭐⭐⭐ |
 | WebUI Terminal — Full browser-based terminal via WebSocket | ⭐⭐⭐⭐⭐ |
 

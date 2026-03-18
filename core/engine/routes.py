@@ -108,6 +108,7 @@ _IMAGE_FETCH_MAX_BYTES = 5 * 1024 * 1024
 TMUX_SESSION_PREFIX = "webui-live-"
 NATIVE_TMUX_SESSION_PREFIX = "native-terminal-"
 WORKFLOW_EXECUTE_SESSION_NAME = "sp-workflow-execute"
+PROTECTED_TMUX_SESSION_NAMES = {"sp-engine", "sp-webui"}
 TMUX_SESSION_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 _last_heartbeat_time: float = time.time()
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -615,6 +616,10 @@ def _kill_tmux_session_any(session_name: str) -> bool:
     if "can't find session" in message:
         return False
     raise RuntimeError((proc.stderr or proc.stdout or "").strip() or "unable to kill tmux session")
+
+
+def _is_protected_tmux_session(session_name: str) -> bool:
+    return session_name in PROTECTED_TMUX_SESSION_NAMES
 
 
 def _pane_current_command_any(session_name: str) -> str:
@@ -1557,11 +1562,16 @@ def terminal_tmux_kill(payload: Dict[str, Any]):
                 _reset_workflow_execute_state(status="terminated")
             _WORKFLOW_EXECUTE_CONTINUE.clear()
             return {"status": "ok", "removed": removed, "session": session_name}
-        session_name = _validate_tmux_session_name(raw_session)
+        session_name = _validate_tmux_session_name_any(raw_session)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
+    if _is_protected_tmux_session(session_name):
+        return JSONResponse(status_code=403, content={"error": f"tmux session '{session_name}' is protected"})
     try:
-        removed = _kill_tmux_session(session_name)
+        if session_name.startswith(TMUX_SESSION_PREFIX):
+            removed = _kill_tmux_session(session_name)
+        else:
+            removed = _kill_tmux_session_any(session_name)
     except RuntimeError as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})
     return {"status": "ok", "removed": removed, "session": session_name}
@@ -3453,7 +3463,7 @@ def _write_new_workflow_file_with_collision_retry(target_dir: Path, filename: st
 
     base = filename[:-5]
     candidate = filename
-    index = 2
+    index = 1
     while True:
         candidate_path = target_dir / candidate
         try:
@@ -3461,7 +3471,7 @@ def _write_new_workflow_file_with_collision_retry(target_dir: Path, filename: st
                 fh.write(content_text)
             return candidate_path
         except FileExistsError:
-            candidate = f"{base}-{index}.json"
+            candidate = f"{base}_{index}.json"
             index += 1
 
 
@@ -3645,6 +3655,17 @@ def workflows_save(payload: Dict[str, Any]):
     if existing_path_raw:
         existing_file = safe_workflow_path(WORKFLOWS_DIR, existing_path_raw)
 
+    operation = str(payload.get("operation") or "save").strip().lower()
+    if operation not in {"save", "duplicate"}:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "error",
+                "valid": False,
+                "errors": [{"rule": "OPERATION", "message": "Invalid workflow save operation.", "node_ids": [], "edge_ids": []}],
+            },
+        )
+
     raw_filename = str(payload.get("filename") or "").strip()
     if existing_file is not None and not raw_filename:
         filename = existing_file.name
@@ -3668,12 +3689,36 @@ def workflows_save(payload: Dict[str, Any]):
     to_save["updated_at"] = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
     payload_text = json.dumps(to_save, indent=2) + "\n"
 
-    if existing_file is not None and desired_path.resolve() == existing_file.resolve():
+    if operation == "duplicate":
+        try:
+            final_path = _write_new_workflow_file_with_collision_retry(target_dir, filename, payload_text)
+        except ValueError as exc:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "valid": False,
+                    "errors": [{"rule": "FILENAME", "message": str(exc), "node_ids": [], "edge_ids": []}],
+                },
+            )
+    elif existing_file is not None and desired_path.resolve() == existing_file.resolve():
         final_path = existing_file
         _write_text_atomic(final_path, payload_text)
     else:
+        if desired_path.exists():
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "status": "error",
+                    "valid": False,
+                    "errors": [{"rule": "FILENAME_EXISTS", "message": "Workflow filename already exists.", "node_ids": [], "edge_ids": []}],
+                },
+            )
         try:
-            final_path = _write_new_workflow_file_with_collision_retry(target_dir, filename, payload_text)
+            _write_text_atomic(desired_path, payload_text)
+            final_path = desired_path
+            if existing_file is not None and existing_file.exists():
+                existing_file.unlink()
         except ValueError as exc:
             return JSONResponse(
                 status_code=400,
@@ -3686,6 +3731,17 @@ def workflows_save(payload: Dict[str, Any]):
 
     saved_rel_path = str(final_path.relative_to(WORKFLOWS_DIR))
     return {"status": "ok", "path": saved_rel_path, "saved_name": final_path.name}
+
+
+@router.post("/api/workflows/delete")
+def workflows_delete(payload: Dict[str, Any]):
+    workflow = str(payload.get("path") or "").strip()
+    if not workflow:
+        return JSONResponse(status_code=400, content={"error": "Missing workflow path"})
+
+    file_path = safe_workflow_path(WORKFLOWS_DIR, workflow)
+    file_path.unlink()
+    return {"status": "ok"}
 
 
 @router.get("/api/llm/providers")

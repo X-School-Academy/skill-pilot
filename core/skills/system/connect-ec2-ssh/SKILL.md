@@ -46,6 +46,13 @@ When this skill is used in a workflow agent node:
 Ask user if an SSH session is already active. If yes, get the session ID and verify with
 `terminal-list-sessions` or `terminal-list-tmux-sessions`. If alive, report it and exit.
 
+## Execution Rule
+
+- Treat every AWS CLI command shown in this skill as reference for the intended AWS operation only.
+- Do not run raw `aws ...` shell commands directly from this skill.
+- Execute each AWS operation through agent skill `aws-api-call-aws`.
+- If an AWS command shape, flag, parameter, or failure is unclear, use agent skill `aws-api-suggest-aws-commands` to get the corrected command pattern, then run the resolved operation through `aws-api-call-aws`.
+
 ## Instructions
 
 ### Step 1: Collect connection parameters

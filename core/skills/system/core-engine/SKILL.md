@@ -1,6 +1,6 @@
 ---
 name: core-engine
-description: Manage core engine lifecycle via core/bin/tool-cli commands for engine-restart and engine-reload. Use when the user asks to restart engine from memory or reload .env updates and restart safely.
+description: Manage core engine lifecycle via core/bin/tool-cli commands for engine-restart and engine-reload. Only use this skill when the user explicitly asks to restart or reload the engine; never trigger it automatically from another agent skill.
 ---
 
 # AI Builder - Core Engine
@@ -9,9 +9,11 @@ Control core engine restart/reload through socket-driven commands.
 
 ## When to Use This Skill
 
-- User asks to restart core engine
-- User asks to reload updated `config/.env` and apply changes
-- User asks to control engine lifecycle from CLI without manual tmux interaction
+- User explicitly asks to restart core engine
+- User explicitly asks to reload updated `config/.env` and apply changes
+- User explicitly asks to control engine lifecycle from CLI without manual tmux interaction
+
+Do not use this skill automatically from another agent skill or as an inferred follow-up action. If engine control seems helpful but the user did not ask for it, ask first instead of invoking this skill.
 
 ## Your Roles in This Skill
 

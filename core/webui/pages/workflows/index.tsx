@@ -33,6 +33,7 @@ import {
   IconClock,
   IconArrowLeft,
   IconPlus,
+  IconCopy,
   IconDeviceFloppy,
   IconTrash,
   IconChevronsLeft,
@@ -91,6 +92,10 @@ type ValidationError = {
   node_ids?: number[];
   edge_ids?: string[];
 };
+
+type WorkflowSaveOperation = 'save' | 'duplicate';
+type WorkflowToolbarAction = WorkflowSaveOperation | 'delete' | null;
+
 type ConnectionDragState = {
   sourceNodeId: number;
   sourceKind: AnchorKind;
@@ -154,6 +159,18 @@ function edgeId(source: number, target: number): string {
 function workflowBaseName(path: string): string {
   const file = path.split('/').pop() || path;
   return file.replace(/\.json$/i, '');
+}
+
+function normalizeWorkflowFilenameInput(name: string): string {
+  return String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\.json$/i, '')
+    .replace(/_/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 function getNodeLabel(node: WorkflowNode): string {
@@ -247,7 +264,7 @@ export default function WorkflowsPage() {
   const [connectionDrag, setConnectionDrag] = useState<ConnectionDragState | null>(null);
   const [hoverAnchor, setHoverAnchor] = useState<HoverAnchorState | null>(null);
   const [errors, setErrors] = useState<ValidationError[]>([]);
-  const [saving, setSaving] = useState(false);
+  const [toolbarAction, setToolbarAction] = useState<WorkflowToolbarAction>(null);
   const [inspectorVisible, setInspectorVisible] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<number | null>(null);
@@ -556,16 +573,12 @@ export default function WorkflowsPage() {
     );
   });
 
-  const handleNewWorkflow = () => {
-    if (hasUnsavedChangesRef.current) {
-      const ok = window.confirm('You have unsaved changes. Discard and create a new workflow?');
-      if (!ok) return;
-    }
+  const resetToFreshWorkflow = useCallback(() => {
     const fresh = createDefaultWorkflow(defaultProviderId);
     beginProgrammaticStateUpdate();
     setWorkflow(fresh);
     setWorkflowPath(null);
-    setFilenameInput('new-workflow');
+    setFilenameInput(fresh.name);
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setConnectionDrag(null);
@@ -575,6 +588,14 @@ export default function WorkflowsPage() {
     setHasUnsavedChanges(false);
     setEditingNodeId(null);
     setEditingNodeTitle('');
+  }, [defaultProviderId]);
+
+  const handleNewWorkflow = () => {
+    if (hasUnsavedChangesRef.current) {
+      const ok = window.confirm('You have unsaved changes. Discard and create a new workflow?');
+      if (!ok) return;
+    }
+    resetToFreshWorkflow();
   };
 
   const handleAddAgent = (position?: { x: number; y: number }) => {
@@ -846,7 +867,7 @@ export default function WorkflowsPage() {
     setSelectedEdgeId(null);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (operation: WorkflowSaveOperation = 'save') => {
     const localErrors: ValidationError[] = [];
     const normalizedNameToIds = new Map<string, number[]>();
     for (const node of workflow.nodes) {
@@ -897,10 +918,11 @@ export default function WorkflowsPage() {
       return;
     }
 
-    setSaving(true);
+    setToolbarAction(operation);
     setErrors([]);
     try {
       const payload = {
+        operation,
         path: workflowPath,
         filename: filenameInput,
         workflow: {
@@ -929,9 +951,39 @@ export default function WorkflowsPage() {
         setInspectorVisible(true);
       }
     } finally {
-      setSaving(false);
+      setToolbarAction(null);
     }
   };
+
+  const handleDelete = useCallback(async () => {
+    if (!workflowPath) {
+      if (!hasUnsavedChangesRef.current) return;
+      if (!window.confirm('Discard this draft workflow?')) return;
+      setToolbarAction('delete');
+      try {
+        resetToFreshWorkflow();
+      } finally {
+        setToolbarAction(null);
+      }
+      return;
+    }
+    if (!window.confirm(`Delete workflow ${workflowBaseName(workflowPath)}?`)) return;
+
+    setToolbarAction('delete');
+    setErrors([]);
+    try {
+      await axios.post(`${API_BASE_URL}/workflows/delete`, { path: workflowPath });
+      await fetchTree();
+      await loadLatest();
+    } catch (err: any) {
+      console.error('Failed to delete workflow:', err);
+      const message = err?.response?.data?.error || err?.response?.data?.detail || err?.message || 'Failed to delete workflow.';
+      setErrors([{ rule: 'DELETE_FAILED', message, node_ids: [], edge_ids: [] }]);
+      setInspectorVisible(true);
+    } finally {
+      setToolbarAction(null);
+    }
+  }, [fetchTree, loadLatest, resetToFreshWorkflow, workflowPath]);
 
   const selectedNode = workflow.nodes.find((n) => n.id === selectedNodeId) || null;
   const selectedNodeHasMissingSkill = Boolean(
@@ -939,6 +991,9 @@ export default function WorkflowsPage() {
     !(selectedNode.data?.skill || '').trim() &&
     !(selectedNode.data?.responsibility || '').trim(),
   );
+  const currentWorkflowName = workflowPath ? workflowBaseName(workflowPath) : '';
+  const normalizedFilenameInput = normalizeWorkflowFilenameInput(filenameInput);
+  const shouldShowRename = Boolean(workflowPath && normalizedFilenameInput && normalizedFilenameInput !== currentWorkflowName);
 
   return (
     <AppShell
@@ -998,8 +1053,30 @@ export default function WorkflowsPage() {
               style={{ width: 220 }}
               styles={{ input: { border: 'none', background: 'transparent', boxShadow: 'none', paddingLeft: 4, paddingRight: 4 } }}
             />
-            <Button leftIcon={<IconDeviceFloppy size="1rem" />} onClick={() => { void handleSave(); }} loading={saving}>
-              Save Workflow
+            <Button
+              leftIcon={<IconDeviceFloppy size="1rem" />}
+              onClick={() => { void handleSave('save'); }}
+              loading={toolbarAction === 'save'}
+            >
+              {shouldShowRename ? 'Rename' : 'Save'}
+            </Button>
+            <Button
+              variant="light"
+              leftIcon={<IconCopy size="1rem" />}
+              onClick={() => { void handleSave('duplicate'); }}
+              loading={toolbarAction === 'duplicate'}
+            >
+              Duplicate
+            </Button>
+            <Button
+              color="red"
+              variant="light"
+              leftIcon={<IconTrash size="1rem" />}
+              onClick={() => { void handleDelete(); }}
+              loading={toolbarAction === 'delete'}
+              disabled={!workflowPath && !hasUnsavedChanges}
+            >
+              {workflowPath ? 'Delete' : 'Discard'}
             </Button>
           </Group>
         </Group>

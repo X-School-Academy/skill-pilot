@@ -41,11 +41,11 @@ Identify whether the user needs:
 
 ### Step 2: Ensure required tools are available
 
-For new Python packages in this repo, use `core/bin/uv-install` from repo root.
+For Python package installs and Python/package execution in this repo, use the `python-package-runtime` system skill.
 
 Python packages:
 ```
-core/bin/uv-install reportlab pdfplumber pypdf
+reportlab pdfplumber pypdf
 ```
 System tools (for rendering):
 ```
@@ -64,6 +64,8 @@ If installation isn't possible in this environment, report the missing dependenc
 2. Use `reportlab` to generate PDFs when creating new documents.
 3. Use `pdfplumber` or `pypdf` for text extraction and structural checks.
 4. Re-render pages after meaningful updates and verify alignment, spacing, and legibility.
+
+When implementing helpers for this workflow, follow the `python-package-runtime` skill conventions for package install, Python script execution, and package CLI execution.
 
 ### Step 4: Apply temp and output conventions
 

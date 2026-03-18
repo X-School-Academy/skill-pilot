@@ -1,6 +1,6 @@
 ---
 name: setup-aws-ec2
-description: Provision an AWS EC2 Ubuntu instance with VPC, subnet, internet gateway, and SSH-only security group using the aws-ec2 agent skill. Returns instance ID and public IP. Reusable for any EC2 server provisioning task.
+description: Provision an AWS EC2 Ubuntu instance with VPC, subnet, internet gateway, and SSH-only security group. AWS CLI snippets in this skill are reference only; execute AWS operations through the aws-api-call-aws agent skill and use aws-api-suggest-aws-commands for help resolving AWS command issues.
 ---
 
 # Setup AWS EC2 Instance
@@ -32,6 +32,13 @@ As a {Role, and Role-XYZ if have more roles}, I will {action description}
 Verify:
 - Use skill `key-safe` to confirm `AWS_ACCESS_KEY_ID` and `AWS_REGION` are available.
 
+## Execution Rule
+
+- Treat every AWS CLI command shown in this skill as reference for the intended AWS operation only.
+- Do not run raw `aws ...` shell commands directly from this skill.
+- Execute each AWS operation through agent skill `aws-api-call-aws`.
+- If an AWS command shape, flag, parameter, or failure is unclear, use agent skill `aws-api-suggest-aws-commands` to get the corrected command pattern, then run the resolved operation through `aws-api-call-aws`.
+
 ## Workflow Usage Requirement
 
 When this skill is used in a workflow agent node:
@@ -50,6 +57,8 @@ aws ec2 describe-instances --instance-ids <id> --region <region>
 
 If running, report it and exit. If stopped, offer to start it.
 
+Use the shown `describe-instances` command only as a reference pattern; perform the actual check through `aws-api-call-aws`.
+
 ## Instructions
 
 ### Step 1: Confirm parameters with user
@@ -57,6 +66,7 @@ If running, report it and exit. If stopped, offer to start it.
 Ask user to confirm or provide:
 - **Instance name** (default: `app-server`)
 - **Instance type** (default: `t4g.small`; show pricing if unsure)
+- **Root disk size** (default: `20 GiB` gp3)
 - **Region** (read from `.env` via skill `key-safe`)
 - **VPC name** (default: `vpc-<instance-name>`)
 - **Security group extra ports** (default: SSH only; ask if any ports should be open)
@@ -80,6 +90,8 @@ Use this value for all AWS API calls via `aws-ec2` skill.
 
 Use `aws-ec2` skill:
 
+The command below is reference only. Run the equivalent operation through `aws-api-call-aws`.
+
 ```
 aws ec2 describe-images
   --owners 099720109477
@@ -93,6 +105,8 @@ Note: use `arm64` filter for t4g, `amd64` for t3.x instances.
 
 ### Step 4: Create VPC
 
+Reference commands only; execute through `aws-api-call-aws`:
+
 ```
 aws ec2 create-vpc --cidr-block 10.0.0.0/16 --region <region>
   → tag: Name=<vpc-name>
@@ -101,6 +115,8 @@ aws ec2 modify-vpc-attribute --vpc-id <VPC_ID> --enable-dns-hostnames
 
 ### Step 5: Create public subnet
 
+Reference commands only; execute through `aws-api-call-aws`:
+
 ```
 aws ec2 create-subnet --vpc-id <VPC_ID> --cidr-block 10.0.1.0/24 --region <region>
   → tag: Name=<vpc-name>-subnet
@@ -108,6 +124,8 @@ aws ec2 modify-subnet-attribute --subnet-id <SUBNET_ID> --map-public-ip-on-launc
 ```
 
 ### Step 6: Internet gateway and routing
+
+Reference commands only; execute through `aws-api-call-aws`:
 
 ```
 aws ec2 create-internet-gateway → tag: Name=<vpc-name>-igw
@@ -118,6 +136,8 @@ aws ec2 associate-route-table --route-table-id <RT_ID> --subnet-id <SUBNET_ID>
 ```
 
 ### Step 7: Security group
+
+Reference commands only; execute through `aws-api-call-aws`:
 
 ```
 aws ec2 create-security-group
@@ -132,6 +152,8 @@ aws ec2 authorize-security-group-ingress --group-id <SG_ID> --protocol tcp --por
 ```
 
 ### Step 8: Launch EC2 instance
+
+Reference commands only; execute through `aws-api-call-aws`:
 
 ```
 aws ec2 run-instances
@@ -148,6 +170,9 @@ aws ec2 run-instances
 ### Step 9: Wait for running state
 
 Poll until state = `running` and status checks pass:
+
+Reference commands only; execute polling and lookups through `aws-api-call-aws`:
+
 ```
 aws ec2 describe-instance-status --instance-ids <INSTANCE_ID>
 aws ec2 describe-instances --instance-ids <INSTANCE_ID>
@@ -179,3 +204,5 @@ AMI:               <ami-id> (Ubuntu 24.04 LTS)
 - **VPC limit reached**: default is 5 VPCs per region — reuse existing or request limit increase
 - **Status checks pending**: normal for first boot; wait up to 10 minutes
 - **No public IP**: verify subnet has `map-public-ip-on-launch` enabled
+
+For any AWS command uncertainty or failure, first consult `aws-api-suggest-aws-commands`, then execute the resolved operation with `aws-api-call-aws`.

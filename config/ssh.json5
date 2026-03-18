@@ -1,1 +1,11 @@
-{}
+{
+  profiles: {
+    "ec2-tmp": {
+      host: "54.79.12.72",
+      port: 22,
+      user: "ubuntu",
+      key: ".skillpilot/temp/ec2-tmp-ssh",
+      timeoutMs: 60000,
+    },
+  },
+}

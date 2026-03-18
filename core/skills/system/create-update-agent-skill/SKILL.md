@@ -190,13 +190,13 @@ Detailed instructions for this step...
 If your skill includes executable scripts:
 
 1. **Create `scripts/` directory**
-2. **Use `core/bin/python`** for all Python helper scripts — this symlink points to `core/engine/.venv/bin/python` and has access to all packages installed in the engine venv.
-3. **Install dependencies** with `core/bin/uv-install <package>` from repo root (this runs `uv add` in `core/engine/`). Do not use `pip` for new packages.
-4. **Add scripts** that are:
+2. **Use the `python-package-runtime` system skill** whenever the skill needs Python package installs, Python helper scripts, or package-provided CLIs.
+3. **Follow the `python-package-runtime` conventions** for Python helper scripts, dependency installation, and package-provided CLI execution.
+6. **Add scripts** that are:
    - Self-contained or clearly document dependencies
    - Include helpful error messages
    - Handle edge cases gracefully
-5. **Temp files**: If the skill creates temporary or intermediate files, save them under `.skillpilot/temp/` with readable but unique names using a timestamp suffix. Example: `element-bbox-1739712000.png`, `quadrants-1739712000/`.
+7. **Temp files**: If the skill creates temporary or intermediate files, save them under `.skillpilot/temp/` with readable but unique names using a timestamp suffix. Example: `element-bbox-1739712000.png`, `quadrants-1739712000/`.
 
 ### Step 6: Validate the Skill
 
