@@ -95,7 +95,7 @@ uv run mcp-servers/terminal/main.py --sshConfig=mcp-servers/terminal/config.json
 | `open_session` | Start a session with `target`, `transport`, and `lifecycle` |
 | `attach_tmux_session` | Attach MCP control to an existing tmux session (`sessionRef`) or pane (`paneRef`) |
 | `send_session_input` | Send text or special keys |
-| `capture_session_screen` | Get session screen (`text`, `ansi`, `structured`; `detailed` alias supported) |
+| `capture_session_screen` | Get session screen (`text`, `ansi`, `structured`; supports `includeScrollback`, `joinWrappedLines`, `captureStart`, `captureEnd`) |
 | `resize_tmux_session` | Resize dimensions for a tmux-backed session |
 | `list_sessions` | List active sessions |
 | `list_tmux_sessions` | List tmux sessions on local or SSH target |
@@ -513,6 +513,25 @@ send_session_input(
 # 3. Capture output
 screen = capture_session_screen(
     sessionId=session.id,
+    includeScrollback=True,
+    joinWrappedLines=True,
+    format="text"
+)
+
+# Variant: 200 history lines plus visible pane, with wrapped lines joined
+screen = capture_session_screen(
+    sessionId=session.id,
+    captureStart="-200",
+    joinWrappedLines=True,
+    format="text"
+)
+
+# Variant: explicit full history through visible pane end
+screen = capture_session_screen(
+    sessionId=session.id,
+    captureStart="-",
+    captureEnd="-",
+    joinWrappedLines=True,
     format="text"
 )
 

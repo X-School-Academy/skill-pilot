@@ -814,6 +814,9 @@ def register_tools(
     async def capture_session_screen(
         sessionId: str,
         includeScrollback: bool = False,
+        joinWrappedLines: bool = True,
+        captureStart: str | None = None,
+        captureEnd: str | None = None,
         format: str = "text",
     ) -> str:
         """Capture a terminal session screen as text, ansi, or structured output.
@@ -825,7 +828,22 @@ def register_tools(
             sessionId: ID of the session returned by open_session or attach_tmux_session.
                        Example: "sess-abc123"
             includeScrollback: If true, include scrollback buffer content above the visible screen area.
-                               Default: false. Set to true to read command history or output that has scrolled off.
+                               Default: false. For tmux sessions this captures the full pane history (`tmux capture-pane -S -`).
+            joinWrappedLines: If true, join terminal-wrapped lines into logical lines when supported by the backend.
+                              Default: true. For tmux sessions this maps to `tmux capture-pane -J`, which is useful for
+                              reading long messages without resizing the pane. Set to false to preserve width-based wrapping.
+            captureStart: Optional tmux capture start bound. Accepts "-" or an integer string such as "-200" or "0".
+                          Examples:
+                          - None: use the visible pane start unless includeScrollback is true
+                          - "-200": start 200 history lines above the visible pane
+                          - "-": start from the beginning of history
+                          When set, this takes precedence over includeScrollback for tmux sessions.
+            captureEnd: Optional tmux capture end bound. Accepts "-" or an integer string such as "0" or "15".
+                        Examples:
+                        - None: use tmux's default end point
+                        - "-": end at the bottom of the visible pane
+                        - "15": end at pane line 15
+                        Supported only for tmux sessions.
             format: Output format. Default: "text".
                      - "text" — plain text content of the visible screen (recommended for most use cases)
                      - "ansi" — raw ANSI escape sequences; use when color/style information is needed
@@ -850,11 +868,27 @@ def register_tools(
             fmt = "structured"
         if fmt not in {"text", "ansi", "structured"}:
             raise ValueError("format must be one of: text, ansi, structured (or detailed)")
+        if (captureStart is not None or captureEnd is not None) and session.lifecycle != "tmux":
+            raise ValueError("captureStart and captureEnd are supported only for tmux-backed sessions")
 
         if fmt == "ansi":
-            return _json({"ansiData": session.get_ansi_snapshot()})
+            return _json(
+                {
+                    "ansiData": session.get_ansi_snapshot(
+                        include_scrollback=includeScrollback,
+                        join_wrapped_lines=joinWrappedLines,
+                        capture_start=captureStart,
+                        capture_end=captureEnd,
+                    )
+                }
+            )
 
-        snapshot = session.get_snapshot(includeScrollback)
+        snapshot = session.get_snapshot(
+            include_scrollback=includeScrollback,
+            join_wrapped_lines=joinWrappedLines,
+            capture_start=captureStart,
+            capture_end=captureEnd,
+        )
         if fmt == "structured":
             out = dict(snapshot)
             out["target"] = session.target

@@ -179,6 +179,8 @@ openclaw models auth login --provider openai-codex
 
 Copy the authorization URL from the output and show it to the user.
 
+**If the url text is too long and wrapped, you can use tmux command directly to the the url without resize the view**
+
 Ask user to:
 1. Open the URL in their local browser
 2. Sign in with their OpenAI account (Codex subscription required)
