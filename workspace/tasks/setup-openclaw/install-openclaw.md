@@ -1,2 +1,2 @@
-Ref to file ec2.md, the ec2 instance i-0fc4503a4a27bc3ce has been terminated, create a new ec2 instance and reuse others settings if possible
+Ref to file ec2.md, the ec2 instance i-0c91d6d3ea988927f has been terminated, create a new ec2 instance and reuse others settings if possible
 then follow the workflow and complete the tasks one by one, and update ec2.md and create openclaw.md to save the openclaw configuration and remote access information in the current workspace for user reference later
