@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Set, Tuple
 from fastapi import HTTPException
 
 
-_FILENAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*\.json$")
+_FILENAME_RE = re.compile(r"^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?\.json$")
 _NORMALIZED_NODE_NAME_RE = re.compile(r"[^a-z0-9]+")
 
 
@@ -115,9 +115,9 @@ def resolve_filename_collision(root: Path, filename: str) -> str:
 
     base = filename[:-5]
     candidate = filename
-    i = 2
+    i = 1
     while (root / candidate).exists():
-        candidate = f"{base}-{i}.json"
+        candidate = f"{base}_{i}.json"
         i += 1
     return candidate
 
