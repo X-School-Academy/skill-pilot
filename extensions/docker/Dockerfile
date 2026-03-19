@@ -66,8 +66,7 @@ RUN /bin/bash -c "\
     pip install -r /home/ubuntu/workspace/SongBloom/requirements.txt"
 
 # --- IndexTTS ---
-RUN git lfs install && \
-    git clone https://github.com/index-tts/index-tts.git index-tts && \
+RUN GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/index-tts/index-tts.git index-tts && \
     cd index-tts && \
     git checkout 830f6f8f94a51fea23ab1d639027a86200075a4e
 
