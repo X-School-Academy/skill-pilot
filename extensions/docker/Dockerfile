@@ -82,4 +82,6 @@ RUN chmod +x /home/ubuntu/workspace/download_models.sh /home/ubuntu/workspace/en
 # ---
 WORKDIR /home/ubuntu/workspace
 
+EXPOSE 22 8080 7860 8188 
+
 ENTRYPOINT ["/home/ubuntu/workspace/entrypoint.sh"]
