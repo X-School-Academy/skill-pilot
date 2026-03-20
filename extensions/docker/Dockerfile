@@ -28,7 +28,7 @@ RUN git clone https://github.com/comfy-org/ComfyUI ComfyUI && \
     cd ComfyUI && \
     git checkout f6b869d7d35f7160bf2fdeabaed378d737834540
 
-RUN /home/ubuntu/.local/bin/uv venv /home/ubuntu/workspace/ComfyUI/.venv && \
+RUN /home/ubuntu/.local/bin/uv venv --seed /home/ubuntu/workspace/ComfyUI/.venv && \
     /home/ubuntu/.local/bin/uv pip install \
         --python /home/ubuntu/workspace/ComfyUI/.venv/bin/python \
         -r /home/ubuntu/workspace/ComfyUI/requirements.txt

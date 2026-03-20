@@ -15,6 +15,15 @@ service ssh start; \
 sleep infinity'
 ```
 
+```bash
+uv pip install pip
+uv pip install basicsr accelerate numba
+uv pip install ftfy
+uv pip install diffusers
+uv pip install facexlib
+uv pip install gfpgan
+```
+
 
 https://console.runpod.io/user/settings
 API Keys
