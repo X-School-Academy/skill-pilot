@@ -14,4 +14,4 @@ docker run -d \
   -p 18080:8080 \
   -p 17860:7860 \
   -p 18188:8188 \
-  skill-pilot/media-mcp:latest
+  skill-pilot/media-mcp:latest_01
