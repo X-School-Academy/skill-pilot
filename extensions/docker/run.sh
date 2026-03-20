@@ -7,6 +7,7 @@ docker run -d \
   --name skill-pilot-media-mcp \
   --gpus all \
   -e PUBLIC_KEY="$PUBLIC_KEY" \
+  -e COMFYUI_INSTALL_PATH="/home/ubuntu/workspace/ComfyUI" \
   ${NO_DOWNLOAD_MODELS:+-e NO_DOWNLOAD_MODELS="$NO_DOWNLOAD_MODELS"} \
   -v ~/data/models:/home/ubuntu/workspace/models \
   -p 10022:22 \
