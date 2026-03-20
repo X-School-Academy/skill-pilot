@@ -16,12 +16,23 @@ sleep infinity'
 ```
 
 ```bash
+cd /home/ubuntu/workspace/ComfyUI
+# uv pip install can auto pick the right python version, and install to the right venv
+source .venv/bin/activate
 uv pip install pip
 uv pip install basicsr accelerate numba
 uv pip install ftfy
 uv pip install diffusers
 uv pip install facexlib
 uv pip install gfpgan
+uv pip install soundfile
+# https://github.com/thu-ml/SageAttention/issues/197
+# Sage attention hacked for NVIDIA Turing GPUs
+uv pip install --no-build-isolation https://github.com/ezhomelabs/SageAttention2/archive/refs/heads/updates.zip
+# for SageAttention2 hacked 
+uv pip install -U triton==3.2
+#for ComfyUI_ACE-Step & ComfyUI-tbox
+uv pip install "numpy<2"
 ```
 
 
