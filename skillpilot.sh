@@ -47,6 +47,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENGINE_ENV_FILE="${ROOT_DIR}/config/.env"
 ACTION="start"
 ACTION_TARGET=""
+TEST_FILES=()
 IS_DEV=0
 AVAILABLE_PROVIDERS=()
 HUMAN_DETECTION_REQUIREMENTS="${ROOT_DIR}/core/engine/mcp_servers/cameras/requirements-human-detection.txt"
@@ -54,14 +55,16 @@ LIVE_TTS_REQUIREMENTS="${ROOT_DIR}/core/engine/mcp_servers/live_tts/requirements
 
 print_help() {
   cat <<'EOF_HELP'
-Usage: ./skillpilot.sh [help|build|start|stop] [--dev]
+Usage: ./skillpilot.sh [help|build|start|stop|test] [--dev]
        ./skillpilot.sh <enable|disable> <human-detection|live-tts>
+       ./skillpilot.sh test [test_file ...]
 
 Commands:
   help    Show this help message.
   build   Build static webui export (core/webui/www).
   start   Start services. Default command.
   stop    Stop running tmux sessions.
+  test    Run engine pytest suite, or only the named files under core/engine/tests.
   enable human-detection    Install optional human detection dependencies.
   disable human-detection   Uninstall optional human detection dependencies.
   enable live-tts           Install optional live-tts dependencies.
@@ -73,17 +76,19 @@ Options:
 Defaults:
   - Command defaults to: start
   - Mode defaults to production (without --dev)
+  - Test file names may omit ".py", may omit the "test_" prefix, and may be passed as space-separated or comma-separated values
 EOF_HELP
 }
 
 parse_args() {
   local action_set=0
+  local expect_test_files=0
   while (($# > 0)); do
     case "$1" in
       --dev)
         IS_DEV=1
         ;;
-      help|-h|--help|build|start|stop|enable|disable)
+      help|-h|--help|build|start|stop|test|enable|disable)
         if ((action_set == 1)); then
           echo "Error: multiple commands provided."
           print_help
@@ -91,6 +96,11 @@ parse_args() {
         fi
         ACTION="$1"
         action_set=1
+        if [[ "${ACTION}" == "test" ]]; then
+          expect_test_files=1
+        else
+          expect_test_files=0
+        fi
         ;;
       human-detection|live-tts)
         if [[ "${ACTION}" != "enable" && "${ACTION}" != "disable" ]]; then
@@ -106,6 +116,17 @@ parse_args() {
         ACTION_TARGET="$1"
         ;;
       *)
+        if ((expect_test_files == 1)); then
+          local raw_item trimmed
+          IFS=',' read -r -a _test_items <<< "$1"
+          for raw_item in "${_test_items[@]}"; do
+            trimmed="${raw_item#"${raw_item%%[![:space:]]*}"}"
+            trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+            [[ -n "${trimmed}" ]] && TEST_FILES+=("${trimmed}")
+          done
+          shift
+          continue
+        fi
         echo "Error: unknown argument '$1'."
         print_help
         exit 1
@@ -888,6 +909,41 @@ build_webui_export() {
   pnpm -C "${ROOT_DIR}/core/webui" export
 }
 
+run_engine_tests() {
+  require_cmd uv
+
+  local tests_dir="${ROOT_DIR}/core/engine/tests"
+  local pytest_targets=()
+  local name path
+
+  if [[ ! -d "${tests_dir}" ]]; then
+    echo "Error: missing tests directory at ${tests_dir}."
+    exit 1
+  fi
+
+  if ((${#TEST_FILES[@]} == 0)); then
+    pytest_targets=("tests")
+  else
+    for name in "${TEST_FILES[@]}"; do
+      if [[ "${name}" == */* ]]; then
+        echo "Error: test files must be file names only under core/engine/tests: '${name}'."
+        exit 1
+      fi
+      [[ "${name}" == test_* ]] || name="test_${name}"
+      [[ "${name}" == *.py ]] || name="${name}.py"
+      path="${tests_dir}/${name}"
+      if [[ ! -f "${path}" ]]; then
+        echo "Error: test file not found: ${path}"
+        exit 1
+      fi
+      pytest_targets+=("tests/${name}")
+    done
+  fi
+
+  echo "Running engine tests: ${pytest_targets[*]}"
+  uv --directory "${ROOT_DIR}/core/engine" run pytest "${pytest_targets[@]}"
+}
+
 ensure_webui_release_assets() {
   local webui_www_dir="${ROOT_DIR}/core/webui/www"
   local webui_index="${webui_www_dir}/index.html"
@@ -1100,6 +1156,9 @@ case "${ACTION}" in
   build)
     build_webui_export
     echo "Done."
+    ;;
+  test)
+    run_engine_tests
     ;;
   start)
     ensure_engine_venv

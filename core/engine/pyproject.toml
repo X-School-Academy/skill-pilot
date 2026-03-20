@@ -40,3 +40,8 @@ dependencies = [
     "av>=16.1.0",
     "onvif-python>=0.2.10",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

@@ -606,8 +606,8 @@ def llm_get_json(
 
 def llm_stream(
     prompt: str,
-    provider_id: Optional[str],
-    client_id: str,
+    provider_id: Optional[str] = None,
+    client_id: str = "workflow",
     auto_allow: Optional[bool] = None,
     network_allow: Optional[bool] = None,
     sandbox_mode: Optional[bool] = None,
@@ -759,8 +759,8 @@ def llm_stream(
 
 def run_llm_once(
     prompt: str,
-    provider_id: Optional[str],
-    client_id: str,
+    provider_id: Optional[str] = None,
+    client_id: str = "workflow",
     auto_allow: Optional[bool] = None,
     network_allow: Optional[bool] = None,
     sandbox_mode: Optional[bool] = None,
