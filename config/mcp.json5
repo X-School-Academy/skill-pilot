@@ -23,7 +23,7 @@
         COMFYUI_SERVER_ADDRESS: "http://localhost:8188",
         COMFYUI_INSTALL_PATH: "/home/ubuntu/workspace/ComfyUI",
         GPU_WORKER_TTS_CREATOR: "/home/ubuntu/workspace/index-tts/index-tts.py",
-        GPU_WORKER_SONG_CREATOR: "/home/ubuntu/workspace/SongBloom/song_creator.py",
+        GPU_WORKER_SONG_CREATOR: "/home/ubuntu/workspace/SongBloom/songbloom_creator.py",
         GPU_WORKER_LLM_VISION_INFER: "/tmp/llm_vision_infer.py",
         GPU_WORKER_WHISPER_CLI: "/home/ubuntu/workspace/external_scripts/whisper_cli.py",
         GPU_WORKER_MUSETALK_CLI: "/home/ubuntu/workspace/MuseTalk/musetalk_cli.py",
