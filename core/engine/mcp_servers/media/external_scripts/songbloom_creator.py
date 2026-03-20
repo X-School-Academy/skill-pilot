@@ -1,4 +1,4 @@
-#!/media/frankhe/Data/AUTOMATIC1111/SongBloom/.venv/bin/python3
+#!/home/ubuntu/miniconda3/envs/SongBloom/bin/python
 import os
 import sys
 import torch

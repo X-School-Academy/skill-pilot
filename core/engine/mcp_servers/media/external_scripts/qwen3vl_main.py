@@ -1,4 +1,4 @@
-#!/home/frankhe/data/AUTOMATIC1111/Qwen3VL-GGUF/.venv/bin/python
+#!/home/ubuntu/workspace/Qwen3VL-GGUF/.venv/bin/python
 from __future__ import annotations
 
 import argparse

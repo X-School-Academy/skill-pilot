@@ -1,4 +1,4 @@
-#!/home/frankhe/data/AUTOMATIC1111/remove-music/.venv/bin/python
+#!/home/ubuntu/workspace/ComfyUI/.venv/bin/python
 """
 Demucs Vocal Extraction Script
 

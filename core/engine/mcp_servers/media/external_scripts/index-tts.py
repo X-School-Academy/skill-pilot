@@ -1,4 +1,4 @@
-#!/media/frankhe/Data/AUTOMATIC1111/index-tts2/.venv/bin/python3
+#!/home/ubuntu/workspace/index-tts/.venv/bin/python3
 """
 IndexTTS2 Text-to-Speech Generation Script
 

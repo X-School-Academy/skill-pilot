@@ -1,4 +1,4 @@
-#!/home/frankhe/data/AUTOMATIC1111/MuseTalk_1.5/.venv/bin/python
+#!/home/ubuntu/miniconda3/envs/MuseTalk/bin/python
 import contextlib
 import logging
 import os
