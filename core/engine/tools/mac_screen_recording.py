@@ -12,8 +12,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-DEFAULT_STATE_PATH = Path(".skillpilot/temp/screen-recording/state.json")
-DEFAULT_RECORDINGS_DIR = Path(".skillpilot/temp/screen-recording/recordings")
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_STATE_PATH = PROJECT_ROOT / ".skillpilot" / "temp" / "screen-recording" / "state.json"
+DEFAULT_RECORDINGS_DIR = PROJECT_ROOT / ".skillpilot" / "temp" / "screen-recording" / "recordings"
 DEFAULT_FPS = 30
 
 
@@ -43,7 +44,12 @@ def _run(cmd: list[str], check: bool = True, capture_output: bool = True) -> sub
 
 
 def _state_path(path_arg: Optional[str]) -> Path:
-    return Path(path_arg) if path_arg else DEFAULT_STATE_PATH
+    if not path_arg:
+        return DEFAULT_STATE_PATH
+    path = Path(path_arg).expanduser()
+    if path.is_absolute():
+        return path
+    return PROJECT_ROOT / path
 
 
 def _load_state(path: Path) -> Dict[str, Any]:
