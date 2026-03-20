@@ -16,6 +16,8 @@ sleep infinity'
 ```
 
 ```bash
+echo 'COMFYUI_INSTALL_PATH="/home/ubuntu/workspace/ComfyUI"' >> /etc/environment
+
 cd /home/ubuntu/workspace/ComfyUI
 # uv pip install can auto pick the right python version, and install to the right venv
 source .venv/bin/activate
