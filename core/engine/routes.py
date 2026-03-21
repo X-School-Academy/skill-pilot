@@ -1757,24 +1757,6 @@ async def config_default_provider(request: Request):
 _PROFILE_PATH = _REPO_ROOT / "config" / "profile.json5"
 
 
-def _get_local_timezone() -> str:
-    try:
-        import time as _time
-        tz_name = _time.tzname[0] if _time.tzname else ""
-        # Prefer IANA name from /etc/localtime or TZ env
-        tz_env = os.environ.get("TZ", "")
-        if tz_env:
-            return tz_env
-        localtime = Path("/etc/localtime")
-        if localtime.is_symlink():
-            target = str(localtime.resolve())
-            if "/zoneinfo/" in target:
-                return target.split("/zoneinfo/", 1)[1]
-        return tz_name or "UTC"
-    except Exception:
-        return "UTC"
-
-
 @router.get("/api/config/profile")
 def config_profile_get():
     data: Dict[str, Any] = {}
@@ -1785,8 +1767,6 @@ def config_profile_get():
                 data = loaded
         except Exception as exc:
             logger.warning("Failed to read profile: %s", exc)
-    if not data.get("timezone"):
-        data["timezone"] = _get_local_timezone()
     return data
 
 
