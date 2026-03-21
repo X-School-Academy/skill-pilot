@@ -1,4 +1,4 @@
-#!/media/frankhe/Data/miniconda3/envs/whisper/bin/python
+#!/home/ubuntu/workspace/ComfyUI/.venv/bin/python
 import argparse
 import json
 import sys

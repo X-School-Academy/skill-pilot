@@ -177,17 +177,21 @@ openclaw doctor
 openclaw models auth login --provider openai-codex
 ```
 
-Copy the authorization URL from the output and show it to the user.
+Extract the authorization URL from the output and save it to a local file (e.g., `/tmp/codex-auth-url.txt`). Do **not** let the user copy the URL directly from the terminal — terminal line wrapping can silently break the URL and cause an authentication error.
 
-Ask user to:
-1. Open the URL in their local browser
-2. Sign in with their OpenAI account (Codex subscription required)
+> **Tip:** If the URL is hard to extract via `terminal-send-session-input`, use the native tmux command to capture the pane buffer instead.
+
+Then use agent skill `playwright-cli` to complete the OAuth flow:
+1. Read the URL from the saved file and open it in the browser
+2. Sign in with the user's OpenAI account (subscription required)
 3. Click **Authorize**
 
 The CLI polls and confirms automatically. Wait for:
 ```
 ✓ Authenticated with openai-codex
 ```
+
+Or get the redirect URL directly with agent skill `playwright-cli`, or ask the user to paste the redirect URL back to you.
 
 Verify:
 ```bash

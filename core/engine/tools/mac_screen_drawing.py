@@ -6,7 +6,21 @@ import signal
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _resolve_state_path(path_value: str | None) -> str:
+    raw = (path_value or "").strip()
+    if not raw:
+        return str(PROJECT_ROOT / ".skillpilot" / "temp" / "screen-drawing-state.json")
+    path = Path(raw).expanduser()
+    if path.is_absolute():
+        return str(path)
+    return str(PROJECT_ROOT / path)
 
 
 @dataclass
@@ -155,7 +169,7 @@ def main() -> int:
     parser.add_argument(
         "--state-path",
         type=str,
-        default=os.getenv("SCREEN_DRAWING_STATE_PATH", ".skillpilot/temp/screen-drawing-state.json"),
+        default=_resolve_state_path(os.getenv("SCREEN_DRAWING_STATE_PATH")),
         help="JSON state file for manual mode updates (last drawn bbox).",
     )
 
@@ -212,7 +226,7 @@ def main() -> int:
 
     quick_cocoa_bbox = _top_left_bbox_to_cocoa(bounds, quick_top_left_bbox)
 
-    state_path = os.path.abspath(args.state_path)
+    state_path = _resolve_state_path(args.state_path)
     state: Dict[str, Any] = {
         "mode": args.mode,
         "active": False,

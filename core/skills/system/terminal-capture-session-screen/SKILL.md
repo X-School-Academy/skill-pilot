@@ -10,7 +10,22 @@ Use this tool when you need to read the current output of a running terminal ses
             sessionId: ID of the session returned by open_session or attach_tmux_session.
                        Example: "sess-abc123"
             includeScrollback: If true, include scrollback buffer content above the visible screen area.
-                               Default: false. Set to true to read command history or output that has scrolled off.
+                               Default: false. For tmux sessions this captures the full pane history (`tmux capture-pane -S -`).
+            joinWrappedLines: If true, join terminal-wrapped lines into logical lines when supported by the backend.
+                              Default: true. For tmux sessions this maps to `tmux capture-pane -J`, which is useful for
+                              reading long messages without resizing the pane. Set to false to preserve width-based wrapping.
+            captureStart: Optional tmux capture start bound. Accepts "-" or an integer string such as "-200" or "0".
+                          Examples:
+                          - None: use the visible pane start unless includeScrollback is true
+                          - "-200": start 200 history lines above the visible pane
+                          - "-": start from the beginning of history
+                          When set, this takes precedence over includeScrollback for tmux sessions.
+            captureEnd: Optional tmux capture end bound. Accepts "-" or an integer string such as "0" or "15".
+                        Examples:
+                        - None: use tmux's default end point
+                        - "-": end at the bottom of the visible pane
+                        - "15": end at pane line 15
+                        Supported only for tmux sessions.
             format: Output format. Default: "text".
                      - "text" — plain text content of the visible screen (recommended for most use cases)
                      - "ansi" — raw ANSI escape sequences; use when color/style information is needed
@@ -48,6 +63,35 @@ core/bin/tool-cli request '{"server_id": "terminal", "tool_name": "capture_sessi
       "default": false,
       "title": "Includescrollback",
       "type": "boolean"
+    },
+    "joinWrappedLines": {
+      "default": true,
+      "title": "Joinwrappedlines",
+      "type": "boolean"
+    },
+    "captureStart": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Capturestart"
+    },
+    "captureEnd": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Captureend"
     },
     "format": {
       "default": "text",

@@ -35,7 +35,7 @@ from aiortc.contrib.media import MediaPlayer, MediaRecorder, MediaBlackhole
 from av import VideoFrame, AudioFrame
 from av.audio.resampler import AudioResampler
 from fractions import Fraction
-from scripts.chat_realtime import response_audio_wav, send_text as llm_live_send_text, send_audio as llm_live_send_audio, send_image_file as llm_live_send_image_file, listen as llm_live_listen , first_frame_event, generated_audio_queue, END_OF_AUDIO, END_OF_VIDEO, generated_frame_queue, turn_sequence, clear_queue
+from scripts.openai_live import response_audio_wav, send_text as llm_live_send_text, send_audio as llm_live_send_audio, listen as llm_live_listen , first_frame_event, generated_audio_queue, END_OF_AUDIO, END_OF_VIDEO, generated_frame_queue, turn_sequence, clear_queue
 from scripts.live_inference import init_live_inference, start_live_inference
 import glob
 import cv2
@@ -57,7 +57,7 @@ video_fps = 25
 pcs = set()
 ws_client = None  # Global websocket connection (for this prototype only)
 current_pc = None  # Global reference to the active peer connection
-mic_muted = False  # Global flag to indicate whether the mic is muted
+mic_muted = True  # Global flag to indicate whether the mic is muted
 avatar = ''
 driver = 'openai'
 
@@ -66,38 +66,19 @@ Repeat the text exactly as provided, applying the specified emotional or voice s
 Do not add any introductory phrases, explanations, or commentary in the audio output.
 Speak only the text given, in the required tone."""
 
-AUTH_TOKEN = os.environ.get("AUTH_TOKEN", "")
-if not AUTH_TOKEN:
-    print("ENV AUTH_TOKEN is not set – connections will be refused")
+if os.environ.get("TURN_SERVER_URLS") is None:
+    print("ENV TURN_SERVER_URLS is not set")
 
-
-def _read_settings_turn(key: str) -> str:
-    """Read a TURN setting from config/settings.json5 as fallback."""
+async def index(request):
     try:
-        import json5 as _json5
-        settings_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "config", "settings.json5")
-        data = _json5.loads(open(settings_path, encoding="utf-8").read())
-        return str(data.get("turn", {}).get(key, "") or "")
-    except Exception:
-        return ""
-
-
-def _get_turn_urls() -> list[str]:
-    raw = os.environ.get("TURN_SERVER_URLS") or _read_settings_turn("urls")
-    return [u.strip() for u in raw.split(",") if u.strip()] if raw else []
-
-
-def _get_turn_username() -> str:
-    return os.environ.get("TURN_SERVER_USERNAME") or _read_settings_turn("username")
-
-
-def _get_turn_password() -> str:
-    return os.environ.get("TURN_SERVER_PASSWORD") or _read_settings_turn("password")
-
-
-_turn_urls = _get_turn_urls()
-if not _turn_urls:
-    print("TURN_SERVER_URLS is not set (env or settings.json5) — TURN disabled")
+        with open(os.path.join(os.path.dirname(__file__), "live_chat.html"), "r") as f:
+            content = f.read()
+            content = content.replace('{{TURN_SERVER_URLS}}', os.environ.get("TURN_SERVER_URLS"))
+            content = content.replace('{{TURN_SERVER_USERNAME}}', os.environ.get("TURN_SERVER_USERNAME"))
+            content = content.replace('{{TURN_SERVER_PASSWORD}}', os.environ.get("TURN_SERVER_PASSWORD"))
+    except Exception as e:
+        return web.Response(status=500, text=str(e))
+    return web.Response(content_type="text/html", text=content)
 
 class VideoTrack(VideoStreamTrack):
     """
@@ -294,44 +275,54 @@ class AudioTrack(AudioStreamTrack):
 
         return frame
 
-async def _create_peer_connection(ws):
-    """Create RTCPeerConnection and register ICE candidate forwarding to ws."""
+async def offer(request):
     global current_pc
+    params = await request.json()
+    offer_desc = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 
+    # Define the STUN server
     stun_server = RTCIceServer(urls='stun:stun.l.google.com:19302')
-    ice_servers = [stun_server]
-    turn_urls = _get_turn_urls()
-    if turn_urls:
-        turn_server = RTCIceServer(
-            urls=turn_urls,
-            username=_get_turn_username() or None,
-            credential=_get_turn_password() or None,
-        )
-        ice_servers.append(turn_server)
-    rtc_configuration = RTCConfiguration(iceServers=ice_servers)
 
+    turn_server = RTCIceServer(
+        urls=os.environ.get("TURN_SERVER_URLS").split(','),
+        username=os.environ.get("TURN_SERVER_USERNAME"),
+        credential=os.environ.get("TURN_SERVER_PASSWORD")
+    )
+
+    # Create the RTC configuration with the STUN server
+    rtc_configuration = RTCConfiguration(iceServers=[turn_server, stun_server])
+
+    # Initialize the RTCPeerConnection with the specified configuration
     pc = RTCPeerConnection(configuration=rtc_configuration)
     current_pc = pc
     pcs.add(pc)
+
     logging.info("Created RTCPeerConnection")
 
     @pc.on("icecandidate")
     async def on_icecandidate(candidate):
         if candidate:
+            logging.info("New ICE candidate:", candidate.candidate)
             candidate_json = {
                 "candidate": candidate.candidate,
                 "sdpMid": candidate.sdpMid,
                 "sdpMLineIndex": candidate.sdpMLineIndex,
             }
-            try:
-                await ws.send_str(json.dumps({"type": "candidate", "candidate": candidate_json}))
-            except Exception as e:
-                logging.error("Error sending ICE candidate: %s", e)
+            if ws_client:
+                try:
+                    logging.info('send new candidate to remote')
+                    await ws_client.send_str(json.dumps({
+                        "type": "candidate",
+                        "candidate": candidate_json,
+                    }))
+                except Exception as e:
+                    logging.error("Error sending ICE candidate: %s", e)
         else:
             logging.info("ICE gathering complete")
 
-    input_hz = 16000 if driver == 'gemini' else 24000
-    resampler = AudioResampler(format="s16", layout="mono", rate=input_hz)
+    resampler = AudioResampler(format="s16", layout="mono", rate=24000)
+    vad_resampler = AudioResampler(format="s16", layout="mono", rate=16000)
+    vad_buffer = [] 
 
     @pc.on("track")
     async def on_track(track):
@@ -340,6 +331,32 @@ async def _create_peer_connection(ws):
             async def process_audio():
                 while True:
                     frame = await track.recv()
+                    '''
+                    vad_pcm_frames = vad_resampler.resample(frame)
+                    if vad_pcm_frames:
+                        vad_pcm_frame = vad_pcm_frames[0]
+                        audio_bytes = vad_pcm_frame.to_ndarray().astype("int16").tobytes()
+                        audio_samples = np.frombuffer(audio_bytes, dtype=np.int16)
+                        audio_float = audio_samples.astype(np.float32) / 32768.0
+                        vad_buffer.extend(audio_float.tolist())
+                        if len(vad_buffer) >= int(16000 * 0.3):
+                            speech_timestamps = get_speech_ts(
+                                np.array(vad_buffer, dtype=np.float32),
+                                vad_model,
+                                threshold=0.5,
+                                sampling_rate=16000
+                            )
+                            if speech_timestamps:
+                                if turn_sequence.playing and not turn_sequence.paused:
+                                    logging.info(f"New speech detected: {speech_timestamps}")
+                                    turn_sequence.paused = True
+                                # Here you can forward the buffered audio to your stream API or audio queue.
+                                vad_buffer.clear()
+                            else:
+                                max_buffer = int(16000 * 2)  # keep at most 2 seconds
+                                if len(vad_buffer) > max_buffer:
+                                    vad_buffer[:] = vad_buffer[-int(16000 * 0.2):]
+                    '''
                     if mic_muted:
                         continue
                     pcm_frames = resampler.resample(frame)
@@ -353,56 +370,49 @@ async def _create_peer_connection(ws):
                     else:
                         logging.error('resampler.resample: None')
             asyncio.create_task(process_audio())
+            
         elif track.kind == "video":
             logging.info("Received video track from client; ignoring for now.")
 
         @track.on("ended")
         async def on_ended():
-            logging.info("Client %s track ended", track.kind)
+            print("Client %s track ended" % track.kind)
 
-    return pc
+    #logging.info('====== remote offer ======')
+    #logging.info(offer_desc)
+    await pc.setRemoteDescription(offer_desc)
 
+    audio_track = AudioTrack()
+    pc.addTrack(audio_track)
+    video_track = VideoTrack(fps=video_fps)
+    pc.addTrack(video_track)
+
+    answer = await pc.createAnswer()
+    #logging.info('====== local answer ======')
+    #logging.info(answer)
+    await pc.setLocalDescription(answer)
+
+    return web.Response(
+        content_type="application/json",
+        text=json.dumps({
+            "sdp": pc.localDescription.sdp,
+            "type": pc.localDescription.type,
+        }),
+    )
 
 async def websocket_handler(request):
     global ws_client, current_pc, mic_muted
-
-    # Verify AUTH_TOKEN from query parameter
-    token = request.rel_url.query.get("token", "")
-    if not AUTH_TOKEN or token != AUTH_TOKEN:
-        logging.warning("WebSocket connection rejected: invalid token")
-        return web.Response(status=401, text="Unauthorized")
-
     ws = web.WebSocketResponse()
     await ws.prepare(request)
     ws_client = ws
-    logging.info("WebSocket connection established")
+    logging.info("WebSocket web connection established")
 
     async for msg in ws:
         if msg.type == web.WSMsgType.TEXT:
             data = msg.data.strip()
             try:
                 data_json = json.loads(data)
-                msg_type = data_json.get("type")
-
-                if msg_type == "offer":
-                    # SDP offer from browser — create peer connection and send back answer
-                    offer_desc = RTCSessionDescription(
-                        sdp=data_json["sdp"], type=data_json["sdpType"]
-                    )
-                    pc = await _create_peer_connection(ws)
-                    await pc.setRemoteDescription(offer_desc)
-                    pc.addTrack(AudioTrack())
-                    pc.addTrack(VideoTrack(fps=video_fps))
-                    answer = await pc.createAnswer()
-                    await pc.setLocalDescription(answer)
-                    await ws.send_str(json.dumps({
-                        "type": "answer",
-                        "sdp": pc.localDescription.sdp,
-                        "sdpType": pc.localDescription.type,
-                    }))
-                    logging.info("SDP answer sent")
-
-                elif msg_type == "candidate":
+                if data_json.get("type") == "candidate":
                     logging.info("Received ICE candidate: %s", data_json)
                     candidate = data_json.get("candidate")
                     if candidate and current_pc:
@@ -411,33 +421,27 @@ async def websocket_handler(request):
                             candidate["sdpMid"],
                             candidate["sdpMLineIndex"]
                         )
+                        logging.info('new candidate from remote')
                         await current_pc.addIceCandidate(ice_candidate)
-
-                elif msg_type == "text":
+                elif data_json.get("type") == "text":
                     text_message = data_json.get("message")
                     logging.info("Received text message: %s", text_message)
                     await llm_live_send_text(text_message)
-
-                elif msg_type == "predefined":
+                elif data_json.get("type") == "predefined":
                     text_message = data_json.get("message")
                     logging.info("Received predefined message: %s", text_message)
                     if text_message.endswith('.wav') and ' ' not in text_message:
-                        await response_audio_wav(f"audios/{text_message}")
-                    elif text_message.endswith('.jpg') and ' ' not in text_message:
-                        await llm_live_send_image_file(f"images/{text_message}")
+                        wave_file = text_message
+                        await response_audio_wav(f"audios/{wave_file}")
                     else:
                         await llm_live_send_text(text_message, instructions=predefined_message_instructions)
-
-                elif msg_type == "mic_mute":
+                elif data_json.get("type") == "mic_mute":
                     mic_muted = data_json.get("muted", True)
                     logging.info("Received mic mute signal: %s", mic_muted)
-
                 else:
-                    logging.warning("Unknown message type: %s", msg_type)
-
+                    logging.warning("Unknown message: %s", data)
             except Exception as e:
                 logging.error("Error processing message: %s, error: %s", data, e)
-
         elif msg.type == web.WSMsgType.ERROR:
             logging.error("WebSocket closed with exception %s", ws.exception())
 
@@ -455,7 +459,7 @@ async def on_shutdown(app):
 
 async def main():
     '''
-    python -m scripts.live_chat --avatar frank --port 8008 --fps 12 --driver openai
+    python -m scripts.live_chat --avatar frank --port 8008 --fps 12 --driver wav
     # remote must use https, or port forward to local
     http://127.0.0.1:21938/
     '''
@@ -471,7 +475,7 @@ async def main():
     parser.add_argument("--avatar", type=str, required=True,
                         help="the avatar of the video file name without path and '.mp4'")
     parser.add_argument("--driver", type=str, default="openai",
-                        help="openai, gemini or wav")
+                        help="openai or wav")
     args = parser.parse_args()
     video_fps = args.fps
     avatar = args.avatar
@@ -479,11 +483,12 @@ async def main():
 
     app = web.Application()
     app.on_shutdown.append(on_shutdown)
-
+    app.router.add_get("/", index)
+    app.router.add_post("/offer", offer)
     app.router.add_get("/ws", websocket_handler)
 
     logging.info('run start_live_inference')
-    avatar_video_file = f"data/video/{avatar}.mp4 "
+    avatar_video_file = f"data/video/{avatar}.mp4"
     init_live_inference(avatar_video_file)
     asyncio.create_task(start_live_inference(video_fps, args.audio_buffer_time))
 

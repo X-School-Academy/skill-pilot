@@ -606,8 +606,8 @@ def llm_get_json(
 
 def llm_stream(
     prompt: str,
-    provider_id: Optional[str],
-    client_id: str,
+    provider_id: Optional[str] = None,
+    client_id: str = "workflow",
     auto_allow: Optional[bool] = None,
     network_allow: Optional[bool] = None,
     sandbox_mode: Optional[bool] = None,
@@ -755,43 +755,6 @@ def llm_stream(
             logger.error("llm cli output:\n%s", output_text)
         yield b"[-ERROR-]"
     yield b"[-DONE-]"
-
-
-def run_llm_once(
-    prompt: str,
-    provider_id: Optional[str],
-    client_id: str,
-    auto_allow: Optional[bool] = None,
-    network_allow: Optional[bool] = None,
-    sandbox_mode: Optional[bool] = None,
-) -> str:
-    _ = client_id
-    provider = get_provider(provider_id)
-    cmd = build_llm_command(
-        provider,
-        prompt,
-        auto_allow=auto_allow,
-        network_allow=network_allow,
-        sandbox_mode=sandbox_mode,
-    )
-    agent_cli_unset = configured_unset_keys()
-    provider_env = _resolve_provider_env(provider)
-    logger.info(
-        "[llm] run_once client_id=%s provider_id=%s command=%s",
-        client_id,
-        provider.get("id"),
-        format_command_for_log(cmd, provider_env),
-    )
-    proc = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        shell=False,
-        env=safe_env(extra=provider_env, unset_keys=agent_cli_unset),
-        **_popen_kwargs(),
-    )
-    output = (proc.stdout or "") + (proc.stderr or "")
-    return output.strip()
 
 
 def stop_client(client_id: str) -> str:

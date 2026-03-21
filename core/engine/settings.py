@@ -125,7 +125,6 @@ TERMINAL_AUTO_IMAGE_URL_PREVIEW = os.getenv("TERMINAL_AUTO_IMAGE_URL_PREVIEW", "
 
 # Discord bot settings
 DISCORD_BOT_TOKEN = get_discord_bot_token()
-AUTH_TOKEN = ensure_auth_token()
 DISCORD_SESSIONS_DIR = Path(
     os.getenv("DISCORD_SESSIONS_DIR", PROJECT_DIR / ".skillpilot" / "discord" / "sessions")
 ).resolve()

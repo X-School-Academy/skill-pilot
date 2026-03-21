@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import pty
+import re
 import select
 import shlex
 import signal
@@ -25,6 +26,19 @@ from helpers import (
 )
 from ssh import SSHClientPool
 from terminal import TerminalState
+
+_TMUX_CAPTURE_BOUND_RE = re.compile(r"^-?\d+$|^-$")
+
+
+def _normalize_tmux_capture_bound(value: str | None, name: str) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if not _TMUX_CAPTURE_BOUND_RE.fullmatch(normalized):
+        raise ValueError(f"{name} must be '-', or an integer string like '-200' or '0'")
+    return normalized
 
 
 class SessionBase:
@@ -170,7 +184,16 @@ class LocalPtySession(SessionBase):
             body.append(f"{line_num} |{padded}|")
         return "\n".join([separator, *body, separator])
 
-    def get_snapshot(self, include_scrollback: bool = False) -> dict:
+    def get_snapshot(
+        self,
+        include_scrollback: bool = False,
+        join_wrapped_lines: bool = True,
+        capture_start: str | None = None,
+        capture_end: str | None = None,
+    ) -> dict:
+        _ = join_wrapped_lines
+        _ = capture_start
+        _ = capture_end
         with self._lock:
             snap = self._terminal.snapshot(include_scrollback)
         return {
@@ -181,11 +204,31 @@ class LocalPtySession(SessionBase):
             "processTitle": self.command,
         }
 
-    def get_ansi_snapshot(self) -> str:
+    def get_ansi_snapshot(
+        self,
+        include_scrollback: bool = True,
+        join_wrapped_lines: bool = True,
+        capture_start: str | None = None,
+        capture_end: str | None = None,
+    ) -> str:
+        _ = include_scrollback
+        _ = join_wrapped_lines
+        _ = capture_start
+        _ = capture_end
         with self._lock:
             return "".join(self._ansi_log)
 
-    def get_raw_output(self) -> str:
+    def get_raw_output(
+        self,
+        include_scrollback: bool = True,
+        join_wrapped_lines: bool = True,
+        capture_start: str | None = None,
+        capture_end: str | None = None,
+    ) -> str:
+        _ = include_scrollback
+        _ = join_wrapped_lines
+        _ = capture_start
+        _ = capture_end
         return self.get_ansi_snapshot()
 
     def close(self, sig: str = "SIGTERM") -> dict[str, int | None]:
@@ -334,8 +377,17 @@ class LocalPipeSession(SessionBase):
             body.append(f"{line_num} |{padded}|")
         return "\n".join([separator, *body, separator])
 
-    def get_snapshot(self, include_scrollback: bool = False) -> dict:
+    def get_snapshot(
+        self,
+        include_scrollback: bool = False,
+        join_wrapped_lines: bool = True,
+        capture_start: str | None = None,
+        capture_end: str | None = None,
+    ) -> dict:
         _ = include_scrollback
+        _ = join_wrapped_lines
+        _ = capture_start
+        _ = capture_end
         text = self._joined_output()
         with self._lock:
             stdout = "".join(self._stdout_log)
@@ -350,11 +402,31 @@ class LocalPipeSession(SessionBase):
             "stderr": stderr,
         }
 
-    def get_ansi_snapshot(self) -> str:
+    def get_ansi_snapshot(
+        self,
+        include_scrollback: bool = True,
+        join_wrapped_lines: bool = True,
+        capture_start: str | None = None,
+        capture_end: str | None = None,
+    ) -> str:
+        _ = include_scrollback
+        _ = join_wrapped_lines
+        _ = capture_start
+        _ = capture_end
         with self._lock:
             return "".join(self._ansi_log)
 
-    def get_raw_output(self) -> str:
+    def get_raw_output(
+        self,
+        include_scrollback: bool = True,
+        join_wrapped_lines: bool = True,
+        capture_start: str | None = None,
+        capture_end: str | None = None,
+    ) -> str:
+        _ = include_scrollback
+        _ = join_wrapped_lines
+        _ = capture_start
+        _ = capture_end
         return self._joined_output()
 
     def close(self, sig: str = "SIGTERM") -> dict[str, int | None]:
@@ -499,7 +571,16 @@ class SSHPtySession(SessionBase):
             body.append(f"{line_num} |{padded}|")
         return "\n".join([separator, *body, separator])
 
-    def get_snapshot(self, include_scrollback: bool = False) -> dict:
+    def get_snapshot(
+        self,
+        include_scrollback: bool = False,
+        join_wrapped_lines: bool = True,
+        capture_start: str | None = None,
+        capture_end: str | None = None,
+    ) -> dict:
+        _ = join_wrapped_lines
+        _ = capture_start
+        _ = capture_end
         with self._lock:
             snap = self._terminal.snapshot(include_scrollback)
         return {
@@ -510,11 +591,31 @@ class SSHPtySession(SessionBase):
             "processTitle": self.command,
         }
 
-    def get_ansi_snapshot(self) -> str:
+    def get_ansi_snapshot(
+        self,
+        include_scrollback: bool = True,
+        join_wrapped_lines: bool = True,
+        capture_start: str | None = None,
+        capture_end: str | None = None,
+    ) -> str:
+        _ = include_scrollback
+        _ = join_wrapped_lines
+        _ = capture_start
+        _ = capture_end
         with self._lock:
             return "".join(self._ansi_log)
 
-    def get_raw_output(self) -> str:
+    def get_raw_output(
+        self,
+        include_scrollback: bool = True,
+        join_wrapped_lines: bool = True,
+        capture_start: str | None = None,
+        capture_end: str | None = None,
+    ) -> str:
+        _ = include_scrollback
+        _ = join_wrapped_lines
+        _ = capture_start
+        _ = capture_end
         return self.get_ansi_snapshot()
 
     def close(self, sig: str = "SIGTERM") -> dict[str, int | None]:
@@ -636,8 +737,17 @@ class SSHPipeSession(SessionBase):
             body.append(f"{line_num} |{padded}|")
         return "\n".join([separator, *body, separator])
 
-    def get_snapshot(self, include_scrollback: bool = False) -> dict:
+    def get_snapshot(
+        self,
+        include_scrollback: bool = False,
+        join_wrapped_lines: bool = True,
+        capture_start: str | None = None,
+        capture_end: str | None = None,
+    ) -> dict:
         _ = include_scrollback
+        _ = join_wrapped_lines
+        _ = capture_start
+        _ = capture_end
         text = self._joined_output()
         with self._lock:
             stdout = "".join(self._stdout_log)
@@ -652,11 +762,31 @@ class SSHPipeSession(SessionBase):
             "stderr": stderr,
         }
 
-    def get_ansi_snapshot(self) -> str:
+    def get_ansi_snapshot(
+        self,
+        include_scrollback: bool = True,
+        join_wrapped_lines: bool = True,
+        capture_start: str | None = None,
+        capture_end: str | None = None,
+    ) -> str:
+        _ = include_scrollback
+        _ = join_wrapped_lines
+        _ = capture_start
+        _ = capture_end
         with self._lock:
             return "".join(self._ansi_log)
 
-    def get_raw_output(self) -> str:
+    def get_raw_output(
+        self,
+        include_scrollback: bool = True,
+        join_wrapped_lines: bool = True,
+        capture_start: str | None = None,
+        capture_end: str | None = None,
+    ) -> str:
+        _ = include_scrollback
+        _ = join_wrapped_lines
+        _ = capture_start
+        _ = capture_end
         return self._joined_output()
 
     def close(self, sig: str = "SIGTERM") -> dict[str, int | None]:
@@ -742,11 +872,24 @@ class TmuxSession(SessionBase):
     def size(self) -> dict[str, int]:
         return {"cols": self.cols, "rows": self.rows}
 
-    def _capture(self, include_scrollback: bool, include_ansi: bool = False) -> str:
-        flag = "-S -32768" if include_scrollback else ""
+    def _capture(
+        self,
+        include_scrollback: bool,
+        include_ansi: bool = False,
+        join_wrapped_lines: bool = True,
+        capture_start: str | None = None,
+        capture_end: str | None = None,
+    ) -> str:
+        start_value = _normalize_tmux_capture_bound(capture_start, "capture_start")
+        end_value = _normalize_tmux_capture_bound(capture_end, "capture_end")
+        if start_value is None and include_scrollback:
+            start_value = "-"
         ansi_flag = "-e" if include_ansi else ""
+        join_flag = "-J" if join_wrapped_lines else ""
+        start_flag = f"-S {shlex.quote(start_value)}" if start_value is not None else ""
+        end_flag = f"-E {shlex.quote(end_value)}" if end_value is not None else ""
         out, err, code = self._runner(
-            f"tmux capture-pane -p -J {ansi_flag} {flag} -t {shlex.quote(self._pane)}"
+            f"tmux capture-pane -p {join_flag} {ansi_flag} {start_flag} {end_flag} -t {shlex.quote(self._pane)}"
         )
         if code != 0:
             raise RuntimeError((out + err).strip() or "tmux capture failed")
@@ -792,8 +935,19 @@ class TmuxSession(SessionBase):
         self.rows = rows
         return prev
 
-    def get_snapshot(self, include_scrollback: bool = False) -> dict:
-        text = self._capture(include_scrollback)
+    def get_snapshot(
+        self,
+        include_scrollback: bool = False,
+        join_wrapped_lines: bool = True,
+        capture_start: str | None = None,
+        capture_end: str | None = None,
+    ) -> dict:
+        text = self._capture(
+            include_scrollback,
+            join_wrapped_lines=join_wrapped_lines,
+            capture_start=capture_start,
+            capture_end=capture_end,
+        )
         return {
             "text": self._format_screen(text),
             "cursorPosition": {"x": 0, "y": 0},
@@ -804,11 +958,34 @@ class TmuxSession(SessionBase):
             "tmuxPane": self._pane,
         }
 
-    def get_ansi_snapshot(self) -> str:
-        return self._capture(include_scrollback=True, include_ansi=True)
+    def get_ansi_snapshot(
+        self,
+        include_scrollback: bool = True,
+        join_wrapped_lines: bool = True,
+        capture_start: str | None = None,
+        capture_end: str | None = None,
+    ) -> str:
+        return self._capture(
+            include_scrollback=include_scrollback,
+            include_ansi=True,
+            join_wrapped_lines=join_wrapped_lines,
+            capture_start=capture_start,
+            capture_end=capture_end,
+        )
 
-    def get_raw_output(self) -> str:
-        return self._capture(include_scrollback=True)
+    def get_raw_output(
+        self,
+        include_scrollback: bool = True,
+        join_wrapped_lines: bool = True,
+        capture_start: str | None = None,
+        capture_end: str | None = None,
+    ) -> str:
+        return self._capture(
+            include_scrollback=include_scrollback,
+            join_wrapped_lines=join_wrapped_lines,
+            capture_start=capture_start,
+            capture_end=capture_end,
+        )
 
     def close(self, sig: str = "SIGTERM") -> dict[str, int | None]:
         if sig == "DETACH":
