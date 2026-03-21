@@ -16,6 +16,20 @@ sleep infinity'
 ```
 
 ```bash
+# Install Miniconda
+/home/ubuntu/miniconda3/bin/conda init bash
+source ~/.bashrc
+conda env list
+```
+
+# conda environments:
+#
+base                     /home/ubuntu/miniconda3
+MuseTalk              *  /home/ubuntu/miniconda3/envs/MuseTalk
+SongBloom                /home/ubuntu/miniconda3/envs/SongBloom
+
+
+```bash
 echo 'COMFYUI_INSTALL_PATH="/home/ubuntu/workspace/ComfyUI"' >> /etc/environment
 
 cd /home/ubuntu/workspace/ComfyUI

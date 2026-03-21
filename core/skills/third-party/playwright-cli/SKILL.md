@@ -6,6 +6,10 @@ allowed-tools: Bash(playwright-cli:*)
 
 # Browser Automation with playwright-cli
 
+## Temp files
+
+For any temp files, screenshot images, save to folder `.skillpilot/playwright-cli` in the root of this project 
+
 ## Quick start
 
 ```bash
