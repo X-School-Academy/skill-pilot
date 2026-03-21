@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 
 import yaml
 
-from llm_service import run_llm_once
+from llm_service import llm_get_text
 
 limit_cache: Dict[str, Dict[str, int]] = {}
 
@@ -231,7 +231,7 @@ def execute_code_impl(lang: str, meta: str, source: str, client_ip: str) -> Dict
             target_source = "<?php\n" + target_source
     elif target_lang in {"json", "markdown"}:
         if meta_obj.get("api") == "chat":
-            output = run_llm_once(target_source, provider_id=None, client_id=client_ip)
+            output = llm_get_text([{"role": "user", "content": target_source}], provider_id=None, client_id=client_ip)
             return {"codes": codes, "status": 1, "result": output}
         if meta_obj.get("api") == "image":
             return {"codes": codes, "status": 1, "result": "[]"}
@@ -340,7 +340,7 @@ def execute_code_impl(lang: str, meta: str, source: str, client_ip: str) -> Dict
             f"```{lang}\n{source}\n```\n"
         )
         try:
-            score_text = run_llm_once(request_text, provider_id=None, client_id=client_ip)
+            score_text = llm_get_text([{"role": "user", "content": request_text}], provider_id=None, client_id=client_ip)
             score_match = re.search(r"\d+", score_text or "")
             if score_match:
                 score = int(score_match.group(0))

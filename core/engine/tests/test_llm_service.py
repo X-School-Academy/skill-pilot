@@ -1,43 +1,61 @@
-import os
 import sys
 from pathlib import Path
-
-import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import llm_service
 
 
+TEXT_INPUT = "my new password `abracadabra` should be updated and I should be logged in automatically"
+
+
 def test_llm_get_text():
-
     result = llm_service.llm_get_text(
-        [{"role": "user", "content": "Return exactly TEST_OK and nothing else."}],
+        [
+            {
+                "role": "user",
+                "content": (
+                    f"Check how many character a are in this string: '{TEXT_INPUT}'. "
+                    "Then reply with exactly this prefix and the number only once: "
+                    "'The total number of a is:'"
+                ),
+            }
+        ],
     )
+    print(f"llm_get_text raw output:\n{result}")
 
-    assert "TEST_OK" in result
+    assert "The total number of a is:" in result
 
 
 def test_llm_get_json():
-
     result = llm_service.llm_get_json(
         [
             {
                 "role": "user",
-                "content": 'Return exactly this JSON object and nothing else: {"ok": true, "value": 3}',
+                "content": (
+                    f"Check how many character a are in this string: '{TEXT_INPUT}'. "
+                    'Return JSON only in this shape: {"input":"...","count":number,"message":"The total number of a is: N"}'
+                ),
             }
         ]
     )
+    print(f"llm_get_json raw output:\n{result}")
 
-    assert result["ok"] is True
-    assert result["value"] == 3
+    assert isinstance(result.get("count"), int)
+    assert isinstance(result.get("input"), str)
+    assert result["input"] == TEXT_INPUT
+    assert isinstance(result.get("message"), str)
+    assert result["message"].startswith("The total number of a is:")
 
 
 def test_llm_stream():
-
     chunks = list(
         llm_service.llm_stream(
-            "Return exactly STREAM_OK and nothing else."
+            (
+                f"Check how many character a are in this string: '{TEXT_INPUT}'. "
+                "Then reply with exactly this prefix and the number only once: "
+                "'The total number of a is:'"
+            )
         )
     )
 
@@ -46,14 +64,5 @@ def test_llm_stream():
         "utf-8",
         errors="replace",
     )
-    assert "STREAM_OK" in streamed_text
-
-
-def test_run_llm_once():
-
-    result = llm_service.run_llm_once(
-        "Return exactly RUN_ONCE_OK and nothing else.",
-        client_id="test-client-run-once",
-    )
-
-    assert "RUN_ONCE_OK" in result
+    print(f"llm_stream raw output:\n{streamed_text}")
+    assert "The total number of a is:" in streamed_text

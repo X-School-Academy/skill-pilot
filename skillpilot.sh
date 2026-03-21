@@ -941,7 +941,7 @@ run_engine_tests() {
   fi
 
   echo "Running engine tests: ${pytest_targets[*]}"
-  uv --directory "${ROOT_DIR}/core/engine" run pytest "${pytest_targets[@]}"
+  uv --directory "${ROOT_DIR}/core/engine" run pytest -s "${pytest_targets[@]}"
 }
 
 ensure_webui_release_assets() {
