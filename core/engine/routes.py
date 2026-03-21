@@ -116,7 +116,7 @@ _MCP_CONFIG_PATH = _REPO_ROOT / "config" / "mcp.json5"
 _MCP_SERVER_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 _MCP_SKILLS_DIR = _REPO_ROOT / "core" / "skills" / "mcp"
 _SYSTEM_SKILLS_DIR = _REPO_ROOT / "core" / "skills" / "system"
-_DISABLED_SKILLS_PATH = _REPO_ROOT / "config" / "disabled_skills.json"
+_DISABLED_SKILLS_PATH = _REPO_ROOT / "config" / "disabled_skills.json5"
 _SKILL_CATEGORIES: List[tuple[str, str, Path]] = [
     ("system", "System", _REPO_ROOT / "core" / "skills" / "system"),
     ("dev-swarm", "Dev Swarm", _REPO_ROOT / "dev-swarm" / "skills"),
