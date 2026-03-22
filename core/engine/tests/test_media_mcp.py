@@ -8,7 +8,7 @@ def test_text_to_image():
         "server_id": "media",
         "tool_name": "text_to_image",
         "arguments": {
-            "prompt": "A yellow tree",
+            "prompt": "A tree",
             "width": 624,
             "height": 624,
         },

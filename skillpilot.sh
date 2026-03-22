@@ -1171,7 +1171,7 @@ case "${ACTION}" in
     if ((IS_DEV == 1)); then
       ensure_webui_deps
       start_session "sp-webui" "pnpm -C core/webui dev"
-      start_session "sp-engine" "uv --project core/engine run core/engine/main.py --reload --reload-dir core/engine"
+      start_session "sp-engine" "uv --project core/engine run core/engine/main.py --reload --reload-dir core/engine --reload-exclude core/engine/tests"
       _engine_url="$(get_webui_base_url "prod")"
       _webui_url="$(get_webui_base_url "dev")"
       echo "  Engine  ->  ${_engine_url%/}"
