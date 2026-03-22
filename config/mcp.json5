@@ -29,6 +29,7 @@
         GPU_WORKER_MUSETALK_CLI: "/home/ubuntu/workspace/MuseTalk/musetalk_cli.py",
         GPU_WORKER_DEMUCS_CLI: "/home/ubuntu/workspace/external_scripts/demucs_cli.py",
         GPU_WORKER_MUSETALK_MAX_AUDIO_SECONDS: 7200,
+        MCP_TOOL_TIMEOUT:720000000
       },
     },
     "live-tts": {

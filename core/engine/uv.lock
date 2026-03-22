@@ -3103,6 +3103,93 @@ wheels = [
 ]
 
 [[package]]
+name = "skill-pilot"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "aiofiles" },
+    { name = "aiohttp" },
+    { name = "aiortc" },
+    { name = "apscheduler" },
+    { name = "av" },
+    { name = "fastapi" },
+    { name = "fastmcp" },
+    { name = "google-genai" },
+    { name = "json-repair" },
+    { name = "json5" },
+    { name = "langchain" },
+    { name = "langchain-core" },
+    { name = "langchain-google-genai" },
+    { name = "langchain-openai" },
+    { name = "langgraph" },
+    { name = "markdown" },
+    { name = "numpy" },
+    { name = "onvif-python" },
+    { name = "openai" },
+    { name = "paramiko" },
+    { name = "pillow" },
+    { name = "playwright" },
+    { name = "py-cord" },
+    { name = "pyautogui" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin'" },
+    { name = "python-dotenv" },
+    { name = "python-multipart" },
+    { name = "python-socketio" },
+    { name = "pyyaml" },
+    { name = "screeninfo" },
+    { name = "sshtunnel" },
+    { name = "typing-extensions" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiofiles", specifier = ">=24.1.0" },
+    { name = "aiohttp", specifier = ">=3.11.0" },
+    { name = "aiortc", specifier = ">=1.14.0" },
+    { name = "apscheduler", specifier = ">=3.10" },
+    { name = "av", specifier = ">=16.1.0" },
+    { name = "fastapi", specifier = ">=0.115.0" },
+    { name = "fastmcp", specifier = ">=0.1.0" },
+    { name = "google-genai", specifier = ">=1.30.0" },
+    { name = "json-repair", specifier = ">=0.30.0" },
+    { name = "json5", specifier = ">=0.12.1" },
+    { name = "langchain", specifier = ">=0.3.0" },
+    { name = "langchain-core", specifier = ">=0.3.0" },
+    { name = "langchain-google-genai", specifier = ">=2.0.0" },
+    { name = "langchain-openai", specifier = ">=0.2.0" },
+    { name = "langgraph", specifier = ">=0.2.60" },
+    { name = "markdown", specifier = ">=3.7" },
+    { name = "numpy", specifier = ">=2.4.2" },
+    { name = "onvif-python", specifier = ">=0.2.10" },
+    { name = "openai", specifier = ">=1.66.0" },
+    { name = "paramiko", specifier = ">=4.0.0" },
+    { name = "pillow", specifier = ">=10.4.0" },
+    { name = "playwright", specifier = ">=1.48.0" },
+    { name = "py-cord", specifier = "==2.6.1" },
+    { name = "pyautogui", specifier = ">=0.9.54" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin'", specifier = ">=10.3.2" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin'", specifier = ">=10.3.2" },
+    { name = "python-dotenv", specifier = ">=1.0.1" },
+    { name = "python-multipart", specifier = ">=0.0.22" },
+    { name = "python-socketio", specifier = ">=5.11.0" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "screeninfo", specifier = ">=0.8.1" },
+    { name = "sshtunnel", specifier = ">=0.4.0" },
+    { name = "typing-extensions", specifier = ">=4.12.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0.2" }]
+
+[[package]]
 name = "sniffio"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3470,93 +3557,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/1b/6c/c65773d6cab416a64d191d6ee8a8b1c68a09970ea6909d16965d26bfed1e/websockets-15.0.1-cp313-cp313-win_amd64.whl", hash = "sha256:e09473f095a819042ecb2ab9465aee615bd9c2028e4ef7d933600a8401c79561", size = 176837, upload-time = "2025-03-05T20:02:55.237Z" },
     { url = "https://files.pythonhosted.org/packages/fa/a8/5b41e0da817d64113292ab1f8247140aac61cbf6cfd085d6a0fa77f4984f/websockets-15.0.1-py3-none-any.whl", hash = "sha256:f7a866fbc1e97b5c617ee4116daaa09b722101d4a3c170c787450ba409f9736f", size = 169743, upload-time = "2025-03-05T20:03:39.41Z" },
 ]
-
-[[package]]
-name = "webui"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "aiofiles" },
-    { name = "aiohttp" },
-    { name = "aiortc" },
-    { name = "apscheduler" },
-    { name = "av" },
-    { name = "fastapi" },
-    { name = "fastmcp" },
-    { name = "google-genai" },
-    { name = "json-repair" },
-    { name = "json5" },
-    { name = "langchain" },
-    { name = "langchain-core" },
-    { name = "langchain-google-genai" },
-    { name = "langchain-openai" },
-    { name = "langgraph" },
-    { name = "markdown" },
-    { name = "numpy" },
-    { name = "onvif-python" },
-    { name = "openai" },
-    { name = "paramiko" },
-    { name = "pillow" },
-    { name = "playwright" },
-    { name = "py-cord" },
-    { name = "pyautogui" },
-    { name = "pyobjc-core", marker = "sys_platform == 'darwin'" },
-    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin'" },
-    { name = "python-dotenv" },
-    { name = "python-multipart" },
-    { name = "python-socketio" },
-    { name = "pyyaml" },
-    { name = "screeninfo" },
-    { name = "sshtunnel" },
-    { name = "typing-extensions" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiofiles", specifier = ">=24.1.0" },
-    { name = "aiohttp", specifier = ">=3.11.0" },
-    { name = "aiortc", specifier = ">=1.14.0" },
-    { name = "apscheduler", specifier = ">=3.10" },
-    { name = "av", specifier = ">=16.1.0" },
-    { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "fastmcp", specifier = ">=0.1.0" },
-    { name = "google-genai", specifier = ">=1.30.0" },
-    { name = "json-repair", specifier = ">=0.30.0" },
-    { name = "json5", specifier = ">=0.12.1" },
-    { name = "langchain", specifier = ">=0.3.0" },
-    { name = "langchain-core", specifier = ">=0.3.0" },
-    { name = "langchain-google-genai", specifier = ">=2.0.0" },
-    { name = "langchain-openai", specifier = ">=0.2.0" },
-    { name = "langgraph", specifier = ">=0.2.60" },
-    { name = "markdown", specifier = ">=3.7" },
-    { name = "numpy", specifier = ">=2.4.2" },
-    { name = "onvif-python", specifier = ">=0.2.10" },
-    { name = "openai", specifier = ">=1.66.0" },
-    { name = "paramiko", specifier = ">=4.0.0" },
-    { name = "pillow", specifier = ">=10.4.0" },
-    { name = "playwright", specifier = ">=1.48.0" },
-    { name = "py-cord", specifier = "==2.6.1" },
-    { name = "pyautogui", specifier = ">=0.9.54" },
-    { name = "pyobjc-core", marker = "sys_platform == 'darwin'", specifier = ">=10.3.2" },
-    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin'", specifier = ">=10.3.2" },
-    { name = "python-dotenv", specifier = ">=1.0.1" },
-    { name = "python-multipart", specifier = ">=0.0.22" },
-    { name = "python-socketio", specifier = ">=5.11.0" },
-    { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "screeninfo", specifier = ">=0.8.1" },
-    { name = "sshtunnel", specifier = ">=0.4.0" },
-    { name = "typing-extensions", specifier = ">=4.12.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=9.0.2" }]
 
 [[package]]
 name = "wsproto"

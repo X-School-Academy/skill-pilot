@@ -8,10 +8,39 @@ import sys
 from pathlib import Path
 
 from .run_workflow import resolve_workflow_file, run_workflow
+from .sync import load_mcp_configs
 
 
 def default_socket_path() -> Path:
     return Path(__file__).resolve().parents[4] / ".skillpilot/temp" / "engine.sock"
+
+
+def default_request_timeout_seconds() -> float:
+    return 20.0
+
+
+def resolve_request_timeout_seconds(json_str: str | None) -> float:
+    if not json_str:
+        return default_request_timeout_seconds()
+    try:
+        payload = json.loads(json_str)
+    except json.JSONDecodeError:
+        return default_request_timeout_seconds()
+    if not isinstance(payload, dict):
+        return default_request_timeout_seconds()
+    server_id = payload.get("server_id")
+    if not isinstance(server_id, str) or not server_id.strip():
+        return default_request_timeout_seconds()
+
+    config_path = Path(__file__).resolve().parents[4] / "config" / "mcp.json5"
+    try:
+        servers, _missing = load_mcp_configs(config_path)
+    except Exception:
+        return default_request_timeout_seconds()
+    config = servers.get(server_id.strip())
+    if config is None or not config.tool_timeout_ms:
+        return default_request_timeout_seconds()
+    return max(default_request_timeout_seconds(), (config.tool_timeout_ms / 1000.0) + 5.0)
 
 
 def send_request(json_str: str, socket_path: Path, timeout: float) -> str:
@@ -44,8 +73,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--timeout",
         type=float,
-        default=20.0,
-        help="Socket timeout in seconds (default: 20)",
+        default=None,
+        help="Socket timeout in seconds (default: 20, or request-specific MCP timeout + 5s for tool requests)",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -134,8 +163,11 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
     socket_path = Path(args.socket).expanduser().resolve()
+    timeout = float(args.timeout) if args.timeout is not None else default_request_timeout_seconds()
 
     if args.command == "request":
+        if args.timeout is None:
+            timeout = resolve_request_timeout_seconds(args.json_str)
         if args.help_json:
             print('{"server_id":"<server-id>","tool_name":"<tool-name>","arguments":{}}')
             return 0
@@ -147,7 +179,7 @@ def main() -> int:
                 print("request requires json_str. Use --help for usage or --help-json for an example payload.", file=sys.stderr)
             return 2
         try:
-            response = send_request(args.json_str, socket_path, args.timeout)
+            response = send_request(args.json_str, socket_path, timeout)
         except Exception as exc:
             print(f"request failed: {exc}", file=sys.stderr)
             return 2
@@ -158,7 +190,7 @@ def main() -> int:
         operation = "engine_restart" if args.command == "engine-restart" else "engine_reload"
         payload = {"operation": operation}
         try:
-            response_raw = send_request(json.dumps(payload, ensure_ascii=True), socket_path, args.timeout)
+            response_raw = send_request(json.dumps(payload, ensure_ascii=True), socket_path, timeout)
         except Exception as exc:
             print(f"{args.command} request failed: {exc}", file=sys.stderr)
             return 2
@@ -196,7 +228,7 @@ def main() -> int:
             payload["sandbox"] = bool(args.sandbox)
 
         try:
-            response_raw = send_request(json.dumps(payload, ensure_ascii=True), socket_path, args.timeout)
+            response_raw = send_request(json.dumps(payload, ensure_ascii=True), socket_path, timeout)
         except Exception as exc:
             print(f"skill-agent request failed: {exc}", file=sys.stderr)
             return 2
@@ -230,7 +262,7 @@ def main() -> int:
                 "source": str(args.continue_source or "cli"),
             }
             try:
-                response_raw = send_request(json.dumps(payload, ensure_ascii=True), socket_path, args.timeout)
+                response_raw = send_request(json.dumps(payload, ensure_ascii=True), socket_path, timeout)
             except Exception as exc:
                 print(f"run-workflow continue request failed: {exc}", file=sys.stderr)
                 return 2
@@ -356,7 +388,7 @@ def main() -> int:
             payload["sandbox"] = bool(args.sandbox)
 
         try:
-            response_raw = send_request(json.dumps(payload, ensure_ascii=True), socket_path, args.timeout)
+            response_raw = send_request(json.dumps(payload, ensure_ascii=True), socket_path, timeout)
         except Exception as exc:
             print(f"new_agent_session request failed: {exc}", file=sys.stderr)
             return 2

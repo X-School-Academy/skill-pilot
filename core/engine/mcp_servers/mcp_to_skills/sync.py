@@ -42,6 +42,7 @@ class ServerConfig:
     enabled: bool | None
     system: bool
     workdir: str | None
+    tool_timeout_ms: int | None
 
 
 @dataclass
@@ -60,8 +61,6 @@ class MCPClient:
 
 
 class StdioClient(MCPClient):
-    _response_timeout_seconds = 30
-
     def __init__(
         self,
         command: str,
@@ -69,6 +68,7 @@ class StdioClient(MCPClient):
         env: dict[str, str],
         workdir: str | None = None,
         server_id: str = "unknown",
+        timeout_seconds: float = 30.0,
     ) -> None:
         self._next_id = 1
         self._lock = threading.Lock()
@@ -76,6 +76,7 @@ class StdioClient(MCPClient):
         self._stdout_closed = threading.Event()
         self._stderr_tail: deque[str] = deque(maxlen=20)
         self._server_id = server_id
+        self._response_timeout_seconds = timeout_seconds
         merged_env = safe_env(extra=env)
         self._process = subprocess.Popen(
             [command, *args],
@@ -191,12 +192,13 @@ class StdioClient(MCPClient):
 
 
 class HttpClient(MCPClient):
-    def __init__(self, url: str, headers: dict[str, str], sse: bool) -> None:
+    def __init__(self, url: str, headers: dict[str, str], sse: bool, timeout_seconds: float = 30.0) -> None:
         self._url = url
         self._headers = headers
         self._sse = sse
         self._next_id = 1
         self._lock = threading.Lock()
+        self._timeout_seconds = timeout_seconds
         self._initialize()
 
     def _initialize(self) -> None:
@@ -222,7 +224,11 @@ class HttpClient(MCPClient):
             "method": method,
             "params": params or {},
         }
-        response = _post_sse(self._url, payload, self._headers) if self._sse else _post_json(self._url, payload, self._headers)
+        response = (
+            _post_sse(self._url, payload, self._headers, timeout_seconds=self._timeout_seconds)
+            if self._sse
+            else _post_json(self._url, payload, self._headers, timeout_seconds=self._timeout_seconds)
+        )
         if response.get("id") != request_id:
             raise MCPError("mismatched response id")
         if "error" in response:
@@ -234,7 +240,7 @@ class HttpClient(MCPClient):
         return parse_tools(result)
 
 
-def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str], *, timeout_seconds: float = 30.0) -> dict[str, Any]:
     body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(url, data=body, method="POST")
     request.add_header("Content-Type", "application/json")
@@ -242,7 +248,7 @@ def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str]) -> di
     for key, value in headers.items():
         request.add_header(key, value)
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             content = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         error_body = exc.read().decode("utf-8", errors="replace")
@@ -253,7 +259,7 @@ def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str]) -> di
         raise MCPError("Invalid JSON response from MCP server") from exc
 
 
-def _post_sse(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+def _post_sse(url: str, payload: dict[str, Any], headers: dict[str, str], *, timeout_seconds: float = 30.0) -> dict[str, Any]:
     body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(url, data=body, method="POST")
     request.add_header("Content-Type", "application/json")
@@ -261,7 +267,7 @@ def _post_sse(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dic
     for key, value in headers.items():
         request.add_header(key, value)
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             raw = response.read()
             return _parse_sse_payload(raw)
     except urllib.error.HTTPError as exc:
@@ -345,6 +351,18 @@ def load_expansion_env(config_path: Path) -> dict[str, str]:
     return dict(os.environ)
 
 
+def _coerce_timeout_ms(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        timeout_ms = int(str(value).strip())
+    except (TypeError, ValueError):
+        raise MCPError(f"invalid MCP tool timeout value: {value!r}")
+    if timeout_ms <= 0:
+        raise MCPError(f"MCP tool timeout must be > 0, got {timeout_ms}")
+    return timeout_ms
+
+
 def load_mcp_configs(path: Path) -> tuple[dict[str, ServerConfig], dict[str, set[str]]]:
     raw = json5.loads(path.read_text())
     raw_servers = raw.get("mcpServers")
@@ -374,6 +392,11 @@ def load_mcp_configs(path: Path) -> tuple[dict[str, ServerConfig], dict[str, set
 
         env_val = expanded.get("env") or {}
         headers_val = expanded.get("headers") or {}
+        tool_timeout_ms = None
+        if isinstance(env_val, dict):
+            tool_timeout_ms = _coerce_timeout_ms(env_val.get("MCP_TOOL_TIMEOUT"))
+        if tool_timeout_ms is None:
+            tool_timeout_ms = _coerce_timeout_ms(expanded.get("toolTimeoutMs"))
         server = ServerConfig(
             id=server_id,
             command=command,
@@ -387,6 +410,7 @@ def load_mcp_configs(path: Path) -> tuple[dict[str, ServerConfig], dict[str, set
             enabled=_coerce_to_bool(expanded["enabled"]) if "enabled" in expanded and expanded["enabled"] is not None else None,
             system=bool(expanded.get("system", False)),
             workdir=default_workdir,
+            tool_timeout_ms=tool_timeout_ms,
         )
         servers[server_id] = server
         if missing:
@@ -412,18 +436,26 @@ def resolve_transport(config: ServerConfig) -> str:
 
 def create_client(config: ServerConfig) -> MCPClient:
     transport = resolve_transport(config)
+    timeout_seconds = (config.tool_timeout_ms / 1000.0) if config.tool_timeout_ms else 30.0
     if transport == "stdio":
         if not config.command:
             raise MCPError(f"Missing command for stdio server {config.id}")
-        return StdioClient(config.command, config.args, config.env, config.workdir, server_id=config.id)
+        return StdioClient(
+            config.command,
+            config.args,
+            config.env,
+            config.workdir,
+            server_id=config.id,
+            timeout_seconds=timeout_seconds,
+        )
     if transport in {"http", "streamable-http"}:
         if not config.url:
             raise MCPError(f"Missing url for server {config.id}")
-        return HttpClient(config.url, config.headers, sse=(transport == "streamable-http"))
+        return HttpClient(config.url, config.headers, sse=(transport == "streamable-http"), timeout_seconds=timeout_seconds)
     if transport == "sse":
         if not config.url:
             raise MCPError(f"Missing url for server {config.id}")
-        return HttpClient(config.url, config.headers, sse=True)
+        return HttpClient(config.url, config.headers, sse=True, timeout_seconds=timeout_seconds)
     raise MCPError(f"Unsupported transport '{transport}' for server {config.id}")
 
 
