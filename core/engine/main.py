@@ -88,6 +88,27 @@ def _read_engine_service_defaults() -> tuple[str, int]:
         return "127.0.0.1", 3001
 
 
+def _normalize_reload_paths(paths: list[str] | None) -> list[str] | None:
+    if not paths:
+        return paths
+
+    normalized: list[str] = []
+    for item in paths:
+        path = Path(item)
+        if path.exists():
+            normalized.append(str(path.resolve()))
+            continue
+
+        if not path.is_absolute():
+            project_path = PROJECT_DIR / path
+            if project_path.exists():
+                normalized.append(str(project_path.resolve()))
+                continue
+
+        normalized.append(item)
+    return normalized
+
+
 if __name__ == "__main__":
     import argparse
     import uvicorn
@@ -111,7 +132,15 @@ if __name__ == "__main__":
         dest="reload_dirs",
         help="Directory to watch for reload; can be passed multiple times",
     )
+    parser.add_argument(
+        "--reload-exclude",
+        action="append",
+        dest="reload_excludes",
+        help="Path pattern to exclude from reload watching; can be passed multiple times",
+    )
     args = parser.parse_args()
+    args.reload_dirs = _normalize_reload_paths(args.reload_dirs)
+    args.reload_excludes = _normalize_reload_paths(args.reload_excludes)
 
     log_config = {
         "version": 1,
@@ -149,5 +178,6 @@ if __name__ == "__main__":
         factory=True,
         reload=args.reload,
         reload_dirs=args.reload_dirs,
+        reload_excludes=args.reload_excludes,
         app_dir=str(ENGINE_DIR) if args.reload else None,
     )
