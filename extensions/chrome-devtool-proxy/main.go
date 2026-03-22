@@ -19,12 +19,26 @@ import (
 var (
 	listenAddr string
 	targetBase string
+	allowIP    string
 )
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
+}
+
+// isAllowed checks the request's remote IP against the allowIP setting.
+// "*" permits any address; otherwise the client IP must match exactly.
+func isAllowed(r *http.Request) bool {
+	if allowIP == "*" {
+		return true
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	return host == allowIP
 }
 
 func copyHeaders(dst, src http.Header) {
@@ -189,10 +203,17 @@ func localIP() string {
 func main() {
 	flag.StringVar(&listenAddr, "listenAddr", "0.0.0.0:9223", "Address to listen on (e.g. 0.0.0.0:9223)")
 	flag.StringVar(&targetBase, "targetBase", "ws://127.0.0.1:9222", "Upstream WebSocket target base URL (e.g. ws://127.0.0.1:9222)")
+	flag.StringVar(&allowIP, "allowIP", "*", "Remote IP allowed to connect; '*' permits any address (e.g. 192.168.1.50)")
 	flag.Parse()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if !isAllowed(r) {
+			host, _, _ := net.SplitHostPort(r.RemoteAddr)
+			log.Printf("[proxy] rejected connection from %s (not in allow-ip: %s)", host, allowIP)
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
 		// Chrome DevTools clients typically connect to:
 		// /devtools/browser/<id>
 		if websocket.IsWebSocketUpgrade(r) {
@@ -213,6 +234,11 @@ func main() {
 	go func() {
 		log.Printf("[proxy] listening on ws://%s", listenAddr)
 		log.Printf("[proxy] forwarding to %s", targetBase)
+		if allowIP == "*" {
+			log.Printf("[proxy] allow-ip: any")
+		} else {
+			log.Printf("[proxy] allow-ip: %s only", allowIP)
+		}
 
 		// Print remote connection hint.
 		_, port, _ := net.SplitHostPort(listenAddr)
