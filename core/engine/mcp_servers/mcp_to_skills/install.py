@@ -14,6 +14,9 @@ class SkillInstallError(RuntimeError):
     pass
 
 
+EXCLUDED_SOURCE_DIR_NAMES = {"alternatives"}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Install local skills by validating and linking into .agent/skills.")
     parser.add_argument(
@@ -57,10 +60,23 @@ def load_disabled_skills(path: Path) -> set[str]:
     return disabled
 
 
+def should_exclude_path(path: Path, source_root: Path) -> bool:
+    try:
+        relative_parts = path.resolve().relative_to(source_root.resolve()).parts
+    except ValueError:
+        return False
+    return any(part in EXCLUDED_SOURCE_DIR_NAMES for part in relative_parts)
+
+
 def discover_skills(source_root: Path) -> list[Path]:
     if not source_root.exists():
         return []
-    return sorted(skill_md.parent for skill_md in source_root.rglob("SKILL.md"))
+    discovered: list[Path] = []
+    for skill_md in source_root.rglob("SKILL.md"):
+        if should_exclude_path(skill_md.parent, source_root):
+            continue
+        discovered.append(skill_md.parent)
+    return sorted(discovered)
 
 
 def run_verify(verify_bin: Path, skill_dir: Path) -> tuple[bool, str]:
@@ -102,6 +118,22 @@ def remove_broken_symlinks(target_root: Path) -> list[str]:
     return removed
 
 
+def remove_excluded_symlinks(target_root: Path, source_roots: list[Path]) -> list[str]:
+    removed: list[str] = []
+    if not target_root.exists():
+        return removed
+
+    resolved_roots = [source_root.resolve() for source_root in source_roots]
+    for entry in sorted(target_root.iterdir()):
+        if not entry.is_symlink():
+            continue
+        target = entry.resolve()
+        if any(should_exclude_path(target, source_root) for source_root in resolved_roots):
+            entry.unlink()
+            removed.append(entry.name)
+    return removed
+
+
 def main() -> int:
     args = parse_args()
     repo_root = Path(__file__).resolve().parents[4]
@@ -128,6 +160,7 @@ def main() -> int:
         return 2
 
     removed_broken = remove_broken_symlinks(target_root)
+    removed_excluded = remove_excluded_symlinks(target_root, source_roots)
 
     all_skill_dirs: list[Path] = []
     for source_root in source_roots:
@@ -174,6 +207,8 @@ def main() -> int:
     print(f"Installed {len(installed)} skill(s) into {target_root}.")
     if removed_broken:
         print(f"Removed {len(removed_broken)} broken symlink(s): {', '.join(removed_broken)}")
+    if removed_excluded:
+        print(f"Removed {len(removed_excluded)} excluded symlink(s): {', '.join(removed_excluded)}")
     if skipped_disabled:
         print(f"Skipped {len(skipped_disabled)} disabled skill(s).")
     if failed_verify:

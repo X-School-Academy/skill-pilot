@@ -35,11 +35,6 @@ def test_text_to_image():
     response = json.loads(output)
     assert response, "Empty response from tool"
 
-    # Save raw response for inspection
-    os.makedirs(".skillpilot/tests", exist_ok=True)
-    with open(".skillpilot/tests/test_text_to_image_output.json", "w") as f:
-        json.dump(response, f, indent=2)
-
     # Response should contain a URL to the generated image
     response_str = json.dumps(response)
     assert any(kw in response_str for kw in ["http", ".png", ".jpg", "url", "image"]), (
