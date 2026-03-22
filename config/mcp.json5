@@ -20,7 +20,7 @@
         "mcp_servers/media/main.py",
       ],
       env: {
-        COMFYUI_SERVER_ADDRESS: "http://localhost:8188",
+        COMFYUI_SERVER_ADDRESS: "http://192.168.1.222:38188",
         COMFYUI_INSTALL_PATH: "/home/ubuntu/workspace/ComfyUI",
         GPU_WORKER_TTS_CREATOR: "/home/ubuntu/workspace/index-tts/index-tts.py",
         GPU_WORKER_SONG_CREATOR: "/home/ubuntu/workspace/SongBloom/songbloom_creator.py",

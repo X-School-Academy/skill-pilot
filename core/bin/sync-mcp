@@ -7,7 +7,8 @@ SOCKET_PATH="${REPO_ROOT}/.skillpilot/temp/engine.sock"
 
 cd "$REPO_ROOT"
 
-# Prefer in-engine sync when the bridge socket is available.
+# Prefer in-engine sync when the bridge socket is available. The live bridge will
+# refresh MCP clients so they reconnect using the latest config/mcp.json5.
 if [[ -S "${SOCKET_PATH}" ]]; then
   if core/bin/tool-cli request '{"operation":"sync_mcp"}'; then
     exit 0
