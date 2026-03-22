@@ -1,7 +1,7 @@
 [
+  "cameras-webrtc-ice-candidate",
+  "cameras-webrtc-offer",
   "context7-query-docs",
   "context7-resolve-library-id",
-  // cameras mcp tools only for internal use
-  "cameras-webrtc-offer",
-  "cameras-webrtc-ice-candidate",
+  "media-image-analysis",
 ]

@@ -64,11 +64,8 @@ If the site appears untrusted, unexpected, or blocked by login challenges, stop 
 
 ### Step 3: AWS account sign-in or creation
 
-Open `https://aws.amazon.com/` via `playwright-cli agent skill`:
+Open `https://aws.amazon.com/` via `web browser agent skill`:
 
-```
-playwright-cli open https://aws.amazon.com/ --extension --headed
-```
 
 - Signed in: proceed to Step 4.
 - Not signed in: attempt to navigate to sign-in automatically, then ask user to complete sign-in only if credentials, MFA, CAPTCHA, or other human checks are required.

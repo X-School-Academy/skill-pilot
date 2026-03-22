@@ -391,17 +391,28 @@ export default function HomePage() {
         for (const [k, v] of Object.entries(res.data)) {
           data[k] = String(v ?? '');
         }
-        if (!data.timezone) {
-          try {
-            data.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-          } catch {}
-        }
         setProfileData(data);
       }
     } catch (err) {
       console.error('Failed to fetch profile:', err);
     }
   }, []);
+
+  const detectValidIanaTimezone = useCallback((): string => {
+    try {
+      const detected = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      if (!detected) return '';
+      if (timezoneList.length > 0) {
+        return timezoneList.includes(detected) ? detected : '';
+      }
+      if (typeof Intl.supportedValuesOf === 'function') {
+        return Intl.supportedValuesOf('timeZone').includes(detected) ? detected : '';
+      }
+      return detected.includes('/') ? detected : '';
+    } catch {
+      return '';
+    }
+  }, [timezoneList]);
 
   const cronToFormData = (cron: string): Partial<ScheduleFormData> => {
     const parts = cron.trim().split(/\s+/);
@@ -546,6 +557,17 @@ export default function HomePage() {
       }
     }
   }, [activeView, fetchProfile]);
+
+  useEffect(() => {
+    if (activeView !== 'profile') return;
+    setProfileData((prev) => {
+      const current = prev.timezone || '';
+      if (current.trim()) return prev;
+      const detected = detectValidIanaTimezone();
+      if (!detected) return prev;
+      return { ...prev, timezone: detected };
+    });
+  }, [activeView, detectValidIanaTimezone]);
 
   useEffect(() => {
     if (router.isReady) {

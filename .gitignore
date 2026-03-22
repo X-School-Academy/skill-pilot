@@ -21,3 +21,4 @@ skillpilot-ssh-key
 .skillpilot
 
 config/cameras.json5
+config/profile.json5
