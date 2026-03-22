@@ -115,9 +115,8 @@ If no response after 10 seconds, check that the OpenClaw service is running on E
 
 ### Step 5: Open WebUI in local browser
 
-```bash
-playwright-cli open "http://127.0.0.1:18789" --extension --headed
-```
+Open by web browser agent skill:
+http://127.0.0.1:18789
 
 If a token prompt appears, enter the gateway token.
 

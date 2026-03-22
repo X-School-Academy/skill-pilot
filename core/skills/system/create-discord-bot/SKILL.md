@@ -23,7 +23,7 @@ then securely save the bot token, server ID, and user ID to `config/.env`.
 ## Other Agent Skills Required
 
 - `key-safe`
-- `playwright-cli`
+- `web browser agent skill`
 
 ## Role Communication
 
@@ -33,7 +33,7 @@ As a {Role, and Role-XYZ if have more roles}, I will {action description}
 
 ## Preconditions
 
-- `playwright-cli` is ready (run skill `init-playwright` if not installed)
+- `web browser agent skill` is ready 
 - Only use official Discord domains: `https://discord.com` and `https://discord.com/developers`
 
 ## Workflow Usage Requirement
@@ -83,11 +83,10 @@ Do not ask the user to manually click through routine setup pages when AI can do
 
 ### Step 4: Ensure Discord account and server
 
-Open Discord in a headed browser:
+Open Discord in a headed browser (web browser agent skill):
 
-```bash
-playwright-cli goto https://discord.com/channels/@me
-```
+ https://discord.com/channels/@me
+
 
 AI should:
 1. Wait for the user to sign in if Discord shows the login screen.
@@ -104,9 +103,9 @@ AI should:
 
 ### Step 5: Create bot application in the Developer Portal
 
-```bash
-playwright-cli goto https://discord.com/developers/applications
-```
+Open by web browser agent skill:
+https://discord.com/developers/applications
+
 
 AI should perform:
 1. Wait for the user to sign in if the Developer Portal requires login.

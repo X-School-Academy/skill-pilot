@@ -1,6 +1,6 @@
 ---
 name: init-playwright
-description: Initialize and verify playwright-cli with Chrome and the Playwright MCP Bridge extension. Check and skip if already ready. Use before any browser automation task.
+description: Initialize and verify AI Agent for web browser setup with Chrome for browser automation.
 ---
 
 # Init Playwright CLI

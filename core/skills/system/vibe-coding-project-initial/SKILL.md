@@ -50,7 +50,7 @@ Ask the user how they want to manage the project's code with git. The default is
 - Set it up as a git submodule of the root project.
 
 **If the user asks to create a new GitHub repo:**
-- Use agent skill `playwright-cli` to create the repo from the GitHub website.
+- Use web browser agent skill to create the repo from the GitHub website.
 - Then add it as a git submodule of the root project.
 
 **Otherwise (default):**

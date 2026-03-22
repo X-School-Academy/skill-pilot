@@ -181,7 +181,7 @@ Extract the authorization URL from the output and save it to a local file (e.g.,
 
 > **Tip:** If the URL is hard to extract via `terminal-send-session-input`, use the native tmux command to capture the pane buffer instead.
 
-Then use agent skill `playwright-cli` to complete the OAuth flow:
+Then use web browser agent skill to complete the OAuth flow:
 1. Read the URL from the saved file and open it in the browser
 2. Sign in with the user's OpenAI account (subscription required)
 3. Click **Authorize**
@@ -191,7 +191,7 @@ The CLI polls and confirms automatically. Wait for:
 ✓ Authenticated with openai-codex
 ```
 
-Or get the redirect URL directly with agent skill `playwright-cli`, or ask the user to paste the redirect URL back to you.
+Or get the redirect URL directly with web browser agent skill, or ask the user to paste the redirect URL back to you.
 
 Verify:
 ```bash
