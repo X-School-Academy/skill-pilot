@@ -264,8 +264,8 @@ install_pnpm() {
   return $rc
 }
 
-install_playwright() {
-  pnpm install -g @playwright/cli@latest
+install_agent_browser() {
+  pnpm install -g agent-browser
   local bin_dir
   bin_dir="$(pnpm bin -g 2>/dev/null || true)"
   [ -n "$bin_dir" ] && export PATH="$bin_dir:$PATH"
@@ -883,15 +883,15 @@ main() {
 
   # Screen 13 — Playwright CLI
   install_step \
-    "Playwright CLI — Browser Automation" \
+    "agent-browser CLI — Browser Automation" \
     "$(printf '%s\n%s\n%s\n\n%s\n%s' \
-      "Playwright lets AI agents control a web browser" \
+      "agent-browser lets AI agents control a web browser" \
       "programmatically — opening pages, clicking buttons, filling" \
       "forms, taking screenshots, and extracting data." \
-      "Skill Pilot's agent skills use Playwright for web tasks" \
+      "Skill Pilot's agent skills use agent-browser for web tasks" \
       "you would normally do by hand.")" \
-    "playwright-cli" \
-    "install_playwright" \
+    "agent-browser" \
+    "install_agent_browser" \
     "pnpm_home"
 
   if [ "$SOMETHING_INSTALLED" -eq 1 ]; then

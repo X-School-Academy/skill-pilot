@@ -87,10 +87,10 @@ Install Python 3.9+ (if missing):
 uv python install
 ```
 
-Install Playwright CLI:
+Install agent-browser CLI:
 
 ```bash
-pnpm install -g @playwright/cli@latest
+pnpm install -g agent-browser
 ```
 
 ## 3. Install at least one AI code agent CLI
