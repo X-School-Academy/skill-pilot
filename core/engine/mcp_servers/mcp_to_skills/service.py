@@ -429,13 +429,22 @@ class Bridge:
                 continue
             self._enabled.add(server_id)
 
-    def refresh_config(self) -> dict[str, Any]:
+    def refresh_config(self, restart_clients: bool = False) -> dict[str, Any]:
         previous_enabled = set(self._enabled)
         self._load()
 
         active_enabled = set(self._enabled)
         stale_server_ids = [server_id for server_id in self._clients if server_id not in active_enabled]
+        restarted_server_ids: list[str] = []
+        if restart_clients:
+            restarted_server_ids = [server_id for server_id in self._clients if server_id in active_enabled]
+            stale_server_ids.extend(restarted_server_ids)
+
+        closed_server_ids: set[str] = set()
         for server_id in stale_server_ids:
+            if server_id in closed_server_ids:
+                continue
+            closed_server_ids.add(server_id)
             client = self._clients.pop(server_id, None)
             if client is not None:
                 client.close()
@@ -444,6 +453,7 @@ class Bridge:
             "enabled_servers": sorted(active_enabled),
             "disabled_servers": sorted(previous_enabled - active_enabled),
             "newly_enabled_servers": sorted(active_enabled - previous_enabled),
+            "restarted_servers": sorted(restarted_server_ids),
         }
 
     def _get_client(self, server_id: str) -> MCPClient:
@@ -486,7 +496,9 @@ class Bridge:
             from .sync import sync_mcp_tools
 
             summary = sync_mcp_tools(repo_root=repo_root)
-            refresh_summary = self.refresh_config()
+            # Close live MCP clients so the next tool request recreates them from the
+            # freshly synced config on disk.
+            refresh_summary = self.refresh_config(restart_clients=True)
             if isinstance(summary, dict):
                 summary["bridge_refresh"] = refresh_summary
             return {"status": "ok", "result": summary}
