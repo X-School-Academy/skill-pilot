@@ -4,6 +4,7 @@ import (
 	"flag"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -154,6 +155,37 @@ func proxyWS(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[proxy] disconnected %s", r.RemoteAddr)
 }
 
+// localIP returns the first non-loopback IPv4 address, or "localhost" as fallback.
+func localIP() string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return "localhost"
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil || ip.IsLoopback() || ip.To4() == nil {
+				continue
+			}
+			return ip.String()
+		}
+	}
+	return "localhost"
+}
+
 func main() {
 	flag.StringVar(&listenAddr, "listenAddr", "0.0.0.0:9223", "Address to listen on (e.g. 0.0.0.0:9223)")
 	flag.StringVar(&targetBase, "targetBase", "ws://127.0.0.1:9222", "Upstream WebSocket target base URL (e.g. ws://127.0.0.1:9222)")
@@ -181,6 +213,11 @@ func main() {
 	go func() {
 		log.Printf("[proxy] listening on ws://%s", listenAddr)
 		log.Printf("[proxy] forwarding to %s", targetBase)
+
+		// Print remote connection hint.
+		_, port, _ := net.SplitHostPort(listenAddr)
+		ip := localIP()
+		log.Printf("[proxy] connect from remote: agent-browser open URL --cdp ws://%s:%s/devtools/browser/", ip, port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("[proxy] server error: %v", err)
 		}

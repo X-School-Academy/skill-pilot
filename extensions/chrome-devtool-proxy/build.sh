@@ -55,9 +55,9 @@ build() {
     GOOS="$goos" GOARCH="$goarch" go build -ldflags="${LDFLAGS}" -o "bin/${out}" .
 }
 
-build linux   amd64 chrome-devtool-proxy-linux-amd64
-build darwin  arm64 chrome-devtool-proxy-darwin-arm64
-build windows amd64 chrome-devtool-proxy-windows-amd64.exe
+build linux   amd64 linux-amd64
+build darwin  arm64 darwin-arm64
+build windows amd64 windows-amd64.exe
 
 echo ""
 echo "Done. Binaries in bin/:"
