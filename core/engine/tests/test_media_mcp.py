@@ -59,10 +59,10 @@ def test_text_to_image():
 
 def test_image_to_image():
     response = _run_media_tool(
-        "text_to_image",
+        "image_to_image",
         {
-            "prompt": "A tree",
-            "image_file": "file"
+            "prompt": "A tree in the winter and snow",
+            "image_file": "/tmp/test.png"
         },
     )
 
