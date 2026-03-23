@@ -260,8 +260,9 @@
     {
       id: 'gemini',
       name: 'Gemini Image',
-      model: 'imagen-4.0-generate-001',
-      number_of_images: 1,
+      model: 'gemini-3.1-flash-image-preview',
+      aspect_ratio: '2:3', // "1:1","1:4","1:8","2:3","3:2","3:4","4:1","4:3","4:5","5:4","8:1","9:16","16:9","21:9"
+      resolution: "1K", // "512", "1K", "2K", "4K"
     },
   ],
 }
