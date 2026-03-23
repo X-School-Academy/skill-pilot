@@ -39,20 +39,11 @@ class ScriptExecutor:
         self.workflow_executor = WorkflowExecutor()
 
     @staticmethod
-    def _is_explicit_local_path(path_value: str) -> bool:
-        text = str(path_value or "").strip()
-        return text.startswith("/") or text.startswith("./") or text.startswith("../") or text.startswith("~")
-
-    def _validate_local_if_explicit(self, path_value: str, label: str) -> str:
+    def _normalize_input_reference(path_value: str, label: str) -> str:
         text = str(path_value or "").strip()
         if not text:
             raise ScriptExecutionError(f"{label} is required")
-        if self._is_explicit_local_path(text):
-            resolved = Path(text).expanduser().resolve()
-            if not resolved.exists():
-                raise ScriptExecutionError(f"{label} not found: {resolved}")
-            return str(resolved)
-        return text
+        return str(Path(text).expanduser()) if text.startswith("~") else text
 
     @staticmethod
     def _require_sentence(value: str, label: str) -> str:
@@ -236,11 +227,11 @@ class ScriptExecutor:
         ref_voice_value = str(ref_voice or '').strip()
         if not ref_voice_value:
             raise ScriptExecutionError('Reference voice is required for TTS generation')
-        resolved_ref_voice = self._validate_local_if_explicit(ref_voice_value, "Reference voice")
+        resolved_ref_voice = self._normalize_input_reference(ref_voice_value, "Reference voice")
 
         ref_emotion_voice_value = str(ref_emotion_voice or '').strip()
         if ref_emotion_voice_value:
-            resolved_ref_emotion_voice = self._validate_local_if_explicit(
+            resolved_ref_emotion_voice = self._normalize_input_reference(
                 ref_emotion_voice_value,
                 "Emotion reference voice"
             )
@@ -280,7 +271,7 @@ class ScriptExecutor:
         ref_voice_value = str(ref_voice or '').strip()
         if not ref_voice_value:
             raise ScriptExecutionError('Reference voice is required for multi-line TTS generation')
-        resolved_ref_voice = self._validate_local_if_explicit(ref_voice_value, "Reference voice")
+        resolved_ref_voice = self._normalize_input_reference(ref_voice_value, "Reference voice")
 
         validated_lines = []
         for index, line in enumerate(lines, start=1):
@@ -297,7 +288,7 @@ class ScriptExecutor:
             )
             ref_emotion_voice_value = str(line.get('ref_emotion_voice') or '').strip()
             if ref_emotion_voice_value:
-                resolved_ref_emotion_voice = self._validate_local_if_explicit(
+                resolved_ref_emotion_voice = self._normalize_input_reference(
                     ref_emotion_voice_value,
                     f"Emotion reference voice for line {index}"
                 )
@@ -347,7 +338,7 @@ class ScriptExecutor:
         ref_voice_value = str(ref_voice or '').strip()
         if not ref_voice_value:
             raise ScriptExecutionError('Reference voice is required for song generation')
-        resolved_ref_voice = self._validate_local_if_explicit(ref_voice_value, "Reference voice")
+        resolved_ref_voice = self._normalize_input_reference(ref_voice_value, "Reference voice")
 
         payload = {
             'lyrics': lyrics,
@@ -401,7 +392,7 @@ class ScriptExecutor:
         image_file: str,
         max_tokens: int = 512
     ) -> str:
-        image_file = self._validate_local_if_explicit(image_file, "Image file")
+        image_file = self._normalize_input_reference(image_file, "Image file")
 
         payload = {
             'prompt': prompt,
@@ -430,7 +421,7 @@ class ScriptExecutor:
         max_frames: int = -1,
         max_tokens: int = 2048
     ) -> str:
-        video_file = self._validate_local_if_explicit(video_file, "Video file")
+        video_file = self._normalize_input_reference(video_file, "Video file")
 
         payload = {
             'prompt': prompt,
@@ -470,7 +461,7 @@ class ScriptExecutor:
         Returns:
             List of segments with timing information
         """
-        audio_file = self._validate_local_if_explicit(audio_file, "Audio file")
+        audio_file = self._normalize_input_reference(audio_file, "Audio file")
 
         payload = {
             'audio_file': audio_file,
@@ -505,7 +496,7 @@ class ScriptExecutor:
             page_from: Starting page number (1-indexed)
             count: Number of pages to read
         """
-        pdf_path = Path(self._validate_local_if_explicit(pdf_file, "PDF file")).expanduser()
+        pdf_path = self._normalize_input_reference(pdf_file, "PDF file")
 
         if page_from < 1:
             raise ScriptExecutionError("page_from must be >= 1")
@@ -520,7 +511,7 @@ class ScriptExecutor:
         resolved_script = Path(script_path).expanduser()
 
         payload = {
-            "pdf_file": str(pdf_path),
+            "pdf_file": pdf_path,
             "page_from": page_from,
             "count": count
         }

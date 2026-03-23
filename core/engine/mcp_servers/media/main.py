@@ -601,21 +601,19 @@ async def text_to_speech(
         if not ref_voice_value:
             raise ScriptExecutionError("ref_voice is required for text_to_speech")
         ref_voice_value = _resolve_input_file(ref_voice_value, "ref_voice")
-        ref_voice_path = Path(ref_voice_value).expanduser()
 
         ref_emotion_voice_value = str(ref_emotion_voice or '').strip()
         if ref_emotion_voice_value:
             ref_emotion_voice_value = _resolve_input_file(ref_emotion_voice_value, "ref_emotion_voice")
-            ref_emotion_voice_path = Path(ref_emotion_voice_value).expanduser()
         else:
-            ref_emotion_voice_path = ref_voice_path
+            ref_emotion_voice_value = ref_voice_value
 
         audio_file = await script_executor.generate_tts_audio(
             text=text,
             emotion=emotion,
             emotion_sample=emotion_sample_value,
-            ref_voice=str(ref_voice_path),
-            ref_emotion_voice=str(ref_emotion_voice_path)
+            ref_voice=ref_voice_value,
+            ref_emotion_voice=ref_emotion_voice_value
         )
         _log_success("text_to_speech", {"audio_file": audio_file, **request_extra})
         return _format_output(audio_file)
@@ -671,7 +669,6 @@ async def text_segments_to_speech(
         if not ref_voice_value:
             raise ScriptExecutionError("ref_voice is required for text_segments_to_speech")
         ref_voice_value = _resolve_input_file(ref_voice_value, "ref_voice")
-        ref_voice_path = Path(ref_voice_value).expanduser()
 
         validated_lines = []
         for index, line in enumerate(segments, start=1):
@@ -697,20 +694,19 @@ async def text_segments_to_speech(
                     ref_emotion_voice_value,
                     f"ref_emotion_voice line {index}"
                 )
-                ref_emotion_voice_path = Path(ref_emotion_voice_value).expanduser()
             else:
-                ref_emotion_voice_path = ref_voice_path
+                ref_emotion_voice_value = ref_voice_value
 
             validated_lines.append({
                 'text': text,
                 'emotion': emotion,
                 'emotion_sample': emotion_sample,
-                'ref_emotion_voice': str(ref_emotion_voice_path)
+                'ref_emotion_voice': ref_emotion_voice_value
             })
 
         audio_files = await script_executor.generate_tts_lines_audio(
             lines=validated_lines,
-            ref_voice=str(ref_voice_path)
+            ref_voice=ref_voice_value
         )
         _log_success("text_segments_to_speech", {"audio_files": audio_files, **request_extra})
         return _format_output(audio_files)
