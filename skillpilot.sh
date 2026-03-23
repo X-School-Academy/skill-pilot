@@ -57,7 +57,7 @@ print_help() {
   cat <<'EOF_HELP'
 Usage: ./skillpilot.sh [help|build|start|stop|test] [--dev]
        ./skillpilot.sh <enable|disable> <human-detection|live-tts>
-       ./skillpilot.sh test [test_file[func1,func2] ...]
+       ./skillpilot.sh test '[test_file[func1,func2]' | test_file:func1,func2 | test_file::func1 ...]
 
 Commands:
   help    Show this help message.
@@ -78,6 +78,7 @@ Defaults:
   - Mode defaults to production (without --dev)
   - Test file names may omit ".py", may omit the "test_" prefix, and may be passed as space-separated or comma-separated values
   - Test selectors support file-scoped function filters: "media_mcp[text_to_image,text_to_song]"
+  - zsh-safe alternatives are also supported: "media_mcp:text_to_image,text_to_song" or "media_mcp::text_to_image"
   - Empty brackets mean all tests in the file: "media_mcp[]"
 EOF_HELP
 }
@@ -963,12 +964,23 @@ run_engine_tests() {
       name="${spec}"
       func_spec=""
       if [[ "${spec}" == *'['* ]]; then
-        if [[ ! "${spec}" =~ ^([^\[\]]+)\[(.*)\]$ ]]; then
+        if [[ "${spec}" != *']' ]] || [[ "${spec}" == \[* ]] || [[ "${spec}" == *']'*'['* ]]; then
           echo "Error: invalid test selector '${spec}'. Expected file[func1,func2]."
           exit 1
         fi
-        name="${BASH_REMATCH[1]}"
-        func_spec="${BASH_REMATCH[2]}"
+        name="${spec%%[*}"
+        func_spec="${spec#*[}"
+        func_spec="${func_spec%]}"
+        if [[ -z "${name}" ]]; then
+          echo "Error: invalid test selector '${spec}'. Expected file[func1,func2]."
+          exit 1
+        fi
+      elif [[ "${spec}" == *"::"* ]]; then
+        name="${spec%%::*}"
+        func_spec="${spec#*::}"
+      elif [[ "${spec}" == *":"* ]]; then
+        name="${spec%%:*}"
+        func_spec="${spec#*:}"
       fi
       if [[ "${name}" == */* ]]; then
         echo "Error: test files must be file names only under core/engine/tests: '${name}'."
