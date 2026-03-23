@@ -1,7 +1,9 @@
 import base64
 import asyncio
+import json
 import os
 import math
+import subprocess
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
@@ -87,6 +89,25 @@ def _extract_gemini_response_parts(response: Any) -> Iterable[Any]:
         if candidate_parts:
             return candidate_parts
     return []
+
+
+def _extract_mcp_text_content(payload: Any) -> Optional[str]:
+    if not isinstance(payload, dict):
+        return None
+
+    content = payload.get("content")
+    if not isinstance(content, list):
+        return None
+
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") != "text":
+            continue
+        text = item.get("text")
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+    return None
 
 
 def _openai_generate_image(prompt: str, provider: Dict[str, Any], size: Optional[str]) -> Path:
@@ -179,6 +200,60 @@ def _gemini_generate_image(prompt: str, provider: Dict[str, Any], size: Optional
     raise HTTPException(status_code=502, detail="Gemini image generation returned no image")
 
 
+def _media_mcp_generate_image(prompt: str, provider: Dict[str, Any], size: Optional[str]) -> Path:
+    parsed_size = _parse_image_size(size or provider.get("size"))
+    width, height = parsed_size or (720, 1280)
+    repo_root = Path(__file__).resolve().parents[2]
+    request = {
+        "server_id": "media",
+        "tool_name": "text_to_image",
+        "arguments": {
+            "prompt": prompt,
+            "width": width,
+            "height": height,
+        },
+    }
+
+    try:
+        result = subprocess.run(
+            [str(repo_root / "core/bin/tool-cli"), "request", json.dumps(request)],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            check=False,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Media MCP image generation failed: {exc}") from exc
+
+    if result.returncode != 0:
+        stderr = (result.stderr or result.stdout or "").strip()
+        raise HTTPException(status_code=502, detail=f"Media MCP image generation failed: {stderr}")
+
+    output = (result.stdout or "").strip()
+    if not output:
+        raise HTTPException(status_code=502, detail="Media MCP image generation returned no output")
+
+    try:
+        response = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=502, detail=f"Media MCP image generation returned invalid JSON: {output}") from exc
+
+    if not isinstance(response, dict):
+        raise HTTPException(status_code=502, detail="Media MCP image generation returned an unexpected response")
+    if response.get("status") != "ok":
+        raise HTTPException(status_code=502, detail=str(response.get("detail") or "Media MCP image generation failed"))
+
+    result_payload = response.get("result")
+    raw_path = _extract_mcp_text_content(result_payload)
+    if not raw_path:
+        raise HTTPException(status_code=502, detail=f"Media MCP image generation returned no local image path: {output}")
+
+    path = Path(raw_path).expanduser()
+    if not path.is_file():
+        raise HTTPException(status_code=502, detail=f"Media MCP image generation returned a missing file path: {raw_path}")
+    return path.resolve()
+
+
 def generate_image_file(prompt: str, provider_id: Optional[str] = None, size: Optional[str] = None) -> str:
     if not prompt or not prompt.strip():
         raise HTTPException(status_code=400, detail="prompt is required")
@@ -190,6 +265,8 @@ def generate_image_file(prompt: str, provider_id: Optional[str] = None, size: Op
         path = _openai_generate_image(prompt, provider, size)
     elif provider_name == "gemini":
         path = _gemini_generate_image(prompt, provider, size)
+    elif provider_name == "media-mcp":
+        path = _media_mcp_generate_image(prompt, provider, size)
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported image provider: {provider_name}")
 

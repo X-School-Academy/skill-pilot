@@ -222,8 +222,6 @@ class ScriptExecutor:
         text: str,
         emotion: str,
         emotion_sample: str,
-        gender: str = "female",
-        age: int = 30,
         ref_voice: str = "",
         ref_emotion_voice: str = ""
     ) -> str:
@@ -253,8 +251,6 @@ class ScriptExecutor:
             'text': text,
             'emotion': emotion,
             'emotion_sample': emotion_sample_value,
-            'gender': gender,
-            'age': age,
             'ref_voice': str(resolved_ref_voice),
             'ref_emotion_voice': str(resolved_ref_emotion_voice),
             'output_dir': COMFYUI_OUTPUT_DIR
@@ -344,18 +340,18 @@ class ScriptExecutor:
     async def generate_song_audio(
         self,
         lyrics: str,
-        emotion: str = "calm",
-        emotion_sample: Optional[str] = None,
         ref_voice: Optional[str] = None
     ) -> str:
         if not lyrics:
             raise ScriptExecutionError('Lyrics are required for song generation')
+        ref_voice_value = str(ref_voice or '').strip()
+        if not ref_voice_value:
+            raise ScriptExecutionError('Reference voice is required for song generation')
+        resolved_ref_voice = self._validate_local_if_explicit(ref_voice_value, "Reference voice")
 
         payload = {
             'lyrics': lyrics,
-            'emotion': emotion,
-            'emotion_sample': emotion_sample or emotion,
-            'ref_voice': ref_voice,
+            'ref_voice': str(resolved_ref_voice),
             'output_dir': COMFYUI_OUTPUT_DIR
         }
 

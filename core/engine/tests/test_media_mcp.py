@@ -1,6 +1,9 @@
-import subprocess
 import json
-import os
+import subprocess
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_text_to_image():
@@ -18,7 +21,7 @@ def test_text_to_image():
         ["core/bin/tool-cli", "request", json.dumps(request)],
         capture_output=True,
         text=True,
-        cwd="/Users/frankhe/myworks/skill-pilot-ai",
+        cwd=REPO_ROOT,
     )
 
     print("--- stdout ---")
