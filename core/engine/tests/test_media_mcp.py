@@ -57,6 +57,20 @@ def test_text_to_image():
     _assert_media_response_has_output(response, (".png", ".jpg", ".jpeg", "image"))
 
 
+def test_image_to_image():
+    response = _run_media_tool(
+        "text_to_image",
+        {
+            "prompt": "A tree",
+            "image_file": "file"
+        },
+    )
+
+    # Response should contain a URL to the generated image
+    _assert_media_response_has_output(response, (".png", ".jpg", ".jpeg", "image"))
+
+
+
 def test_text_to_speech():
     response = _run_media_tool(
         "text_to_speech",

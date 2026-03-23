@@ -5,9 +5,7 @@ description: "Generate singing audio from lyrics with musical vocal delivery."
 
 Args:
     lyrics: The song lyrics to be sung (can include multiple verses and chorus)
-    emotion: The emotional style for the singing performance (calm, energetic, melancholic, joyful, etc.)
-    emotion_sample: Optional sentence or audio file describing the singing style and emotional expression (use a declarative sentence, not a command)
-    ref_voice: Optional audio file_id from /upload_file to use as reference for the singing voice timbre and characteristics
+    ref_voice: Required audio file_id, local file path, or remote URL to use as reference for the singing voice timbre and characteristics
 
 Returns:
     Generated singing audio as a URL in MP3 format
@@ -25,21 +23,6 @@ core/bin/tool-cli request '{"server_id": "media", "tool_name": "text_to_song", "
   "properties": {
     "lyrics": {
       "type": "string"
-    },
-    "emotion": {
-      "default": "calm",
-      "type": "string"
-    },
-    "emotion_sample": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null
     },
     "ref_voice": {
       "anyOf": [
