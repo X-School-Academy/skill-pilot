@@ -246,6 +246,19 @@
       format: 'wav',
       voice: 'Kore',
     },
+    {
+      id: 'media-mcp',
+      name: 'Media MCP Server - TTS',
+      voices: {
+        'voice_name': 
+        {
+          "emotion": "calm",
+          "emotion_sample": "This is a calm and steady narration voice.",
+          "ref_voice": "file",
+          "ref_emotion_voice": "file",
+        }
+      },
+    },
   ],
 
   // Image generation providers.
@@ -266,7 +279,7 @@
     },
     {
       id: 'media-mcp',
-      name: 'Media MCP Server',
+      name: 'Media MCP Server - Image',
       size: '720x1280',
     },
   ],

@@ -2,6 +2,7 @@ import base64
 import asyncio
 import json
 import os
+import subprocess
 import uuid
 import wave
 from pathlib import Path
@@ -35,6 +36,25 @@ def _write_wav(path: Path, pcm_bytes: bytes, channels: int = 1, rate: int = 2400
         wf.setsampwidth(sample_width)
         wf.setframerate(rate)
         wf.writeframes(pcm_bytes)
+
+
+def _extract_mcp_text_content(payload: Any) -> Optional[str]:
+    if not isinstance(payload, dict):
+        return None
+
+    content = payload.get("content")
+    if not isinstance(content, list):
+        return None
+
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") != "text":
+            continue
+        text = item.get("text")
+        if isinstance(text, str) and text.strip():
+            return text.strip()
+    return None
 
 
 def _openai_tts(text: str, provider: Dict[str, Any], voice: Optional[str], output_format: Optional[str]) -> Path:
@@ -135,6 +155,89 @@ def _gemini_tts(text: str, provider: Dict[str, Any], voice: Optional[str], outpu
     return converted
 
 
+def _media_mcp_tts(text: str, provider: Dict[str, Any], voice: Optional[str], output_format: Optional[str]) -> Path:
+    _ = output_format
+    voices = provider.get("voices")
+    if not isinstance(voices, dict) or not voices:
+        raise HTTPException(status_code=500, detail="Media MCP TTS provider is missing configured voices")
+
+    selected_voice = voice or provider.get("voice")
+    if selected_voice:
+        selected_config = voices.get(selected_voice)
+        if not isinstance(selected_config, dict):
+            raise HTTPException(status_code=400, detail=f"Unknown Media MCP TTS voice: {selected_voice}")
+    else:
+        selected_voice, selected_config = next(iter(voices.items()))
+        if not isinstance(selected_config, dict):
+            raise HTTPException(status_code=500, detail=f"Invalid Media MCP TTS voice config: {selected_voice}")
+
+    emotion = str(selected_config.get("emotion") or "").strip()
+    emotion_sample = str(selected_config.get("emotion_sample") or "").strip()
+    ref_voice = str(selected_config.get("ref_voice") or "").strip()
+    ref_emotion_voice = str(selected_config.get("ref_emotion_voice") or "").strip()
+
+    if not emotion:
+        raise HTTPException(status_code=500, detail=f"Media MCP TTS voice '{selected_voice}' is missing emotion")
+    if not emotion_sample:
+        raise HTTPException(status_code=500, detail=f"Media MCP TTS voice '{selected_voice}' is missing emotion_sample")
+    if not ref_voice:
+        raise HTTPException(status_code=500, detail=f"Media MCP TTS voice '{selected_voice}' is missing ref_voice")
+
+    repo_root = Path(__file__).resolve().parents[2]
+    request = {
+        "server_id": "media",
+        "tool_name": "text_to_speech",
+        "arguments": {
+            "text": text,
+            "emotion": emotion,
+            "emotion_sample": emotion_sample,
+            "ref_voice": ref_voice,
+            "ref_emotion_voice": ref_emotion_voice or ref_voice,
+        },
+    }
+
+    try:
+        result = subprocess.run(
+            [str(repo_root / "core/bin/tool-cli"), "request", json.dumps(request)],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            check=False,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Media MCP TTS failed: {exc}") from exc
+
+    if result.returncode != 0:
+        stderr = (result.stderr or result.stdout or "").strip()
+        raise HTTPException(status_code=502, detail=f"Media MCP TTS failed: {stderr}")
+
+    output = (result.stdout or "").strip()
+    if not output:
+        raise HTTPException(status_code=502, detail="Media MCP TTS returned no output")
+
+    try:
+        response = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=502, detail=f"Media MCP TTS returned invalid JSON: {output}") from exc
+
+    if not isinstance(response, dict):
+        raise HTTPException(status_code=502, detail="Media MCP TTS returned an unexpected response")
+    if response.get("status") != "ok":
+        raise HTTPException(status_code=502, detail=str(response.get("detail") or "Media MCP TTS failed"))
+
+    result_payload = response.get("result")
+    raw_path = _extract_mcp_text_content(result_payload)
+    if not raw_path and isinstance(result_payload, str):
+        raw_path = result_payload.strip()
+    if not raw_path:
+        raise HTTPException(status_code=502, detail=f"Media MCP TTS returned no local audio path: {output}")
+
+    path = Path(raw_path).expanduser()
+    if not path.is_file():
+        raise HTTPException(status_code=502, detail=f"Media MCP TTS returned a missing file path: {raw_path}")
+    return path.resolve()
+
+
 def text_to_speech_file(text: str, provider_id: Optional[str] = None, voice: Optional[str] = None, output_format: Optional[str] = None) -> str:
     provider = get_tts_provider(provider_id or DEFAULT_TTS_PROVIDER)
     provider_name = provider.get("id")
@@ -146,6 +249,8 @@ def text_to_speech_file(text: str, provider_id: Optional[str] = None, voice: Opt
         path = _openai_tts(text, provider, voice, output_format)
     elif provider_name == "gemini":
         path = _gemini_tts(text, provider, voice, output_format)
+    elif provider_name == "media-mcp":
+        path = _media_mcp_tts(text, provider, voice, output_format)
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported TTS provider: {provider_name}")
 
