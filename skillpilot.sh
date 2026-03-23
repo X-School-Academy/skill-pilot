@@ -57,7 +57,7 @@ print_help() {
   cat <<'EOF_HELP'
 Usage: ./skillpilot.sh [help|build|start|stop|test] [--dev]
        ./skillpilot.sh <enable|disable> <human-detection|live-tts>
-       ./skillpilot.sh test [test_file ...]
+       ./skillpilot.sh test [test_file[func1,func2] ...]
 
 Commands:
   help    Show this help message.
@@ -77,7 +77,47 @@ Defaults:
   - Command defaults to: start
   - Mode defaults to production (without --dev)
   - Test file names may omit ".py", may omit the "test_" prefix, and may be passed as space-separated or comma-separated values
+  - Test selectors support file-scoped function filters: "media_mcp[text_to_image,text_to_song]"
+  - Empty brackets mean all tests in the file: "media_mcp[]"
 EOF_HELP
+}
+
+append_test_specs_from_arg() {
+  local input="$1"
+  local char current="" depth=0 i
+
+  for ((i = 0; i < ${#input}; i++)); do
+    char="${input:i:1}"
+    case "${char}" in
+      '[')
+        depth=$((depth + 1))
+        current+="${char}"
+        ;;
+      ']')
+        if ((depth > 0)); then
+          depth=$((depth - 1))
+        fi
+        current+="${char}"
+        ;;
+      ',')
+        if ((depth == 0)); then
+          current="${current#"${current%%[![:space:]]*}"}"
+          current="${current%"${current##*[![:space:]]}"}"
+          [[ -n "${current}" ]] && TEST_FILES+=("${current}")
+          current=""
+        else
+          current+="${char}"
+        fi
+        ;;
+      *)
+        current+="${char}"
+        ;;
+    esac
+  done
+
+  current="${current#"${current%%[![:space:]]*}"}"
+  current="${current%"${current##*[![:space:]]}"}"
+  [[ -n "${current}" ]] && TEST_FILES+=("${current}")
 }
 
 parse_args() {
@@ -117,13 +157,7 @@ parse_args() {
         ;;
       *)
         if ((expect_test_files == 1)); then
-          local raw_item trimmed
-          IFS=',' read -r -a _test_items <<< "$1"
-          for raw_item in "${_test_items[@]}"; do
-            trimmed="${raw_item#"${raw_item%%[![:space:]]*}"}"
-            trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
-            [[ -n "${trimmed}" ]] && TEST_FILES+=("${trimmed}")
-          done
+          append_test_specs_from_arg "$1"
           shift
           continue
         fi
@@ -914,7 +948,8 @@ run_engine_tests() {
 
   local tests_dir="${ROOT_DIR}/core/engine/tests"
   local pytest_targets=()
-  local name path
+  local spec name path func_spec raw_func normalized_func added_func_target
+  local -a funcs
 
   if [[ ! -d "${tests_dir}" ]]; then
     echo "Error: missing tests directory at ${tests_dir}."
@@ -924,7 +959,17 @@ run_engine_tests() {
   if ((${#TEST_FILES[@]} == 0)); then
     pytest_targets=("tests")
   else
-    for name in "${TEST_FILES[@]}"; do
+    for spec in "${TEST_FILES[@]}"; do
+      name="${spec}"
+      func_spec=""
+      if [[ "${spec}" == *'['* ]]; then
+        if [[ ! "${spec}" =~ ^([^\[\]]+)\[(.*)\]$ ]]; then
+          echo "Error: invalid test selector '${spec}'. Expected file[func1,func2]."
+          exit 1
+        fi
+        name="${BASH_REMATCH[1]}"
+        func_spec="${BASH_REMATCH[2]}"
+      fi
       if [[ "${name}" == */* ]]; then
         echo "Error: test files must be file names only under core/engine/tests: '${name}'."
         exit 1
@@ -936,7 +981,34 @@ run_engine_tests() {
         echo "Error: test file not found: ${path}"
         exit 1
       fi
-      pytest_targets+=("tests/${name}")
+      if [[ -z "${func_spec}" ]]; then
+        pytest_targets+=("tests/${name}")
+        continue
+      fi
+
+      funcs=()
+      if [[ -n "${func_spec}" ]]; then
+        IFS=',' read -r -a funcs <<< "${func_spec}"
+      fi
+      if ((${#funcs[@]} == 0)); then
+        pytest_targets+=("tests/${name}")
+        continue
+      fi
+
+      added_func_target=0
+      for raw_func in "${funcs[@]}"; do
+        raw_func="${raw_func#"${raw_func%%[![:space:]]*}"}"
+        raw_func="${raw_func%"${raw_func##*[![:space:]]}"}"
+        [[ -n "${raw_func}" ]] || continue
+        normalized_func="${raw_func}"
+        [[ "${normalized_func}" == test_* ]] || normalized_func="test_${normalized_func}"
+        pytest_targets+=("tests/${name}::${normalized_func}")
+        added_func_target=1
+      done
+
+      if ((added_func_target == 0)); then
+        pytest_targets+=("tests/${name}")
+      fi
     done
   fi
 
