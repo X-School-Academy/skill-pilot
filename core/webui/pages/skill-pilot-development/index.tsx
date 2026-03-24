@@ -156,6 +156,7 @@ export default function SkillPilotDevelopmentPage() {
   const [pendingAction, setPendingAction] = useState<FeatureAction | null>(null);
   const [navbarWidth, setNavbarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
+  const [runtimeMode, setRuntimeMode] = useState<'dev' | 'prod'>('prod');
 
   const currentTask = typeof task === 'string' ? task : '';
   const currentFeature = currentTask.includes('/') ? currentTask.split('/')[0] : '';
@@ -165,6 +166,11 @@ export default function SkillPilotDevelopmentPage() {
     () => featureOptions.find((item) => item.name === featureNameInput.trim()) || null,
     [featureOptions, featureNameInput],
   );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setRuntimeMode(window.location.port === '3003' ? 'dev' : 'prod');
+  }, []);
 
   const startResizing = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -854,10 +860,17 @@ export default function SkillPilotDevelopmentPage() {
       </Modal>
 
       <div className="shrink-0 border-b border-[#d6def8] bg-white/60 px-6 py-2">
-        <button type="button" onClick={() => { void router.push('/'); }} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-[#5e6b9d] hover:bg-[#eef2ff] hover:text-[#1a2455] transition" title="Back to Home">
-          <IconArrowLeft size="1rem" />
-          <span>Back to Home</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={() => { void router.push('/'); }} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-[#5e6b9d] hover:bg-[#eef2ff] hover:text-[#1a2455] transition" title="Back to Home">
+            <IconArrowLeft size="1rem" />
+            <span>Back to Home</span>
+          </button>
+          <span className="text-xs text-[#55627f]">
+            {runtimeMode === 'dev'
+              ? 'Dev Mode: Changes appear here in real time. Use this mode to validate UI updates quickly, but keep in mind that a bad hot-reload change can temporarily break the WebUI or related services.'
+              : 'Prod Mode: You are viewing the release build. UI changes do not appear here live. Use dev mode for real-time validation, or rebuild the project and restart the Skill Pilot engine to apply WebUI updates.'}
+          </span>
+        </div>
       </div>
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
