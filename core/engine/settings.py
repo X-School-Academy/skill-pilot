@@ -10,6 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = BASE_DIR.parent.parent
 CONFIG_ENV_PATH = PROJECT_DIR / "config" / ".env"
 _SETTINGS_PATH = PROJECT_DIR / "config" / "settings.json5"
+_RUNTIME_MODE_ENV = "SKILL_PILOT_RUNTIME_MODE"
 
 
 def _read_service_setting(*keys: str, default: str = "") -> str:
@@ -34,6 +35,55 @@ def _read_service_setting(*keys: str, default: str = "") -> str:
         return default
 
 
+def _normalize_runtime_mode(value: str | None, default: str = "production") -> str:
+    normalized = (value or "").strip().lower()
+    if normalized in {"dev", "development"}:
+        return "development"
+    if normalized in {"prod", "production", "release"}:
+        return "production"
+    return default
+
+
+def get_runtime_mode(default: str = "production") -> str:
+    return _normalize_runtime_mode(os.getenv(_RUNTIME_MODE_ENV), default=default)
+
+
+def _read_service_config(service_name: str, mode: str | None = None) -> dict[str, object]:
+    try:
+        import json5 as _json5
+
+        data = _json5.loads(_SETTINGS_PATH.read_text(encoding="utf-8"))
+        services = data.get("services", {}) if isinstance(data, dict) else {}
+        service = services.get(service_name, {}) if isinstance(services, dict) else {}
+        if not isinstance(service, dict):
+            return {}
+
+        merged = dict(service)
+        normalized_mode = _normalize_runtime_mode(mode, default="production")
+        mode_config = service.get(normalized_mode, {})
+        if isinstance(mode_config, dict):
+            merged.update(mode_config)
+        return merged
+    except Exception:
+        return {}
+
+
+def get_service_host_port(
+    service_name: str,
+    *,
+    mode: str | None = None,
+    default_host: str = "127.0.0.1",
+    default_port: int,
+) -> tuple[str, int]:
+    service = _read_service_config(service_name, mode=mode)
+    host = str(service.get("host", default_host))
+    try:
+        port = int(service.get("port", default_port))
+    except Exception:
+        port = default_port
+    return host, port
+
+
 def _sanitize_single_line_secret(value: str) -> str:
     return re.sub(r"[\r\n]+", "", value).strip()
 
@@ -55,8 +105,12 @@ def get_engine_ws_url() -> str:
     Reads services.engine.host/port from settings.json5 so the browser
     never has to guess the engine address.
     """
-    host = _read_service_setting("services", "engine", "host", default="127.0.0.1")
-    port = _read_service_setting("services", "engine", "port", default="3001")
+    host, port = get_service_host_port(
+        "engine",
+        mode=get_runtime_mode(),
+        default_host="127.0.0.1",
+        default_port=3001,
+    )
     return f"ws://{host}:{port}"
 
 

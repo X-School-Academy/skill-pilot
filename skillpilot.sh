@@ -63,7 +63,7 @@ Commands:
   help    Show this help message.
   build   Build static webui export (core/webui/www).
   start   Start services. Default command.
-  stop    Stop running tmux sessions.
+  stop    Stop running tmux sessions. Use `--dev` to stop only development sessions.
   test    Run engine pytest suite, or only the named files under core/engine/tests.
   enable human-detection    Install optional human detection dependencies.
   disable human-detection   Uninstall optional human detection dependencies.
@@ -71,7 +71,7 @@ Commands:
   disable live-tts          Uninstall optional live-tts dependencies.
 
 Options:
-  --dev   Run in development mode (start only).
+  --dev   Use development mode for `start`, or stop only development sessions for `stop`.
 
 Defaults:
   - Command defaults to: start
@@ -170,8 +170,8 @@ parse_args() {
     shift
   done
 
-  if ((IS_DEV == 1)) && [[ "${ACTION}" != "start" ]]; then
-    echo "Error: --dev is only supported with 'start'."
+  if ((IS_DEV == 1)) && [[ "${ACTION}" != "start" && "${ACTION}" != "stop" ]]; then
+    echo "Error: --dev is only supported with 'start' or 'stop'."
     print_help
     exit 1
   fi
@@ -498,12 +498,13 @@ choose_provider() {
 
 update_settings_json5() {
   local host="$1"
-  local webui_port="$2"
-  local engine_port="$3"
+  local prod_engine_port="$2"
+  local dev_engine_port="$3"
+  local dev_webui_port="$4"
   local py
   py="$(engine_python)"
 
-  "${py}" - "${ROOT_DIR}/config/settings.json5" "${host}" "${webui_port}" "${engine_port}" <<'PY'
+  "${py}" - "${ROOT_DIR}/config/settings.json5" "${host}" "${prod_engine_port}" "${dev_engine_port}" "${dev_webui_port}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -512,8 +513,9 @@ import json5
 
 settings_path = Path(sys.argv[1])
 host = sys.argv[2]
-webui_port = int(sys.argv[3])
-engine_port = int(sys.argv[4])
+prod_engine_port = int(sys.argv[3])
+dev_engine_port = int(sys.argv[4])
+dev_webui_port = int(sys.argv[5])
 
 if settings_path.is_file():
     data = json5.loads(settings_path.read_text(encoding="utf-8"))
@@ -533,14 +535,27 @@ if not isinstance(webui, dict):
     webui = {}
     services["webui"] = webui
 webui["host"] = host
-webui["port"] = webui_port
+webui_dev = webui.setdefault("development", {})
+if not isinstance(webui_dev, dict):
+    webui_dev = {}
+    webui["development"] = webui_dev
+webui_dev["port"] = dev_webui_port
 
 engine = services.setdefault("engine", {})
 if not isinstance(engine, dict):
     engine = {}
     services["engine"] = engine
 engine["host"] = host
-engine["port"] = engine_port
+engine_prod = engine.setdefault("production", {})
+if not isinstance(engine_prod, dict):
+    engine_prod = {}
+    engine["production"] = engine_prod
+engine_prod["port"] = prod_engine_port
+engine_dev = engine.setdefault("development", {})
+if not isinstance(engine_dev, dict):
+    engine_dev = {}
+    engine["development"] = engine_dev
+engine_dev["port"] = dev_engine_port
 
 settings_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
@@ -686,7 +701,7 @@ run_init_wizard_if_needed() {
   press_any_key "Press any key to begin."
 
   local listen_host only_allow_https
-  local webui_port engine_port
+  local prod_engine_port dev_engine_port dev_webui_port
   local provider_id=""
   local webui_auth_token
 
@@ -701,12 +716,13 @@ run_init_wizard_if_needed() {
   echo ""
   echo "Common port numbers you will use with Skill Pilot:"
   echo ""
-  echo "  3000  ->  Web interface (the website you open in browser)"
-  echo "  3001  ->  Skill Pilot engine API (the backend service)"
+  echo "  3001  ->  Production engine API and bundled release UI"
+  echo "  3002  ->  Development engine API"
+  echo "  3003  ->  Development WebUI"
   echo ""
   echo "What is 127.0.0.1?"
   echo '  This is called "localhost" — it means your own computer.'
-  echo "  When you open http://127.0.0.1:3000 in a browser, you"
+  echo "  When you open http://127.0.0.1:3003 in a browser, you"
   echo "  are connecting to a service running on your own machine."
   echo "  No one else on the internet can access it."
   echo ""
@@ -772,21 +788,30 @@ run_init_wizard_if_needed() {
 
   # Wizard Screen 4c — Choose ports
   show_screen "Choose Your Port Numbers"
-  echo "Skill Pilot runs two services, each on its own port:"
+  echo "Skill Pilot can run production and development side by side."
   echo ""
-  echo "  Dev  port  ->  Web interface (the page you open in a browser)"
-  echo "  Prod port  ->  Engine API (the backend that powers AI agents)"
+  echo "Choose default ports for these services:"
+  echo ""
+  echo "  Prod engine  ->  Release engine API and bundled release UI"
+  echo "  Dev engine   ->  Reloading engine API for development"
+  echo "  Dev WebUI    ->  Next.js development server"
   echo ""
   echo "The defaults work for most setups. Change them only if"
   echo "another program on your computer is already using that port."
   echo ""
   echo "Press Enter to accept the default, or type a port number (1-65535)."
   echo ""
-  webui_port="$(pick_port "Dev  (WebUI)" "${listen_host}" "3000")"
-  engine_port="$(pick_port "Prod (Engine API)" "${listen_host}" "3001" "${webui_port}")"
+  prod_engine_port="$(pick_port "Prod (Engine API)" "${listen_host}" "3001")"
+  dev_engine_port="$(pick_port "Dev  (Engine API)" "${listen_host}" "3002" "${prod_engine_port}")"
+  dev_webui_port="$(pick_port "Dev  (WebUI)" "${listen_host}" "3003" "${prod_engine_port}")"
+  while [[ "${dev_webui_port}" == "${dev_engine_port}" ]]; do
+    echo "Port ${dev_webui_port} is already used by another Skill Pilot service." >&2
+    dev_webui_port="$(pick_port "Dev  (WebUI)" "${listen_host}" "3003" "${prod_engine_port}")"
+  done
   echo ""
-  echo "  Dev  port: ${webui_port}  ->  http://${listen_host}:${webui_port}"
-  echo "  Prod port: ${engine_port}  ->  http://${listen_host}:${engine_port}"
+  echo "  Prod engine: ${prod_engine_port}  ->  http://${listen_host}:${prod_engine_port}"
+  echo "  Dev  engine: ${dev_engine_port}  ->  http://${listen_host}:${dev_engine_port}"
+  echo "  Dev  WebUI : ${dev_webui_port}  ->  http://${listen_host}:${dev_webui_port}"
   press_any_key
 
   # Wizard Screen 5 — AI agent CLI detection
@@ -924,7 +949,7 @@ run_init_wizard_if_needed() {
   webui_auth_token="$(generate_uuid)"
 
   write_engine_env "${only_allow_https}" "${webui_auth_token}" "none" "" ""
-  update_settings_json5 "${listen_host}" "${webui_port}" "${engine_port}"
+  update_settings_json5 "${listen_host}" "${prod_engine_port}" "${dev_engine_port}" "${dev_webui_port}"
   update_ai_providers_json5 "${provider_id}" "${AVAILABLE_PROVIDERS[@]}"
 
   # Wizard Screen 7 — Configuration saved
@@ -936,6 +961,118 @@ run_init_wizard_if_needed() {
   echo ""
   echo "You can review and edit these files at any time."
   press_any_key "Press any key to start Skill Pilot."
+}
+
+get_service_port() {
+  local service_name="$1"
+  local mode="$2"
+  local py
+  py="$(engine_python)"
+  "${py}" - "${ROOT_DIR}/config/settings.json5" "${service_name}" "${mode}" "port" <<'PY'
+import sys
+from pathlib import Path
+
+try:
+    import json5
+except Exception:
+    json5 = None
+
+settings_path = Path(sys.argv[1])
+service_name = sys.argv[2]
+mode = sys.argv[3]
+field_name = sys.argv[4]
+
+default_ports = {
+    ("engine", "production"): 3001,
+    ("engine", "development"): 3002,
+    ("webui", "development"): 3003,
+}
+
+default_port = default_ports.get((service_name, mode), 3001)
+default_host = "127.0.0.1"
+
+try:
+    data = json5.loads(settings_path.read_text(encoding="utf-8")) if json5 else {}
+except Exception:
+    data = {}
+
+services = data.get("services", {}) if isinstance(data, dict) else {}
+service = services.get(service_name, {}) if isinstance(services, dict) else {}
+mode_config = service.get(mode, {}) if isinstance(service, dict) else {}
+
+if not isinstance(service, dict):
+    service = {}
+if not isinstance(mode_config, dict):
+    mode_config = {}
+
+if field_name == "host":
+    value = mode_config.get(field_name, service.get(field_name, default_host))
+else:
+    value = mode_config.get(field_name, default_port)
+if field_name == "port":
+    print(int(value))
+else:
+    print(str(value))
+PY
+}
+
+get_service_host() {
+  local service_name="$1"
+  local mode="$2"
+  local py
+  py="$(engine_python)"
+  "${py}" - "${ROOT_DIR}/config/settings.json5" "${service_name}" "${mode}" "host" <<'PY'
+import sys
+from pathlib import Path
+
+try:
+    import json5
+except Exception:
+    json5 = None
+
+settings_path = Path(sys.argv[1])
+service_name = sys.argv[2]
+mode = sys.argv[3]
+field_name = sys.argv[4]
+
+default_ports = {
+    ("engine", "production"): 3001,
+    ("engine", "development"): 3002,
+    ("webui", "development"): 3003,
+}
+
+default_port = default_ports.get((service_name, mode), 3001)
+default_host = "127.0.0.1"
+
+try:
+    data = json5.loads(settings_path.read_text(encoding="utf-8")) if json5 else {}
+except Exception:
+    data = {}
+
+services = data.get("services", {}) if isinstance(data, dict) else {}
+service = services.get(service_name, {}) if isinstance(services, dict) else {}
+mode_config = service.get(mode, {}) if isinstance(service, dict) else {}
+
+if not isinstance(service, dict):
+    service = {}
+if not isinstance(mode_config, dict):
+    mode_config = {}
+
+if field_name == "host":
+    value = mode_config.get(field_name, service.get(field_name, default_host))
+else:
+    value = mode_config.get(field_name, default_port)
+print(str(value))
+PY
+}
+
+get_service_base_url() {
+  local service_name="$1"
+  local mode="$2"
+  local host port
+  host="$(get_service_host "${service_name}" "${mode}")"
+  port="$(get_service_port "${service_name}" "${mode}")"
+  echo "http://${host}:${port}/"
 }
 
 build_webui_export() {
@@ -1097,27 +1234,11 @@ for key, value in values.items():
 
 get_webui_base_url() {
   local mode="$1"
-  local py
-  py="$(engine_python)"
-  "${py}" - "${ROOT_DIR}/config/settings.json5" "${mode}" <<'PY'
-import sys
-from pathlib import Path
-try:
-    import json5
-    data = json5.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-except Exception:
-    data = {}
-services = data.get("services", {}) if isinstance(data, dict) else {}
-if sys.argv[2] == "dev":
-    svc = services.get("webui", {}) if isinstance(services, dict) else {}
-    default_port = "3000"
-else:
-    svc = services.get("engine", {}) if isinstance(services, dict) else {}
-    default_port = "3001"
-host = str(svc.get("host", "127.0.0.1")) if isinstance(svc, dict) else "127.0.0.1"
-port = str(svc.get("port", default_port)) if isinstance(svc, dict) else default_port
-print(f"http://{host}:{port}/")
-PY
+  if [[ "${mode}" == "dev" ]]; then
+    get_service_base_url "webui" "development"
+  else
+    get_service_base_url "engine" "production"
+  fi
 }
 
 has_gui_env() {
@@ -1163,9 +1284,57 @@ wait_for_http_ready() {
   done
 }
 
+wait_for_tcp_ready() {
+  local url="$1"
+  local timeout_seconds="${2:-30}"
+  local py host port
+  py="$(engine_python)"
+  read -r host port < <("${py}" - "${url}" <<'PY'
+import sys
+from urllib.parse import urlparse
+
+parsed = urlparse(sys.argv[1])
+host = parsed.hostname or "127.0.0.1"
+port = parsed.port or (443 if parsed.scheme == "https" else 80)
+print(host, port)
+PY
+)
+
+  local start_ts now
+  start_ts="$(date +%s)"
+  while true; do
+    if "${py}" - "${host}" "${port}" <<'PY'
+import socket
+import sys
+
+host = sys.argv[1]
+port = int(sys.argv[2])
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.settimeout(1.0)
+try:
+    sock.connect((host, port))
+except OSError:
+    raise SystemExit(1)
+finally:
+    sock.close()
+raise SystemExit(0)
+PY
+    then
+      return 0
+    fi
+
+    now="$(date +%s)"
+    if (( now - start_ts >= timeout_seconds )); then
+      return 1
+    fi
+    sleep 1
+  done
+}
+
 open_or_print_webui_url() {
   local mode="$1"
-  local base_url url ready_url ready_url_with_auth
+  local base_url url ready_url
   base_url="$(get_webui_base_url "${mode}")"
   if [[ -n "${AUTH_TOKEN:-}" ]]; then
     url="${base_url}?token=${AUTH_TOKEN}"
@@ -1176,23 +1345,13 @@ open_or_print_webui_url() {
   if [[ "${mode}" == "dev" ]]; then
     ready_url="${base_url}"
   else
-    ready_url="${base_url}api/health"
-  fi
-
-  if [[ -n "${AUTH_TOKEN:-}" ]]; then
-    if [[ "${ready_url}" == *\?* ]]; then
-      ready_url_with_auth="${ready_url}&token=${AUTH_TOKEN}"
-    else
-      ready_url_with_auth="${ready_url}?token=${AUTH_TOKEN}"
-    fi
-  else
-    ready_url_with_auth="${ready_url}"
+    ready_url="${base_url}"
   fi
 
   echo ""
   if has_gui_env; then
     echo "Waiting for Skill Pilot to become reachable: ${ready_url}"
-    if wait_for_http_ready "${ready_url_with_auth}" 45; then
+    if wait_for_tcp_ready "${ready_url}" 120; then
       echo "Skill Pilot is reachable."
     else
       echo "Timed out waiting for Skill Pilot to answer at ${ready_url}."
@@ -1254,25 +1413,31 @@ case "${ACTION}" in
     echo ""
     if ((IS_DEV == 1)); then
       ensure_webui_deps
-      start_session "sp-webui" "pnpm -C core/webui dev"
-      start_session "sp-engine" "uv --project core/engine run core/engine/main.py --reload --reload-dir core/engine --reload-exclude core/engine/tests"
-      _engine_url="$(get_webui_base_url "prod")"
+      _dev_webui_host="$(get_service_host "webui" "development")"
+      _dev_webui_port="$(get_service_port "webui" "development")"
+      start_session "sp-webui-dev" "cd core/webui && SKILL_PILOT_RUNTIME_MODE=development HOSTNAME=${_dev_webui_host} PORT=${_dev_webui_port} node scripts/with-timestamp-logs.js dev --webpack --hostname ${_dev_webui_host} --port ${_dev_webui_port}"
+      start_session "sp-engine-dev" "SKILL_PILOT_RUNTIME_MODE=development uv --project core/engine run core/engine/main.py --reload --reload-dir core/engine --reload-exclude core/engine/tests"
+      _dev_engine_url="$(get_service_base_url "engine" "development")"
       _webui_url="$(get_webui_base_url "dev")"
-      echo "  Engine  ->  ${_engine_url%/}"
+      echo "  Dev engine   ->  ${_dev_engine_url%/}"
       echo "  WebUI   ->  ${_webui_url%/}  (dev mode)"
       echo ""
-      echo "Use 'tmux attach -t sp-webui' or 'tmux attach -t sp-engine' to view logs."
+      echo "Use 'tmux attach -t sp-webui-dev' or 'tmux attach -t sp-engine-dev' to view logs."
     else
       ensure_webui_release_assets
-      start_session "sp-engine" "uv --project core/engine run core/engine/main.py"
+      start_session "sp-engine-prod" "SKILL_PILOT_RUNTIME_MODE=production uv --project core/engine run core/engine/main.py"
       _engine_url="$(get_webui_base_url "prod")"
       echo "  Engine + WebUI  ->  ${_engine_url%/}  (production mode)"
       echo ""
-      echo "Use 'tmux attach -t sp-engine' to view logs."
+      echo "Use 'tmux attach -t sp-engine-prod' to view logs."
     fi
     echo ""
     echo "To stop Skill Pilot at any time, run:"
-    echo "  ./skillpilot.sh stop"
+    if ((IS_DEV == 1)); then
+      echo "  ./skillpilot.sh stop --dev"
+    else
+      echo "  ./skillpilot.sh stop"
+    fi
     if ((IS_DEV == 1)); then
       open_or_print_webui_url "dev"
     else
@@ -1280,8 +1445,12 @@ case "${ACTION}" in
     fi
     ;;
   stop)
-    stop_session "sp-webui"
-    stop_session "sp-engine"
+    if ((IS_DEV == 1)); then
+      stop_session "sp-webui-dev"
+      stop_session "sp-engine-dev"
+    else
+      stop_session "sp-engine-prod"
+    fi
     echo "Done."
     ;;
   enable)

@@ -14,6 +14,7 @@ import asyncio
 import base64
 import io
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,8 +36,20 @@ _SETTINGS_PATH = _PROJECT_DIR / "config" / "settings.json5"
 def _get_engine_port() -> int:
     try:
         import json5
+
         data = json5.loads(_SETTINGS_PATH.read_text(encoding="utf-8"))
-        return int(data.get("services", {}).get("engine", {}).get("port", 3001))
+        engine = data.get("services", {}).get("engine", {})
+        mode = (os.getenv("SKILL_PILOT_RUNTIME_MODE", "production") or "production").strip().lower()
+        if mode in {"dev", "development"}:
+            mode = "development"
+        else:
+            mode = "production"
+        mode_config = engine.get(mode, {}) if isinstance(engine, dict) else {}
+        if not isinstance(engine, dict):
+            engine = {}
+        if not isinstance(mode_config, dict):
+            mode_config = {}
+        return int(mode_config.get("port", 3002 if mode == "development" else 3001))
     except Exception:
         return 3001
 
