@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-REF_VOICE = REPO_ROOT / "assets/skillpilot-song.mp3"
+REF_VOICE = REPO_ROOT / "assets/custom-voices/frank-en.mp3"
 
 
 def _run_media_tool(tool_name: str, arguments: dict) -> dict:
@@ -37,7 +37,7 @@ def _run_media_tool(tool_name: str, arguments: dict) -> dict:
 
 
 def _assert_media_response_has_output(response: dict, suffixes: tuple[str, ...]) -> None:
-    response_str = json.dumps(response)
+    response_str = json.dumps(response, ensure_ascii=False)
     assert any(suffix in response_str for suffix in suffixes), (
         f"Response does not contain expected output marker: {response_str}"
     )
@@ -62,7 +62,7 @@ def test_image_to_image():
         "image_to_image",
         {
             "prompt": "A tree in the winter and snow",
-            "image_file": "/tmp/test.png"
+            "image_file": "/private/tmp/mcp_video_http_outputs/acb5a92b52474c9eac48a8c24b48530f.png"
         },
     )
 
@@ -96,3 +96,14 @@ def test_text_to_song():
     )
 
     _assert_media_response_has_output(response, (".wav", ".mp3", "audio"))
+
+def test_audio_segments():
+    response = _run_media_tool(
+        "audio_segments",
+        {
+            "audio_file": "/Users/frankhe/Downloads/vvv.mp3",
+            "language": "zh",
+        },
+    )
+
+    _assert_media_response_has_output(response, ("start"))

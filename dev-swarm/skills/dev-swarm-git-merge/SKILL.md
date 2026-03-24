@@ -1,6 +1,6 @@
 ---
 name: dev-swarm-git-merge
-description: Perform git partial merges (checkout specific folders from another branch) and squash merges (clean single-commit integration) to selectively integrate changes across branches.
+description: Only merge folders or files from a branch to another branch and squash merges (clean single-commit integration) to selectively integrate changes across branches.
 ---
 
 # AI Builder - Git Partial and Clean Merge

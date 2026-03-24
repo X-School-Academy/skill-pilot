@@ -627,16 +627,16 @@ class Bridge:
         try:
             payload = json.loads(json_str)
         except json.JSONDecodeError:
-            return json.dumps({"status": "error", "detail": "invalid_json"}, ensure_ascii=True)
+            return json.dumps({"status": "error", "detail": "invalid_json"}, ensure_ascii=False)
 
         if not isinstance(payload, dict):
-            return json.dumps({"status": "error", "detail": "payload must be object"}, ensure_ascii=True)
+            return json.dumps({"status": "error", "detail": "payload must be object"}, ensure_ascii=False)
 
         try:
             response = self.handle_request(payload)
         except Exception as exc:
-            return json.dumps({"status": "error", "detail": str(exc)}, ensure_ascii=True)
-        return json.dumps(response, ensure_ascii=True)
+            return json.dumps({"status": "error", "detail": str(exc)}, ensure_ascii=False)
+        return json.dumps(response, ensure_ascii=False)
 
     def close(self) -> None:
         for client in self._clients.values():
@@ -828,7 +828,7 @@ class MCPBridgeSocketService:
                     raw = self._read_all(conn)
                     response = self._bridge.handle_request_json(raw.strip())
                 except Exception as exc:
-                    response = json.dumps({"status": "error", "detail": str(exc)}, ensure_ascii=True)
+                    response = json.dumps({"status": "error", "detail": str(exc)}, ensure_ascii=False)
                 try:
                     conn.sendall(response.encode("utf-8") + b"\n")
                 except OSError:

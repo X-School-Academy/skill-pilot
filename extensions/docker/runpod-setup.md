@@ -41,7 +41,7 @@ uv pip install ftfy
 uv pip install diffusers
 uv pip install facexlib
 uv pip install gfpgan
-uv pip install soundfile whisper demucs
+uv pip install soundfile demucs openai-whisper
 # https://github.com/thu-ml/SageAttention/issues/197
 # Sage attention hacked for NVIDIA Turing GPUs
 uv pip install --no-build-isolation https://github.com/ezhomelabs/SageAttention2/archive/refs/heads/updates.zip
