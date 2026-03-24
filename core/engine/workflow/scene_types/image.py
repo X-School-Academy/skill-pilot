@@ -5,5 +5,6 @@ from typing import Dict, Any
 from ..VideoStyle import VideoStyle
 import workflow.scene_types.image_with_caption as image_with_caption
 async def create_image_scene(scene: Dict[str, Any], style: VideoStyle, cost_member_id: int = None) -> tuple[str, float]:
+    # Reuse the caption scene implementation; callers can provide either image_path or image_prompt.
     scene['text'] = '&nbsp;'
     return await image_with_caption.create_image_with_caption_scene(scene, style, cost_member_id)

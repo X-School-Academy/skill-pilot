@@ -7,8 +7,6 @@ Args:
     segments: List of dicts with fields text, emotion, and emotion_sample (all required);
               Optionally include ref_emotion_voice per segment as a file_id from /upload_file;
               when omitted/empty, defaults to ref_voice.
-    gender: The gender of the voice (male or female)
-    age: Approximate age of the voice in years (affects voice characteristics)
     ref_voice: Audio file_id from /upload_file to use as reference for voice characteristics and timbre
 
 Returns:
@@ -29,7 +27,7 @@ Returns:
             "ref_emotion_voice": "file_id_from_upload"
         }
     ]
-    audio = await text_segments_to_speech(segments, gender="female", age=28, ref_voice="file_id_from_upload")
+    audio = await text_segments_to_speech(segments, ref_voice="file_id_from_upload")
 
 ## Usage
 Call the local MCP bridge shell wrapper:
@@ -48,14 +46,6 @@ core/bin/tool-cli request '{"server_id": "media", "tool_name": "text_segments_to
         "type": "object"
       },
       "type": "array"
-    },
-    "gender": {
-      "default": "female",
-      "type": "string"
-    },
-    "age": {
-      "default": 30,
-      "type": "integer"
     },
     "ref_voice": {
       "default": "",

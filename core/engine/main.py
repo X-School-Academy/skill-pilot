@@ -16,6 +16,7 @@ _ENV_LOADED_FLAG = "SKILL_PILOT_ENV_ALREADY_LOADED"
 _ENGINE_CONTROL_PID_ENV = "SKILL_PILOT_ENGINE_CONTROL_PID"
 _RELOAD_SIGNAL = signal.SIGUSR1
 _RESTART_SIGNAL = signal.SIGUSR2
+_RUNTIME_MODE_ENV = "SKILL_PILOT_RUNTIME_MODE"
 
 if multiprocessing.parent_process() is None and os.getenv(_ENV_LOADED_FLAG) != "1":
     from safe_dotenv import load_env_with_safeguard
@@ -73,7 +74,25 @@ def _on_restart_signal(signum, frame):  # type: ignore[no-untyped-def]
     _restart_from_memory()
 
 
-def _read_engine_service_defaults() -> tuple[str, int]:
+def _normalize_runtime_mode(value: str | None, default: str = "production") -> str:
+    normalized = (value or "").strip().lower()
+    if normalized in {"dev", "development"}:
+        return "development"
+    if normalized in {"prod", "production", "release"}:
+        return "production"
+    return default
+
+
+def _detect_runtime_mode(argv: list[str]) -> str:
+    env_mode = os.getenv(_RUNTIME_MODE_ENV)
+    if env_mode:
+        return _normalize_runtime_mode(env_mode)
+    if "--reload" in argv:
+        return "development"
+    return "production"
+
+
+def _read_engine_service_defaults(mode: str) -> tuple[str, int]:
     """Read engine host/port from config/settings.json5 services.engine section."""
     try:
         import json5
@@ -81,11 +100,37 @@ def _read_engine_service_defaults() -> tuple[str, int]:
         settings_path = PROJECT_DIR / "config" / "settings.json5"
         data = json5.loads(settings_path.read_text(encoding="utf-8"))
         engine = data.get("services", {}).get("engine", {})
-        host = str(engine.get("host", "127.0.0.1"))
-        port = int(engine.get("port", 3001))
+        mode_config = engine.get(mode, {}) if isinstance(engine, dict) else {}
+        if not isinstance(engine, dict):
+            engine = {}
+        if not isinstance(mode_config, dict):
+            mode_config = {}
+        host = str(mode_config.get("host", engine.get("host", "127.0.0.1")))
+        port = int(mode_config.get("port", 3002 if mode == "development" else 3001))
         return host, port
     except Exception:
-        return "127.0.0.1", 3001
+        return "127.0.0.1", 3002 if mode == "development" else 3001
+
+
+def _normalize_reload_paths(paths: list[str] | None) -> list[str] | None:
+    if not paths:
+        return paths
+
+    normalized: list[str] = []
+    for item in paths:
+        path = Path(item)
+        if path.exists():
+            normalized.append(str(path.resolve()))
+            continue
+
+        if not path.is_absolute():
+            project_path = PROJECT_DIR / path
+            if project_path.exists():
+                normalized.append(str(project_path.resolve()))
+                continue
+
+        normalized.append(item)
+    return normalized
 
 
 if __name__ == "__main__":
@@ -99,7 +144,9 @@ if __name__ == "__main__":
     signal.signal(_RELOAD_SIGNAL, _on_reload_signal)
     signal.signal(_RESTART_SIGNAL, _on_restart_signal)
 
-    _default_host, _default_port = _read_engine_service_defaults()
+    _runtime_mode = _detect_runtime_mode(sys.argv[1:])
+    os.environ[_RUNTIME_MODE_ENV] = _runtime_mode
+    _default_host, _default_port = _read_engine_service_defaults(_runtime_mode)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default=_default_host)
@@ -111,7 +158,15 @@ if __name__ == "__main__":
         dest="reload_dirs",
         help="Directory to watch for reload; can be passed multiple times",
     )
+    parser.add_argument(
+        "--reload-exclude",
+        action="append",
+        dest="reload_excludes",
+        help="Path pattern to exclude from reload watching; can be passed multiple times",
+    )
     args = parser.parse_args()
+    args.reload_dirs = _normalize_reload_paths(args.reload_dirs)
+    args.reload_excludes = _normalize_reload_paths(args.reload_excludes)
 
     log_config = {
         "version": 1,
@@ -149,5 +204,6 @@ if __name__ == "__main__":
         factory=True,
         reload=args.reload,
         reload_dirs=args.reload_dirs,
+        reload_excludes=args.reload_excludes,
         app_dir=str(ENGINE_DIR) if args.reload else None,
     )

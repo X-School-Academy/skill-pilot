@@ -140,26 +140,78 @@ After [installation](#installation), run:
 ```
 
 ```
-Usage: ./skillpilot.sh [help|build|start|stop] [--dev]
+Usage: ./skillpilot.sh [help|build|start|stop|test] [--dev]
        ./skillpilot.sh <enable|disable> <human-detection|live-tts>
 
 Commands:
   help    Show this help message.
   build   Build static webui export (core/webui/www).
   start   Start services. Default command.
-  stop    Stop running tmux sessions.
+  stop    Stop running tmux sessions. Use `--dev` to stop only development sessions.
+  test    Run engine pytest suite, or only the named files under core/engine/tests.
   enable human-detection    Install optional human detection dependencies.
   disable human-detection   Uninstall optional human detection dependencies.
   enable live-tts           Install optional live-tts dependencies.
   disable live-tts          Uninstall optional live-tts dependencies.
 
 Options:
-  --dev   Run in development mode (start only).
+  --dev   Use development mode for `start`, or stop only development sessions for `stop`.
 
 Defaults:
   - Command defaults to: start
   - Mode defaults to production (without --dev)
 ```
+
+### Prod and Dev Modes
+
+Skill Pilot now supports running production and development side by side:
+
+- Production engine and bundled release WebUI: `http://127.0.0.1:3001`
+- Development engine: `http://127.0.0.1:3002`
+- Development WebUI: `http://127.0.0.1:3003`
+
+Typical workflow:
+
+```bash
+./skillpilot.sh
+./skillpilot.sh --dev
+```
+
+Stop commands:
+
+```bash
+./skillpilot.sh stop
+./skillpilot.sh stop --dev
+```
+
+- `./skillpilot.sh stop` stops production only
+- `./skillpilot.sh stop --dev` stops development only
+
+### Using AI Agent CLIs Directly
+
+If you use agent CLIs directly, without the Skill Pilot WebUI:
+
+- For normal usage, start the engine in production mode with `./skillpilot.sh`
+- For development workflows, export `SKILL_PILOT_RUNTIME_MODE=development` before starting the agent CLI directly
+
+Examples:
+
+```bash
+export SKILL_PILOT_RUNTIME_MODE=development
+claude
+```
+
+```bash
+export SKILL_PILOT_RUNTIME_MODE=development
+codex
+```
+
+```bash
+export SKILL_PILOT_RUNTIME_MODE=development
+gemini
+```
+
+This ensures the agent CLI can see the same runtime mode as the development engine.
 
 ---
 

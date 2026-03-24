@@ -24,6 +24,7 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
     Args:
         scene: Scene data containing:
             - image_prompt: string - AI prompt which will be used to create the image
+            - image_path: string - local file path to a provided image
             - text: string - caption of the image
             - voice_over: string
         style: Video style configuration
@@ -35,6 +36,7 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
 
     # Extract scene data
     image_prompt = scene.get("image_prompt", "")
+    image_path = scene.get("image_path", "")
     caption_text = scene.get("text", "")
     voice_over = scene.get("voice_over", "")
 
@@ -47,8 +49,16 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
     min_length = min(width, height)
     image_size = min_length * 0.75  # Use 75% of the minimum dimension for image size
 
-    if not image_prompt:
-        raise ValueError("Image with caption scene requires 'image_prompt' field")
+    has_image_prompt = bool(image_prompt)
+    has_image_path = bool(image_path)
+
+    if has_image_prompt == has_image_path:
+        raise ValueError(
+            "Image with caption scene requires exactly one of 'image_prompt' or 'image_path'"
+        )
+
+    if has_image_path and not os.path.isfile(image_path):
+        raise ValueError(f"Image with caption scene image_path does not exist: {image_path}")
     
     if not caption_text:
         raise ValueError("Image with caption scene requires 'text' field")
@@ -56,23 +66,25 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
     if not voice_over:
         raise ValueError("Image with caption scene requires 'voice_over' field")
     
-    # Generate image using AI
-    try:
-        generated_image_path, image_cost = await generate_image_from_prompt(
-            image_prompt,
-            style='icon',
-            cost_member_id=cost_member_id,
-            cost_note="Image with caption scene - image generation"
-        )
-        if not generated_image_path:
-            raise Exception("Failed to generate image from prompt")
+    generated_image_path = image_path
+    should_cleanup_generated_image = False
+    if has_image_prompt:
+        try:
+            generated_image_path, image_cost = await generate_image_from_prompt(
+                image_prompt,
+                style='icon',
+                cost_member_id=cost_member_id,
+                cost_note="Image with caption scene - image generation"
+            )
+            if not generated_image_path:
+                raise Exception("Failed to generate image from prompt")
 
-        # Upload image to S3 and add URL to scene data
-        scene['image_url'] = generated_image_path
-        scene_cost += image_cost
+            scene_cost += image_cost
+            should_cleanup_generated_image = True
+        except Exception as e:
+            raise Exception(f"Failed to generate image: {str(e)}")
 
-    except Exception as e:
-        raise Exception(f"Failed to generate image: {str(e)}")
+    scene['image_url'] = generated_image_path
     
     # Convert image to base64 for embedding in HTML
     with open(generated_image_path, "rb") as img_file:
@@ -234,7 +246,7 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
     
     # Clean up temporary files (keep the video file)
     try:
-        if os.path.exists(generated_image_path):
+        if should_cleanup_generated_image and os.path.exists(generated_image_path):
             os.remove(generated_image_path)
         if os.path.exists(composite_image_path):
             os.remove(composite_image_path)

@@ -25,6 +25,7 @@ async def create_icon_grid_scene(scene: Dict[str, Any], style: VideoStyle, cost_
         scene: Scene data containing:
             - icons: list of dicts with:
                 - image_prompt: string - use to create the icon image with AI
+                - image_path: string - local file path to a provided image
                 - text: string - the caption of the image
             - voice_over: string
         style: Video style configuration
@@ -52,10 +53,27 @@ async def create_icon_grid_scene(scene: Dict[str, Any], style: VideoStyle, cost_
     
     # Generate all icon images concurrently
     icon_tasks = []
+    provided_icon_paths: List[str] = []
+    generated_icon_indexes = set()
     for i, icon in enumerate(icons):
         prompt = icon.get("image_prompt", "")
-        if not prompt:
-            raise ValueError(f"Icon {i+1} missing 'prompt' field")
+        image_path = icon.get("image_path", "")
+        has_prompt = bool(prompt)
+        has_image_path = bool(image_path)
+
+        if has_prompt == has_image_path:
+            raise ValueError(
+                f"Icon {i+1} requires exactly one of 'image_prompt' or 'image_path'"
+            )
+
+        if has_image_path:
+            if not os.path.isfile(image_path):
+                raise ValueError(f"Icon {i+1} image_path does not exist: {image_path}")
+            provided_icon_paths.append(image_path)
+            continue
+
+        provided_icon_paths.append("")
+        generated_icon_indexes.add(i)
         icon_tasks.append(generate_image_from_prompt(
             prompt,
             style='icon',
@@ -64,10 +82,16 @@ async def create_icon_grid_scene(scene: Dict[str, Any], style: VideoStyle, cost_
         ))
 
     try:
-        icon_results = await asyncio.gather(*icon_tasks)
+        generated_icon_results = await asyncio.gather(*icon_tasks)
         icon_image_paths = []
+        generated_result_index = 0
         # Upload icon images to S3 and add URLs to scene data
-        for i, (icon, (image_path, image_cost)) in enumerate(zip(icons, icon_results)):
+        for i, icon in enumerate(icons):
+            image_path = provided_icon_paths[i]
+            image_cost = 0.0
+            if not image_path:
+                image_path, image_cost = generated_icon_results[generated_result_index]
+                generated_result_index += 1
             icon_image_paths.append(image_path)
             if image_path:
                 icon['image_url'] = image_path
@@ -286,8 +310,8 @@ async def create_icon_grid_scene(scene: Dict[str, Any], style: VideoStyle, cost_
     # Clean up temporary files (keep the video file)
     try:
         # Clean up generated icon images
-        for image_path in icon_image_paths:
-            if image_path and os.path.exists(image_path):
+        for i, image_path in enumerate(icon_image_paths):
+            if i in generated_icon_indexes and image_path and os.path.exists(image_path):
                 os.remove(image_path)
         if os.path.exists(composite_image_path):
             os.remove(composite_image_path)

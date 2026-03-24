@@ -34,7 +34,6 @@ from fastmcp import FastMCP
 
 from logger import get_logger
 from mcp_servers.media.audio_utils import get_audio_duration
-from mcp_servers.media.voice_defaults import get_default_ref_voice
 from mcp_servers.media.gpu_workflow_executor import WorkflowExecutor, WorkflowExecutionError
 from mcp_servers.media.playwright_utils.html2image import capture_image
 from mcp_servers.media.playwright_utils.screen_recording import record_screen
@@ -569,8 +568,6 @@ async def text_to_speech(
     text: str,
     emotion: str,
     emotion_sample: str = "",
-    gender: str = "female",
-    age: int = 30,
     ref_voice: str = "",
     ref_emotion_voice: str = ""
 ) -> str:
@@ -581,8 +578,6 @@ async def text_to_speech(
         text: The text content you want to convert into spoken words
         emotion: The emotional tone for the voice (neutral, happy, sad, angry, excited, calm, etc.)
         emotion_sample: Sentence showing the desired emotional delivery style (required)
-        gender: The gender of the voice (male or female)
-        age: Approximate age of the voice in years (affects voice characteristics)
         ref_voice: Audio file_id from /upload_file to use as reference for voice characteristics and timbre (required)
         ref_emotion_voice: Optional audio file_id from /upload_file to control emotional delivery;
                            when omitted/empty, defaults to ref_voice.
@@ -593,8 +588,6 @@ async def text_to_speech(
     try:
         request_extra = {
             "emotion": emotion,
-            "gender": gender,
-            "age": age,
             "text_preview": _preview_text(text)
         }
         _log_request("text_to_speech", request_extra)
@@ -608,23 +601,19 @@ async def text_to_speech(
         if not ref_voice_value:
             raise ScriptExecutionError("ref_voice is required for text_to_speech")
         ref_voice_value = _resolve_input_file(ref_voice_value, "ref_voice")
-        ref_voice_path = Path(ref_voice_value).expanduser()
 
         ref_emotion_voice_value = str(ref_emotion_voice or '').strip()
         if ref_emotion_voice_value:
             ref_emotion_voice_value = _resolve_input_file(ref_emotion_voice_value, "ref_emotion_voice")
-            ref_emotion_voice_path = Path(ref_emotion_voice_value).expanduser()
         else:
-            ref_emotion_voice_path = ref_voice_path
+            ref_emotion_voice_value = ref_voice_value
 
         audio_file = await script_executor.generate_tts_audio(
             text=text,
             emotion=emotion,
             emotion_sample=emotion_sample_value,
-            gender=gender,
-            age=age,
-            ref_voice=str(ref_voice_path),
-            ref_emotion_voice=str(ref_emotion_voice_path)
+            ref_voice=ref_voice_value,
+            ref_emotion_voice=ref_emotion_voice_value
         )
         _log_success("text_to_speech", {"audio_file": audio_file, **request_extra})
         return _format_output(audio_file)
@@ -636,8 +625,6 @@ async def text_to_speech(
 @mcp.tool()
 async def text_segments_to_speech(
     segments: list[dict],
-    gender: str = "female",
-    age: int = 30,
     ref_voice: str = ""
 ) -> list[str]:
     """
@@ -647,8 +634,6 @@ async def text_segments_to_speech(
         segments: List of dicts with fields text, emotion, and emotion_sample (all required);
                   Optionally include ref_emotion_voice per segment as a file_id from /upload_file;
                   when omitted/empty, defaults to ref_voice.
-        gender: The gender of the voice (male or female)
-        age: Approximate age of the voice in years (affects voice characteristics)
         ref_voice: Audio file_id from /upload_file to use as reference for voice characteristics and timbre
 
     Returns:
@@ -669,13 +654,11 @@ async def text_segments_to_speech(
                 "ref_emotion_voice": "file_id_from_upload"
             }
         ]
-        audio = await text_segments_to_speech(segments, gender="female", age=28, ref_voice="file_id_from_upload")
+        audio = await text_segments_to_speech(segments, ref_voice="file_id_from_upload")
     """
     try:
         request_extra = {
             "segments_count": len(segments) if segments else 0,
-            "gender": gender,
-            "age": age,
             "first_segment_preview": _preview_text(segments[0].get("text", "")) if segments else ""
         }
         _log_request("text_segments_to_speech", request_extra)
@@ -686,7 +669,6 @@ async def text_segments_to_speech(
         if not ref_voice_value:
             raise ScriptExecutionError("ref_voice is required for text_segments_to_speech")
         ref_voice_value = _resolve_input_file(ref_voice_value, "ref_voice")
-        ref_voice_path = Path(ref_voice_value).expanduser()
 
         validated_lines = []
         for index, line in enumerate(segments, start=1):
@@ -712,20 +694,19 @@ async def text_segments_to_speech(
                     ref_emotion_voice_value,
                     f"ref_emotion_voice line {index}"
                 )
-                ref_emotion_voice_path = Path(ref_emotion_voice_value).expanduser()
             else:
-                ref_emotion_voice_path = ref_voice_path
+                ref_emotion_voice_value = ref_voice_value
 
             validated_lines.append({
                 'text': text,
                 'emotion': emotion,
                 'emotion_sample': emotion_sample,
-                'ref_emotion_voice': str(ref_emotion_voice_path)
+                'ref_emotion_voice': ref_emotion_voice_value
             })
 
         audio_files = await script_executor.generate_tts_lines_audio(
             lines=validated_lines,
-            ref_voice=str(ref_voice_path)
+            ref_voice=ref_voice_value
         )
         _log_success("text_segments_to_speech", {"audio_files": audio_files, **request_extra})
         return _format_output(audio_files)
@@ -737,8 +718,6 @@ async def text_segments_to_speech(
 @mcp.tool()
 async def text_to_song(
     lyrics: str,
-    emotion: str = "calm",
-    emotion_sample: Optional[str] = None,
     ref_voice: Optional[str] = None
 ) -> str:
     """
@@ -746,35 +725,21 @@ async def text_to_song(
 
     Args:
         lyrics: The song lyrics to be sung (can include multiple verses and chorus)
-        emotion: The emotional style for the singing performance (calm, energetic, melancholic, joyful, etc.)
-        emotion_sample: Optional sentence or audio file describing the singing style and emotional expression (use a declarative sentence, not a command)
-        ref_voice: Optional audio file_id from /upload_file to use as reference for the singing voice timbre and characteristics
+        ref_voice: Required audio file_id, local file path, or remote URL to use as reference for the singing voice timbre and characteristics
 
     Returns:
         Generated singing audio as a URL in MP3 format
     """
     try:
         request_extra = {
-            "emotion": emotion,
             "lyrics_preview": _preview_text(lyrics),
             "ref_voice_provided": bool(ref_voice)
         }
         _log_request("text_to_song", request_extra)
-        # Use default ref_voice if not provided (use music voice)
-        if not ref_voice:
-            ref_voice = get_default_ref_voice(
-                task_type='text-to-song',
-                gender='female',
-                age=30,
-                emotion=emotion,
-                is_music_voice=True
-            )
-        else:
-            ref_voice = _resolve_input_file(ref_voice, "ref_voice")
-
-        # Default emotion_sample to a descriptive sentence if not provided
-        if not emotion_sample:
-            emotion_sample = f"The singing feels {emotion}, flowing and musical."
+        ref_voice_value = str(ref_voice or "").strip()
+        if not ref_voice_value:
+            raise ScriptExecutionError("ref_voice is required for text_to_song")
+        ref_voice = _resolve_input_file(ref_voice_value, "ref_voice")
 
         lyrics = lyrics.strip()
         if lyrics[0] != '[':
@@ -782,8 +747,6 @@ async def text_to_song(
 
         audio_file = await script_executor.generate_song_audio(
             lyrics=lyrics,
-            emotion=emotion,
-            emotion_sample=emotion_sample,
             ref_voice=ref_voice
         )
         _log_success("text_to_song", {"audio_file": audio_file, **request_extra})

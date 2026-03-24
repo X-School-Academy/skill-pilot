@@ -216,17 +216,30 @@ Set host and service ports (example):
   "services": {
     "engine": {
       "host": "127.0.0.1",
-      "port": 3001
+      "production": {
+        "port": 3001
+      },
+      "development": {
+        "port": 3002
+      }
     },
     "webui": {
       "host": "127.0.0.1",
-      "port": 3000
+      "development": {
+        "port": 3003
+      }
     }
   }
 }
 ```
 
 If binding to non-localhost hosts, decide whether to enforce HTTPS (`ONLY_ALLOW_HTTPS=1`) or allow HTTP (`ONLY_ALLOW_HTTPS=0`).
+
+Port meanings:
+
+- `engine.production.port`: production engine and bundled release WebUI, default `3001`
+- `engine.development.port`: development engine, default `3002`
+- `webui.development.port`: Next.js development WebUI, default `3003`
 
 ## 8. Update `config/ai_providers.json5`
 
@@ -259,6 +272,65 @@ default: {
   },
 }
 ```
+
+## 9. Start Skill Pilot
+
+Production mode:
+
+```bash
+./skillpilot.sh
+```
+
+Development mode:
+
+```bash
+./skillpilot.sh --dev
+```
+
+Run both at the same time:
+
+```bash
+./skillpilot.sh
+./skillpilot.sh --dev
+```
+
+Stop production only:
+
+```bash
+./skillpilot.sh stop
+```
+
+Stop development only:
+
+```bash
+./skillpilot.sh stop --dev
+```
+
+## 10. Using AI Agent CLIs Directly
+
+If you use AI agent CLIs directly, without the Skill Pilot WebUI:
+
+- Use production mode by starting the engine with `./skillpilot.sh`
+- During development, export `SKILL_PILOT_RUNTIME_MODE=development` before starting the agent CLI directly
+
+Examples:
+
+```bash
+export SKILL_PILOT_RUNTIME_MODE=development
+claude
+```
+
+```bash
+export SKILL_PILOT_RUNTIME_MODE=development
+codex
+```
+
+```bash
+export SKILL_PILOT_RUNTIME_MODE=development
+gemini
+```
+
+The same rule applies to other supported agent CLIs such as Copilot CLI or OpenCode.
 
 ```json5
 {

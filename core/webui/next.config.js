@@ -1,6 +1,7 @@
 /**
  * @type {import('next').NextConfig}
  */
+const { PHASE_DEVELOPMENT_SERVER } = require('next/constants')
 const { i18n } = require('./next-i18next.config.js')
 const fs = require('fs')
 const path = require('path')
@@ -8,11 +9,18 @@ const JSON5 = require('json5')
 
 const isStaticExport = process.env.EXPORT_STATIC === 'true'
 
+function normalizeRuntimeMode(value, defaultMode = 'production') {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (normalized === 'dev' || normalized === 'development') return 'development'
+  if (normalized === 'prod' || normalized === 'production' || normalized === 'release') return 'production'
+  return defaultMode
+}
+
 /**
  * Read the engine base URL from config/settings.json5 (services.engine).
  * Priority: NEXT_PUBLIC_CODES_API env var → settings.json5 → hardcoded default.
  */
-function readEngineBaseUrl() {
+function readEngineBaseUrl(mode) {
   if (process.env.NEXT_PUBLIC_CODES_API) {
     return process.env.NEXT_PUBLIC_CODES_API.replace(/\/$/, '')
   }
@@ -20,52 +28,56 @@ function readEngineBaseUrl() {
     const settingsPath = path.resolve(__dirname, '../../config/settings.json5')
     const data = JSON5.parse(fs.readFileSync(settingsPath, 'utf-8'))
     const engine = (data && data.services && data.services.engine) || {}
-    const host = engine.host || '127.0.0.1'
-    const port = engine.port || 3001
+    const modeConfig = (engine && engine[mode]) || {}
+    const host = modeConfig.host || engine.host || '127.0.0.1'
+    const port = modeConfig.port || (mode === 'development' ? 3002 : 3001)
     return `http://${host}:${port}`
   } catch (_) {
-    return 'http://127.0.0.1:3001'
+    return mode === 'development' ? 'http://127.0.0.1:3002' : 'http://127.0.0.1:3001'
   }
 }
 
-const engineBaseUrl = readEngineBaseUrl()
+module.exports = (phase) => {
+  const runtimeMode = normalizeRuntimeMode(
+    process.env.SKILL_PILOT_RUNTIME_MODE,
+    phase === PHASE_DEVELOPMENT_SERVER ? 'development' : 'production',
+  )
+  const engineBaseUrl = readEngineBaseUrl(runtimeMode)
 
-const nextConfig = {
-  env: {
-    CODES_API_SSR: engineBaseUrl,
-  },
-  reactStrictMode: true,
-  ...(isStaticExport ? { output: 'export', distDir: 'www'} : {}),
-  ...(isStaticExport ? {} : { i18n }),
-  allowedDevOrigins: [
-    'localhost',
-    '*.localhost',
-    '127.0.0.1',
-  ],
-  async headers() {
-    return [
-      {
-        source: '/api/:path*',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'private, no-store, max-age=0',
-          },
-        ],
-      },
-    ]
-  },
-  async rewrites() {
-    if (isStaticExport) return []
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${engineBaseUrl}/api/:path*`,
-      },
-    ]
-  },
-  trailingSlash: isStaticExport ? true : false,
+  return {
+    env: {
+      CODES_API_SSR: engineBaseUrl,
+    },
+    reactStrictMode: true,
+    ...(isStaticExport ? { output: 'export', distDir: 'www'} : {}),
+    ...(isStaticExport ? {} : { i18n }),
+    allowedDevOrigins: [
+      'localhost',
+      '*.localhost',
+      '127.0.0.1',
+    ],
+    async headers() {
+      return [
+        {
+          source: '/api/:path*',
+          headers: [
+            {
+              key: 'Cache-Control',
+              value: 'private, no-store, max-age=0',
+            },
+          ],
+        },
+      ]
+    },
+    async rewrites() {
+      if (isStaticExport) return []
+      return [
+        {
+          source: '/api/:path*',
+          destination: `${engineBaseUrl}/api/:path*`,
+        },
+      ]
+    },
+    trailingSlash: isStaticExport ? true : false,
+  }
 }
-
-
-module.exports = nextConfig

@@ -16,6 +16,6 @@ sudo service ssh start
 tmux new-session -d -s download 'bash /home/ubuntu/workspace/download_models.sh'
 
 # Start ComfyUI in a tmux session (monitor with: tmux attach -t comfyui)
-tmux new-session -d -s comfyui 'cd /home/ubuntu/workspace/ComfyUI && .venv/bin/python main.py --listen 0.0.0.0'
+tmux new-session -d -s comfyui 'cd /home/ubuntu/workspace/ComfyUI && .venv/bin/python main.py --listen 0.0.0.0 --force-fp16'
 
 sleep infinity

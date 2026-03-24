@@ -1,24 +1,23 @@
-import subprocess
 import json
-import os
+import subprocess
+from pathlib import Path
 
 
-def test_text_to_image():
+REPO_ROOT = Path(__file__).resolve().parents[3]
+REF_VOICE = REPO_ROOT / "assets/custom-voices/frank-en.mp3"
+
+
+def _run_media_tool(tool_name: str, arguments: dict) -> dict:
     request = {
         "server_id": "media",
-        "tool_name": "text_to_image",
-        "arguments": {
-            "prompt": "A serene mountain landscape at sunset with golden light",
-            "width": 624,
-            "height": 624,
-        },
+        "tool_name": tool_name,
+        "arguments": arguments,
     }
-
     result = subprocess.run(
         ["core/bin/tool-cli", "request", json.dumps(request)],
         capture_output=True,
         text=True,
-        cwd="/Users/frankhe/myworks/skill-pilot-ai",
+        cwd=REPO_ROOT,
     )
 
     print("--- stdout ---")
@@ -34,9 +33,77 @@ def test_text_to_image():
 
     response = json.loads(output)
     assert response, "Empty response from tool"
+    return response
+
+
+def _assert_media_response_has_output(response: dict, suffixes: tuple[str, ...]) -> None:
+    response_str = json.dumps(response, ensure_ascii=False)
+    assert any(suffix in response_str for suffix in suffixes), (
+        f"Response does not contain expected output marker: {response_str}"
+    )
+
+
+def test_text_to_image():
+    response = _run_media_tool(
+        "text_to_image",
+        {
+            "prompt": "A tree",
+            "width": 624,
+            "height": 624,
+        },
+    )
 
     # Response should contain a URL to the generated image
-    response_str = json.dumps(response)
-    assert any(kw in response_str for kw in ["http", ".png", ".jpg", "url", "image"]), (
-        f"Response does not contain an image URL: {response_str}"
+    _assert_media_response_has_output(response, (".png", ".jpg", ".jpeg", "image"))
+
+
+def test_image_to_image():
+    response = _run_media_tool(
+        "image_to_image",
+        {
+            "prompt": "A tree in the winter and snow",
+            "image_file": "/private/tmp/mcp_video_http_outputs/acb5a92b52474c9eac48a8c24b48530f.png"
+        },
     )
+
+    # Response should contain a URL to the generated image
+    _assert_media_response_has_output(response, (".png", ".jpg", ".jpeg", "image"))
+
+
+
+def test_text_to_speech():
+    response = _run_media_tool(
+        "text_to_speech",
+        {
+            "text": "Skill Pilot can now generate speech from a reference voice.",
+            "emotion": "calm",
+            "emotion_sample": "This is a calm and steady narration voice.",
+            "ref_voice": str(REF_VOICE),
+            #"ref_emotion_voice": "file",
+        },
+    )
+
+    _assert_media_response_has_output(response, (".wav", ".mp3", "audio"))
+
+
+def test_text_to_song():
+    response = _run_media_tool(
+        "text_to_song",
+        {
+            "lyrics": "[verse]\nSkill Pilot keeps the workflow moving on\n[chorus]\nTurn the prompt into a working song",
+            "ref_voice": str(REF_VOICE),
+        },
+    )
+
+    _assert_media_response_has_output(response, (".wav", ".mp3", "audio"))
+
+def test_audio_segments():
+    response = _run_media_tool(
+        "audio_segments",
+        {
+            "audio_file": "/Users/frankhe/Downloads/vvv.mp3",
+            "language": "zh",
+        },
+    )
+
+    _assert_media_response_has_output(response, ("start"))
