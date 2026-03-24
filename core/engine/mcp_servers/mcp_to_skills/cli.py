@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
 import sys
 from pathlib import Path
@@ -12,7 +13,9 @@ from .sync import load_mcp_configs
 
 
 def default_socket_path() -> Path:
-    return Path(__file__).resolve().parents[4] / ".skillpilot/temp" / "engine.sock"
+    runtime_mode = (os.getenv("SKILL_PILOT_RUNTIME_MODE", "production") or "production").strip().lower()
+    socket_name = "engine-dev.sock" if runtime_mode in {"dev", "development"} else "engine.sock"
+    return Path(__file__).resolve().parents[4] / ".skillpilot/temp" / socket_name
 
 
 def default_request_timeout_seconds() -> float:
@@ -68,7 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--socket",
         default=str(default_socket_path()),
-        help="Unix socket path (default: <repo>/.skillpilot/temp/engine.sock)",
+        help="Unix socket path (default: mode-aware path under <repo>/.skillpilot/temp/)",
     )
     parser.add_argument(
         "--timeout",
