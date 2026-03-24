@@ -1286,7 +1286,6 @@ wait_for_http_ready() {
 
 wait_for_tcp_ready() {
   local url="$1"
-  local timeout_seconds="${2:-30}"
   local py host port
   py="$(engine_python)"
   read -r host port < <("${py}" - "${url}" <<'PY'
@@ -1300,10 +1299,7 @@ print(host, port)
 PY
 )
 
-  local start_ts now
-  start_ts="$(date +%s)"
-  while true; do
-    if "${py}" - "${host}" "${port}" <<'PY'
+  if "${py}" - "${host}" "${port}" <<'PY'
 import socket
 import sys
 
@@ -1320,13 +1316,61 @@ finally:
     sock.close()
 raise SystemExit(0)
 PY
-    then
+  then
+    return 0
+  fi
+  return 1
+}
+
+session_exists() {
+  local session_name="$1"
+  tmux has-session -t "${session_name}" 2>/dev/null
+}
+
+required_sessions_live() {
+  local mode="$1"
+  if [[ "${mode}" == "dev" ]]; then
+    session_exists "sp-webui-dev" && session_exists "sp-engine-dev"
+  else
+    session_exists "sp-engine-prod"
+  fi
+}
+
+print_startup_troubleshooting() {
+  local mode="$1"
+  echo "A startup tmux session exited before Skill Pilot became reachable."
+  echo "Run the raw command(s) below for troubleshooting:"
+  if [[ "${mode}" == "dev" ]]; then
+    local dev_webui_host dev_webui_port
+    dev_webui_host="$(get_service_host "webui" "development")"
+    dev_webui_port="$(get_service_port "webui" "development")"
+    echo "  cd ${ROOT_DIR}/core/webui && SKILL_PILOT_RUNTIME_MODE=development HOSTNAME=${dev_webui_host} PORT=${dev_webui_port} node scripts/with-timestamp-logs.js dev --webpack --hostname ${dev_webui_host} --port ${dev_webui_port}"
+    echo "  cd ${ROOT_DIR} && SKILL_PILOT_RUNTIME_MODE=development uv --project core/engine run core/engine/main.py --reload --reload-dir core/engine --reload-exclude core/engine/tests"
+  else
+    echo "  cd ${ROOT_DIR} && SKILL_PILOT_RUNTIME_MODE=production uv --project core/engine run core/engine/main.py"
+  fi
+}
+
+wait_for_service_ready_or_session_exit() {
+  local mode="$1"
+  local url="$2"
+  local start_ts now
+  local next_notice=45
+
+  start_ts="$(date +%s)"
+  while true; do
+    if wait_for_tcp_ready "${url}"; then
       return 0
     fi
 
-    now="$(date +%s)"
-    if (( now - start_ts >= timeout_seconds )); then
+    if ! required_sessions_live "${mode}"; then
       return 1
+    fi
+
+    now="$(date +%s)"
+    if (( now - start_ts >= next_notice )); then
+      echo "Skill Pilot is still starting. The tmux session is still live, so waiting longer..."
+      next_notice=$((next_notice + 30))
     fi
     sleep 1
   done
@@ -1351,11 +1395,11 @@ open_or_print_webui_url() {
   echo ""
   if has_gui_env; then
     echo "Waiting for Skill Pilot to become reachable: ${ready_url}"
-    if wait_for_tcp_ready "${ready_url}" 120; then
+    if wait_for_service_ready_or_session_exit "${mode}" "${ready_url}"; then
       echo "Skill Pilot is reachable."
     else
-      echo "Timed out waiting for Skill Pilot to answer at ${ready_url}."
-      echo "Opening the browser anyway."
+      print_startup_troubleshooting "${mode}"
+      return 1
     fi
     echo "Opening WebUI in browser: ${url}"
     open_in_browser "${url}"
