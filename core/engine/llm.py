@@ -9,6 +9,16 @@ class LLM:
         _ = model
         _ = use_pro
 
+    async def __aenter__(self) -> "LLM":
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:
+        await self.close()
+        return False
+
+    async def close(self) -> None:
+        return None
+
     async def chat(self, member_id: Optional[int], messages: List[Dict[str, Any]], **_: Any):
         _ = member_id
         text = llm_get_text(messages)
@@ -26,7 +36,11 @@ class LLM:
         format: str = "mp3",
         speed: float = 1.0,
         **_: Any,
-    ) -> Tuple[str, float]:
+    ) -> str:
         _ = emotion
         _ = speed
-        return text_to_speech_file(text, provider_id="openai", voice=voice, output_format=format), 0.0
+        return text_to_speech_file(
+            text,
+            voice=voice,
+            output_format=format,
+        )

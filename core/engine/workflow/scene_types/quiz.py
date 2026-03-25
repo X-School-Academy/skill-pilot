@@ -11,7 +11,7 @@ import subprocess
 from tts_service import async_text_to_audio_file
 
 
-async def create_quiz_scene(scene: Dict[str, Any], style: VideoStyle, cost_member_id: int = None) -> tuple[str, float]:
+async def create_quiz_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
     """
     Create a quiz scene video.
 
@@ -23,10 +23,9 @@ async def create_quiz_scene(scene: Dict[str, Any], style: VideoStyle, cost_membe
             - question_voice_over: string - explain the question
             - answer_voice_over: string - explain the correct answer
         style: Video style configuration
-        cost_member_id: Member ID for cost tracking (None for system cost)
 
     Returns:
-        tuple: (video_path, scene_cost) - Local file path to the generated video and accumulated cost for this scene
+        Local file path to the generated video
     """
 
     # Extract scene data
@@ -36,9 +35,6 @@ async def create_quiz_scene(scene: Dict[str, Any], style: VideoStyle, cost_membe
     question_voice_over = scene.get("question_voice_over", "")
     answer_voice_over = scene.get("answer_voice_over", "")
 
-    # Track accumulated cost for this scene
-    scene_cost = 0.0
-    
     if not question:
         raise ValueError("Quiz scene requires 'question' field")
     
@@ -67,55 +63,43 @@ async def create_quiz_scene(scene: Dict[str, Any], style: VideoStyle, cost_membe
         """
     
     # Generate audio files for both phases first to get durations using Gemini TTS or fallback to LLM
-    question_tts_cost = 0.0
-    answer_tts_cost = 0.0
     try:
         # Generate question audio
-        question_audio_path, question_tts_cost = await async_text_to_audio_file(
+        question_audio_path = await async_text_to_audio_file(
             question_voice_over,
             voice=style.voice_name,
             format="wav",
-            cost_member_id=cost_member_id,
-            cost_note="Quiz scene - question voice over"
         )
 
         # Generate answer audio
-        answer_audio_path, answer_tts_cost = await async_text_to_audio_file(
+        answer_audio_path = await async_text_to_audio_file(
             answer_voice_over,
             voice=style.voice_name,
             format="wav",
-            cost_member_id=cost_member_id,
-            cost_note="Quiz scene - answer voice over"
         )
     except Exception as e:
         print(f"Gemini TTS failed, falling back to LLM: {e}")
         # Fallback to original LLM method
         async with LLM() as llm:
             # Generate question audio
-            question_audio_path, question_tts_cost = await llm.text_to_audio_file(
+            question_audio_path = await llm.text_to_audio_file(
                 question_voice_over, 
                 voice=style.voice_name,
-                cost_member_id=cost_member_id,
-                cost_note="Quiz scene - question voice over (fallback MS TTS)"
             )
             
             if not question_audio_path:
                 raise Exception("Failed to generate question audio for quiz scene")
             
             # Generate answer audio
-            answer_audio_path, answer_tts_cost = await llm.text_to_audio_file(
+            answer_audio_path = await llm.text_to_audio_file(
                 answer_voice_over, 
                 voice=style.voice_name,
-                cost_member_id=cost_member_id,
-                cost_note="Quiz scene - answer voice over (fallback MS TTS)"
             )
     
     # Upload audio files to S3 and add URLs to scene data
     scene['question_voice_url'] = question_audio_path
     scene['answer_voice_url'] = answer_audio_path
 
-    scene_cost += question_tts_cost + answer_tts_cost
-    
     if not answer_audio_path:
         raise Exception("Failed to generate answer audio for quiz scene")
     
@@ -375,7 +359,7 @@ async def create_quiz_scene(scene: Dict[str, Any], style: VideoStyle, cost_membe
     except:
         pass  # Ignore cleanup errors
 
-    return video_path, scene_cost
+    return video_path
 
 
 async def get_audio_duration(audio_path: str) -> float:

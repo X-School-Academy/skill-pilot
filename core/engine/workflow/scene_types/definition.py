@@ -15,7 +15,7 @@ from tts_service import async_text_to_audio_file
 
 
 
-async def create_definition_scene(scene: Dict[str, Any], style: VideoStyle, cost_member_id: int = None) -> tuple[str, float]:
+async def create_definition_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
     """
     Create a definition scene video.
 
@@ -25,10 +25,9 @@ async def create_definition_scene(scene: Dict[str, Any], style: VideoStyle, cost
             - definition: string - Definition in markdown style
             - voice_over: string
         style: Video style configuration
-        cost_member_id: Member ID for cost tracking (None for system cost)
 
     Returns:
-        tuple: (video_path, scene_cost) - Local file path to the generated video and accumulated cost for this scene
+        Local file path to the generated video
     """
 
     # Extract scene data
@@ -36,9 +35,6 @@ async def create_definition_scene(scene: Dict[str, Any], style: VideoStyle, cost
     definition = scene.get("definition", "")
     voice_over = scene.get("voice_over", "")
 
-    # Track accumulated cost for this scene
-    scene_cost = 0.0
-    
     if not term:
         raise ValueError("Definition scene requires 'term' field")
     
@@ -290,24 +286,19 @@ async def create_definition_scene(scene: Dict[str, Any], style: VideoStyle, cost
         raise Exception("Failed to capture image for definition scene")
     
     # Generate audio file using Gemini TTS or fallback to LLM
-    tts_cost = 0.0
     try:
-        audio_path, tts_cost = await async_text_to_audio_file(
+        audio_path = await async_text_to_audio_file(
             voice_over,
             voice=style.voice_name,
             format="wav",
-            cost_member_id=cost_member_id,
-            cost_note="Definition scene - voice narration"
         )
     except Exception as e:
         print(f"Gemini TTS failed, falling back to LLM: {e}")
         # Fallback to original LLM method
         async with LLM() as llm:
-            audio_path, tts_cost = await llm.text_to_audio_file(
+            audio_path = await llm.text_to_audio_file(
                 voice_over, 
                 voice=style.voice_name,
-                cost_member_id=cost_member_id,
-                cost_note="Definition scene - voice narration (fallback MS TTS)"
             )
     
     if not audio_path:
@@ -316,8 +307,6 @@ async def create_definition_scene(scene: Dict[str, Any], style: VideoStyle, cost
     # Upload audio to S3 and add URL to scene data
     scene['voice_url'] = audio_path
 
-    scene_cost += tts_cost
-    
     # Create video by combining image and audio using ffmpeg
     import uuid
     video_filename = f"definition_scene_{uuid.uuid4()}.mp4"
@@ -360,4 +349,4 @@ async def create_definition_scene(scene: Dict[str, Any], style: VideoStyle, cost
     except:
         pass  # Ignore cleanup errors
 
-    return video_path, scene_cost
+    return video_path

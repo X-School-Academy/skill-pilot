@@ -12,14 +12,38 @@ from .run_workflow import resolve_workflow_file, run_workflow
 from .sync import load_mcp_configs
 
 
+class EngineNotStartedError(RuntimeError):
+    pass
+
+
+def socket_root() -> Path:
+    return Path(__file__).resolve().parents[4] / ".skillpilot/temp"
+
+
+def runtime_mode_env() -> str | None:
+    value = os.getenv("SKILL_PILOT_RUNTIME_MODE")
+    if value is None:
+        return None
+    value = value.strip().lower()
+    return value or None
+
+
+def default_socket_candidates() -> list[Path]:
+    root = socket_root()
+    runtime_mode = runtime_mode_env()
+    if runtime_mode is None:
+        return [root / "engine.sock", root / "engine-dev.sock"]
+    if runtime_mode in {"dev", "development"}:
+        return [root / "engine-dev.sock"]
+    return [root / "engine.sock"]
+
+
 def default_socket_path() -> Path:
-    runtime_mode = (os.getenv("SKILL_PILOT_RUNTIME_MODE", "production") or "production").strip().lower()
-    socket_name = "engine-dev.sock" if runtime_mode in {"dev", "development"} else "engine.sock"
-    return Path(__file__).resolve().parents[4] / ".skillpilot/temp" / socket_name
+    return default_socket_candidates()[0]
 
 
 def default_request_timeout_seconds() -> float:
-    return 20.0
+    return 7200.0
 
 
 def resolve_request_timeout_seconds(json_str: str | None) -> float:
@@ -66,18 +90,45 @@ def send_request(json_str: str, socket_path: Path, timeout: float) -> str:
     return b"".join(chunks).decode("utf-8", errors="replace").strip()
 
 
+def send_request_with_runtime_fallback(
+    json_str: str,
+    timeout: float,
+    socket_path: Path | None = None,
+    *,
+    explicit_socket: bool,
+) -> str:
+    if explicit_socket:
+        if socket_path is None:
+            raise ValueError("socket_path is required when explicit_socket is True")
+        return send_request(json_str, socket_path, timeout)
+
+    errors: list[str] = []
+    for candidate in default_socket_candidates():
+        try:
+            return send_request(json_str, candidate, timeout)
+        except Exception as exc:
+            errors.append(f"{candidate.name}: {exc}")
+
+    runtime_mode = runtime_mode_env()
+    if runtime_mode is None:
+        raise EngineNotStartedError("your Skill Pilot Engine (Prod or Dev) is not started")
+    if runtime_mode in {"dev", "development"}:
+        raise EngineNotStartedError("your Skill Pilot Engine (Dev) is not started")
+    raise EngineNotStartedError("your Skill Pilot Engine (Prod) is not started")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="CLI bridge mcp tool request to core engine service")
     parser.add_argument(
         "--socket",
-        default=str(default_socket_path()),
+        default=None,
         help="Unix socket path (default: mode-aware path under <repo>/.skillpilot/temp/)",
     )
     parser.add_argument(
         "--timeout",
         type=float,
         default=None,
-        help="Socket timeout in seconds (default: 20, or request-specific MCP timeout + 5s for tool requests)",
+        help="Socket timeout in seconds (default: 7200, or request-specific MCP timeout + 5s for tool requests)",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -107,6 +158,17 @@ def build_parser() -> argparse.ArgumentParser:
     skill_agent_parser.add_argument("--no-network", dest="network", action="store_false")
     skill_agent_parser.add_argument("--sandbox", dest="sandbox", action="store_true", default=None)
     skill_agent_parser.add_argument("--no-sandbox", dest="sandbox", action="store_false")
+    api_invoke_parser = subparsers.add_parser(
+        "api-invoke",
+        help="Invoke an internal POST /api/<name> route through the engine socket",
+    )
+    api_invoke_parser.add_argument("api_name", help="API name without /api/ prefix, for example create_course_plan")
+    api_invoke_parser.add_argument(
+        "payload",
+        nargs="?",
+        default="{}",
+        help="JSON object payload (default: {})",
+    )
     run_workflow_parser = subparsers.add_parser(
         "run-workflow",
         help="Execute a workflow JSON by running each SubAgent via engine socket inference",
@@ -165,7 +227,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    socket_path = Path(args.socket).expanduser().resolve()
+    explicit_socket = args.socket is not None
+    socket_path = Path(args.socket).expanduser().resolve() if explicit_socket else default_socket_path()
     timeout = float(args.timeout) if args.timeout is not None else default_request_timeout_seconds()
 
     if args.command == "request":
@@ -182,7 +245,15 @@ def main() -> int:
                 print("request requires json_str. Use --help for usage or --help-json for an example payload.", file=sys.stderr)
             return 2
         try:
-            response = send_request(args.json_str, socket_path, timeout)
+            response = send_request_with_runtime_fallback(
+                args.json_str,
+                timeout,
+                socket_path,
+                explicit_socket=explicit_socket,
+            )
+        except EngineNotStartedError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
         except Exception as exc:
             print(f"request failed: {exc}", file=sys.stderr)
             return 2
@@ -193,7 +264,15 @@ def main() -> int:
         operation = "engine_restart" if args.command == "engine-restart" else "engine_reload"
         payload = {"operation": operation}
         try:
-            response_raw = send_request(json.dumps(payload, ensure_ascii=True), socket_path, timeout)
+            response_raw = send_request_with_runtime_fallback(
+                json.dumps(payload, ensure_ascii=True),
+                timeout,
+                socket_path,
+                explicit_socket=explicit_socket,
+            )
+        except EngineNotStartedError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
         except Exception as exc:
             print(f"{args.command} request failed: {exc}", file=sys.stderr)
             return 2
@@ -231,7 +310,15 @@ def main() -> int:
             payload["sandbox"] = bool(args.sandbox)
 
         try:
-            response_raw = send_request(json.dumps(payload, ensure_ascii=True), socket_path, timeout)
+            response_raw = send_request_with_runtime_fallback(
+                json.dumps(payload, ensure_ascii=True),
+                timeout,
+                socket_path,
+                explicit_socket=explicit_socket,
+            )
+        except EngineNotStartedError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
         except Exception as exc:
             print(f"skill-agent request failed: {exc}", file=sys.stderr)
             return 2
@@ -258,6 +345,52 @@ def main() -> int:
         print(response_raw)
         return 0
 
+    if args.command == "api-invoke":
+        try:
+            payload = json.loads(args.payload)
+        except json.JSONDecodeError as exc:
+            print(f"api-invoke payload must be valid JSON: {exc}", file=sys.stderr)
+            return 2
+        if not isinstance(payload, dict):
+            print("api-invoke payload must be a JSON object", file=sys.stderr)
+            return 2
+
+        request_payload = {
+            "operation": "api_invoke",
+            "api_name": str(args.api_name).strip(),
+            "payload": payload,
+        }
+        try:
+            response_raw = send_request_with_runtime_fallback(
+                json.dumps(request_payload, ensure_ascii=True),
+                timeout,
+                socket_path,
+                explicit_socket=explicit_socket,
+            )
+        except EngineNotStartedError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        except Exception as exc:
+            print(f"api-invoke request failed: {exc}", file=sys.stderr)
+            return 2
+        try:
+            response = json.loads(response_raw)
+        except json.JSONDecodeError:
+            print(response_raw)
+            return 0
+
+        if not isinstance(response, dict):
+            print(response_raw)
+            return 0
+        if response.get("status") != "ok":
+            detail = response.get("detail") or "api-invoke request failed"
+            print(str(detail), file=sys.stderr)
+            return 2
+
+        result = response.get("result")
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
+
     if args.command == "run-workflow":
         if bool(args.continue_terminal_session):
             payload = {
@@ -265,7 +398,15 @@ def main() -> int:
                 "source": str(args.continue_source or "cli"),
             }
             try:
-                response_raw = send_request(json.dumps(payload, ensure_ascii=True), socket_path, timeout)
+                response_raw = send_request_with_runtime_fallback(
+                    json.dumps(payload, ensure_ascii=True),
+                    timeout,
+                    socket_path,
+                    explicit_socket=explicit_socket,
+                )
+            except EngineNotStartedError as exc:
+                print(str(exc), file=sys.stderr)
+                return 2
             except Exception as exc:
                 print(f"run-workflow continue request failed: {exc}", file=sys.stderr)
                 return 2
@@ -320,7 +461,12 @@ def main() -> int:
             ]
             print(" ".join(debug_parts), file=sys.stderr)
             print(f"[run-workflow] infer_prompt\n{prompt}", file=sys.stderr)
-            response_raw = send_request(json.dumps(payload, ensure_ascii=True), socket_path, args.infer_timeout)
+            response_raw = send_request_with_runtime_fallback(
+                json.dumps(payload, ensure_ascii=True),
+                args.infer_timeout,
+                socket_path,
+                explicit_socket=explicit_socket,
+            )
             print(f"[run-workflow] infer_response_raw\n{response_raw}", file=sys.stderr)
             response = json.loads(response_raw)
             if not isinstance(response, dict):
@@ -351,6 +497,9 @@ def main() -> int:
                 infer_fn=infer_fn,
                 log_fn=lambda message: print(message, file=sys.stderr),
             )
+        except EngineNotStartedError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
         except Exception as exc:
             print(f"run-workflow failed: {exc}", file=sys.stderr)
             return 2
@@ -391,7 +540,15 @@ def main() -> int:
             payload["sandbox"] = bool(args.sandbox)
 
         try:
-            response_raw = send_request(json.dumps(payload, ensure_ascii=True), socket_path, timeout)
+            response_raw = send_request_with_runtime_fallback(
+                json.dumps(payload, ensure_ascii=True),
+                timeout,
+                socket_path,
+                explicit_socket=explicit_socket,
+            )
+        except EngineNotStartedError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
         except Exception as exc:
             print(f"new_agent_session request failed: {exc}", file=sys.stderr)
             return 2

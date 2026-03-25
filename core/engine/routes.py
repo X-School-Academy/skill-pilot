@@ -108,7 +108,7 @@ _IMAGE_FETCH_MAX_BYTES = 5 * 1024 * 1024
 TMUX_SESSION_PREFIX = "webui-live-"
 NATIVE_TMUX_SESSION_PREFIX = "native-terminal-"
 WORKFLOW_EXECUTE_SESSION_NAME = "sp-workflow-execute"
-PROTECTED_TMUX_SESSION_NAMES = {"sp-engine", "sp-webui"}
+PROTECTED_TMUX_SESSION_PREFIXES = ("sp-engine-", "sp-webui-")
 TMUX_SESSION_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 _last_heartbeat_time: float = time.time()
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -415,6 +415,7 @@ def _list_webui_tmux_sessions() -> List[Dict[str, Any]]:
                 "attached": attached_raw == "1",
                 "created_at": created_at,
                 "windows": windows,
+                "system": _is_protected_tmux_session(name),
             }
         )
     sessions.sort(key=lambda item: item["name"])
@@ -619,7 +620,7 @@ def _kill_tmux_session_any(session_name: str) -> bool:
 
 
 def _is_protected_tmux_session(session_name: str) -> bool:
-    return session_name in PROTECTED_TMUX_SESSION_NAMES
+    return session_name.startswith(PROTECTED_TMUX_SESSION_PREFIXES)
 
 
 def _pane_current_command_any(session_name: str) -> str:
@@ -4396,9 +4397,9 @@ def create_course_plan(payload: Dict[str, Any]):
     return {"course_details": course_details}
 
 
-@router.post("/api/create_course_video")
-@router.post("/create_course_video")
-def create_course_video(payload: Dict[str, Any]):
+@router.post("/api/create_cpu_video")
+@router.post("/create_cpu_video")
+def create_cpu_video(payload: Dict[str, Any]):
     requirement = str(payload.get("requirement") or "").strip()
     if not requirement:
         return JSONResponse(status_code=400, content={"error": "requirement is required"})
@@ -4408,7 +4409,7 @@ def create_course_video(payload: Dict[str, Any]):
     except (TypeError, ValueError):
         target_duration = 60
     resolution = str(payload.get("resolution") or "1080x1920")
-    video_file_path = VIDEO_CREATOR.create_course_video(
+    video_file_path = VIDEO_CREATOR.create_cpu_video(
         requirement=requirement,
         target_duration=target_duration,
         resolution=resolution,

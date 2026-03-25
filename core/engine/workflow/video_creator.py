@@ -18,12 +18,8 @@ from json_repair import repair_json
 import subprocess
 import uuid
 
-# Import cost tracking functions
-from ai_cost_config import save_cost_event, save_cost_task
 from image_service import generate_image_from_prompt
 from .llm_adapter import WorkflowLLMAdapter
-
-AZURE_CHAT_MODEL_NAME = os.getenv("AZURE_OPENAI_CHAT_MODEL_NAME", "gpt-4o")
 
 # Import VideoStyle from separate module to avoid circular imports
 from .VideoStyle import VideoStyle
@@ -109,10 +105,6 @@ class State(TypedDict):
     requirement: str
     target_duration: int
     resolution: str
-
-    # Cost tracking parameters
-    cost_member_id: Optional[int]  # None for predefined courses, member_id for customized
-    total_cost: float  # Accumulated cost for this video creation
 
     # Workflow state
     video_spec: Optional[VideoSpec]
@@ -262,23 +254,6 @@ Please analyze the requirement and extract all contextual information to create 
                 }
             })
 
-            # Track cost for this LLM call
-            total_cost = state.get("total_cost", 0.0)
-            if hasattr(response, 'response_metadata'):
-                usage = response.response_metadata.get('token_usage', {})
-                if usage:
-                    event = await save_cost_event(
-                        provider="azure_openai",
-                        model=AZURE_CHAT_MODEL_NAME,
-                        cost_type="text",
-                        scope_id=state.get("cost_member_id") or 0,
-                        note="Video specification design",
-                        input_tokens=usage.get('prompt_tokens', 0),
-                        output_tokens=usage.get('completion_tokens', 0)
-                    )
-                    if event and 'data' in event:
-                        total_cost += event['data'].get('total_cost', 0.0)
-
             # Parse JSON response
             content = response.content.strip()
             log(f"design_video_spec_node LLM response content: {content}")
@@ -303,7 +278,6 @@ Please analyze the requirement and extract all contextual information to create 
             
             return {
                 "video_spec": video_spec,
-                "total_cost": total_cost,
                 "messages": state.get('messages', []) + [response]
             }
             
@@ -649,23 +623,6 @@ Target Audience: {video_spec.target_audience}"""
                 }
             })
 
-            # Track cost for this LLM call
-            total_cost = state.get("total_cost", 0.0)
-            if hasattr(response, 'response_metadata'):
-                usage = response.response_metadata.get('token_usage', {})
-                if usage:
-                    event = await save_cost_event(
-                        provider="gemini",
-                        model="gemini-2.0-flash",
-                        cost_type="text",
-                        scope_id=state.get("cost_member_id") or 0,
-                        note="Video scene planning",
-                        input_tokens=usage.get('prompt_tokens', 0),
-                        output_tokens=usage.get('completion_tokens', 0)
-                    )
-                    if event and 'data' in event:
-                        total_cost += event['data'].get('total_cost', 0.0)
-
             content = response.content.strip()
             log(f"plan_scenes_node LLM response content: {content}")
             content = repair_json(content)
@@ -686,7 +643,6 @@ Target Audience: {video_spec.target_audience}"""
                 "scene_plan": scenes,
                 "total_scenes": len(scenes),
                 "current_scene_index": 0,
-                "total_cost": total_cost,
                 "messages": state.get('messages', []) + [response]
             }
             
@@ -700,8 +656,7 @@ Target Audience: {video_spec.target_audience}"""
         self,
         scene: Dict[str, Any],
         style: VideoStyle,
-        cost_member_id: Optional[int] = None
-    ) -> tuple[str, float]:
+    ) -> str:
         """
         Create a scene video based on the scene type.
         This function calls the appropriate scene type module to generate the video.
@@ -709,10 +664,8 @@ Target Audience: {video_spec.target_audience}"""
         Args:
             scene: Scene data dictionary containing scene_type and all scene-specific data
             style: Video style configuration for consistent styling
-            cost_member_id: Member ID for cost tracking (None for system cost)
-
         Returns:
-            tuple: (video_path, scene_cost) - Local file path to the generated video and accumulated cost for this scene
+            Local file path to the generated scene video
         """
         
         # Extract scene type from scene data
@@ -747,10 +700,8 @@ Target Audience: {video_spec.target_audience}"""
         if not creator_func:
             raise ValueError(f"Unsupported scene type: {scene_type}")
         
-        # Call the scene creator function with scene data, style configuration, and cost tracking
         try:
-            video_url, scene_cost = await creator_func(scene, style, cost_member_id)
-            return video_url, scene_cost
+            return await creator_func(scene, style)
         except Exception as e:
             error(f"Error creating {scene_type.value} scene: {e}")
             raise Exception(f"Failed to create scene of type {scene_type.value}: {str(e)}")
@@ -761,8 +712,6 @@ Target Audience: {video_spec.target_audience}"""
         current_scene_index = state.get("current_scene_index", 0)
         scene_videos = state.get("scene_videos", [])
         video_style = state.get("video_style")
-        cost_member_id = state.get("cost_member_id")
-        total_cost = state.get("total_cost", 0.0)
 
         if not scene_plan:
             raise ValueError("No scene plan found in state")
@@ -777,13 +726,7 @@ Target Audience: {video_spec.target_audience}"""
 
         log(f"Creating scene {current_scene_index + 1}/{len(scene_plan)}: {current_scene.scene_id}")
 
-        # Generate video file path using scene type-specific creator with style and cost tracking
-        video_path, scene_cost = await self.create_scene_video_by_type(current_scene.data, video_style, cost_member_id)
-
-        # Update total cost with scene cost
-        total_cost += scene_cost
-        if scene_cost > 0:
-            log(f"Scene {current_scene.scene_id} cost: ${scene_cost:.4f}, Total cost so far: ${total_cost:.4f}")
+        video_path = await self.create_scene_video_by_type(current_scene.data, video_style)
 
         # Persist the newly generated video details on the current scene
         current_scene.video_file_path = video_path
@@ -791,12 +734,11 @@ Target Audience: {video_spec.target_audience}"""
 
         log(f"Scene created: {video_path}")
 
-        # Update state with current progress and accumulated cost
+        # Update state with current progress
         updated_state = {
             "scene_plan": scene_plan,
             "scene_videos": scene_videos,
             "current_scene_index": current_scene_index + 1,
-            "total_cost": total_cost,
             "messages": [AIMessage(content=f"Created scene: {current_scene.scene_id} - {video_path}")]
         }
         
@@ -960,8 +902,6 @@ Target Audience: {video_spec.target_audience}"""
         duration: int = 300,
         resolution: str = "1920x1080",
         thread_id: str = None,
-        category: str = "predefined-course",  # "predefined-course" or "customized-course"
-        member_id: Optional[int] = None  # Required for customized-course
     ) -> Dict[str, Any]:
         """
         Create an educational video based on a requirement
@@ -971,8 +911,6 @@ Target Audience: {video_spec.target_audience}"""
             duration: Target video duration in seconds (default: 300 = 5 minutes)
             resolution: Video resolution (default: "1920x1080")
             thread_id: Optional thread ID for conversation tracking
-            category: Course category - "predefined-course" or "customized-course"
-            member_id: Member ID for cost tracking (required for customized-course)
 
         Returns:
             Dictionary containing final video path and metadata
@@ -983,10 +921,6 @@ Target Audience: {video_spec.target_audience}"""
 
         config = {"configurable": {"thread_id": thread_id}}
 
-        # For predefined courses: cost_member_id=None (system cost)
-        # For customized courses: cost_member_id=member_id (member cost)
-        cost_member_id = None if category == "predefined-course" else member_id
-
         initial_state = {
             "requirement": requirement,
             "target_duration": duration,
@@ -994,8 +928,6 @@ Target Audience: {video_spec.target_audience}"""
             "thread_id": thread_id,
             "current_scene_index": 0,
             "scene_videos": [],
-            "cost_member_id": cost_member_id,
-            "total_cost": 0.0,
             "messages": [HumanMessage(content=f"Create video for requirement: {requirement}")]
         }
         
@@ -1028,7 +960,6 @@ Target Audience: {video_spec.target_audience}"""
             result['video_spec']  = asdict(state_values.get('video_spec', {}))
             result['scene_videos'] = state_values.get('scene_videos', [])
             result['scene_plan'] = state_values.get('scene_plan', [])
-            result['total_cost'] = state_values.get('total_cost', 0.0)
             
             # Generate thumbnail and extract video metadata
             final_video_url = result['final_video_path']
@@ -1043,15 +974,6 @@ Target Audience: {video_spec.target_audience}"""
                 except Exception as e:
                     log(f"Warning: Failed to extract video metadata: {e}")
                 
-                # Save cost task using final_video_url (which is the S3 URL from final_video_path)
-                total_cost = state_values.get('total_cost', 0.0)
-                if total_cost > 0:
-                    try:
-                        await save_cost_task("course_video", final_video_url, total_cost)
-                        log(f"Saved cost tracking for video {final_video_url}: ${total_cost:.4f}")
-                    except Exception as e:
-                        log(f"Error saving cost task: {e}")
-            
             log(f"Video creation completed successfully")
             return result
             
@@ -1062,13 +984,12 @@ Target Audience: {video_spec.target_audience}"""
             log(f"Error in create_video: {e}")
             raise Exception(f"Video creation failed: {str(e)}")
 
-    def create_course_video(self, requirement: str, target_duration: int = 60, resolution: str = "1080x1920") -> str:
+    def create_cpu_video(self, requirement: str, target_duration: int = 60, resolution: str = "1080x1920") -> str:
         result = asyncio.run(
             self.create_video(
                 requirement=requirement,
                 duration=target_duration,
                 resolution=resolution,
-                category="predefined-course",
             )
         )
         return str(result.get("final_video_path") or "")
@@ -1171,7 +1092,7 @@ Target Audience: {video_spec.target_audience}"""
             prompt = await self._build_thumbnail_prompt(requirement, video_spec)
 
             # Generate thumbnail image
-            thumbnail_path, _ = await generate_image_from_prompt(prompt, style='icon')
+            thumbnail_path = await generate_image_from_prompt(prompt, style='icon')
             if not thumbnail_path:
                 raise Exception("Failed to generate thumbnail image")
             
@@ -1230,10 +1151,6 @@ Return ONLY the final image prompt (no extra lines)."""
             
             response = await self.llm.ainvoke(messages)
 
-            # Note: Thumbnail prompt generation happens after video creation is complete,
-            # so we don't track this cost to the video creation task
-            # This is a post-processing step for metadata generation
-
             thumbnail_prompt = response.content.strip()
 
             log(f"AI-generated thumbnail prompt: {thumbnail_prompt}")
@@ -1250,90 +1167,3 @@ def create_video_creator() -> VideoCreatorWorkflow:
     """Create and return a configured video creator workflow"""
     return VideoCreatorWorkflow()
 
-# Convenience function for external use
-async def create_video_by_knowledgepoint(
-    course_pid: str,
-    section_pid: str,
-    knowledge_pid: str,
-    requirement: str,
-    category: str = "predefined-course",  # "predefined-course" or "customized-course"
-    member_id: Optional[int] = None  # Required for customized-course
-) -> str:
-    """
-    Create a video for a specific knowledge point and save to course-content collection
-
-    Args:
-        course_pid: Course parent ID
-        section_pid: Section parent ID
-        knowledge_pid: Knowledge point parent ID
-        requirement: Detailed video creation requirement with all context
-        category: Course category - "predefined-course" or "customized-course"
-        member_id: Member ID for cost tracking (required for customized-course)
-
-    Returns:
-        Video URL from the created course-content record
-    """
-    try:
-        # Import CMS for database operations
-        from strapi4.cms import CMS
-        from strapi4 import flatten_strapi_object
-
-        cms = CMS()
-
-        # Create video creator workflow with proper cleanup
-        async with create_video_creator() as creator:
-            # Create video with appropriate duration and resolution
-            result = await creator.create_video(
-                requirement=requirement,
-                duration=60,  # 60 seconds for knowledge videos
-                resolution="1080x1920",  # Mobile-first vertical format
-                category=category,
-                member_id=member_id
-            )
-        
-        video_url = result.get('final_video_path')
-        if not video_url:
-            raise Exception("No video URL returned from creator")
-        
-        # Prepare metadata for course-content.data field
-        metadata = {
-            'meta': {
-                'thumbnail_url': result.get('thumbnail_url'),
-                'duration': result.get('duration'),
-                'size': result.get('size'), 
-                'width': result.get('width'),
-                'height': result.get('height')
-            },
-            'video_spec': result.get('video_spec', {}),
-            'scenes': []
-        }
-        
-        # Add scene data to metadata
-        scene_plan = result.get('scene_plan', [])
-        for scene in scene_plan:
-            scene_data = {
-                'scene_id': scene.scene_id,
-                'scene_type': scene.data.get('scene_type'),
-                'data': scene.data
-            }
-            metadata['scenes'].append(scene_data)
-        
-        # Save to course-content collection
-        course_content_data = {
-            'type': 'knowledge_video',
-            'course_uid': course_pid,
-            'section_uid': section_pid, 
-            'knowledge_uid': knowledge_pid,
-            'url': video_url,
-            'data': metadata
-        }
-        
-        # Create the course-content record
-        await cms.create_collection_record('course-content', course_content_data)
-        
-        log(f"Created course-content record for video: {video_url}")
-        return video_url
-        
-    except Exception as e:
-        log(f"Error in create_video function: {e}")
-        raise Exception(f"Failed to create video for knowledge point: {str(e)}")

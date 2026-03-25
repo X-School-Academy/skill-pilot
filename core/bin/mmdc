@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+MMDC_JS="${REPO_ROOT}/core/webui/node_modules/@mermaid-js/mermaid-cli/src/cli.js"
+
+cd "${REPO_ROOT}"
+
+if [[ ! -f "${MMDC_JS}" ]]; then
+  pnpm add @mermaid-js/mermaid-cli --prefix core/webui
+fi
+
+exec node "${MMDC_JS}" "$@"

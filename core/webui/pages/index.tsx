@@ -51,6 +51,11 @@ import { resolveSelectedProvider, setSelectedProvider } from '../libs/llm';
 const API_BASE_URL = apiUrl('/api');
 axios.defaults.withCredentials = true;
 
+const isProtectedProcessSession = (sessionName: string): boolean => (
+  sessionName.startsWith('sp-engine-') ||
+  sessionName.startsWith('sp-webui-')
+);
+
 interface LlmProvider {
   id: string;
   name: string;
@@ -61,6 +66,7 @@ interface ExternalTmuxSession {
   attached: boolean;
   created_at: number;
   windows: number;
+  system?: boolean;
 }
 
 interface McpServer {
@@ -1221,11 +1227,14 @@ export default function HomePage() {
   );
 
   const renderProcessesView = () => {
+    const activeProcessProtected = activeProcessSession ? isProtectedProcessSession(activeProcessSession) : false;
     if (activeProcessSession) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '12px 16px 16px 16px' }}>
           <Group position="apart" mb={8}>
-            <Text size="sm" weight={700}>Viewing: {activeProcessSession} (read-only)</Text>
+            <Text size="sm" weight={700}>
+              Viewing: {activeProcessSession} {activeProcessProtected ? '(system process, read-only)' : '(read-only)'}
+            </Text>
             <button
               type="button"
               onClick={() => setActiveProcessSession(null)}
@@ -1244,7 +1253,7 @@ export default function HomePage() {
           <div style={{ flex: 1, position: 'relative' }}>
             <iframe
               key={activeProcessSession}
-              src={`/terminal?session=${encodeURIComponent(activeProcessSession)}&readonly=1&allowKill=1`}
+              src={`/terminal?session=${encodeURIComponent(activeProcessSession)}&readonly=1${activeProcessProtected ? '' : '&allowKill=1'}`}
               style={{
                 width: '100%',
                 height: '100%',
@@ -1286,6 +1295,10 @@ export default function HomePage() {
         )}
 
         {externalSessions.map((session) => (
+          (() => {
+            const isSystemProcess = Boolean(session.system) || isProtectedProcessSession(session.name);
+            const readonlyUrl = `/terminal?session=${encodeURIComponent(session.name)}&readonly=1${isSystemProcess ? '' : '&allowKill=1'}`;
+            return (
           <div
             key={session.name}
             style={{
@@ -1300,16 +1313,32 @@ export default function HomePage() {
             }}
           >
             <div>
-              <Text size="sm" weight={600}>{session.name}</Text>
+              <Group spacing={8}>
+                <Text size="sm" weight={600}>{session.name}</Text>
+                {isSystemProcess && (
+                  <Text
+                    size="xs"
+                    weight={700}
+                    style={{
+                      padding: '2px 6px',
+                      borderRadius: 999,
+                      background: theme.colorScheme === 'dark' ? theme.colors.orange[9] : theme.colors.orange[1],
+                      color: theme.colorScheme === 'dark' ? theme.colors.orange[2] : theme.colors.orange[8],
+                    }}
+                  >
+                    System Process
+                  </Text>
+                )}
+              </Group>
               <Text size="xs" color="dimmed">
-                {session.attached ? 'Attached' : 'Detached'} · windows {session.windows}
+                {session.attached ? 'Attached' : 'Detached'} · windows {session.windows}{isSystemProcess ? ' · kill disabled' : ''}
               </Text>
             </div>
             <button
               type="button"
               onClick={(e) => {
                 if (e.shiftKey) {
-                  window.open(`/terminal?session=${encodeURIComponent(session.name)}&readonly=1&allowKill=1`, '_blank');
+                  window.open(readonlyUrl, '_blank');
                 } else {
                   setActiveProcessSession(session.name);
                 }
@@ -1326,6 +1355,8 @@ export default function HomePage() {
               View Only
             </button>
           </div>
+            );
+          })()
         ))}
         <Text size="xs" color="dimmed" mt={4}>Shift+Click &quot;View Only&quot; to open in a new window.</Text>
       </div>

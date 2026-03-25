@@ -6,6 +6,7 @@ import sys
 import os
 import aiofiles
 from playwright.async_api import async_playwright
+from workflow.video_utils.playwright_browser import launch_playwright_chromium
 
 async def capture_image(
     html_code,
@@ -43,20 +44,14 @@ async def capture_image(
 
         try:
             playwright = await async_playwright().start()
-            if os.getenv('PYTHON_ENV') == 'azure_container':
-                browser = await playwright.chromium.launch(
-                    executable_path=os.getenv("PUPPETEER_EXECUTABLE_PATH"),
-                    args=['--no-sandbox','--disable-dev-shm-usage']
-                )
-            else:
-                browser = await playwright.chromium.launch(headless=True, args=['--no-sandbox'])
+            browser = await launch_playwright_chromium(playwright, headless=True)
 
             # Create a task that we can cancel if needed
             async def capture():
                 page = await browser.new_page()
                 await page.set_viewport_size({'width': width, 'height': height})
                 await page.set_content(html_code)
-                await page.screenshot(path=image_file, omitBackground=omitBackground)
+                await page.screenshot(path=image_file, omit_background=omitBackground)
                 return image_file
 
             capture_task = asyncio.create_task(capture())

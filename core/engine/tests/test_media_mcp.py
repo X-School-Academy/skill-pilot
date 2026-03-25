@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-REF_VOICE = REPO_ROOT / "assets/custom-voices/frank-en.mp3"
+REF_VOICE = "assets/custom-voices/your-voice.wav"
 
 
 def _run_media_tool(tool_name: str, arguments: dict) -> dict:
@@ -62,7 +62,7 @@ def test_image_to_image():
         "image_to_image",
         {
             "prompt": "A tree in the winter and snow",
-            "image_file": "/private/tmp/mcp_video_http_outputs/acb5a92b52474c9eac48a8c24b48530f.png"
+            "image_file": "assets/images/test.png"
         },
     )
 
@@ -101,7 +101,7 @@ def test_audio_segments():
     response = _run_media_tool(
         "audio_segments",
         {
-            "audio_file": "/Users/frankhe/Downloads/vvv.mp3",
+            "audio_file": "assets/audio/test.mp3",
             "language": "zh",
         },
     )

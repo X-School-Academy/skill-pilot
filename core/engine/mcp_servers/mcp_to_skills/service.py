@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 import os
 import re
 import signal
@@ -18,6 +19,8 @@ from pathlib import Path
 from typing import Any
 
 import json5
+from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 
 from llm_service import build_terminal_command, get_provider, llm_get_text, load_llm_providers
 from safe_dotenv import apply_env_key_values, loaded_env_key_names, safe_env
@@ -36,8 +39,9 @@ class Bridge:
         self._repo_root = Path(__file__).resolve().parents[4]
         self._settings_path = self._repo_root / "config" / "settings.json5"
         self._clients: dict[str, MCPClient] = {}
-        self._enabled: set[str] = set()
-        self._load()
+        self._client_request_locks: dict[str, threading.Lock] = {}
+        self._clients_lock = threading.Lock()
+        self._enabled: set[str] = self._load_enabled_servers()
 
     @staticmethod
     def _coerce_bool(value: Any, default: bool) -> bool:
@@ -418,26 +422,41 @@ class Bridge:
             "wait_seconds": 1.0,
         }
 
-    def _load(self) -> None:
+    def _load_enabled_servers(self) -> set[str]:
         servers, missing_env = load_mcp_configs(self._config_path)
-        self._enabled.clear()
+        enabled: set[str] = set()
 
         for server_id, server_cfg in servers.items():
             if not is_server_enabled(server_cfg):
                 continue
             if missing_env.get(server_id):
                 continue
-            self._enabled.add(server_id)
+            enabled.add(server_id)
+        return enabled
+
+    def _close_client(self, server_id: str) -> None:
+        lock = self._client_request_lock(server_id)
+        with lock:
+            with self._clients_lock:
+                client = self._clients.pop(server_id, None)
+                self._client_request_locks.pop(server_id, None)
+            if client is not None:
+                client.close()
 
     def refresh_config(self, restart_clients: bool = False) -> dict[str, Any]:
-        previous_enabled = set(self._enabled)
-        self._load()
+        with self._clients_lock:
+            previous_enabled = set(self._enabled)
+            known_clients = list(self._clients.keys())
+        active_enabled = self._load_enabled_servers()
+        with self._clients_lock:
+            self._enabled = set(active_enabled)
 
-        active_enabled = set(self._enabled)
-        stale_server_ids = [server_id for server_id in self._clients if server_id not in active_enabled]
+        with self._clients_lock:
+            known_clients = list(self._clients.keys())
+        stale_server_ids = [server_id for server_id in known_clients if server_id not in active_enabled]
         restarted_server_ids: list[str] = []
         if restart_clients:
-            restarted_server_ids = [server_id for server_id in self._clients if server_id in active_enabled]
+            restarted_server_ids = [server_id for server_id in known_clients if server_id in active_enabled]
             stale_server_ids.extend(restarted_server_ids)
 
         closed_server_ids: set[str] = set()
@@ -445,9 +464,7 @@ class Bridge:
             if server_id in closed_server_ids:
                 continue
             closed_server_ids.add(server_id)
-            client = self._clients.pop(server_id, None)
-            if client is not None:
-                client.close()
+            self._close_client(server_id)
 
         return {
             "enabled_servers": sorted(active_enabled),
@@ -457,10 +474,13 @@ class Bridge:
         }
 
     def _get_client(self, server_id: str) -> MCPClient:
-        if server_id not in self._enabled:
-            raise MCPError(f"server_id is not enabled or not available: {server_id}")
-        if server_id in self._clients:
-            return self._clients[server_id]
+        with self._clients_lock:
+            if server_id not in self._enabled:
+                raise MCPError(f"server_id is not enabled or not available: {server_id}")
+            existing = self._clients.get(server_id)
+            if existing is not None:
+                self._client_request_locks.setdefault(server_id, threading.Lock())
+                return existing
 
         servers, missing_env = load_mcp_configs(self._config_path)
         cfg = servers.get(server_id)
@@ -471,8 +491,15 @@ class Bridge:
             raise MCPError(f"missing env for server {server_id}: {missing}")
 
         client = create_client(cfg)
-        self._clients[server_id] = client
-        return client
+        with self._clients_lock:
+            existing = self._clients.get(server_id)
+            if existing is not None:
+                client.close()
+                self._client_request_locks.setdefault(server_id, threading.Lock())
+                return existing
+            self._clients[server_id] = client
+            self._client_request_locks[server_id] = threading.Lock()
+            return client
 
     @staticmethod
     def _resolve_engine_control_pid() -> int:
@@ -552,6 +579,17 @@ class Bridge:
                     "security": {"sandbox": sandbox, "auto": auto, "network": network},
                 },
             }
+        if operation == "api_invoke":
+            api_name_raw = payload.get("api_name")
+            if not isinstance(api_name_raw, str) or not api_name_raw.strip():
+                raise MCPError("api_invoke requires a non-empty api_name")
+            route_payload = payload.get("payload")
+            if route_payload is None:
+                route_payload = {}
+            if not isinstance(route_payload, dict):
+                raise MCPError("api_invoke payload must be an object")
+            result = self._invoke_internal_api(api_name=api_name_raw.strip(), payload=route_payload)
+            return {"status": "ok", "result": result}
         if operation == "new_agent_session":
             prompt = str(payload.get("prompt") or "").strip()
             if not prompt:
@@ -608,7 +646,8 @@ class Bridge:
             arguments = payload.get("arguments")
             if arguments is not None and not isinstance(arguments, dict):
                 raise MCPError("arguments must be an object")
-            result = client.request("tools/call", {"name": tool_name, "arguments": arguments or {}})
+            with self._client_request_lock(server_id):
+                result = client.request("tools/call", {"name": tool_name, "arguments": arguments or {}})
             return {"status": "ok", "result": result}
 
         if "method" in payload:
@@ -618,10 +657,57 @@ class Bridge:
             params = payload.get("params")
             if params is not None and not isinstance(params, dict):
                 raise MCPError("params must be an object")
-            result = client.request(method, params or {})
+            with self._client_request_lock(server_id):
+                result = client.request(method, params or {})
             return {"status": "ok", "result": result}
 
         raise MCPError("request must include tool_name or method")
+
+    def _invoke_internal_api(self, api_name: str, payload: dict[str, Any]) -> Any:
+        from routes import router
+
+        route_path = f"/api/{api_name}"
+        matched_route: APIRoute | None = None
+        for route in router.routes:
+            if not isinstance(route, APIRoute):
+                continue
+            if route.path != route_path:
+                continue
+            if "POST" not in route.methods:
+                raise MCPError(f"api route exists but does not allow POST: {route_path}")
+            matched_route = route
+            break
+
+        if matched_route is None:
+            raise MCPError(f"unknown POST api route: {route_path}")
+
+        endpoint = matched_route.endpoint
+        signature = inspect.signature(endpoint)
+        parameters = list(signature.parameters.values())
+        if len(parameters) != 1:
+            raise MCPError(
+                f"api route {route_path} is not supported by api-invoke; expected exactly one payload parameter"
+            )
+
+        try:
+            result = endpoint(payload)
+            if inspect.isawaitable(result):
+                raise MCPError(f"api route {route_path} is async and is not supported by api-invoke yet")
+        except MCPError:
+            raise
+        except Exception as exc:
+            raise MCPError(f"api route {route_path} failed: {exc}") from exc
+
+        if isinstance(result, JSONResponse):
+            body = result.body.decode("utf-8", errors="replace")
+            try:
+                parsed = json.loads(body)
+            except json.JSONDecodeError:
+                parsed = body
+            if result.status_code >= 400:
+                raise MCPError(f"api route {route_path} returned HTTP {result.status_code}: {parsed}")
+            return parsed
+        return result
 
     def handle_request_json(self, json_str: str) -> str:
         try:
@@ -638,9 +724,15 @@ class Bridge:
             return json.dumps({"status": "error", "detail": str(exc)}, ensure_ascii=False)
         return json.dumps(response, ensure_ascii=False)
 
+    def _client_request_lock(self, server_id: str) -> threading.Lock:
+        with self._clients_lock:
+            return self._client_request_locks.setdefault(server_id, threading.Lock())
+
     def close(self) -> None:
-        for client in self._clients.values():
-            client.close()
+        with self._clients_lock:
+            server_ids = list(self._clients.keys())
+        for server_id in server_ids:
+            self._close_client(server_id)
 
     def probe_servers(self) -> list[dict[str, Any]]:
         servers, missing_env = load_mcp_configs(self._config_path)
@@ -685,6 +777,8 @@ class MCPBridgeSocketService:
         self._server: socket.socket | None = None
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        self._conn_threads: set[threading.Thread] = set()
+        self._conn_threads_lock = threading.Lock()
         self._atexit_registered = False
 
     @property
@@ -821,7 +915,18 @@ class MCPBridgeSocketService:
                 if self._stop_event.is_set():
                     break
                 continue
+            worker = threading.Thread(
+                target=self._handle_connection,
+                args=(conn,),
+                name="mcp-bridge-conn",
+                daemon=True,
+            )
+            with self._conn_threads_lock:
+                self._conn_threads.add(worker)
+            worker.start()
 
+    def _handle_connection(self, conn: socket.socket) -> None:
+        try:
             with conn:
                 conn.settimeout(self._conn_read_timeout_seconds)
                 try:
@@ -832,7 +937,11 @@ class MCPBridgeSocketService:
                 try:
                     conn.sendall(response.encode("utf-8") + b"\n")
                 except OSError:
-                    continue
+                    return
+        finally:
+            current = threading.current_thread()
+            with self._conn_threads_lock:
+                self._conn_threads.discard(current)
 
     @staticmethod
     def _read_all(conn: socket.socket) -> str:
@@ -856,8 +965,18 @@ class MCPBridgeSocketService:
                 self._server = None
 
         if self._thread is not None:
-            self._thread.join(timeout=2)
+            self._thread.join()
             self._thread = None
+
+        while True:
+            with self._conn_threads_lock:
+                conn_threads = list(self._conn_threads)
+            if not conn_threads:
+                break
+            for worker in conn_threads:
+                worker.join()
+            with self._conn_threads_lock:
+                self._conn_threads.difference_update(conn_threads)
 
         self._bridge.close()
         self._cleanup_socket_file()

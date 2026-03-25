@@ -18,45 +18,45 @@ FORM_URL="${1:?Usage: $0 <form-url>}"
 echo "Form automation: $FORM_URL"
 
 # Step 1: Navigate to form
-agent-browser open "$FORM_URL"
-agent-browser wait --load networkidle
+core/bin/agent-browser open "$FORM_URL"
+core/bin/agent-browser wait --load networkidle
 
 # Step 2: Snapshot to discover form elements
 echo ""
 echo "Form structure:"
-agent-browser snapshot -i
+core/bin/agent-browser snapshot -i
 
 # Step 3: Fill form fields (customize these refs based on snapshot output)
 #
 # Common field types:
-#   agent-browser fill @e1 "John Doe"           # Text input
-#   agent-browser fill @e2 "user@example.com"   # Email input
-#   agent-browser fill @e3 "SecureP@ss123"      # Password input
-#   agent-browser select @e4 "Option Value"     # Dropdown
-#   agent-browser check @e5                     # Checkbox
-#   agent-browser click @e6                     # Radio button
-#   agent-browser fill @e7 "Multi-line text"   # Textarea
-#   agent-browser upload @e8 /path/to/file.pdf # File upload
+#   core/bin/agent-browser fill @e1 "John Doe"           # Text input
+#   core/bin/agent-browser fill @e2 "user@example.com"   # Email input
+#   core/bin/agent-browser fill @e3 "SecureP@ss123"      # Password input
+#   core/bin/agent-browser select @e4 "Option Value"     # Dropdown
+#   core/bin/agent-browser check @e5                     # Checkbox
+#   core/bin/agent-browser click @e6                     # Radio button
+#   core/bin/agent-browser fill @e7 "Multi-line text"   # Textarea
+#   core/bin/agent-browser upload @e8 /path/to/file.pdf # File upload
 #
 # Uncomment and modify:
-# agent-browser fill @e1 "Test User"
-# agent-browser fill @e2 "test@example.com"
-# agent-browser click @e3  # Submit button
+# core/bin/agent-browser fill @e1 "Test User"
+# core/bin/agent-browser fill @e2 "test@example.com"
+# core/bin/agent-browser click @e3  # Submit button
 
 # Step 4: Wait for submission
-# agent-browser wait --load networkidle
-# agent-browser wait --url "**/success"  # Or wait for redirect
+# core/bin/agent-browser wait --load networkidle
+# core/bin/agent-browser wait --url "**/success"  # Or wait for redirect
 
 # Step 5: Verify result
 echo ""
 echo "Result:"
-agent-browser get url
-agent-browser snapshot -i
+core/bin/agent-browser get url
+core/bin/agent-browser snapshot -i
 
 # Optional: Capture evidence
-agent-browser screenshot /tmp/form-result.png
+core/bin/agent-browser screenshot /tmp/form-result.png
 echo "Screenshot saved: /tmp/form-result.png"
 
 # Cleanup
-agent-browser close
+core/bin/agent-browser close
 echo "Done"

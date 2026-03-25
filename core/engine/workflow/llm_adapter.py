@@ -1,21 +1,16 @@
 import json
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from langchain_core.messages import AIMessage
+
 from llm_service import llm_get_json, llm_get_text
-
-
-@dataclass
-class LLMResponse:
-    content: str
-    response_metadata: Dict[str, Any]
 
 
 class WorkflowLLMAdapter:
     def __init__(self, provider_id: Optional[str] = None):
         self.provider_id = provider_id
 
-    async def ainvoke(self, messages: List[Any], config: Optional[Dict[str, Any]] = None) -> LLMResponse:
+    async def ainvoke(self, messages: List[Any], config: Optional[Dict[str, Any]] = None) -> AIMessage:
         message_payload: List[Dict[str, Any]] = []
         for message in messages:
             role = getattr(message, "type", None) or getattr(message, "role", None) or "user"
@@ -36,7 +31,10 @@ class WorkflowLLMAdapter:
 
         if isinstance(response_format, dict) and response_format.get("type") == "json_object":
             data = llm_get_json(message_payload, provider_id=self.provider_id, client_id="workflow")
-            return LLMResponse(content=json.dumps(data, ensure_ascii=False), response_metadata={"token_usage": token_usage})
+            return AIMessage(
+                content=json.dumps(data, ensure_ascii=False),
+                response_metadata={"token_usage": token_usage},
+            )
 
         text = llm_get_text(message_payload, provider_id=self.provider_id, client_id="workflow")
-        return LLMResponse(content=text, response_metadata={"token_usage": token_usage})
+        return AIMessage(content=text, response_metadata={"token_usage": token_usage})

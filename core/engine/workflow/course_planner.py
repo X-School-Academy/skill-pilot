@@ -5,7 +5,6 @@ from logger import log
 from course_manager import update_node_version
 from strapi4 import flatten_strapi_object
 from strapi4.cms import CMS
-from ai_cost_config import save_cost_event, save_cost_task
 import json
 import asyncio
 from typing import Dict, List, Optional, Any
@@ -24,8 +23,6 @@ import traceback
 
 from image_service import generate_image_from_prompt
 from .llm_adapter import WorkflowLLMAdapter
-
-AZURE_CHAT_MODEL_NAME = os.getenv("AZURE_OPENAI_CHAT_MODEL_NAME", "gpt-4o")
 
 
 @dataclass
@@ -96,8 +93,6 @@ class State(TypedDict):
     total_batches: int
     detailed_sections: List[Section]
     thumbnail_url: Optional[str]
-    # Cost tracking state
-    total_cost: float
     language: str
 
 
@@ -233,21 +228,6 @@ Return the course plan as a JSON object in this **exact format**:
             }
         })
 
-        # Track cost for predefined course draft creation (system cost)
-        total_cost = state.get("total_cost", 0.0)
-        usage = response.response_metadata.get("token_usage", {})
-        event = await save_cost_event(
-            provider="azure_openai",
-            model=AZURE_CHAT_MODEL_NAME,
-            cost_type="text",
-            scope_id=0,  # System cost for predefined courses
-            note="Predefined course planning - draft creation",
-            input_tokens=usage.get("prompt_tokens", 0),
-            output_tokens=usage.get("completion_tokens", 0)
-        )
-        if event and 'data' in event:
-            total_cost += event['data'].get('total_cost', 0.0)
-
         # Add AI response to messages
         messages.append(response)
 
@@ -279,7 +259,6 @@ Return the course plan as a JSON object in this **exact format**:
             "messages": messages,
             "course_draft": course_draft,
             "draft_iteration": 1,
-            "total_cost": total_cost
         }
 
     async def course_creator_node(self, state: State) -> Dict[str, Any]:
@@ -373,21 +352,6 @@ Now, please create detailed content for the following sections of the course:
             }
         })
 
-        # Track cost for predefined course content creation (system cost)
-        total_cost = state.get("total_cost", 0.0)
-        usage = response.response_metadata.get("token_usage", {})
-        event = await save_cost_event(
-            provider="azure_openai",
-            model=AZURE_CHAT_MODEL_NAME,
-            cost_type="text",
-            scope_id=0,  # System cost for predefined courses
-            note=f"Predefined course planning - content creation (batch {current_batch_index + 1}/{total_batches})",
-            input_tokens=usage.get("prompt_tokens", 0),
-            output_tokens=usage.get("completion_tokens", 0)
-        )
-        if event and 'data' in event:
-            total_cost += event['data'].get('total_cost', 0.0)
-
         # Strip whitespace and newlines from response content before parsing
         content = response.content.strip()
         content = repair_json(content)  # Repair any JSON formatting issues
@@ -428,13 +392,11 @@ Now, please create detailed content for the following sections of the course:
                 "course_details": course_details,
                 "current_batch_index": next_batch_index,
                 "detailed_sections": detailed_sections,
-                "total_cost": total_cost
             }
         else:
             return {
                 "current_batch_index": next_batch_index,
                 "detailed_sections": detailed_sections,
-                "total_cost": total_cost
             }
 
     async def course_creator_init_node(self, state: State) -> Dict[str, Any]:
@@ -501,48 +463,28 @@ Respond with just the image prompt, no additional text.
         messages = [prompt_system_message]
         response = await self.llm.ainvoke(messages)
 
-        # Track cost for thumbnail prompt generation (system cost)
-        total_cost = state.get("total_cost", 0.0)
-        usage = response.response_metadata.get("token_usage", {})
-        event = await save_cost_event(
-            provider="azure_openai",
-            model=AZURE_CHAT_MODEL_NAME,
-            cost_type="text",
-            scope_id=0,  # System cost for predefined courses
-            note="Predefined course planning - thumbnail prompt generation",
-            input_tokens=usage.get("prompt_tokens", 0),
-            output_tokens=usage.get("completion_tokens", 0)
-        )
-        if event and 'data' in event:
-            total_cost += event['data'].get('total_cost', 0.0)
-
         image_prompt = response.content.strip()
 
         log(f"Generated image prompt for thumbnail: {image_prompt}")
 
         try:
-            # Generate thumbnail image with cost tracking
-            thumbnail_image_path, image_cost = await generate_image_from_prompt(
+            thumbnail_image_path = await generate_image_from_prompt(
                 image_prompt,
                 style='icon',
-                cost_member_id=0,  # System cost for predefined courses
-                cost_note="Predefined course planning - thumbnail image generation"
             )
             if not thumbnail_image_path:
                 log("Failed to generate thumbnail image, proceeding without thumbnail")
-                return {"thumbnail_url": None, "total_cost": total_cost}
-
-            total_cost += image_cost
+                return {"thumbnail_url": None}
 
             # Keep local file path as thumbnail URL in local-only mode
             thumbnail_url = thumbnail_image_path
             log(f"Generated thumbnail: {thumbnail_url}")
-            return {"thumbnail_url": thumbnail_url, "total_cost": total_cost}
+            return {"thumbnail_url": thumbnail_url}
 
         except Exception as e:
             log(f"Error generating thumbnail: {e}")
             # Return None if thumbnail generation fails - course can proceed without it
-            return {"thumbnail_url": None, "total_cost": total_cost}
+            return {"thumbnail_url": None}
 
     async def start_workflow(self, request_message: str, language: str = "English", thread_id: Optional[str] = None, thumbnail_url: Optional[str] = None):
         """
@@ -575,7 +517,6 @@ Respond with just the image prompt, no additional text.
                 "total_batches": 0,
                 "detailed_sections": [],
                 "thumbnail_url": thumbnail_url,
-                "total_cost": 0.0
             }
 
             config = {"recursion_limit": self.recursion_limit,
@@ -600,16 +541,6 @@ Respond with just the image prompt, no additional text.
                 # Update course data with hash and version - this creates the course_uid
                 update_node_version(course_data)
                 
-                # Save cost task now that we have course_uid
-                course_uid = course_data.get('uid')
-                total_cost = final_state.get('total_cost', 0.0)
-                if course_uid and total_cost > 0:
-                    try:
-                        await save_cost_task("course_plan", course_uid, total_cost)
-                        log(f"Saved cost tracking for course {course_uid}: ${total_cost:.4f}")
-                    except Exception as e:
-                        log(f"Error saving cost task: {e}")
-
                 log(
                     f"Predefined course planning completed successfully: {course_data['name']}")
                 return course_data
@@ -771,4 +702,3 @@ async def main():
         import traceback
         log(traceback.format_exc())
         raise
-

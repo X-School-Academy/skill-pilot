@@ -8,6 +8,7 @@ import uuid
 from playwright.async_api import async_playwright
 import argparse
 from logger import get_logger
+from workflow.video_utils.playwright_browser import launch_playwright_chromium
 
 # https://playwright.dev/python/
 
@@ -52,13 +53,7 @@ async def record_screen(
     try:
         logger.info("Launching headless browser...")
         playwright = await async_playwright().start()
-        if os.getenv("PYTHON_ENV") == "azure_container":
-            browser = await playwright.chromium.launch(
-                executable_path=os.getenv("PUPPETEER_EXECUTABLE_PATH"),
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
-            )
-        else:
-            browser = await playwright.chromium.launch(headless=True, args=["--no-sandbox"])
+        browser = await launch_playwright_chromium(playwright, headless=True)
         logger.info("Browser launched.")
         context = await browser.new_context(
             viewport={"width": width, "height": height},
