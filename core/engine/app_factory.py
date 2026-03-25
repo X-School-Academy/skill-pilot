@@ -26,6 +26,13 @@ def _sanitize_single_line_secret(value: str) -> str:
     return re.sub(r"[\r\n]+", "", value).strip()
 
 
+def _matches_auth_token_request(request: Request, expected: str) -> bool:
+    provided = _sanitize_single_line_secret(request.query_params.get("auth_token", ""))
+    if not provided:
+        return False
+    return bool(expected and secrets.compare_digest(provided, expected))
+
+
 def create_app():
     ensure_auth_token()
     app = FastAPI()
@@ -50,7 +57,8 @@ def create_app():
         expected = _sanitize_single_line_secret(get_auth_token())
         cookie_token = _sanitize_single_line_secret(request.cookies.get(_AUTH_COOKIE_NAME, ""))
         authorized_by_cookie = bool(expected and cookie_token and secrets.compare_digest(cookie_token, expected))
-        if not authorized_by_cookie:
+        authorized_by_param = _matches_auth_token_request(request, expected)
+        if not authorized_by_cookie and not authorized_by_param:
             return JSONResponse(status_code=401, content={"error": "unauth"})
 
         return await call_next(request)

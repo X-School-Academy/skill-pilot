@@ -5,18 +5,18 @@ description: Initialize and verify AI Agent for web browser setup with Chrome fo
 
 # Init Agent Browser
 
-Verify that `agent-browser` is installed and configure the correct Chrome connection
+Verify that `core/bin/agent-browser` is available and configure the correct Chrome connection
 method for the current environment before any browser automation is attempted.
 
 ## When to Use This Skill
 
 - Any task that requires browser automation via agent-browser
-- agent-browser may not be installed or Chrome may be missing
+- `core/bin/agent-browser` may not be ready yet or Chrome may be missing
 - The environment-specific connection has not yet been configured
 
 ## Your Roles in This Skill
 
-- **SysOps Engineer**: Install and validate agent-browser and Chrome
+- **SysOps Engineer**: Validate `core/bin/agent-browser` and Chrome
 - **QA Engineer**: Confirm the browser connection is working end-to-end
 
 ## Role Communication
@@ -34,17 +34,10 @@ When this skill is used in a workflow agent node:
 
 ## Instructions
 
-### Step 1: Check if agent-browser is installed
+### Step 1: Check if core/bin/agent-browser is ready
 
 ```bash
-agent-browser --version
-```
-
-If the command is not found, install it:
-
-```bash
-pnpm install -g agent-browser
-agent-browser --version
+core/bin/agent-browser --version
 ```
 
 ### Step 2: Check environment
@@ -83,13 +76,13 @@ chrome-devtool-proxy-windows-amd64.exe
 The proxy will print the host IP and the full connect command, for example:
 
 ```
-[proxy] connect from remote: agent-browser open URL --cdp ws://<host-ip>:9223/devtools/browser/
+[proxy] connect from remote: core/bin/agent-browser open URL --cdp ws://<host-ip>:9223/devtools/browser/
 ```
 
 Once the user provides the cdp ws URL shown in the proxy output, update `dev-swarm/user_preferences.md` to record:
 
 ```
-Browser automation command: agent-browser open URL --cdp ws://<host-ip>:9223/devtools/browser/
+Browser automation command: core/bin/agent-browser open URL --cdp ws://<host-ip>:9223/devtools/browser/
 ```
 
 ---
@@ -101,7 +94,7 @@ Refer to [references/mac.md](references/mac.md).
 Update `dev-swarm/user_preferences.md` to record:
 
 ```
-Browser automation command: agent-browser --auto-connect open URL
+Browser automation command: core/bin/agent-browser --auto-connect open URL
 ```
 
 ---
@@ -113,7 +106,7 @@ Refer to [references/linux-gui.md](references/linux-gui.md).
 Update `dev-swarm/user_preferences.md` to record:
 
 ```
-Browser automation command: agent-browser --auto-connect open URL
+Browser automation command: core/bin/agent-browser --auto-connect open URL
 ```
 
 ---
@@ -137,33 +130,33 @@ Ask the user to copy the appropriate binary to their host machine and run it:
 The proxy will print the host IP and the full connect command, for example:
 
 ```
-[proxy] connect from remote: agent-browser open URL --cdp ws://<host-ip>:9223/devtools/browser/
+[proxy] connect from remote: core/bin/agent-browser open URL --cdp ws://<host-ip>:9223/devtools/browser/
 ```
 
 Once the user provides the cdp ws URL shown in the proxy output, update `dev-swarm/user_preferences.md` to record:
 
 ```
-Browser automation command: agent-browser open URL --cdp ws://<host-ip>:9223/devtools/browser/
+Browser automation command: core/bin/agent-browser open URL --cdp ws://<host-ip>:9223/devtools/browser/
 ```
 
 ---
 
-### Step 3: Test with agent-browser
+### Step 3: Test with core/bin/agent-browser
 
 Using the connection command recorded in `dev-swarm/user_preferences.md`, open https://www.google.com:
 
 ```bash
 # macOS / Linux with GUI
-agent-browser --auto-connect open https://www.google.com
+core/bin/agent-browser --auto-connect open https://www.google.com
 
 # Windows WSL / Docker / Linux without GUI
-agent-browser open https://www.google.com --cdp ws://<cdp_ws_url>
+core/bin/agent-browser open https://www.google.com --cdp ws://<cdp_ws_url>
 ```
 
 Then take a snapshot to confirm the page loaded:
 
 ```bash
-agent-browser snapshot -i
+core/bin/agent-browser snapshot -i
 ```
 
 If no errors occur, proceed to Step 5 (Report result).
@@ -192,14 +185,6 @@ open -a "Google Chrome" chrome://inspect/#remote-debugging
 start chrome chrome://inspect/#remote-debugging
 ```
 
-If Chrome is not installed, run:
-
-```bash
-agent-browser install
-```
-
-This installs a Chrome build managed by agent-browser. Then retry Step 3.
-
 ### Step 5: Report result
 
 Output result as plain text, say "agent-browser is ready. Use the configured command from `dev-swarm/user_preferences.md` for all browser automation tasks."
@@ -209,7 +194,7 @@ Output result as plain text, say "agent-browser is ready. Use the configured com
 Plain text result shown to user (example):
 
 ```
-agent-browser: ready
+core/bin/agent-browser: ready
 Environment: macOS
 Connection method: --auto-connect
 Chrome: connected and ready
@@ -223,4 +208,4 @@ If the user requested file output, write the same content to the specified path.
 - **pnpm not found**: install pnpm first (`npm install -g pnpm`), then retry
 - **Chrome not detected**: ensure Chrome is running with remote debugging enabled
 - **cdp ws URL not reachable**: check that the chrome-devtool-proxy binary is running on the host and the firewall allows the connection
-- **agent-browser snapshot returns empty**: the page may still be loading — use `agent-browser wait --load networkidle` before snapshot
+- **agent-browser snapshot returns empty**: the page may still be loading — use `core/bin/agent-browser wait --load networkidle` before snapshot

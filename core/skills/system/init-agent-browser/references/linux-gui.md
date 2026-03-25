@@ -12,7 +12,7 @@ If either variable is set, a GUI display is available.
 
 ## How it works
 
-`agent-browser --auto-connect` discovers a running Chrome instance by checking common
+`core/bin/agent-browser --auto-connect` discovers a running Chrome instance by checking common
 debugging ports. No proxy is needed when a display is available.
 
 ## Setup steps
@@ -20,21 +20,13 @@ debugging ports. No proxy is needed when a display is available.
 1. **Connect agent-browser**
 
    ```bash
-   agent-browser --auto-connect open https://www.google.com
+   core/bin/agent-browser --auto-connect open https://www.google.com
    ```
-
-2. **If Chrome is not installed**, run:
-
-   ```bash
-   agent-browser install
-   ```
-
-   Then retry the connect command above.
 
 ## user_preferences.md entry
 
 ```
-Browser automation command: agent-browser --auto-connect open URL
+Browser automation command: core/bin/agent-browser --auto-connect open URL
 ```
 
 ## Notes

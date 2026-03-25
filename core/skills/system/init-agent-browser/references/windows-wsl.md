@@ -8,7 +8,7 @@ uname -r  # output contains "microsoft" or "WSL"
 
 ## How it works
 
-Chrome runs on the Windows host. The `agent-browser` CLI runs inside WSL.
+Chrome runs on the Windows host. The `core/bin/agent-browser` CLI runs inside WSL.
 A proxy binary (`chrome-devtool-proxy`) bridges CDP traffic from WSL to the Windows Chrome.
 
 ## Setup steps
@@ -37,7 +37,7 @@ A proxy binary (`chrome-devtool-proxy`) bridges CDP traffic from WSL to the Wind
 
    ```
    [proxy] listening on ws://0.0.0.0:9223
-   [proxy] connect from remote: agent-browser open URL --cdp ws://<host-ip>:9223/devtools/browser/
+   [proxy] connect from remote: core/bin/agent-browser open URL --cdp ws://<host-ip>:9223/devtools/browser/
    ```
 
    The IP shown is the Windows host IP reachable from WSL.
@@ -47,7 +47,7 @@ A proxy binary (`chrome-devtool-proxy`) bridges CDP traffic from WSL to the Wind
    Copy the `ws://` URL printed by the proxy and pass it to agent-browser:
 
    ```bash
-   agent-browser open https://www.google.com --cdp ws://<host-ip>:9223
+   core/bin/agent-browser open https://www.google.com --cdp ws://<host-ip>:9223
    ```
 
 ## Proxy options
@@ -61,5 +61,5 @@ A proxy binary (`chrome-devtool-proxy`) bridges CDP traffic from WSL to the Wind
 ## user_preferences.md entry
 
 ```
-Browser automation command: agent-browser open URL --cdp ws://<host-ip>:9223/devtools/browser/
+Browser automation command: core/bin/agent-browser open URL --cdp ws://<host-ip>:9223/devtools/browser/
 ```

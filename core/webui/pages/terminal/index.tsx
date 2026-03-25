@@ -16,7 +16,13 @@ type TerminalTarget = {
   session: string | null;
 };
 
-const PROTECTED_SESSION_NAMES = new Set(["sp-engine", "sp-webui"]);
+const isProtectedSession = (session: string | null): boolean => {
+  if (!session) return false;
+  return (
+    session.startsWith("sp-engine-") ||
+    session.startsWith("sp-webui-")
+  );
+};
 
 const toWsBase = (base: string): string => {
   const normalized = base.replace("://localhost:", "://127.0.0.1:");
@@ -408,7 +414,7 @@ const TerminalPage = () => {
     isReadonly &&
     sessionName &&
     allowReadonlyKill &&
-    !PROTECTED_SESSION_NAMES.has(sessionName),
+    !isProtectedSession(sessionName),
   );
 
   return (
@@ -430,7 +436,7 @@ const TerminalPage = () => {
               {sessionName ? `session=${sessionName}` : ""}
             </div>
             <div className="flex gap-2">
-              {sessionName && !isReadonly && (
+              {sessionName && !isReadonly && !isProtectedSession(sessionName) && (
                 <button
                   type="button"
                   onClick={handleKillSession}

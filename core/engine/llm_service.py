@@ -19,93 +19,31 @@ RUNNING_LOCK = threading.Lock()
 WEBUI_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def _default_config() -> Dict[str, Any]:
-    return {
-        "default": {"llm": "claude", "tts": "openai", "image": "openai"},
-        "llm": [
-            {
-                "id": "claude",
-                "name": "Claude Code",
-                "bin": "claude",
-                "args": [
-                    "--include-partial-messages",
-                    "--output-format=stream-json",
-                    "--verbose",
-                    "--print",
-                    "{{prompt}}",
-                ],
-                "auto-args": [],
-                "network-args": [],
-                "sandbox-args": ["--settings", "claude-sandbox-settings.json"],
-            },
-            {
-                "id": "copilot",
-                "name": "Copilot CLI",
-                "bin": "copilot",
-                "args": ["-p", "{{prompt}}", "-s", "--allow-all-tools"],
-                "auto-args": ["--no-ask-user"],
-                "network-args": ["--allow-all-urls"],
-                "sandbox-args": [],
-            },
-            {
-                "id": "codex",
-                "name": "OpenAI Codex",
-                "bin": "codex",
-                "args": ["exec", "--json", "{{prompt}}"],
-                "auto-args": ["--ask-for-approval", "never"],
-                "network-args": ["--config", "sandbox_workspace_write.network_access=true"],
-                "sandbox-args": ["--sandbox", "workspace-write"],
-            },
-            {
-                "id": "gemini",
-                "name": "Gemini CLI",
-                "bin": "gemini",
-                "args": ["--output-format", "stream-json", "-p", "{{prompt}}"],
-                "auto-args": ["--yolo"],
-                "network-args": [],
-                "sandbox-args": ["-s"],
-            },
-        ],
-        "tts": [
-            {"id": "openai", "model": "gpt-4o-mini-tts"},
-            {"id": "gemini", "model": "gemini-2.5-flash-preview-tts"},
-        ],
-        "image": [
-            {"id": "openai", "model": "gpt-image-1"},
-            {"id": "gemini", "model": "gemini-2.0-flash-preview-image-generation"},
-        ],
-    }
-
-
 def load_provider_config() -> Dict[str, Any]:
-    candidates = [
-        LLM_PROVIDERS_FILE,
-        (PROJECT_DIR / "config" / "ai_providers.json5").resolve(),
-        (PROJECT_DIR / "config" / "ai_providers.json").resolve(),
-        (Path(__file__).resolve().parent / "ai_providers.json5").resolve(),
-        (Path(__file__).resolve().parent / "ai_providers.json").resolve(),
-    ]
-    for config_path in candidates:
-        if not config_path.exists():
-            continue
+    config_path = LLM_PROVIDERS_FILE
+    if not config_path.exists():
+        raise SystemExit(f"FATAL: required AI provider config is missing: {config_path}")
+
+    try:
+        raw = config_path.read_text(encoding="utf-8")
+    except Exception as exc:
+        raise SystemExit(f"FATAL: failed to read AI provider config {config_path}: {exc}") from exc
+
+    try:
         try:
-            raw = config_path.read_text(encoding="utf-8")
-            try:
-                data = json.loads(raw)
-            except JSONDecodeError:
-                data = json5_loads(raw)
-            if isinstance(data, list):
-                cfg = _default_config()
-                cfg["llm"] = data
-                return cfg
-            if isinstance(data, dict):
-                cfg = _default_config()
-                cfg.update(data)
-                return cfg
-            logger.warning("Ignoring provider config at %s: root must be object or array", config_path)
-        except Exception as exc:
-            logger.warning("Failed to load provider config at %s: %s", config_path, exc)
-    return _default_config()
+            data = json.loads(raw)
+        except JSONDecodeError:
+            data = json5_loads(raw)
+    except Exception as exc:
+        raise SystemExit(f"FATAL: failed to parse AI provider config {config_path}: {exc}") from exc
+
+    if not isinstance(data, dict):
+        raise SystemExit(f"FATAL: AI provider config root must be an object: {config_path}")
+
+    return data
+
+
+_ = load_provider_config()
 
 
 def load_llm_providers() -> List[Dict[str, Any]]:
@@ -116,12 +54,14 @@ def load_llm_providers() -> List[Dict[str, Any]]:
 
 def load_tts_providers() -> List[Dict[str, Any]]:
     data = load_provider_config().get("tts", [])
-    return data if isinstance(data, list) else []
+    providers = data if isinstance(data, list) else []
+    return [p for p in providers if not p.get("disabled", False)]
 
 
 def load_image_providers() -> List[Dict[str, Any]]:
     data = load_provider_config().get("image", [])
-    return data if isinstance(data, list) else []
+    providers = data if isinstance(data, list) else []
+    return [p for p in providers if not p.get("disabled", False)]
 
 
 def _default_id(kind: str, providers: List[Dict[str, Any]]) -> Optional[str]:

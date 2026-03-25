@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+from pathlib import Path
 from tts_service import async_text_to_audio_file
 import uuid
 from typing import Dict, Any
@@ -11,15 +12,16 @@ from langchain_core.messages import HumanMessage
 from llm import LLM
 import re
 from logger import log, error
-from ai_cost_config import save_cost_event
-
-AZURE_CHAT_MODEL_NAME = os.getenv("AZURE_OPENAI_CHAT_MODEL_NAME", "gpt-4o")
 
 # Import utility functions
 from ..video_utils.html2image import capture_image
 
 
-async def create_mermaid_diagram_scene(scene: Dict[str, Any], style: VideoStyle, cost_member_id: int = None) -> tuple[str, float]:
+REPO_ROOT = Path(__file__).resolve().parents[4]
+DEFAULT_MERMAID_CLI = str(REPO_ROOT / "core" / "bin" / "mmdc")
+
+
+async def create_mermaid_diagram_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
     """
     Create a mermaid diagram scene video.
 
@@ -30,10 +32,9 @@ async def create_mermaid_diagram_scene(scene: Dict[str, Any], style: VideoStyle,
             - text: string - caption of the diagram
             - voice_over: string
         style: Video style configuration
-        cost_member_id: Member ID for cost tracking (None for system cost)
 
     Returns:
-        tuple: (video_path, scene_cost) - Local file path to the generated video and accumulated cost for this scene
+        Local file path to the generated video
     """
     
     # Extract scene data
@@ -48,15 +49,11 @@ async def create_mermaid_diagram_scene(scene: Dict[str, Any], style: VideoStyle,
     if not voice_over:
         raise ValueError("Mermaid diagram scene requires 'voice_over' field")
     
-    # Get mermaid CLI path from environment variable
-    mermaid_cli = os.environ.get("MERMAID_CLI", "mmdc")
-
-    # Track accumulated cost for this scene
-    scene_cost = 0.0
+    # Prefer the repo-managed Mermaid CLI wrapper over a global install.
+    mermaid_cli = os.environ.get("MERMAID_CLI", DEFAULT_MERMAID_CLI)
 
     # Generate mermaid diagram code using LLM with retry logic for syntax errors
-    svg_content, llm_cost = await generate_mermaid_image_with_retry(diagram_type, description, mermaid_cli, cost_member_id)
-    scene_cost += llm_cost
+    svg_content = await generate_mermaid_image_with_retry(diagram_type, description, mermaid_cli)
     
     
     # Create HTML content with SVG diagram
@@ -171,24 +168,19 @@ async def create_mermaid_diagram_scene(scene: Dict[str, Any], style: VideoStyle,
         raise Exception("Failed to capture composite image for mermaid diagram scene")
     
     # Generate audio file using Gemini TTS or fallback to LLM
-    tts_cost = 0.0
     try:
-        audio_path, tts_cost = await async_text_to_audio_file(
+        audio_path = await async_text_to_audio_file(
             voice_over,
             voice=style.voice_name,
             format="wav",
-            cost_member_id=cost_member_id,
-            cost_note="Mermaid diagram scene - voice narration"
         )
     except Exception as e:
         print(f"Gemini TTS failed, falling back to LLM: {e}")
         # Fallback to original LLM method
         async with LLM() as llm:
-            audio_path, tts_cost = await llm.text_to_audio_file(
+            audio_path = await llm.text_to_audio_file(
                 voice_over, 
                 voice=style.voice_name,
-                cost_member_id=cost_member_id,
-                cost_note="Mermaid diagram scene - voice narration (fallback MS TTS)"
             )
     
     if not audio_path:
@@ -197,8 +189,6 @@ async def create_mermaid_diagram_scene(scene: Dict[str, Any], style: VideoStyle,
     # Upload audio to S3 and add URL to scene data
     scene['voice_url'] = audio_path
 
-    scene_cost += tts_cost
-    
     # Create video by combining image and audio using ffmpeg
     video_filename = f"mermaid_diagram_scene_{uuid.uuid4()}.mp4"
     video_path = f"/tmp/{video_filename}"
@@ -248,10 +238,10 @@ async def create_mermaid_diagram_scene(scene: Dict[str, Any], style: VideoStyle,
     except:
         pass  # Ignore cleanup errors
 
-    return video_path, scene_cost
+    return video_path
 
 
-async def generate_mermaid_image_with_retry(diagram_type: str, description: str, mermaid_cli: str, cost_member_id: int = None, max_retries: int = 3) -> tuple[str, float]:
+async def generate_mermaid_image_with_retry(diagram_type: str, description: str, mermaid_cli: str, max_retries: int = 3) -> str:
     """
     Generate mermaid code with retry logic for syntax errors.
 
@@ -259,11 +249,10 @@ async def generate_mermaid_image_with_retry(diagram_type: str, description: str,
         diagram_type: Type of diagram (flowchart, sequenceDiagram, etc.)
         description: Description of what the diagram should show
         mermaid_cli: Path to mermaid CLI tool
-        cost_member_id: Member ID for cost tracking (None for system cost)
         max_retries: Maximum number of retries for syntax errors
 
     Returns:
-        tuple: (svg_content, accumulated_cost) - SVG content as string and total LLM cost
+        SVG content as string
     """
     
     # Initialize LLM model
@@ -288,30 +277,11 @@ async def generate_mermaid_image_with_retry(diagram_type: str, description: str,
     
     messages = [HumanMessage(content=diagram_prompt)]
 
-    # Track accumulated cost for all LLM calls
-    accumulated_cost = 0.0
-
     for attempt in range(max_retries):
         try:
             # Generate mermaid code
             response = await model.ainvoke(messages)
             mermaid_code = response.content.strip()
-
-            # Track cost for this LLM call
-            if hasattr(response, 'response_metadata'):
-                usage = response.response_metadata.get('token_usage', {})
-                if usage:
-                    event = await save_cost_event(
-                        provider="azure_openai",
-                        model=AZURE_CHAT_MODEL_NAME,
-                        cost_type="text",
-                        scope_id=cost_member_id if cost_member_id is not None else 0,
-                        note=f"Mermaid diagram generation (attempt {attempt + 1})",
-                        input_tokens=usage.get('prompt_tokens', 0),
-                        output_tokens=usage.get('completion_tokens', 0)
-                    )
-                    if event and 'data' in event:
-                        accumulated_cost += event['data'].get('total_cost', 0.0)
 
             if not mermaid_code:
                 raise Exception("Failed to generate mermaid diagram code")
@@ -320,7 +290,7 @@ async def generate_mermaid_image_with_retry(diagram_type: str, description: str,
             svg_content = await generate_svg_from_mermaid(mermaid_code, mermaid_cli)
 
             # If we get here, the mermaid code is valid
-            return svg_content, accumulated_cost
+            return svg_content
 
         except Exception as e:
             if attempt == max_retries - 1:

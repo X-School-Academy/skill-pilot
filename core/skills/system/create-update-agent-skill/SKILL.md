@@ -80,7 +80,11 @@ description: A clear description of what this skill does and when to use it.
 
 **Frontmatter requirements:**
 - `name`: Must match directory name, lowercase, hyphens only, max 64 characters. Only dev-swarm skills use the `dev-swarm-` prefix.
-- `description`: Max 1024 characters, describe what it does AND when to use it
+- `description`: Max 1024 characters, describe what the skill helps the agent accomplish and when it should be selected
+
+**Description writing rule:**
+- Focus the description on user intent, capability, outputs, triggers, and task context so the LLM has the highest chance to pick the skill.
+- Do not include implementation details such as internal CLI names, API routes, transports, file layouts, or technical wiring unless they are essential to selecting the skill.
 
 **Optional frontmatter fields:**
 - `metadata`: Additional key-value metadata (author, version, etc.)
@@ -92,7 +96,7 @@ description: A clear description of what this skill does and when to use it.
 ```markdown
 # AI Builder - {Skill Name}
 
-Brief introduction describing what this skill does.
+Brief introduction describing what this skill enables, not how it is technically implemented.
 ```
 
 **2. When to Use This Skill**
@@ -161,6 +165,11 @@ Detailed instructions for this step...
 
 **ALWAYS use reference files to keep SKILL.md concise.** Prefer routing details to `references/` files rather than embedding everything in `SKILL.md`.
 
+**Tool-detail rule:**
+- If the skill uses a tool or command, keep `SKILL.md` focused on when to use that tool.
+- Put the usage details, payload shapes, flags, and command examples in `references/` files.
+- Document how to use the tool effectively, but do not explain how the tool itself is technically implemented unless that is required for correct usage.
+
 **When to use reference files:**
 - **Multiple tools/technologies**: Create separate reference files for each tool (e.g., `references/claude-code.md`, `references/gemini-cli.md`)
 - **Platform-specific instructions**: Create files for different platforms (e.g., `references/macos.md`, `references/windows.md`, `references/linux.md`)
@@ -179,6 +188,7 @@ Detailed instructions for this step...
 
 **Reference file guidance:**
 - Create reference files PROACTIVELY - don't wait to be asked
+- Keep SKILL.md as small as possible; prefer trigger conditions and brief routing text over embedded operational detail
 - Keep SKILL.md under 200 lines when possible by using references
 - Keep reference files under 500 lines when possible
 - Use clear, descriptive filenames
@@ -220,6 +230,9 @@ If your skill includes executable scripts:
    - [ ] Instructions are clear and step-by-step
    - [ ] Roles are appropriate for the task
    - [ ] File references use relative paths
+   - [ ] Frontmatter description is capability-first and optimized for skill selection
+   - [ ] `SKILL.md` avoids implementation details that are not needed for skill selection
+   - [ ] Tool-specific usage detail lives in `references/` files instead of the main skill file
    - [ ] `SKILL.md` is concise (under 200 lines preferred), defers details to references
    - [ ] Reference files created for different tools/platforms/methods
    - [ ] No steps to update documentation files (AGENTS.md, README.md, etc.) unless explicitly requested by user
@@ -263,7 +276,9 @@ Ask: "The skill has been created/updated. Would you like me to make any changes?
 
 - **Follow the specification**: Always adhere to file `dev-swarm/docs/agent-skill-specification.md`
 - **Progressive disclosure**: ALWAYS keep SKILL.md concise (under 200 lines preferred), move detailed content to reference files
+- **Description for selection**: Write descriptions for LLM pickup, focusing on capability, trigger phrases, outputs, and use context rather than internal implementation
 - **Use reference files proactively**: Create separate reference files for different tools, platforms, installation methods, frameworks, etc.
+- **Tool usage over tool internals**: When a skill depends on tools, document how to use them, not how they are implemented internally
 - **No unsolicited documentation updates**: NEVER add steps to update AGENTS.md, README.md, or other documentation files unless the user explicitly requests it
 - **Clear instructions**: Write step-by-step instructions that are easy to follow
 - **Appropriate roles**: Choose roles that match the task from file `dev-swarm/docs/dev-swarm-roles.md`
@@ -288,6 +303,12 @@ Ask: "The skill has been created/updated. Would you like me to make any changes?
 
 **Issue: Description too vague**
 - Solution: Describe both WHAT the skill does and WHEN to use it
+
+**Issue: Description contains implementation details**
+- Solution: Rewrite it around user intent, capability, outputs, and trigger phrases; move CLI/API/internal wiring details out of the description
+
+**Issue: SKILL.md contains too much tool detail**
+- Solution: Keep only the routing and trigger logic in `SKILL.md`, then move usage details into focused `references/` files
 
 **Issue: SKILL.md too long (over 200 lines)**
 - Solution: Move detailed content to reference files. Create separate files for different tools, platforms, or methods

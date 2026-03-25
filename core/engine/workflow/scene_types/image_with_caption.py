@@ -17,7 +17,7 @@ import base64
 
 
 
-async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoStyle, cost_member_id: int = None) -> tuple[str, float]:
+async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
     """
     Create an image with caption scene video.
 
@@ -28,10 +28,9 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
             - text: string - caption of the image
             - voice_over: string
         style: Video style configuration
-        cost_member_id: Member ID for cost tracking (None for system cost)
 
     Returns:
-        tuple: (video_path, scene_cost) - Local file path to the generated video and accumulated cost for this scene
+        Local file path to the generated video
     """
 
     # Extract scene data
@@ -40,9 +39,6 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
     caption_text = scene.get("text", "")
     voice_over = scene.get("voice_over", "")
 
-    # Track accumulated cost for this scene
-    scene_cost = 0.0
-    
     width = style.width
     height = style.height
 
@@ -70,16 +66,13 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
     should_cleanup_generated_image = False
     if has_image_prompt:
         try:
-            generated_image_path, image_cost = await generate_image_from_prompt(
+            generated_image_path = await generate_image_from_prompt(
                 image_prompt,
                 style='icon',
-                cost_member_id=cost_member_id,
-                cost_note="Image with caption scene - image generation"
             )
             if not generated_image_path:
                 raise Exception("Failed to generate image from prompt")
 
-            scene_cost += image_cost
             should_cleanup_generated_image = True
         except Exception as e:
             raise Exception(f"Failed to generate image: {str(e)}")
@@ -181,24 +174,19 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
         raise Exception("Failed to capture composite image for image with caption scene")
     
     # Generate audio file using Gemini TTS or fallback to LLM
-    tts_cost = 0.0
     try:
-        audio_path, tts_cost = await async_text_to_audio_file(
+        audio_path = await async_text_to_audio_file(
             voice_over,
             voice=style.voice_name,
             format="wav",
-            cost_member_id=cost_member_id,
-            cost_note="Image with caption scene - voice narration"
         )
     except Exception as e:
         print(f"Gemini TTS failed, falling back to LLM: {e}")
         # Fallback to original LLM method
         async with LLM() as llm:
-            audio_path, tts_cost = await llm.text_to_audio_file(
+            audio_path = await llm.text_to_audio_file(
                 voice_over, 
                 voice=style.voice_name,
-                cost_member_id=cost_member_id,
-                cost_note="Image with caption scene - voice narration (fallback MS TTS)"
             )
     
     if not audio_path:
@@ -207,8 +195,6 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
     # Upload audio to S3 and add URL to scene data
     scene['voice_url'] = audio_path
 
-    scene_cost += tts_cost
-    
     # Create video by combining image and audio using ffmpeg
     video_filename = f"image_caption_scene_{uuid.uuid4()}.mp4"
     if caption_text == '&nbsp;':
@@ -255,4 +241,4 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
     except:
         pass  # Ignore cleanup errors
 
-    return video_path, scene_cost
+    return video_path

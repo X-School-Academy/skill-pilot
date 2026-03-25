@@ -26,6 +26,7 @@ PDF_READER_SCRIPT = os.getenv('PDF_READER_SCRIPT')
 COMFYUI_INSTALL_PATH = str(os.getenv('COMFYUI_INSTALL_PATH') or '').rstrip('/')
 COMFYUI_OUTPUT_DIR = f"{COMFYUI_INSTALL_PATH}/output"
 SHELL_SCRIPT_WORKFLOW_ID = 'shell_script'
+PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 class ScriptExecutionError(Exception):
     """Raised when helper script execution fails"""
@@ -43,7 +44,18 @@ class ScriptExecutor:
         text = str(path_value or "").strip()
         if not text:
             raise ScriptExecutionError(f"{label} is required")
-        return str(Path(text).expanduser()) if text.startswith("~") else text
+        if text.startswith(("http://", "https://")):
+            return text
+
+        candidate = Path(text).expanduser()
+        if candidate.is_absolute():
+            return str(candidate)
+
+        project_relative = (PROJECT_ROOT / candidate).resolve()
+        if project_relative.exists():
+            return str(project_relative)
+
+        return text
 
     @staticmethod
     def _require_sentence(value: str, label: str) -> str:

@@ -11,7 +11,7 @@ echo $WAYLAND_DISPLAY  # empty
 
 ## How it works
 
-Chrome runs on the host machine (with a GUI). The `agent-browser` CLI runs inside the
+Chrome runs on the host machine (with a GUI). The `core/bin/agent-browser` CLI runs inside the
 container or headless Linux environment. A proxy binary (`chrome-devtool-proxy`) bridges
 CDP traffic from the container to the host Chrome.
 
@@ -50,23 +50,15 @@ Located under `extensions/chrome-devtool-proxy/bin/`:
 
    ```
    [proxy] listening on ws://0.0.0.0:9223
-   [proxy] connect from remote: agent-browser open URL --cdp ws://<host-ip>:9223/devtools/browser/
+   [proxy] connect from remote: core/bin/agent-browser open URL --cdp ws://<host-ip>:9223/devtools/browser/
    ```
 
-3. **If Chrome is not installed on the host**, run on the host:
-
-   ```bash
-   agent-browser install
-   ```
-
-   Then restart the proxy and retry.
-
-4. **Use the cdp ws URL from inside the container**
+3. **Use the cdp ws URL from inside the container**
 
    Copy the `ws://` URL printed by the proxy and pass it to agent-browser:
 
    ```bash
-   agent-browser open https://www.google.com --cdp ws://<host-ip>:9223
+   core/bin/agent-browser open https://www.google.com --cdp ws://<host-ip>:9223
    ```
 
 ## Proxy options
@@ -80,7 +72,7 @@ Located under `extensions/chrome-devtool-proxy/bin/`:
 ## user_preferences.md entry
 
 ```
-Browser automation command: agent-browser open URL --cdp ws://<host-ip>:9223/devtools/browser/
+Browser automation command: core/bin/agent-browser open URL --cdp ws://<host-ip>:9223/devtools/browser/
 ```
 
 ## Notes

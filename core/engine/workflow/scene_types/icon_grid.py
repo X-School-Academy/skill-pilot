@@ -17,7 +17,7 @@ from tts_service import async_text_to_audio_file
 
 
 
-async def create_icon_grid_scene(scene: Dict[str, Any], style: VideoStyle, cost_member_id: int = None) -> tuple[str, float]:
+async def create_icon_grid_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
     """
     Create an icon grid scene video.
 
@@ -29,19 +29,15 @@ async def create_icon_grid_scene(scene: Dict[str, Any], style: VideoStyle, cost_
                 - text: string - the caption of the image
             - voice_over: string
         style: Video style configuration
-        cost_member_id: Member ID for cost tracking (None for system cost)
 
     Returns:
-        tuple: (video_path, scene_cost) - Local file path to the generated video and accumulated cost for this scene
+        Local file path to the generated video
     """
 
     # Extract scene data
     icons = scene.get("icons", [])
     voice_over = scene.get("voice_over", "")
 
-    # Track accumulated cost for this scene
-    scene_cost = 0.0
-    
     if not icons:
         raise ValueError("Icon grid scene requires 'icons' field")
     
@@ -77,8 +73,6 @@ async def create_icon_grid_scene(scene: Dict[str, Any], style: VideoStyle, cost_
         icon_tasks.append(generate_image_from_prompt(
             prompt,
             style='icon',
-            cost_member_id=cost_member_id,
-            cost_note=f"Icon grid scene - icon {i+1} image generation"
         ))
 
     try:
@@ -88,14 +82,12 @@ async def create_icon_grid_scene(scene: Dict[str, Any], style: VideoStyle, cost_
         # Upload icon images to S3 and add URLs to scene data
         for i, icon in enumerate(icons):
             image_path = provided_icon_paths[i]
-            image_cost = 0.0
             if not image_path:
-                image_path, image_cost = generated_icon_results[generated_result_index]
+                image_path = generated_icon_results[generated_result_index]
                 generated_result_index += 1
             icon_image_paths.append(image_path)
             if image_path:
                 icon['image_url'] = image_path
-            scene_cost += image_cost
     except Exception as e:
         raise Exception(f"Failed to generate icon images: {str(e)}")
     
@@ -246,24 +238,19 @@ async def create_icon_grid_scene(scene: Dict[str, Any], style: VideoStyle, cost_
         raise Exception("Failed to capture composite image for icon grid scene")
     
     # Generate audio file using Gemini TTS or fallback to LLM
-    tts_cost = 0.0
     try:
-        audio_path, tts_cost = await async_text_to_audio_file(
+        audio_path = await async_text_to_audio_file(
             voice_over,
             voice=style.voice_name,
             format="wav",
-            cost_member_id=cost_member_id,
-            cost_note="Icon grid scene - voice narration"
         )
     except Exception as e:
         print(f"Gemini TTS failed, falling back to LLM: {e}")
         # Fallback to original LLM method
         async with LLM() as llm:
-            audio_path, tts_cost = await llm.text_to_audio_file(
+            audio_path = await llm.text_to_audio_file(
                 voice_over, 
                 voice=style.voice_name,
-                cost_member_id=cost_member_id,
-                cost_note="Icon grid scene - voice narration (fallback MS TTS)"
             )
 
     if not audio_path:
@@ -272,8 +259,6 @@ async def create_icon_grid_scene(scene: Dict[str, Any], style: VideoStyle, cost_
     # Upload audio to S3 and add URL to scene data
     scene['voice_url'] = audio_path
 
-    scene_cost += tts_cost
-    
     # Create video by combining image and audio using ffmpeg
     import uuid
     video_filename = f"icon_grid_scene_{uuid.uuid4()}.mp4"
@@ -320,4 +305,4 @@ async def create_icon_grid_scene(scene: Dict[str, Any], style: VideoStyle, cost_
     except:
         pass  # Ignore cleanup errors
 
-    return video_path, scene_cost
+    return video_path

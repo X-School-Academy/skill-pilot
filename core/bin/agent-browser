@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+AGENT_BROWSER_JS="${REPO_ROOT}/core/webui/node_modules/agent-browser/bin/agent-browser.js"
+
+cd "${REPO_ROOT}"
+
+if [[ ! -f "${AGENT_BROWSER_JS}" ]]; then
+  pnpm add agent-browser --prefix core/webui
+fi
+
+exec "${AGENT_BROWSER_JS}" "$@"

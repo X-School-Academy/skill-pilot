@@ -62,7 +62,7 @@ Options:
   -h, --help    Show this help message and exit
 
 Steps performed:
-  1. Install Homebrew, Git, curl, wget, uv, pnpm, Node.js, Python 3, tmux
+  1. Install Homebrew, Git, curl, wget, uv, pnpm, Node.js, Python 3, tmux, ffmpeg
   2. Install Playwright CLI
   3. Clone the Skill Pilot repository
 EOF
@@ -217,6 +217,7 @@ install_git()   { pkg_install git; }
 install_curl()  { pkg_install curl; }
 install_wget()  { pkg_install wget; }
 install_tmux()  { pkg_install tmux; }
+install_ffmpeg() { pkg_install ffmpeg; }
 
 install_gxmessage_linux() {
   if command -v gxmessage >/dev/null 2>&1; then
@@ -262,14 +263,6 @@ install_pnpm() {
   sh "$tmpscript"; local rc=$?
   rm -f "$tmpscript"
   return $rc
-}
-
-install_agent_browser() {
-  pnpm install -g agent-browser
-  local bin_dir
-  bin_dir="$(pnpm bin -g 2>/dev/null || true)"
-  [ -n "$bin_dir" ] && export PATH="$bin_dir:$PATH"
-  hash -r 2>/dev/null || true
 }
 
 # --- Version checks ---
@@ -574,14 +567,12 @@ setup_branches() {
   local current_branch
   current_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 
-  for branch in contrib user; do
-    if git show-ref --verify --quiet "refs/heads/$branch"; then
-      ok "Branch '$branch' already exists."
-    else
-      git branch "$branch"
-      ok "Created branch '$branch'."
-    fi
-  done
+  if git show-ref --verify --quiet "refs/heads/user"; then
+    ok "Branch 'user' already exists."
+  else
+    git branch user
+    ok "Created branch 'user'."
+  fi
 
   if [ "$current_branch" != "user" ]; then
     git checkout user
@@ -868,6 +859,20 @@ main() {
     "wget" \
     "install_wget"
 
+  # Screen 12 — ffmpeg
+  install_step \
+    "ffmpeg — Media Toolkit" \
+    "$(printf '%s\n%s\n%s\n\n%s\n%s\n%s' \
+      "ffmpeg is the command-line toolkit Skill Pilot uses for" \
+      "video and audio processing tasks such as transcoding," \
+      "merging clips, extracting frames, and generating thumbnails." \
+      "Several media and workflow features depend on it being" \
+      "available in PATH." \
+      "If ffmpeg is missing, this installer will add it with" \
+      "Homebrew.")" \
+    "ffmpeg" \
+    "install_ffmpeg"
+
   # Screen 12 — gxmessage (Linux only)
   if [ "$OS_KIND" = "linux" ]; then
     install_step \
@@ -880,19 +885,6 @@ main() {
       "gxmessage" \
       "install_gxmessage_linux"
   fi
-
-  # Screen 13 — Playwright CLI
-  install_step \
-    "agent-browser CLI — Browser Automation" \
-    "$(printf '%s\n%s\n%s\n\n%s\n%s' \
-      "agent-browser lets AI agents control a web browser" \
-      "programmatically — opening pages, clicking buttons, filling" \
-      "forms, taking screenshots, and extracting data." \
-      "Skill Pilot's agent skills use agent-browser for web tasks" \
-      "you would normally do by hand.")" \
-    "agent-browser" \
-    "install_agent_browser" \
-    "pnpm_home"
 
   if [ "$SOMETHING_INSTALLED" -eq 1 ]; then
     setup_shell_paths
@@ -1056,26 +1048,26 @@ main() {
   say "git uses branches to manage parallel versions of the same"
   say "codebase."
   say ""
-  say "Skill Pilot has three branches:"
+  say "Skill Pilot uses two branches during normal local setup:"
   say ""
   say "  codeware  The stable release layer — maintained by the"
   say "            Skill Pilot team. Think of this as the \"main\""
   say "            software release. You keep it clean and use it"
   say "            as your update source."
   say ""
-  say "  contrib   A shared improvement layer — where you can"
-  say "            submit useful skills back to the community"
-  say "            via a pull request."
-  say ""
   say "  user      Your personal workspace — where you and AI"
   say "            make all your daily changes. This branch is"
   say "            yours to edit freely."
   say ""
-  say "Flow of knowledge:"
+  say "Contribution branches are created only when you are ready"
+  say "to prepare a clean contribution back to the official repo."
+  say ""
+  say "Normal flow:"
   say "  codeware -> user       (you receive updates)"
-  say "  user -> contrib        (you share improvements)"
-  say "  contrib -> codeware    (stable knowledge is released)"
-  press_any_key "Press any key to create your branches and switch to 'user' now."
+  say ""
+  say "Contribution flow, only when needed:"
+  say "  user -> feature branch from upstream/contrib -> pull request"
+  press_any_key "Press any key to create the 'user' branch and switch to it now."
 
   setup_branches
 

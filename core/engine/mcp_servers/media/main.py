@@ -1,7 +1,7 @@
 """
 Video MCP Server
 
-Provides 20 video/audio processing tools via MCP protocol using fastmcp.
+Provides video/audio processing tools via MCP protocol using fastmcp.
 Input and output artifacts are exchanged with ComfyUI through its upload/view HTTP APIs.
 Server transport: stdio
 """
@@ -35,8 +35,6 @@ from fastmcp import FastMCP
 from logger import get_logger
 from mcp_servers.media.audio_utils import get_audio_duration
 from mcp_servers.media.gpu_workflow_executor import WorkflowExecutor, WorkflowExecutionError
-from mcp_servers.media.playwright_utils.html2image import capture_image
-from mcp_servers.media.playwright_utils.screen_recording import record_screen
 from mcp_servers.media.script_executor import (
     ScriptExecutor,
     ScriptExecutionError
@@ -112,6 +110,7 @@ _uploaded_input_files: dict[str, str] = {}
 _downloaded_input_files: dict[str, str] = {}
 _uploaded_to_comfy_files: dict[str, str] = {}
 _download_dir = Path("/tmp/mcp_video_http_outputs")
+_PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 
 def _register_output_file(file_path: str) -> None:
@@ -145,7 +144,7 @@ def _resolve_input_file(value: str, label: str) -> str:
         _uploaded_to_comfy_files[candidate] = comfy_ref
         return comfy_ref
 
-    path_candidate = Path(candidate).expanduser()
+    path_candidate = _resolve_local_input_path(candidate)
     if path_candidate.exists():
         comfy_ref = _upload_input_file(str(path_candidate.resolve()), label)
         _uploaded_to_comfy_files[candidate] = comfy_ref
@@ -159,6 +158,13 @@ def _resolve_input_file(value: str, label: str) -> str:
     raise ValueError(
         f"{label} must be a local file path, remote URL, or a file_id resolvable "
     )
+
+
+def _resolve_local_input_path(value: str) -> Path:
+    candidate = Path(str(value).strip()).expanduser()
+    if candidate.is_absolute():
+        return candidate
+    return _PROJECT_ROOT / candidate
 
 
 def _upload_input_file(source: str, label: str, upload_type: str = "input") -> str:
@@ -177,7 +183,7 @@ def _materialize_input_file(source: str, label: str) -> str:
         return cached
 
     media_type = None
-    source_path = Path(source).expanduser()
+    source_path = _resolve_local_input_path(source)
     if source_path.exists():
         return str(source_path.resolve())
 
@@ -1387,201 +1393,6 @@ async def video_lipsync(
     except (ScriptExecutionError, WorkflowExecutionError) as exc:
         _log_failure("video_lipsync", request_extra)
         raise Exception(f"Video lip-sync failed: {exc}") from exc
-
-
-# ============================================================================
-# HTML/CSS Animation Tools
-# ============================================================================
-
-@mcp.tool()
-async def html5_video_clip(
-    html_file: str,
-    width: int,
-    height: int,
-    animate_time: float = 10.0
-) -> str:
-    """
-    Render an HTML/CSS/JS animation into an MP4 clip using a headless browser.
-
-    Args:
-        html_file: HTML file_id from /upload_file that defines video_started()/video_ended() helpers.
-        width: Viewport width (px) for the recorded clip.
-        height: Viewport height (px) for the recorded clip.
-        animate_time: Maximum duration in seconds to wait for the animation to finish.
-
-    Returns:
-        Recorded video clip as a URL in MP4 format.
-
-    Example HTML snippet:
-    ```html
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        :root { --video-width: 1080px; --video-height: 1920px; }
-        body { width: var(--video-width); height: var(--video-height); margin: 0;
-               display: flex; align-items: center; justify-content: center;
-               font-family: 'Inter', sans-serif; background: #020617; color: white; }
-        .card { opacity: 0; font-size: 64px; transition: opacity 1s ease; }
-        body.ready .card { opacity: 1; }
-      </style>
-    </head>
-    <body>
-      <div class="card">Launch Day</div>
-      <script>
-        let started = false; let ended = false;
-        function video_started() {
-          if (!started) {
-            started = true;
-            document.body.classList.add('ready');
-            setTimeout(() => { ended = true; }, 4000);
-          }
-          return started;
-        }
-        function video_ended() { return ended; }
-        setTimeout(video_started, 200);
-      </script>
-    </body>
-    </html>
-    ```
-    """
-    html_file = _materialize_input_file(html_file, "html_file")
-    source_path = Path(html_file).expanduser()
-    if not source_path.exists():
-        raise FileNotFoundError(f"HTML file not found: {html_file}")
-
-    if width <= 0 or height <= 0:
-        raise ValueError("width and height must be positive integers representing pixels")
-
-    try:
-        duration = float(animate_time)
-    except (TypeError, ValueError):
-        raise ValueError("animate_time must be a positive number of seconds")
-
-    if duration <= 0:
-        raise ValueError("animate_time must be greater than zero")
-
-    try:
-        html_content = source_path.read_text(encoding="utf-8")
-    except UnicodeDecodeError as exc:
-        raise ValueError("HTML file must be UTF-8 encoded") from exc
-
-    _validate_html_animation(html_content)
-
-    # Allow CSS hints to override viewport when available
-    css_width, css_height = _extract_viewport_dimensions(html_content)
-    view_width = css_width or width
-    view_height = css_height or height
-    is_horizontal = view_width >= view_height
-
-    output_path = f"/tmp/html5_animation_{uuid.uuid4()}.mp4"
-    # Add buffer for browser start/stop and transcode time so long clips do not time out prematurely
-    timeout_window = max(duration * 2.5, duration + 10)
-    request_extra = {
-        "html_file": str(source_path),
-        "width": width,
-        "height": height,
-        "viewport_width": view_width,
-        "viewport_height": view_height,
-        "animate_time": duration
-    }
-
-    try:
-        _log_request("html5_video_clip", request_extra)
-        video_path = await asyncio.wait_for(
-            record_screen(
-                html_code=html_content,
-                output_file=output_path,
-                duration=duration,
-                isHorizontal=is_horizontal,
-                view_width=view_width,
-                view_height=view_height
-            ),
-            timeout=timeout_window
-        )
-    except asyncio.TimeoutError as exc:
-        _log_failure("html5_video_clip", request_extra)
-        raise TimeoutError(
-            f"Timed out recording HTML animation (>{timeout_window:.1f}s). "
-            "Check video_started()/video_ended() logic."
-        ) from exc
-    except Exception as exc:
-        _log_failure("html5_video_clip", request_extra)
-        raise Exception(f"Failed to create HTML5 video clip: {exc}") from exc
-    _log_success("html5_video_clip", {"video_path": video_path, **request_extra})
-    return _format_output(video_path)
-
-
-@mcp.tool()
-async def html_image(
-    html_file: str,
-    width: int,
-    height: int,
-    transparent: bool = False
-) -> str:
-    """
-    Create static html/css style image, transparent text overlay for video, and video thumbnail image.
-
-    Args:
-        html_file: HTML file_id from /upload_file to render.
-        width: Fallback viewport width (px) if CSS variables are not present.
-        height: Fallback viewport height (px) if CSS variables are not present.
-        transparent: When true, omit the page background for a transparent overlay image.
-
-    Returns:
-        Captured image as a URL in PNG format.
-    """
-    html_file = _materialize_input_file(html_file, "html_file")
-    source_path = Path(html_file).expanduser()
-    if not source_path.exists():
-        raise FileNotFoundError(f"HTML file not found: {html_file}")
-
-    if width <= 0 or height <= 0:
-        raise ValueError("width and height must be positive integers representing pixels")
-
-    if not isinstance(transparent, bool):
-        raise ValueError("transparent must be a boolean flag")
-
-    try:
-        html_content = source_path.read_text(encoding="utf-8")
-    except UnicodeDecodeError as exc:
-        raise ValueError("HTML file must be UTF-8 encoded") from exc
-
-    _validate_html_document(html_content)
-
-    css_width, css_height = _extract_viewport_dimensions(html_content)
-    view_width = css_width or width
-    view_height = css_height or height
-    is_horizontal = view_width >= view_height
-
-    request_extra = {
-        "html_file": str(source_path),
-        "width": width,
-        "height": height,
-        "viewport_width": view_width,
-        "viewport_height": view_height,
-        "transparent": transparent
-    }
-    _log_request("html_image", request_extra)
-
-    try:
-        image_path = await capture_image(
-            html_code=html_content,
-            isHorizontal=is_horizontal,
-            view_width=view_width,
-            view_height=view_height,
-            omitBackground=transparent,
-            timeout=20,
-            retries=3
-        )
-        if not image_path:
-            raise RuntimeError("Playwright returned no image path")
-    except Exception as exc:
-        _log_failure("html_image", request_extra)
-        raise Exception(f"Failed to render HTML image: {exc}") from exc
-
-    _log_success("html_image", {"image_path": image_path, **request_extra})
-    return _format_output(image_path)
 
 
 @mcp.tool()

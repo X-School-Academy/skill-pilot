@@ -184,8 +184,6 @@ DISCORD_SESSIONS_DIR = Path(
 ).resolve()
 DISCORD_MAX_BUFFER_TOKENS = int(os.getenv("DISCORD_MAX_BUFFER_TOKENS", "16384"))
 DISCORD_BUFFER_MSG_COUNT = int(os.getenv("DISCORD_BUFFER_MSG_COUNT", "20"))
-DEFAULT_TTS_PROVIDER = (os.getenv("DEFAULT_TTS_PROVIDER") or "").strip() or None
-DEFAULT_IMAGE_PROVIDER = (os.getenv("DEFAULT_IMAGE_PROVIDER") or "").strip() or None
 
 logging.basicConfig(
     level=logging.INFO,

@@ -11,7 +11,7 @@ from typing import Any, Dict, Iterable, Optional
 from fastapi import HTTPException
 
 from llm_service import get_image_provider
-from settings import DEFAULT_IMAGE_PROVIDER, logger
+from settings import logger
 
 
 GEMINI_ALLOWED_ASPECT_RATIOS = (
@@ -258,7 +258,7 @@ def generate_image_file(prompt: str, provider_id: Optional[str] = None, size: Op
     if not prompt or not prompt.strip():
         raise HTTPException(status_code=400, detail="prompt is required")
 
-    provider = get_image_provider(provider_id or DEFAULT_IMAGE_PROVIDER)
+    provider = get_image_provider(provider_id)
     provider_name = provider.get("id")
 
     if provider_name == "openai":
@@ -280,7 +280,7 @@ async def generate_image_from_prompt(
     style: str = "portrait",
     provider: Optional[str] = None,
     **_: Any,
-) -> tuple[str, float]:
+) -> str:
     _ = negativePrompt
     image_size = None
     if style in {"icon", "square"}:
@@ -296,4 +296,4 @@ async def generate_image_from_prompt(
         provider,
         image_size,
     )
-    return path, 0.0
+    return path

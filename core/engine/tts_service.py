@@ -13,7 +13,7 @@ from urllib.request import Request, urlopen
 from fastapi import HTTPException
 
 from llm_service import get_tts_provider
-from settings import DEFAULT_TTS_PROVIDER, logger
+from settings import PROJECT_DIR, logger
 
 
 def _http_post_json(url: str, payload: Dict[str, Any], headers: Dict[str, str], timeout: float = 60.0) -> Dict[str, Any]:
@@ -55,6 +55,26 @@ def _extract_mcp_text_content(payload: Any) -> Optional[str]:
         if isinstance(text, str) and text.strip():
             return text.strip()
     return None
+
+
+def _normalize_media_mcp_input_reference(value: str) -> str:
+    candidate = str(value or "").strip()
+    if not candidate:
+        return candidate
+
+    if candidate.startswith(("http://", "https://")):
+        return candidate
+
+    expanded = Path(candidate).expanduser()
+    if expanded.is_absolute():
+        return str(expanded)
+
+    project_relative = (PROJECT_DIR / expanded).resolve()
+    if project_relative.exists():
+        return str(project_relative)
+
+    # Preserve non-path identifiers such as uploaded file ids.
+    return candidate
 
 
 def _openai_tts(text: str, provider: Dict[str, Any], voice: Optional[str], output_format: Optional[str]) -> Path:
@@ -165,16 +185,20 @@ def _media_mcp_tts(text: str, provider: Dict[str, Any], voice: Optional[str], ou
     if selected_voice:
         selected_config = voices.get(selected_voice)
         if not isinstance(selected_config, dict):
-            raise HTTPException(status_code=400, detail=f"Unknown Media MCP TTS voice: {selected_voice}")
+            selected_voice = None
+            selected_config = None
     else:
+        selected_config = None
+
+    if selected_voice is None or not isinstance(selected_config, dict):
         selected_voice, selected_config = next(iter(voices.items()))
         if not isinstance(selected_config, dict):
             raise HTTPException(status_code=500, detail=f"Invalid Media MCP TTS voice config: {selected_voice}")
 
     emotion = str(selected_config.get("emotion") or "").strip()
     emotion_sample = str(selected_config.get("emotion_sample") or "").strip()
-    ref_voice = str(selected_config.get("ref_voice") or "").strip()
-    ref_emotion_voice = str(selected_config.get("ref_emotion_voice") or "").strip()
+    ref_voice = _normalize_media_mcp_input_reference(selected_config.get("ref_voice") or "")
+    ref_emotion_voice = _normalize_media_mcp_input_reference(selected_config.get("ref_emotion_voice") or "")
 
     if not emotion:
         raise HTTPException(status_code=500, detail=f"Media MCP TTS voice '{selected_voice}' is missing emotion")
@@ -239,7 +263,7 @@ def _media_mcp_tts(text: str, provider: Dict[str, Any], voice: Optional[str], ou
 
 
 def text_to_speech_file(text: str, provider_id: Optional[str] = None, voice: Optional[str] = None, output_format: Optional[str] = None) -> str:
-    provider = get_tts_provider(provider_id or DEFAULT_TTS_PROVIDER)
+    provider = get_tts_provider(provider_id)
     provider_name = provider.get("id")
 
     if not text or not text.strip():
@@ -264,7 +288,7 @@ async def async_text_to_audio_file(
     format: str = "wav",
     provider_id: Optional[str] = None,
     **_: Any,
-) -> tuple[str, float]:
+) -> str:
     path = await asyncio.to_thread(
         text_to_speech_file,
         text,
@@ -272,4 +296,4 @@ async def async_text_to_audio_file(
         voice,
         format,
     )
-    return path, 0.0
+    return path

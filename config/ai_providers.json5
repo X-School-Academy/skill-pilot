@@ -24,8 +24,8 @@
   // Default provider selection used when no explicit provider is requested.
   default: {
     llm: 'claude',
-    tts: 'openai',
-    image: 'openai',
+    tts: 'media-mcp',
+    image: 'media-mcp',
   },
 
   // LLM CLI providers.
@@ -254,8 +254,8 @@
         {
           "emotion": "calm",
           "emotion_sample": "This is a calm and steady narration voice.",
-          "ref_voice": "file",
-          "ref_emotion_voice": "file",
+          "ref_voice": "assets/custom-voices/your-voice.wav",
+          "ref_emotion_voice": "assets/custom-voices/your-emotion-voice.wav",
         }
       },
     },
@@ -280,7 +280,7 @@
     {
       id: 'media-mcp',
       name: 'Media MCP Server - Image',
-      size: '720x1280',
+      size: '1280x720',
     },
   ],
 }
