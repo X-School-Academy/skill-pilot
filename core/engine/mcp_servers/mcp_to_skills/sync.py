@@ -567,6 +567,7 @@ description: "{skill_description}"
 
 {extra_block}## Usage
 Call the local MCP bridge shell wrapper:
+Do not use any Python helper code to invoke the `core/bin/tool-cli` command. Run as shell command with arguments directly.
 
 ```bash
 core/bin/tool-cli request '{request_json}'
