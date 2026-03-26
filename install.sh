@@ -63,8 +63,7 @@ Options:
 
 Steps performed:
   1. Install Homebrew, Git, curl, wget, uv, pnpm, Node.js, Python 3, tmux, ffmpeg
-  2. Install Playwright CLI
-  3. Clone the Skill Pilot repository
+  2. Clone the Skill Pilot repository
 EOF
 }
 
