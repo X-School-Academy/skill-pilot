@@ -1369,11 +1369,14 @@ async def video_lipsync(
     Returns:
         Lip-synced video as a URL produced by MuseTalk.
     """
-    audio_file = _resolve_input_file(audio_file, "audio_file")
-    video_file = _resolve_input_file(video_file, "video_file")
-    audio_path = _require_local_file(audio_file, "Audio file")
-    video_path = _require_local_file(video_file, "Video file")
+    audio_input = str(audio_file or "").strip()
+    video_input = str(video_file or "").strip()
+    audio_path = Path(_materialize_input_file(audio_input, "audio_file")).expanduser().resolve()
+    video_path = Path(_materialize_input_file(video_input, "video_file")).expanduser().resolve()
     await _ensure_audio_within_musetalk_limit(audio_path, "Audio file")
+
+    audio_ref = _resolve_input_file(audio_input, "audio_file")
+    video_ref = _resolve_input_file(video_input, "video_file")
 
     request_extra = {
         "audio_file": str(audio_path),
@@ -1381,17 +1384,18 @@ async def video_lipsync(
         "label": label,
         "pingpong": pingpong
     }
-    processed_video_path = str(video_path)
+    processed_video_ref = video_ref
 
     try:
         if pingpong:
             processed_video_path = await _create_pingpong_video(str(video_path))
             request_extra["processed_video_file"] = processed_video_path
+            processed_video_ref = _resolve_input_file(processed_video_path, "processed_video_file")
 
         _log_request("video_lipsync", request_extra)
         output = await script_executor.run_musetalk_lipsync(
-            audio_file=str(audio_path),
-            video_file=processed_video_path,
+            audio_file=audio_ref,
+            video_file=processed_video_ref,
             label=label
         )
         _log_success("video_lipsync", {"output_file": output, **request_extra})
