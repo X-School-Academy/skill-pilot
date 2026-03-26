@@ -5,7 +5,7 @@ description: "Modify or transform an existing image based on text instructions u
 
 Args:
     prompt: Description of how you want to modify the image (e.g., "add flowers", "change to winter scene", "make it look vintage", etc.)
-    image_file: Image file_id from /upload_file to modify (supports PNG, JPEG formats)
+    image_file: Local image file path or remote URL to modify (supports PNG, JPEG formats)
 
 Returns:
     Modified image as a URL in PNG or JPEG format
@@ -20,6 +20,7 @@ core/bin/tool-cli request '{"server_id": "media", "tool_name": "image_to_image",
 ## Arguments Schema
 ```json
 {
+  "additionalProperties": false,
   "properties": {
     "prompt": {
       "type": "string"

@@ -5,7 +5,7 @@ description: "Analyze a video using AI vision model to answer questions or provi
 
 Args:
     prompt: Your question or request about the video (e.g., "What happens in this video?", "Describe the actions", "Count how many people appear", etc.)
-    video_file: Video file_id from /upload_file to analyze (supports MP4, AVI, MOV formats)
+    video_file: Local video file path or remote URL to analyze (supports MP4, AVI, MOV formats)
     frame_step: How many frames to skip between samples (1=analyze every frame, 16=analyze every 16th frame for faster processing)
     max_frames: Maximum number of frames to analyze (-1 means analyze all sampled frames)
     max_tokens: Maximum length of the analysis response in tokens (default: 2048)
@@ -23,6 +23,7 @@ core/bin/tool-cli request '{"server_id": "media", "tool_name": "video_analysis",
 ## Arguments Schema
 ```json
 {
+  "additionalProperties": false,
   "properties": {
     "prompt": {
       "type": "string"

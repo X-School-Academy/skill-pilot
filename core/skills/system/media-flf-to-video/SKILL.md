@@ -5,10 +5,10 @@ description: "Create a video by interpolating motion between two images (first a
 
 Args:
     prompt: Description of the transition and motion between the frames (e.g., "smooth transition", "person walks from position A to B", "camera pans", etc.)
-    first_frame_image: Starting frame image file_id from /upload_file
-    last_frame_image: Ending frame image file_id from /upload_file
-    width: Width of the generated video in pixels (default: 768)
-    height: Height of the generated video in pixels (default: 512)
+    first_frame_image: Starting frame local image file path or remote URL
+    last_frame_image: Ending frame local image file path or remote URL
+    width: Final width of the generated video in pixels (default: 1536)
+    height: Final height of the generated video in pixels (default: 1024)
 
 Returns:
     Generated video as a URL interpolating between the two frames in MP4 format, no audio
@@ -23,6 +23,7 @@ core/bin/tool-cli request '{"server_id": "media", "tool_name": "flf_to_video", "
 ## Arguments Schema
 ```json
 {
+  "additionalProperties": false,
   "properties": {
     "prompt": {
       "type": "string"
@@ -34,11 +35,11 @@ core/bin/tool-cli request '{"server_id": "media", "tool_name": "flf_to_video", "
       "type": "string"
     },
     "width": {
-      "default": 768,
+      "default": 1536,
       "type": "integer"
     },
     "height": {
-      "default": 512,
+      "default": 1024,
       "type": "integer"
     }
   },

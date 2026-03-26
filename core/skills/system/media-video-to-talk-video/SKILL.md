@@ -5,11 +5,10 @@ description: "Create a talking or singing video from an existing clip synchroniz
 
 Args:
     prompt: Optional guidance for the video generation style (e.g., "natural expression", "animated talking", "expressive singing", "energetic performance", etc.)
-    video_file: Source video file_id from /upload_file whose subject will be reanimated to match the audio.
-    audio_file: Speech or singing audio file_id from /upload_file that the face will be synchronized to (supports MP3, WAV formats)
-    width: Width of the generated video in pixels (default: 448)
-    height: Height of the generated video in pixels (default: 448)
-    upscale: When true (default), automatically upscale the generated video before returning
+    video_file: Source local video file path or remote URL whose subject will be reanimated to match the audio.
+    audio_file: Local speech or singing audio file path or remote URL that the face will be synchronized to (supports MP3, WAV formats)
+    width: Final width of the generated video in pixels (default: 896)
+    height: Final height of the generated video in pixels (default: 896)
     pingpong: When true (default), mirror the input clip into a forward+reverse pingpong loop before processing
 
 Returns:
@@ -25,6 +24,7 @@ core/bin/tool-cli request '{"server_id": "media", "tool_name": "video_to_talk_vi
 ## Arguments Schema
 ```json
 {
+  "additionalProperties": false,
   "properties": {
     "prompt": {
       "type": "string"
@@ -36,16 +36,12 @@ core/bin/tool-cli request '{"server_id": "media", "tool_name": "video_to_talk_vi
       "type": "string"
     },
     "width": {
-      "default": 448,
+      "default": 896,
       "type": "integer"
     },
     "height": {
-      "default": 448,
+      "default": 896,
       "type": "integer"
-    },
-    "upscale": {
-      "default": true,
-      "type": "boolean"
     },
     "pingpong": {
       "default": true,

@@ -1,13 +1,13 @@
 ---
 name: media-video-upscale
-description: "Upscale and enhance a video using the ComfyUI upscale workflow."
+description: "Upscale video size to 2X and restore face in the video."
 ---
 
 Args:
-    video_file: Video file_id from /upload_file to upscale.
+    video_file: Local video file path or remote URL for face restore and upscale.
 
 Returns:
-    Upscaled video as a URL in MP4 format.
+    Refined 2x upscaled video as a local MP4 file path.
 
 ## Usage
 Call the local MCP bridge shell wrapper:
@@ -19,6 +19,7 @@ core/bin/tool-cli request '{"server_id": "media", "tool_name": "video_upscale", 
 ## Arguments Schema
 ```json
 {
+  "additionalProperties": false,
   "properties": {
     "video_file": {
       "type": "string"

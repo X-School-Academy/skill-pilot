@@ -21,6 +21,7 @@ core/bin/tool-cli request '{"server_id": "media", "tool_name": "text_to_image", 
 ## Arguments Schema
 ```json
 {
+  "additionalProperties": false,
   "properties": {
     "prompt": {
       "type": "string"

@@ -5,9 +5,9 @@ description: "Generate speech audio for multiple lines with per-line emotion con
 
 Args:
     segments: List of dicts with fields text, emotion, and emotion_sample (all required);
-              Optionally include ref_emotion_voice per segment as a file_id from /upload_file;
+              Optionally include ref_emotion_voice per segment as a local audio file path or remote URL;
               when omitted/empty, defaults to ref_voice.
-    ref_voice: Audio file_id from /upload_file to use as reference for voice characteristics and timbre
+    ref_voice: Local audio file path or remote URL to use as reference for voice characteristics and timbre
 
 Returns:
     List of generated speech audio segments as HTTP URLs (http://host:port/file/path) in WAV format
@@ -18,16 +18,16 @@ Returns:
             "text": "Hi there! It is great to meet you.",
             "emotion": "happy",
             "emotion_sample": "I am so glad we finally get to meet in person!",
-            "ref_emotion_voice": "file_id_from_upload"
+            "ref_emotion_voice": "/path/to/emotion_voice.wav"
         },
         {
             "text": "This is serious, so please pay attention.",
             "emotion": "serious",
             "emotion_sample": "This is serious, so please pay attention.",
-            "ref_emotion_voice": "file_id_from_upload"
+            "ref_emotion_voice": "/path/to/emotion_voice.wav"
         }
     ]
-    audio = await text_segments_to_speech(segments, ref_voice="file_id_from_upload")
+    audio = await text_segments_to_speech(segments, ref_voice="/path/to/reference_voice.wav")
 
 ## Usage
 Call the local MCP bridge shell wrapper:
@@ -39,6 +39,7 @@ core/bin/tool-cli request '{"server_id": "media", "tool_name": "text_segments_to
 ## Arguments Schema
 ```json
 {
+  "additionalProperties": false,
   "properties": {
     "segments": {
       "items": {
