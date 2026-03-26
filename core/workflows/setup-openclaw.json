@@ -27,9 +27,9 @@
         "y": 110.60000610351562
       },
       "data": {
-        "title": "PlayWright Init",
+        "title": "Agent Browser Init",
         "provider_id": "claude",
-        "skill": "init-playwright"
+        "skill": "init-agent-browser"
       }
     },
     {
