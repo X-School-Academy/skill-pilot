@@ -5,10 +5,9 @@ from typing import Dict, Any, List
 from ..VideoStyle import VideoStyle
 
 # Import utility functions
-from llm import LLM
 from ..video_utils.html2image import capture_image
 import subprocess
-from tts_service import async_text_to_audio_file
+from .shared import get_or_create_voice_audio
 
 
 async def create_bullet_list_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
@@ -36,6 +35,7 @@ async def create_bullet_list_scene(scene: Dict[str, Any], style: VideoStyle) -> 
         if isinstance(first_item, dict):
             items = [item.get("text", "") for item in items]
     voice_over = scene.get("voice_over", "")
+    voice_path = scene.get("voice_path", "")
     
     if not items:
         raise ValueError("Bullet list scene requires 'items' field")
@@ -144,21 +144,11 @@ async def create_bullet_list_scene(scene: Dict[str, Any], style: VideoStyle) -> 
     if not image_path:
         raise Exception("Failed to capture image for bullet list scene")
     
-    # Generate audio file using Gemini TTS or fallback to LLM
-    try:
-        audio_path = await async_text_to_audio_file(
-            voice_over,
-            voice=style.voice_name,
-            format="wav",
-        )
-    except Exception as e:
-        print(f"Gemini TTS failed, falling back to LLM: {e}")
-        # Fallback to original LLM method
-        async with LLM() as llm:
-            audio_path = await llm.text_to_audio_file(
-                voice_over, 
-                voice=style.voice_name,
-            )
+    audio_path, should_cleanup_audio = await get_or_create_voice_audio(
+        voice_over,
+        voice_path,
+        style.voice_name,
+    )
 
     if not audio_path:
         raise Exception("Failed to generate audio for bullet list scene")
@@ -203,7 +193,7 @@ async def create_bullet_list_scene(scene: Dict[str, Any], style: VideoStyle) -> 
     try:
         if os.path.exists(image_path):
             os.remove(image_path)
-        if os.path.exists(audio_path):
+        if should_cleanup_audio and os.path.exists(audio_path):
             os.remove(audio_path)
     except:
         pass  # Ignore cleanup errors

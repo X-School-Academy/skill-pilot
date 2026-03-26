@@ -6,12 +6,11 @@ from ..VideoStyle import VideoStyle
 import uuid
 
 # Import utility functions
-from llm import LLM    
 from image_service import generate_image_from_prompt
 from ..video_utils.html2image import capture_image
 import subprocess
-from tts_service import async_text_to_audio_file
 import base64
+from .shared import get_or_create_voice_audio, resolve_optional_scene_file
 
 
 
@@ -24,9 +23,10 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
     Args:
         scene: Scene data containing:
             - image_prompt: string - AI prompt which will be used to create the image
-            - image_path: string - local file path to a provided image
+            - image_path: string - set only if an image file is specified in the video design requirements
             - text: string - caption of the image
             - voice_over: string
+            - voice_path: string - set only if a voice file is specified in the video design requirements
         style: Video style configuration
 
     Returns:
@@ -35,9 +35,10 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
 
     # Extract scene data
     image_prompt = scene.get("image_prompt", "")
-    image_path = scene.get("image_path", "")
+    image_path = resolve_optional_scene_file(scene, "image_path")
     caption_text = scene.get("text", "")
     voice_over = scene.get("voice_over", "")
+    voice_path = scene.get("voice_path", "")
 
     width = style.width
     height = style.height
@@ -53,9 +54,6 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
             "Image with caption scene requires exactly one of 'image_prompt' or 'image_path'"
         )
 
-    if has_image_path and not os.path.isfile(image_path):
-        raise ValueError(f"Image with caption scene image_path does not exist: {image_path}")
-    
     if not caption_text:
         raise ValueError("Image with caption scene requires 'text' field")
     
@@ -173,21 +171,11 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
     if not composite_image_path:
         raise Exception("Failed to capture composite image for image with caption scene")
     
-    # Generate audio file using Gemini TTS or fallback to LLM
-    try:
-        audio_path = await async_text_to_audio_file(
-            voice_over,
-            voice=style.voice_name,
-            format="wav",
-        )
-    except Exception as e:
-        print(f"Gemini TTS failed, falling back to LLM: {e}")
-        # Fallback to original LLM method
-        async with LLM() as llm:
-            audio_path = await llm.text_to_audio_file(
-                voice_over, 
-                voice=style.voice_name,
-            )
+    audio_path, should_cleanup_audio = await get_or_create_voice_audio(
+        voice_over,
+        voice_path,
+        style.voice_name,
+    )
     
     if not audio_path:
         raise Exception("Failed to generate audio for image with caption scene")
@@ -236,7 +224,7 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
             os.remove(generated_image_path)
         if os.path.exists(composite_image_path):
             os.remove(composite_image_path)
-        if os.path.exists(audio_path):
+        if should_cleanup_audio and os.path.exists(audio_path):
             os.remove(audio_path)
     except:
         pass  # Ignore cleanup errors
