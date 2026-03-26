@@ -67,6 +67,38 @@ class OutOfMemoryError(WorkflowExecutionError):
     pass
 
 
+def _resolve_max_execution_time_seconds() -> int:
+    """
+    Resolve the workflow timeout in seconds.
+
+    Prefer the explicit GPU worker timeout. If it is not set, fall back to the MCP
+    tool timeout, which is stored in milliseconds in config/mcp.json5.
+    """
+    raw_gpu_timeout = str(os.getenv('GPU_WORKER_MAX_EXECUTION_TIME') or '').strip()
+    if raw_gpu_timeout:
+        try:
+            timeout_seconds = int(raw_gpu_timeout)
+        except ValueError as exc:
+            raise WorkflowExecutionError(
+                f"Invalid GPU_WORKER_MAX_EXECUTION_TIME value: {raw_gpu_timeout!r}"
+            ) from exc
+        if timeout_seconds > 0:
+            return timeout_seconds
+
+    raw_mcp_timeout = str(os.getenv('MCP_TOOL_TIMEOUT') or '').strip()
+    if raw_mcp_timeout:
+        try:
+            timeout_ms = int(raw_mcp_timeout)
+        except ValueError as exc:
+            raise WorkflowExecutionError(
+                f"Invalid MCP_TOOL_TIMEOUT value: {raw_mcp_timeout!r}"
+            ) from exc
+        if timeout_ms > 0:
+            return max(1, int(timeout_ms / 1000))
+
+    return GPU_WORKER_MAX_EXECUTION_TIME
+
+
 class WorkflowExecutor:
     """Execute ComfyUI workflows without Strapi task queue"""
 
@@ -460,7 +492,7 @@ class WorkflowExecutor:
             Tuple of (prompt_id, history data with outputs)
         """
         if max_wait_time is None:
-            max_wait_time = GPU_WORKER_MAX_EXECUTION_TIME
+            max_wait_time = _resolve_max_execution_time_seconds()
 
         start_time = asyncio.get_event_loop().time()
         timeout = aiohttp.ClientTimeout(total=30, connect=10)
