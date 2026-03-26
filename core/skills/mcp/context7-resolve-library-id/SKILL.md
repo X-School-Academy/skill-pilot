@@ -9,6 +9,8 @@ Call the local MCP bridge shell wrapper:
 ```bash
 core/bin/tool-cli request '{"server_id": "context7", "tool_name": "resolve-library-id", "arguments": {}}'
 ```
+**Do not use any Python helper code to invoke the `core/bin/tool-cli` command. Run as shell command with arguments directly.**
+
 
 ## Tool Description
 Resolve a package or product name to the best matching Context7 library ID before calling query-docs.

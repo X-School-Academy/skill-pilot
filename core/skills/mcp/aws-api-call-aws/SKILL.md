@@ -9,6 +9,8 @@ Call the local MCP bridge shell wrapper:
 ```bash
 core/bin/tool-cli request '{"server_id": "aws-api", "tool_name": "call_aws", "arguments": {}}'
 ```
+**Do not use any Python helper code to invoke the `core/bin/tool-cli` command. Run as shell command with arguments directly.**
+
 
 ## Tool Description
 Execute AWS CLI commands with validation and proper error handling. This is the PRIMARY tool to use when you are confident about the exact AWS CLI command needed to fulfill a user's request. Always prefer this tool over 'suggest_aws_commands' when you have a specific command in mind.

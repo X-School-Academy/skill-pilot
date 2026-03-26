@@ -9,6 +9,8 @@ Call the local MCP bridge shell wrapper:
 ```bash
 core/bin/tool-cli request '{"server_id": "context7", "tool_name": "query-docs", "arguments": {}}'
 ```
+**Do not use any Python helper code to invoke the `core/bin/tool-cli` command. Run as shell command with arguments directly.**
+
 
 ## Tool Description
 Retrieves and queries up-to-date documentation and code examples from Context7 for any programming library or framework.

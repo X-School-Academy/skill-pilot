@@ -9,6 +9,8 @@ Call the local MCP bridge shell wrapper:
 ```bash
 core/bin/tool-cli request '{"server_id": "dart", "tool_name": "hover", "arguments": {}}'
 ```
+**Do not use any Python helper code to invoke the `core/bin/tool-cli` command. Run as shell command with arguments directly.**
+
 
 ## Tool Description
 Get hover information at a given cursor position in a file. This can include documentation, type information, etc for the text at that position.
