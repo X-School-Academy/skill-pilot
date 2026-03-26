@@ -55,6 +55,9 @@ uv pip install "numpy<2"
 uv pip freeze > ~/workspace/comfyui_f6b869d7d35f7160bf2fdeabaed378d737834540_freeze.txt
 
 
+ComfyUI-MultiGPU 
+https://github.com/pollockjj/ComfyUI-MultiGPU.git commit a05823ff0a5296332ae478b18ab93b46cd996a44 (fix fp16 not existing issue)
+
 https://console.runpod.io/user/settings
 API Keys
 SSH Keys
