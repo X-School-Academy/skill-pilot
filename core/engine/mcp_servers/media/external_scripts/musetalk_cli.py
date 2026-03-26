@@ -35,8 +35,53 @@ import queue
 import threading
 
 
-ProjectDir = os.path.abspath(os.path.dirname(__file__))
+SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
+
+
+def _find_musetalk_root() -> str:
+    candidates = []
+    for env_name in ("MUSETALK_ROOT", "MUSETALK_HOME"):
+        env_value = str(os.environ.get(env_name) or "").strip()
+        if env_value:
+            candidates.append(os.path.abspath(env_value))
+
+    cwd = os.path.abspath(os.getcwd())
+    candidates.extend(
+        [
+            SCRIPT_DIR,
+            cwd,
+            os.path.dirname(SCRIPT_DIR),
+            os.path.dirname(os.path.dirname(SCRIPT_DIR)),
+        ]
+    )
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+        musetalk_pkg = os.path.join(candidate, "musetalk")
+        models_dir = os.path.join(candidate, "models")
+        if os.path.isdir(musetalk_pkg) and os.path.isdir(models_dir):
+            return candidate
+
+    return SCRIPT_DIR
+
+
+ProjectDir = _find_musetalk_root()
 CheckpointsDir = os.path.join(ProjectDir, "models")
+if ProjectDir not in sys.path:
+    sys.path.insert(0, ProjectDir)
+os.chdir(ProjectDir)
+
+DWPOSE_CONFIG_PATH = os.path.join(
+    ProjectDir,
+    "musetalk",
+    "utils",
+    "dwpose",
+    "rtmpose-l_8xb32-270e_coco-ubody-wholebody-384x288.py",
+)
+MUSETALK_UNET_PATH = os.path.join(CheckpointsDir, "musetalkV15", "unet.pth")
+MUSETALK_CONFIG_PATH = os.path.join(CheckpointsDir, "musetalkV15", "musetalk.json")
+WHISPER_DIR = os.path.join(CheckpointsDir, "whisper")
 
 COMFYUI_INSTALL_PATH = str(os.environ.get("COMFYUI_INSTALL_PATH") or "").strip()
 DEFAULT_TMP_ROOT = f"{COMFYUI_INSTALL_PATH}/temp" if COMFYUI_INSTALL_PATH else "/tmp"
@@ -250,6 +295,17 @@ def download_model():
         logger.info("All required model files exist.")
 
 
+def _patch_musetalk_preprocessing_paths() -> None:
+    try:
+        import musetalk.utils.preprocessing as preprocessing
+    except Exception:
+        return
+
+    if hasattr(preprocessing, "config_file"):
+        preprocessing.config_file = DWPOSE_CONFIG_PATH
+    if hasattr(preprocessing, "checkpoint_file"):
+        preprocessing.checkpoint_file = os.path.join(CheckpointsDir, "dwpose", "dw-ll_ucoco_384.pth")
+
 
 with _log_step("download_model_check", checkpoints_dir=CheckpointsDir):
     download_model()  # for huggingface deployment.
@@ -260,6 +316,8 @@ from musetalk.utils.face_parsing import FaceParsing
 from musetalk.utils.audio_processor import AudioProcessor
 from musetalk.utils.utils import get_file_type, get_video_fps, datagen, load_all_model
 from musetalk.utils.preprocessing import get_landmark_and_bbox, read_imgs, coord_placeholder, get_bbox_range
+
+_patch_musetalk_preprocessing_paths()
 
 
 def fast_check_ffmpeg():
@@ -715,9 +773,9 @@ def check_video(video):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 with _log_step("load_models", device=device):
     vae, unet, pe = load_all_model(
-        unet_model_path="./models/musetalkV15/unet.pth",
+        unet_model_path=MUSETALK_UNET_PATH,
         vae_type="sd-vae",
-        unet_config="./models/musetalkV15/musetalk.json",
+        unet_config=MUSETALK_CONFIG_PATH,
         device=device
     )
 
@@ -828,9 +886,9 @@ if __name__ == "__main__":
 
         # Initialize audio processor and Whisper model
         global audio_processor
-        audio_processor = AudioProcessor(feature_extractor_path="./models/whisper")
+        audio_processor = AudioProcessor(feature_extractor_path=WHISPER_DIR)
         global whisper
-        whisper = WhisperModel.from_pretrained("./models/whisper")
+        whisper = WhisperModel.from_pretrained(WHISPER_DIR)
         whisper = whisper.to(device=device, dtype=weight_dtype).eval()
         whisper.requires_grad_(False)
         logger.info("Whisper model loaded dtype=%s device=%s", weight_dtype, device)
