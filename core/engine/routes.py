@@ -4397,9 +4397,9 @@ def create_course_plan(payload: Dict[str, Any]):
     return {"course_details": course_details}
 
 
-@router.post("/api/create_cpu_video")
-@router.post("/create_cpu_video")
-def create_cpu_video(payload: Dict[str, Any]):
+@router.post("/api/create_multiple_scene_video")
+@router.post("/create_multiple_scene_video")
+def create_multiple_scene_video(payload: Dict[str, Any]):
     requirement = str(payload.get("requirement") or "").strip()
     if not requirement:
         return JSONResponse(status_code=400, content={"error": "requirement is required"})
@@ -4409,9 +4409,11 @@ def create_cpu_video(payload: Dict[str, Any]):
     except (TypeError, ValueError):
         target_duration = 60
     resolution = str(payload.get("resolution") or "1080x1920")
-    video_file_path = VIDEO_CREATOR.create_cpu_video(
+    output_path = str(payload.get("output_path") or "/tmp").strip() or "/tmp"
+    video_file_path = VIDEO_CREATOR.create_multiple_scene_video(
         requirement=requirement,
         target_duration=target_duration,
         resolution=resolution,
+        output_path=output_path,
     )
     return {"video_file_path": video_file_path}

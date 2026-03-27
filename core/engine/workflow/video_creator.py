@@ -5,6 +5,8 @@ from typing import Dict, List, Optional, Any, Literal, Annotated
 from dataclasses import dataclass, asdict
 from enum import Enum
 import traceback
+from pathlib import Path
+import shutil
 # Import Pydantic BaseModel for structured responses
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
@@ -24,6 +26,7 @@ from .llm_adapter import WorkflowLLMAdapter
 # Import VideoStyle from separate module to avoid circular imports
 from .VideoStyle import VideoStyle
 from .scene_types.shared import get_or_create_voice_audio
+from .scene_types.shared import copy_file_to_path, get_media_duration, resolve_project_file_path
 
 # Import scene type modules
 from .scene_types import (
@@ -40,6 +43,8 @@ from .scene_types import (
     create_definition_scene,
     create_text_animation_scene,
     create_narration_only_scene,
+    create_host_speech_clip_scene,
+    create_video_clip_scene,
 )
 
 from logger import log, error
@@ -59,6 +64,8 @@ class SceneType(Enum):
     DEFINITION_SCENE = "definition"
     TEXT_ANIMATION_SCENE = "text_animation"
     NARRATION_ONLY = "narration_only"
+    HOST_SPEECH_CLIP = "host_speech_clip"
+    VIDEO_CLIP = "video_clip"
 
 
 @dataclass
@@ -106,6 +113,7 @@ class State(TypedDict):
     requirement: str
     target_duration: int
     resolution: str
+    output_path: str
 
     # Workflow state
     video_spec: Optional[VideoSpec]
@@ -113,6 +121,7 @@ class State(TypedDict):
     scene_plan: Optional[List[Scene]]
     scene_videos: List[str]  # List of generated scene video file paths
     final_video_path: Optional[str]
+    run_output_dir: Optional[str]
 
     # Processing state
     current_scene_index: int
@@ -125,6 +134,10 @@ class VideoCreatorWorkflow:
     IMAGE_SCENE_TYPES = {
         SceneType.IMAGE.value,
         SceneType.IMAGE_WITH_CAPTION.value,
+    }
+
+    HOST_IMAGE_SCENE_TYPES = {
+        SceneType.HOST_SPEECH_CLIP.value,
     }
 
     def __init__(self):
@@ -595,6 +608,30 @@ This scene type is ideal for emphasizing titles, key points, or important concep
 }}
 ```
 
+* Host Speech Clip – Talking head or lipsynced host scene driven by a host image or source video.
+```json
+{{
+  "scene_type": "host_speech_clip",
+  "video_type": "string: 'talk_video' or 'lipsync', default 'talk_video'",
+  "host_image_path": "string - set only if a source host image file is specified; if present, ignore host_image_prompt",
+  "host_image_prompt": "string - use only when host_image_path is not provided",
+  "talking_video_prompt": "string - guidance for the host talking animation style",
+  "video_path": "string - optional existing source video; if it already has audio, it is treated as the final scene video",
+  "voice_over": "The text for voice-over.",
+  "voice_path": "string - set only if a voice file is specified in the video design requirements"
+}}
+```
+
+* Video Clip – Existing video clip combined with scene narration.
+```json
+{{
+  "scene_type": "video_clip",
+  "video_path": "string - required source video file path",
+  "voice_over": "The text for voice-over.",
+  "voice_path": "string - set only if a voice file is specified in the video design requirements"
+}}
+```
+
 Return your full video plan as a JSON object:
 
 {{
@@ -716,6 +753,8 @@ Target Audience: {video_spec.target_audience}"""
             SceneType.DEFINITION_SCENE: create_definition_scene,
             SceneType.TEXT_ANIMATION_SCENE: create_text_animation_scene,
             SceneType.NARRATION_ONLY: create_narration_only_scene,
+            SceneType.HOST_SPEECH_CLIP: create_host_speech_clip_scene,
+            SceneType.VIDEO_CLIP: create_video_clip_scene,
         }
         
         # Get the appropriate scene creator function
@@ -729,11 +768,134 @@ Target Audience: {video_spec.target_audience}"""
             error(f"Error creating {scene_type.value} scene: {e}")
             raise Exception(f"Failed to create scene of type {scene_type.value}: {str(e)}")
 
+    def _create_run_output_dir(self, output_path: str, thread_id: str) -> str:
+        base_dir = Path(output_path or "/tmp").expanduser().resolve()
+        run_id = f"video_run_{thread_id.replace('/', '_')}"
+        run_dir = base_dir / run_id
+        (run_dir / "scenes").mkdir(parents=True, exist_ok=True)
+        return str(run_dir)
+
+    def _ensure_scene_dir(self, run_output_dir: str, scene_id: str) -> Path:
+        scene_dir = Path(run_output_dir) / "scenes" / scene_id
+        scene_dir.mkdir(parents=True, exist_ok=True)
+        return scene_dir
+
+    def _stage_scene_file(
+        self,
+        source_path: str,
+        destination_path: Path,
+        cleanup_source: bool = False,
+    ) -> str:
+        staged_path = copy_file_to_path(source_path, str(destination_path))
+        if cleanup_source:
+            try:
+                resolved_source = Path(source_path).expanduser().resolve()
+                if resolved_source != Path(staged_path).resolve() and resolved_source.exists():
+                    resolved_source.unlink()
+            except OSError:
+                pass
+        return staged_path
+
+    def _extract_extension(self, file_path: str, default: str) -> str:
+        suffix = Path(file_path).suffix.lower()
+        return suffix if suffix else default
+
+    def _normalize_scene_video(self, input_path: str, output_path: str, style: VideoStyle) -> str:
+        video_filter = (
+            f"scale={style.width}:{style.height}:force_original_aspect_ratio=increase,"
+            f"crop={style.width}:{style.height},fps=30"
+        )
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            input_path,
+            "-vf",
+            video_filter,
+            "-c:v",
+            "libx264",
+            "-crf",
+            "18",
+            "-c:a",
+            "aac",
+            "-ar",
+            "48000",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            output_path,
+        ]
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=180)
+        if result.returncode != 0:
+            raise RuntimeError(f"Failed to normalize scene video: {result.stderr}")
+        return output_path
+
+    def _ensure_scene_preview_image(self, scene_data: Dict[str, Any], scene_video_path: str, scene_dir: Path) -> None:
+        if scene_data.get("audit_image_path") and Path(str(scene_data["audit_image_path"])).is_file():
+            return
+
+        preview_path = scene_dir / "image.png"
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            scene_video_path,
+            "-frames:v",
+            "1",
+            str(preview_path),
+        ]
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=60)
+        if result.returncode == 0 and preview_path.exists():
+            scene_data["audit_image_path"] = str(preview_path)
+
+    def _write_audit_readme(self, run_output_dir: str, state_values: Dict[str, Any]) -> None:
+        output_dir = Path(run_output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        lines = [
+            "# Video Audit",
+            "",
+            f"- Requirement: {state_values.get('requirement', '')}",
+        ]
+
+        video_spec = state_values.get("video_spec")
+        if video_spec:
+            lines.append(f"- Resolution: {getattr(video_spec, 'resolution', '')}")
+            lines.append(f"- Target duration: {getattr(video_spec, 'duration', '')}")
+
+        final_video_path = state_values.get("final_video_path") or ""
+        if final_video_path:
+            lines.append(f"- Final video: `{final_video_path}`")
+
+        scene_plan = state_values.get("scene_plan") or []
+        lines.extend(["", "## Scenes", ""])
+        for index, scene in enumerate(scene_plan, start=1):
+            scene_data = scene.data if isinstance(scene, Scene) else getattr(scene, "data", {}) or {}
+            scene_id = scene.scene_id if isinstance(scene, Scene) else f"scene_{index:03d}"
+            lines.append(f"### {scene_id}")
+            lines.append(f"- Scene type: {scene_data.get('scene_type', '')}")
+            if scene_data.get("audit_image_path"):
+                lines.append(f"- Image: `{scene_data['audit_image_path']}`")
+            if scene_data.get("voice_path"):
+                lines.append(f"- Audio: `{scene_data['voice_path']}`")
+            if scene_data.get("question_voice_path"):
+                lines.append(f"- Question audio: `{scene_data['question_voice_path']}`")
+            if scene_data.get("answer_voice_path"):
+                lines.append(f"- Answer audio: `{scene_data['answer_voice_path']}`")
+            if getattr(scene, "video_file_path", None):
+                lines.append(f"- Scene video: `{scene.video_file_path}`")
+            lines.append("")
+
+        (output_dir / "README.md").write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+
     async def _prepare_scene_images(self, scene_plan: List[Scene]) -> None:
         """Pre-generate all AI images before scene video rendering."""
         for scene in scene_plan:
             scene_data = scene.data
             scene_type = scene_data.get("scene_type")
+            scene_dir = Path(scene_data.get("_scene_dir") or "")
+            if not scene_dir:
+                raise ValueError(f"Missing scene directory for {scene.scene_id}")
 
             if scene_type in self.IMAGE_SCENE_TYPES:
                 image_prompt = scene_data.get("image_prompt", "")
@@ -753,17 +915,58 @@ Target Audience: {video_spec.target_audience}"""
                     if not generated_image_path:
                         raise Exception(f"Failed to generate image for {scene.scene_id}")
 
-                    scene_data["_generated_image_prompt"] = image_prompt
-                    scene_data["image_path"] = generated_image_path
-                    scene_data["image_url"] = generated_image_path
-                    scene_data["_generated_image_path"] = generated_image_path
+                    staged_image_path = self._stage_scene_file(
+                        generated_image_path,
+                        scene_dir / "image.png",
+                        cleanup_source=True,
+                    )
+                    scene_data["image_path"] = staged_image_path
+                    scene_data["image_url"] = staged_image_path
+                    scene_data["audit_image_path"] = staged_image_path
                     scene_data.pop("image_prompt", None)
+                elif image_path:
+                    resolved_image_path = resolve_project_file_path(image_path, "image_path")
+                    staged_image_path = self._stage_scene_file(
+                        resolved_image_path,
+                        scene_dir / f"image{self._extract_extension(resolved_image_path, '.png')}",
+                    )
+                    scene_data["image_path"] = staged_image_path
+                    scene_data["image_url"] = staged_image_path
+                    scene_data["audit_image_path"] = staged_image_path
                 continue
 
             if scene_type != SceneType.ICON_GRID.value:
+                if scene_type not in self.HOST_IMAGE_SCENE_TYPES:
+                    continue
+                host_image_path = scene_data.get("host_image_path", "")
+                host_image_prompt = scene_data.get("host_image_prompt", "")
+                if host_image_path:
+                    resolved_host_image_path = resolve_project_file_path(host_image_path, "host_image_path")
+                    staged_host_image_path = self._stage_scene_file(
+                        resolved_host_image_path,
+                        scene_dir / f"host_image{self._extract_extension(resolved_host_image_path, '.png')}",
+                    )
+                    scene_data["host_image_path"] = staged_host_image_path
+                    scene_data["audit_image_path"] = staged_host_image_path
+                    scene_data.pop("host_image_prompt", None)
+                    continue
+                if host_image_prompt:
+                    generated_host_image_path = await generate_image_from_prompt(
+                        host_image_prompt,
+                        style="icon",
+                    )
+                    if not generated_host_image_path:
+                        raise Exception(f"Failed to generate host image for {scene.scene_id}")
+                    staged_host_image_path = self._stage_scene_file(
+                        generated_host_image_path,
+                        scene_dir / "host_image.png",
+                        cleanup_source=True,
+                    )
+                    scene_data["host_image_path"] = staged_host_image_path
+                    scene_data["audit_image_path"] = staged_host_image_path
+                    scene_data.pop("host_image_prompt", None)
                 continue
 
-            generated_icon_paths = []
             icons = scene_data.get("icons", [])
             for index, icon in enumerate(icons):
                 image_prompt = icon.get("image_prompt", "")
@@ -775,6 +978,16 @@ Target Audience: {video_spec.target_audience}"""
                     )
 
                 if not image_prompt:
+                    if image_path:
+                        resolved_icon_path = resolve_project_file_path(image_path, f"icons[{index}].image_path")
+                        staged_icon_path = self._stage_scene_file(
+                            resolved_icon_path,
+                            scene_dir / f"icon_{index + 1:02d}{self._extract_extension(resolved_icon_path, '.png')}",
+                        )
+                        icon["image_path"] = staged_icon_path
+                        icon["image_url"] = staged_icon_path
+                        if index == 0:
+                            scene_data["audit_image_path"] = staged_icon_path
                     continue
 
                 log(f"Generating icon {index + 1} for {scene.scene_id}")
@@ -787,14 +1000,16 @@ Target Audience: {video_spec.target_audience}"""
                         f"Failed to generate icon {index + 1} for {scene.scene_id}"
                     )
 
-                icon["_generated_image_prompt"] = image_prompt
-                icon["image_path"] = generated_image_path
-                icon["image_url"] = generated_image_path
+                staged_icon_path = self._stage_scene_file(
+                    generated_image_path,
+                    scene_dir / f"icon_{index + 1:02d}.png",
+                    cleanup_source=True,
+                )
+                icon["image_path"] = staged_icon_path
+                icon["image_url"] = staged_icon_path
+                if index == 0:
+                    scene_data["audit_image_path"] = staged_icon_path
                 icon.pop("image_prompt", None)
-                generated_icon_paths.append(generated_image_path)
-
-            if generated_icon_paths:
-                scene_data["_generated_icon_paths"] = generated_icon_paths
 
     async def _prepare_scene_audio(
         self,
@@ -805,6 +1020,9 @@ Target Audience: {video_spec.target_audience}"""
         for scene in scene_plan:
             scene_data = scene.data
             scene_type = scene_data.get("scene_type")
+            scene_dir = Path(scene_data.get("_scene_dir") or "")
+            if not scene_dir:
+                raise ValueError(f"Missing scene directory for {scene.scene_id}")
 
             if scene_type == SceneType.QUIZ.value:
                 for voice_key, path_key, meta_key, url_key in (
@@ -822,10 +1040,14 @@ Target Audience: {video_spec.target_audience}"""
                     if not audio_path:
                         raise Exception(f"Failed to generate audio for {scene.scene_id}:{voice_key}")
 
-                    scene_data[path_key] = audio_path
-                    scene_data[url_key] = audio_path
-                    if should_cleanup_audio:
-                        scene_data[meta_key] = audio_path
+                    destination_name = "question_audio.wav" if "question" in path_key else "answer_audio.wav"
+                    staged_audio_path = self._stage_scene_file(
+                        audio_path,
+                        scene_dir / destination_name,
+                        cleanup_source=should_cleanup_audio,
+                    )
+                    scene_data[path_key] = staged_audio_path
+                    scene_data[url_key] = staged_audio_path
                 continue
 
             voice_over = scene_data.get("voice_over", "")
@@ -844,10 +1066,14 @@ Target Audience: {video_spec.target_audience}"""
             if not audio_path:
                 raise Exception(f"Failed to generate audio for {scene.scene_id}")
 
-            scene_data["voice_path"] = audio_path
-            scene_data["voice_url"] = audio_path
-            if should_cleanup_audio:
-                scene_data["_generated_voice_path"] = audio_path
+            destination_name = f"audio{self._extract_extension(audio_path, '.wav')}"
+            staged_audio_path = self._stage_scene_file(
+                audio_path,
+                scene_dir / destination_name,
+                cleanup_source=should_cleanup_audio,
+            )
+            scene_data["voice_path"] = staged_audio_path
+            scene_data["voice_url"] = staged_audio_path
 
     async def _prepare_scene_assets(
         self,
@@ -861,77 +1087,7 @@ Target Audience: {video_spec.target_audience}"""
             log("Preparing scene audio...")
             await self._prepare_scene_audio(scene_plan, video_style)
         except Exception:
-            for scene in scene_plan:
-                self._cleanup_generated_scene_assets(scene.data, restore_state=True)
             raise
-
-    def _cleanup_generated_scene_assets(
-        self,
-        scene_data: Dict[str, Any],
-        restore_state: bool = False,
-    ) -> None:
-        """Remove temporary generated assets and optionally restore original scene inputs."""
-        generated_image_path = scene_data.pop("_generated_image_path", "")
-        generated_image_prompt = scene_data.pop("_generated_image_prompt", None)
-        if generated_image_path and os.path.exists(generated_image_path):
-            try:
-                os.remove(generated_image_path)
-            except OSError:
-                pass
-        if restore_state and generated_image_prompt is not None:
-            scene_data["image_prompt"] = generated_image_prompt
-            if scene_data.get("image_path") == generated_image_path:
-                scene_data.pop("image_path", None)
-            if scene_data.get("image_url") == generated_image_path:
-                scene_data.pop("image_url", None)
-
-        cleanup_keys = (
-            "_generated_voice_path",
-            "_generated_question_voice_path",
-            "_generated_answer_voice_path",
-        )
-        for key in cleanup_keys:
-            generated_path = scene_data.pop(key, "")
-            if generated_path and os.path.exists(generated_path):
-                try:
-                    os.remove(generated_path)
-                except OSError:
-                    pass
-            if not restore_state:
-                continue
-
-            if key == "_generated_voice_path":
-                if scene_data.get("voice_path") == generated_path:
-                    scene_data.pop("voice_path", None)
-                if scene_data.get("voice_url") == generated_path:
-                    scene_data.pop("voice_url", None)
-            elif key == "_generated_question_voice_path":
-                if scene_data.get("question_voice_path") == generated_path:
-                    scene_data.pop("question_voice_path", None)
-                if scene_data.get("question_voice_url") == generated_path:
-                    scene_data.pop("question_voice_url", None)
-            elif key == "_generated_answer_voice_path":
-                if scene_data.get("answer_voice_path") == generated_path:
-                    scene_data.pop("answer_voice_path", None)
-                if scene_data.get("answer_voice_url") == generated_path:
-                    scene_data.pop("answer_voice_url", None)
-
-        for generated_path in scene_data.pop("_generated_icon_paths", []):
-            if generated_path and os.path.exists(generated_path):
-                try:
-                    os.remove(generated_path)
-                except OSError:
-                    pass
-        if restore_state:
-            for icon in scene_data.get("icons", []):
-                generated_image_prompt = icon.pop("_generated_image_prompt", None)
-                if generated_image_prompt is None:
-                    continue
-                icon["image_prompt"] = generated_image_prompt
-                if icon.get("image_path"):
-                    icon.pop("image_path", None)
-                if icon.get("image_url"):
-                    icon.pop("image_url", None)
     
     async def create_scene_node(self, state: State) -> Command[Literal["create_scene", "merge_scenes"]]:
         """Create a scene with video URL and decide next step"""
@@ -939,43 +1095,55 @@ Target Audience: {video_spec.target_audience}"""
         current_scene_index = state.get("current_scene_index", 0)
         scene_videos = state.get("scene_videos", [])
         video_style = state.get("video_style")
+        run_output_dir = state.get("run_output_dir")
 
         if not scene_plan:
             raise ValueError("No scene plan found in state")
 
         if not video_style:
             raise ValueError("No video style configuration found in state")
+        if not run_output_dir:
+            raise ValueError("No output directory found in state")
 
         if current_scene_index >= len(scene_plan):
             raise ValueError("Scene index out of range")
 
+        for scene in scene_plan:
+            if not scene.data.get("_scene_dir"):
+                scene.data["_scene_dir"] = str(self._ensure_scene_dir(run_output_dir, scene.scene_id))
+
         current_scene = scene_plan[current_scene_index]
+        current_scene_dir = Path(current_scene.data["_scene_dir"])
 
         log(f"Creating scene {current_scene_index + 1}/{len(scene_plan)}: {current_scene.scene_id}")
 
         if current_scene_index == 0 and not scene_videos:
             await self._prepare_scene_assets(scene_plan, video_style)
 
-        try:
-            video_path = await self.create_scene_video_by_type(current_scene.data, video_style)
-        except Exception:
-            self._cleanup_generated_scene_assets(current_scene.data, restore_state=True)
-            raise
+        video_path = await self.create_scene_video_by_type(current_scene.data, video_style)
+        normalized_scene_video_path = str(current_scene_dir / "video.mp4")
+        self._normalize_scene_video(video_path, normalized_scene_video_path, video_style)
+        if Path(video_path).exists() and Path(video_path).resolve() != Path(normalized_scene_video_path).resolve():
+            try:
+                if str(video_path).startswith("/tmp/"):
+                    Path(video_path).unlink()
+            except OSError:
+                pass
 
-        self._cleanup_generated_scene_assets(current_scene.data, restore_state=True)
+        self._ensure_scene_preview_image(current_scene.data, normalized_scene_video_path, current_scene_dir)
 
         # Persist the newly generated video details on the current scene
-        current_scene.video_file_path = video_path
-        scene_videos.append(video_path)
+        current_scene.video_file_path = normalized_scene_video_path
+        scene_videos.append(normalized_scene_video_path)
 
-        log(f"Scene created: {video_path}")
+        log(f"Scene created: {normalized_scene_video_path}")
 
         # Update state with current progress
         updated_state = {
             "scene_plan": scene_plan,
             "scene_videos": scene_videos,
             "current_scene_index": current_scene_index + 1,
-            "messages": [AIMessage(content=f"Created scene: {current_scene.scene_id} - {video_path}")]
+            "messages": [AIMessage(content=f"Created scene: {current_scene.scene_id} - {normalized_scene_video_path}")]
         }
         
         # Check if we have more scenes to create
@@ -995,18 +1163,18 @@ Target Audience: {video_spec.target_audience}"""
         
         scene_videos = state.get("scene_videos", [])
         video_spec = state.get("video_spec")
-        
+        run_output_dir = state.get("run_output_dir")
+
         if not scene_videos:
             return {"messages": [AIMessage(content="Error: No scene videos to merge")]}
         
         if not video_spec:
             return {"messages": [AIMessage(content="Error: No video specification found")]}
+        if not run_output_dir:
+            return {"messages": [AIMessage(content="Error: No output directory found")]}
         
         try:
-            # Generate a unique UUID for the final video filename
-            unique_id = str(uuid.uuid4())
-            final_video_filename = f"{unique_id}.mp4"
-            final_video_path = f"/tmp/{final_video_filename}"
+            final_video_path = str(Path(run_output_dir) / "final_video.mp4")
 
             log(f"Final video will be saved as: {final_video_path}")
             
@@ -1121,23 +1289,13 @@ Target Audience: {video_spec.target_audience}"""
             log(f"Error in merge_scenes_node: {e}")
             return {"messages": [AIMessage(content=f"Error creating final video: {str(e)}")]}
         
-        finally:
-            # Clean up temporary files
-            try:
-                # Keep final output file; only cleanup intermediate scene files.
-                if 'local_video_paths' in locals():
-                    for path in local_video_paths:
-                        if os.path.exists(path):
-                            os.remove(path)
-            except:
-                pass  # Ignore cleanup errors
-    
     async def create_video(
         self,
         requirement: str,
         duration: int = 300,
         resolution: str = "1920x1080",
         thread_id: str = None,
+        output_path: str = "/tmp",
     ) -> Dict[str, Any]:
         """
         Create an educational video based on a requirement
@@ -1147,6 +1305,7 @@ Target Audience: {video_spec.target_audience}"""
             duration: Target video duration in seconds (default: 300 = 5 minutes)
             resolution: Video resolution (default: "1920x1080")
             thread_id: Optional thread ID for conversation tracking
+            output_path: Parent directory to save generated artifacts
 
         Returns:
             Dictionary containing final video path and metadata
@@ -1156,11 +1315,14 @@ Target Audience: {video_spec.target_audience}"""
             thread_id = str(uuid.uuid4())
 
         config = {"configurable": {"thread_id": thread_id}}
+        run_output_dir = self._create_run_output_dir(output_path, thread_id)
 
         initial_state = {
             "requirement": requirement,
             "target_duration": duration,
             "resolution": resolution,
+            "output_path": output_path,
+            "run_output_dir": run_output_dir,
             "thread_id": thread_id,
             "current_scene_index": 0,
             "scene_videos": [],
@@ -1209,6 +1371,11 @@ Target Audience: {video_spec.target_audience}"""
                     result.update(metadata)
                 except Exception as e:
                     log(f"Warning: Failed to extract video metadata: {e}")
+
+            try:
+                self._write_audit_readme(run_output_dir, state_values)
+            except Exception as e:
+                log(f"Warning: Failed to write audit README: {e}")
                 
             log(f"Video creation completed successfully")
             return result
@@ -1220,12 +1387,19 @@ Target Audience: {video_spec.target_audience}"""
             log(f"Error in create_video: {e}")
             raise Exception(f"Video creation failed: {str(e)}")
 
-    def create_cpu_video(self, requirement: str, target_duration: int = 60, resolution: str = "1080x1920") -> str:
+    def create_multiple_scene_video(
+        self,
+        requirement: str,
+        target_duration: int = 60,
+        resolution: str = "1080x1920",
+        output_path: str = "/tmp",
+    ) -> str:
         result = asyncio.run(
             self.create_video(
                 requirement=requirement,
                 duration=target_duration,
                 resolution=resolution,
+                output_path=output_path,
             )
         )
         return str(result.get("final_video_path") or "")

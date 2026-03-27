@@ -15,7 +15,7 @@ def test_create_simple_video():
     }
     command = [
         "core/bin/api-invoke",
-        "create_cpu_video",
+        "create_multiple_scene_video",
         json.dumps(CPU_VIDEO_PAYLOAD, ensure_ascii=False),
     ]
 
