@@ -23,6 +23,7 @@ from .llm_adapter import WorkflowLLMAdapter
 
 # Import VideoStyle from separate module to avoid circular imports
 from .VideoStyle import VideoStyle
+from .scene_types.shared import get_or_create_voice_audio
 
 # Import scene type modules
 from .scene_types import (
@@ -120,6 +121,11 @@ class State(TypedDict):
 
 class VideoCreatorWorkflow:
     """LangGraph workflow for creating educational videos"""
+
+    IMAGE_SCENE_TYPES = {
+        SceneType.IMAGE.value,
+        SceneType.IMAGE_WITH_CAPTION.value,
+    }
 
     def __init__(self):
         self.max_retries = 3
@@ -722,6 +728,210 @@ Target Audience: {video_spec.target_audience}"""
         except Exception as e:
             error(f"Error creating {scene_type.value} scene: {e}")
             raise Exception(f"Failed to create scene of type {scene_type.value}: {str(e)}")
+
+    async def _prepare_scene_images(self, scene_plan: List[Scene]) -> None:
+        """Pre-generate all AI images before scene video rendering."""
+        for scene in scene_plan:
+            scene_data = scene.data
+            scene_type = scene_data.get("scene_type")
+
+            if scene_type in self.IMAGE_SCENE_TYPES:
+                image_prompt = scene_data.get("image_prompt", "")
+                image_path = scene_data.get("image_path", "")
+
+                if image_prompt and image_path:
+                    raise ValueError(
+                        f"Scene {scene.scene_id} requires exactly one of 'image_prompt' or 'image_path'"
+                    )
+
+                if image_prompt:
+                    log(f"Generating image for {scene.scene_id}")
+                    generated_image_path = await generate_image_from_prompt(
+                        image_prompt,
+                        style="icon",
+                    )
+                    if not generated_image_path:
+                        raise Exception(f"Failed to generate image for {scene.scene_id}")
+
+                    scene_data["_generated_image_prompt"] = image_prompt
+                    scene_data["image_path"] = generated_image_path
+                    scene_data["image_url"] = generated_image_path
+                    scene_data["_generated_image_path"] = generated_image_path
+                    scene_data.pop("image_prompt", None)
+                continue
+
+            if scene_type != SceneType.ICON_GRID.value:
+                continue
+
+            generated_icon_paths = []
+            icons = scene_data.get("icons", [])
+            for index, icon in enumerate(icons):
+                image_prompt = icon.get("image_prompt", "")
+                image_path = icon.get("image_path", "")
+
+                if image_prompt and image_path:
+                    raise ValueError(
+                        f"Scene {scene.scene_id} icon {index + 1} requires exactly one of 'image_prompt' or 'image_path'"
+                    )
+
+                if not image_prompt:
+                    continue
+
+                log(f"Generating icon {index + 1} for {scene.scene_id}")
+                generated_image_path = await generate_image_from_prompt(
+                    image_prompt,
+                    style="icon",
+                )
+                if not generated_image_path:
+                    raise Exception(
+                        f"Failed to generate icon {index + 1} for {scene.scene_id}"
+                    )
+
+                icon["_generated_image_prompt"] = image_prompt
+                icon["image_path"] = generated_image_path
+                icon["image_url"] = generated_image_path
+                icon.pop("image_prompt", None)
+                generated_icon_paths.append(generated_image_path)
+
+            if generated_icon_paths:
+                scene_data["_generated_icon_paths"] = generated_icon_paths
+
+    async def _prepare_scene_audio(
+        self,
+        scene_plan: List[Scene],
+        video_style: VideoStyle,
+    ) -> None:
+        """Pre-generate all scene narration audio before scene video rendering."""
+        for scene in scene_plan:
+            scene_data = scene.data
+            scene_type = scene_data.get("scene_type")
+
+            if scene_type == SceneType.QUIZ.value:
+                for voice_key, path_key, meta_key, url_key in (
+                    ("question_voice_over", "question_voice_path", "_generated_question_voice_path", "question_voice_url"),
+                    ("answer_voice_over", "answer_voice_path", "_generated_answer_voice_path", "answer_voice_url"),
+                ):
+                    voice_over = scene_data.get(voice_key, "")
+                    voice_path = scene_data.get(path_key, "")
+                    audio_path, should_cleanup_audio = await get_or_create_voice_audio(
+                        voice_over,
+                        voice_path,
+                        video_style.voice_name,
+                    )
+
+                    if not audio_path:
+                        raise Exception(f"Failed to generate audio for {scene.scene_id}:{voice_key}")
+
+                    scene_data[path_key] = audio_path
+                    scene_data[url_key] = audio_path
+                    if should_cleanup_audio:
+                        scene_data[meta_key] = audio_path
+                continue
+
+            voice_over = scene_data.get("voice_over", "")
+            voice_path = scene_data.get("voice_path", "")
+
+            if not voice_over and not voice_path:
+                continue
+
+            log(f"Generating audio for {scene.scene_id}")
+            audio_path, should_cleanup_audio = await get_or_create_voice_audio(
+                voice_over,
+                voice_path,
+                video_style.voice_name,
+            )
+
+            if not audio_path:
+                raise Exception(f"Failed to generate audio for {scene.scene_id}")
+
+            scene_data["voice_path"] = audio_path
+            scene_data["voice_url"] = audio_path
+            if should_cleanup_audio:
+                scene_data["_generated_voice_path"] = audio_path
+
+    async def _prepare_scene_assets(
+        self,
+        scene_plan: List[Scene],
+        video_style: VideoStyle,
+    ) -> None:
+        """Generate reusable media assets in batches before scene rendering."""
+        try:
+            log("Preparing scene images...")
+            await self._prepare_scene_images(scene_plan)
+            log("Preparing scene audio...")
+            await self._prepare_scene_audio(scene_plan, video_style)
+        except Exception:
+            for scene in scene_plan:
+                self._cleanup_generated_scene_assets(scene.data, restore_state=True)
+            raise
+
+    def _cleanup_generated_scene_assets(
+        self,
+        scene_data: Dict[str, Any],
+        restore_state: bool = False,
+    ) -> None:
+        """Remove temporary generated assets and optionally restore original scene inputs."""
+        generated_image_path = scene_data.pop("_generated_image_path", "")
+        generated_image_prompt = scene_data.pop("_generated_image_prompt", None)
+        if generated_image_path and os.path.exists(generated_image_path):
+            try:
+                os.remove(generated_image_path)
+            except OSError:
+                pass
+        if restore_state and generated_image_prompt is not None:
+            scene_data["image_prompt"] = generated_image_prompt
+            if scene_data.get("image_path") == generated_image_path:
+                scene_data.pop("image_path", None)
+            if scene_data.get("image_url") == generated_image_path:
+                scene_data.pop("image_url", None)
+
+        cleanup_keys = (
+            "_generated_voice_path",
+            "_generated_question_voice_path",
+            "_generated_answer_voice_path",
+        )
+        for key in cleanup_keys:
+            generated_path = scene_data.pop(key, "")
+            if generated_path and os.path.exists(generated_path):
+                try:
+                    os.remove(generated_path)
+                except OSError:
+                    pass
+            if not restore_state:
+                continue
+
+            if key == "_generated_voice_path":
+                if scene_data.get("voice_path") == generated_path:
+                    scene_data.pop("voice_path", None)
+                if scene_data.get("voice_url") == generated_path:
+                    scene_data.pop("voice_url", None)
+            elif key == "_generated_question_voice_path":
+                if scene_data.get("question_voice_path") == generated_path:
+                    scene_data.pop("question_voice_path", None)
+                if scene_data.get("question_voice_url") == generated_path:
+                    scene_data.pop("question_voice_url", None)
+            elif key == "_generated_answer_voice_path":
+                if scene_data.get("answer_voice_path") == generated_path:
+                    scene_data.pop("answer_voice_path", None)
+                if scene_data.get("answer_voice_url") == generated_path:
+                    scene_data.pop("answer_voice_url", None)
+
+        for generated_path in scene_data.pop("_generated_icon_paths", []):
+            if generated_path and os.path.exists(generated_path):
+                try:
+                    os.remove(generated_path)
+                except OSError:
+                    pass
+        if restore_state:
+            for icon in scene_data.get("icons", []):
+                generated_image_prompt = icon.pop("_generated_image_prompt", None)
+                if generated_image_prompt is None:
+                    continue
+                icon["image_prompt"] = generated_image_prompt
+                if icon.get("image_path"):
+                    icon.pop("image_path", None)
+                if icon.get("image_url"):
+                    icon.pop("image_url", None)
     
     async def create_scene_node(self, state: State) -> Command[Literal["create_scene", "merge_scenes"]]:
         """Create a scene with video URL and decide next step"""
@@ -743,7 +953,16 @@ Target Audience: {video_spec.target_audience}"""
 
         log(f"Creating scene {current_scene_index + 1}/{len(scene_plan)}: {current_scene.scene_id}")
 
-        video_path = await self.create_scene_video_by_type(current_scene.data, video_style)
+        if current_scene_index == 0 and not scene_videos:
+            await self._prepare_scene_assets(scene_plan, video_style)
+
+        try:
+            video_path = await self.create_scene_video_by_type(current_scene.data, video_style)
+        except Exception:
+            self._cleanup_generated_scene_assets(current_scene.data, restore_state=True)
+            raise
+
+        self._cleanup_generated_scene_assets(current_scene.data, restore_state=True)
 
         # Persist the newly generated video details on the current scene
         current_scene.video_file_path = video_path

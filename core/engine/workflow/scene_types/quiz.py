@@ -5,10 +5,9 @@ from typing import Dict, Any, List
 from ..VideoStyle import VideoStyle
 
 # Import utility functions
-from llm import LLM
 from ..video_utils.screen_recording import record_screen
 import subprocess
-from tts_service import async_text_to_audio_file
+from .shared import get_or_create_voice_audio
 
 
 async def create_quiz_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
@@ -34,6 +33,8 @@ async def create_quiz_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
     correct_answer = scene.get("answer", 0)
     question_voice_over = scene.get("question_voice_over", "")
     answer_voice_over = scene.get("answer_voice_over", "")
+    question_voice_path = scene.get("question_voice_path", "")
+    answer_voice_path = scene.get("answer_voice_path", "")
 
     if not question:
         raise ValueError("Quiz scene requires 'question' field")
@@ -62,40 +63,21 @@ async def create_quiz_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
         </div>
         """
     
-    # Generate audio files for both phases first to get durations using Gemini TTS or fallback to LLM
-    try:
-        # Generate question audio
-        question_audio_path = await async_text_to_audio_file(
-            question_voice_over,
-            voice=style.voice_name,
-            format="wav",
-        )
+    # Generate or reuse audio files for both phases before building the timed animation.
+    question_audio_path, should_cleanup_question_audio = await get_or_create_voice_audio(
+        question_voice_over,
+        question_voice_path,
+        style.voice_name,
+    )
+    answer_audio_path, should_cleanup_answer_audio = await get_or_create_voice_audio(
+        answer_voice_over,
+        answer_voice_path,
+        style.voice_name,
+    )
 
-        # Generate answer audio
-        answer_audio_path = await async_text_to_audio_file(
-            answer_voice_over,
-            voice=style.voice_name,
-            format="wav",
-        )
-    except Exception as e:
-        print(f"Gemini TTS failed, falling back to LLM: {e}")
-        # Fallback to original LLM method
-        async with LLM() as llm:
-            # Generate question audio
-            question_audio_path = await llm.text_to_audio_file(
-                question_voice_over, 
-                voice=style.voice_name,
-            )
-            
-            if not question_audio_path:
-                raise Exception("Failed to generate question audio for quiz scene")
-            
-            # Generate answer audio
-            answer_audio_path = await llm.text_to_audio_file(
-                answer_voice_over, 
-                voice=style.voice_name,
-            )
-    
+    if not question_audio_path:
+        raise Exception("Failed to generate question audio for quiz scene")
+
     # Upload audio files to S3 and add URLs to scene data
     scene['question_voice_url'] = question_audio_path
     scene['answer_voice_url'] = answer_audio_path
@@ -350,9 +332,9 @@ async def create_quiz_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
     
     # Clean up temporary files (keep the video file)
     try:
-        if os.path.exists(question_audio_path):
+        if should_cleanup_question_audio and os.path.exists(question_audio_path):
             os.remove(question_audio_path)
-        if os.path.exists(answer_audio_path):
+        if should_cleanup_answer_audio and os.path.exists(answer_audio_path):
             os.remove(answer_audio_path)
         if os.path.exists(combined_audio_path):
             os.remove(combined_audio_path)

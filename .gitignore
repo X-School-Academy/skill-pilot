@@ -22,3 +22,6 @@ skillpilot-ssh-key
 
 config/cameras.json5
 config/profile.json5
+
+._*
+.pytest_cache
