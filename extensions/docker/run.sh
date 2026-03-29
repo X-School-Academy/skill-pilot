@@ -22,4 +22,4 @@ docker run -d \
   -p 13478:3478/udp \
   -p 15349:5349 \
   -p 15349:5349/udp \
-  skill-pilot/media-mcp:v_1.11
+  skillpilotai/media-mcp:v_1.11

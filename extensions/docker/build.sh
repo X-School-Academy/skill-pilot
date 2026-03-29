@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-IMAGE_NAME="skill-pilot/media-mcp:v_1.11"
+IMAGE_NAME="skillpilotai/media-mcp:v_1.11"
 CONTAINER_NAME="skill-pilot-media-mcp"
 
 if docker ps -a --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
