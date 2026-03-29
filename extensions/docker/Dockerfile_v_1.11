@@ -14,7 +14,7 @@ EXPOSE 22 8080 7860 8188 3478 3478/udp 5349 5349/udp
 
 RUN sudo apt-get update && sudo apt-get install -y coturn
 
-# Welcome message shown on login for both root and ubuntu
+# Welcome message shown via MOTD on login and for interactive non-login bash shells
 RUN sudo sh -c 'printf "%s\n" \
     "" \
     "  ╔══════════════════════════════════════════════════════════════╗" \
@@ -36,7 +36,6 @@ RUN sudo sh -c 'printf "%s\n" \
     "  ╚══════════════════════════════════════════════════════════════╝" \
     "" \
     > /etc/motd && \
-    printf "#!/bin/sh\ncat /etc/motd\n" > /etc/profile.d/welcome.sh && \
-    chmod +x /etc/profile.d/welcome.sh'
+    printf "\n# Show MOTD for interactive non-login bash shells started via docker exec.\nif [ -r /etc/motd ] && ! shopt -q login_shell; then\n    cat /etc/motd\nfi\n" >> /etc/bash.bashrc'
 
 ENTRYPOINT ["/home/ubuntu/workspace/entrypoint.sh"]
