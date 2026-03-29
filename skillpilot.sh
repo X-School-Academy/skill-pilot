@@ -1466,14 +1466,14 @@ case "${ACTION}" in
       echo "  Dev engine   ->  ${_dev_engine_url%/}"
       echo "  WebUI   ->  ${_webui_url%/}  (dev mode)"
       echo ""
-      echo "Use 'tmux attach -t sp-webui-dev' or 'tmux attach -t sp-engine-dev' to view logs."
+      echo "Use 'tmux attach -t sp-webui-dev -r' or 'tmux attach -t sp-engine-dev -r' to view logs."
     else
       ensure_webui_release_assets
       start_session "sp-engine-prod" "SKILL_PILOT_RUNTIME_MODE=production uv --project core/engine run core/engine/main.py"
       _engine_url="$(get_webui_base_url "prod")"
       echo "  Engine + WebUI  ->  ${_engine_url%/}  (production mode)"
       echo ""
-      echo "Use 'tmux attach -t sp-engine-prod' to view logs."
+      echo "Use 'tmux attach -t sp-engine-prod -r' to view logs."
     fi
     echo ""
     echo "To stop Skill Pilot at any time, run:"

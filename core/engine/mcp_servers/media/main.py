@@ -436,6 +436,18 @@ def _require_local_file(path_str: str, label: str) -> Path:
     return Path(path_value)
 
 
+def _prepare_video_workflow_size(width: int, height: int) -> tuple[int, int]:
+    """
+    Convert requested final output size into the pre-upscale size expected by video workflows.
+
+    The GPU video workflows already upscale their output by 2x, so we halve the requested
+    size before sending width/height into ComfyUI.
+    """
+    if width <= 0 or height <= 0:
+        raise ValueError("width and height must be positive integers")
+    return max(1, math.ceil(width / 2)), max(1, math.ceil(height / 2))
+
+
 async def _ensure_audio_within_limit(path: Path, label: str) -> None:
     """Apply the standard 3-minute cap used by GPU lipsync workflows."""
     duration = await get_audio_duration(str(path))
@@ -584,8 +596,8 @@ async def text_to_speech(
         text: The text content you want to convert into spoken words
         emotion: The emotional tone for the voice (neutral, happy, sad, angry, excited, calm, etc.)
         emotion_sample: Sentence showing the desired emotional delivery style (required)
-        ref_voice: Audio file_id from /upload_file to use as reference for voice characteristics and timbre (required)
-        ref_emotion_voice: Optional audio file_id from /upload_file to control emotional delivery;
+        ref_voice: Local audio file path or remote URL to use as reference for voice characteristics and timbre (required)
+        ref_emotion_voice: Optional local audio file path or remote URL to control emotional delivery;
                            when omitted/empty, defaults to ref_voice.
 
     Returns:
@@ -638,9 +650,9 @@ async def text_segments_to_speech(
 
     Args:
         segments: List of dicts with fields text, emotion, and emotion_sample (all required);
-                  Optionally include ref_emotion_voice per segment as a file_id from /upload_file;
+                  Optionally include ref_emotion_voice per segment as a local audio file path or remote URL;
                   when omitted/empty, defaults to ref_voice.
-        ref_voice: Audio file_id from /upload_file to use as reference for voice characteristics and timbre
+        ref_voice: Local audio file path or remote URL to use as reference for voice characteristics and timbre
 
     Returns:
         List of generated speech audio segments as HTTP URLs (http://host:port/file/path) in WAV format
@@ -651,16 +663,16 @@ async def text_segments_to_speech(
                 "text": "Hi there! It is great to meet you.",
                 "emotion": "happy",
                 "emotion_sample": "I am so glad we finally get to meet in person!",
-                "ref_emotion_voice": "file_id_from_upload"
+                "ref_emotion_voice": "/path/to/emotion_voice.wav"
             },
             {
                 "text": "This is serious, so please pay attention.",
                 "emotion": "serious",
                 "emotion_sample": "This is serious, so please pay attention.",
-                "ref_emotion_voice": "file_id_from_upload"
+                "ref_emotion_voice": "/path/to/emotion_voice.wav"
             }
         ]
-        audio = await text_segments_to_speech(segments, ref_voice="file_id_from_upload")
+        audio = await text_segments_to_speech(segments, ref_voice="/path/to/reference_voice.wav")
     """
     try:
         request_extra = {
@@ -731,7 +743,7 @@ async def text_to_song(
 
     Args:
         lyrics: The song lyrics to be sung (can include multiple verses and chorus)
-        ref_voice: Required audio file_id, local file path, or remote URL to use as reference for the singing voice timbre and characteristics
+        ref_voice: Required local audio file path or remote URL to use as reference for the singing voice timbre and characteristics
 
     Returns:
         Generated singing audio as a URL in MP3 format
@@ -816,16 +828,16 @@ async def text_to_image(
 @mcp.tool()
 async def text_to_video(
     prompt: str,
-    width: int = 768,
-    height: int = 512
+    width: int = 1536,
+    height: int = 1024
 ) -> str:
     """
     Generate a video clip from a text description using AI video generation.
 
     Args:
         prompt: Detailed description of the video scene you want to create (describe action, movement, subjects, environment, camera motion, etc.)
-        width: Width of the generated video in pixels (default: 768)
-        height: Height of the generated video in pixels (default: 512)
+        width: Final width of the generated video in pixels (default: 1536)
+        height: Final height of the generated video in pixels (default: 1024)
 
     Returns:
         Generated video as a URL in MP4 format, no audio
@@ -837,11 +849,12 @@ async def text_to_video(
             "prompt_preview": _preview_text(prompt)
         }
         _log_request("text_to_video", request_extra)
+        workflow_width, workflow_height = _prepare_video_workflow_size(width, height)
         # Prepare task input
         task_input = {
             'video_prompt': prompt,
-            'width': width,
-            'height': height
+            'width': workflow_width,
+            'height': workflow_height
         }
 
         # Execute workflow
@@ -860,7 +873,7 @@ async def text_to_video(
         video_path = await _convert_video_to_fps(video_path, DEFAULT_VIDEO_FPS)
         _log_success("text_to_video", {"video_path": video_path, **request_extra})
         return _format_output(video_path)
-    except WorkflowExecutionError as e:
+    except (ValueError, WorkflowExecutionError) as e:
         _log_failure("text_to_video", request_extra)
         raise Exception(f"Text-to-video failed: {e}")
 
@@ -875,7 +888,7 @@ async def image_to_image(
 
     Args:
         prompt: Description of how you want to modify the image (e.g., "add flowers", "change to winter scene", "make it look vintage", etc.)
-        image_file: Image file_id from /upload_file to modify (supports PNG, JPEG formats)
+        image_file: Local image file path or remote URL to modify (supports PNG, JPEG formats)
 
     Returns:
         Modified image as a URL in PNG or JPEG format
@@ -922,17 +935,17 @@ async def image_to_image(
 async def image_to_video(
     prompt: str,
     image_file: str,
-    width: int = 768,
-    height: int = 512
+    width: int = 1536,
+    height: int = 1024
 ) -> str:
     """
     Animate a static image into a video using AI to add motion and life.
 
     Args:
         prompt: Description of how the image should be animated (e.g., "camera slowly zooms in", "trees sway in the wind", "person walks forward", etc.)
-        image_file: Static image file_id from /upload_file to animate (supports PNG, JPEG formats)
-        width: Width of the generated video in pixels (default: 768)
-        height: Height of the generated video in pixels (default: 512)
+        image_file: Local image file path or remote URL to animate (supports PNG, JPEG formats)
+        width: Final width of the generated video in pixels (default: 1536)
+        height: Final height of the generated video in pixels (default: 1024)
 
     Returns:
         Generated animated video as a URL in MP4 format, no audio
@@ -946,12 +959,13 @@ async def image_to_video(
         }
         _log_request("image_to_video", request_extra)
         image_file = _resolve_input_file(image_file, "image_file")
+        workflow_width, workflow_height = _prepare_video_workflow_size(width, height)
 
         # Prepare task input
         task_input = {
             'video_prompt': prompt,
-            'width': width,
-            'height': height
+            'width': workflow_width,
+            'height': workflow_height
         }
 
         # Prepare downloaded files
@@ -975,7 +989,7 @@ async def image_to_video(
         video_path = await _convert_video_to_fps(video_path, DEFAULT_VIDEO_FPS)
         _log_success("image_to_video", {"video_path": video_path, **request_extra})
         return _format_output(video_path)
-    except WorkflowExecutionError as e:
+    except (ValueError, WorkflowExecutionError) as e:
         _log_failure("image_to_video", request_extra)
         raise Exception(f"Image-to-video failed: {e}")
 
@@ -985,18 +999,18 @@ async def flf_to_video(
     prompt: str,
     first_frame_image: str,
     last_frame_image: str,
-    width: int = 768,
-    height: int = 512
+    width: int = 1536,
+    height: int = 1024
 ) -> str:
     """
     Create a video by interpolating motion between two images (first and last frame).
 
     Args:
         prompt: Description of the transition and motion between the frames (e.g., "smooth transition", "person walks from position A to B", "camera pans", etc.)
-        first_frame_image: Starting frame image file_id from /upload_file
-        last_frame_image: Ending frame image file_id from /upload_file
-        width: Width of the generated video in pixels (default: 768)
-        height: Height of the generated video in pixels (default: 512)
+        first_frame_image: Starting frame local image file path or remote URL
+        last_frame_image: Ending frame local image file path or remote URL
+        width: Final width of the generated video in pixels (default: 1536)
+        height: Final height of the generated video in pixels (default: 1024)
 
     Returns:
         Generated video as a URL interpolating between the two frames in MP4 format, no audio
@@ -1012,12 +1026,13 @@ async def flf_to_video(
         _log_request("flf_to_video", request_extra)
         first_frame_image = _resolve_input_file(first_frame_image, "first_frame_image")
         last_frame_image = _resolve_input_file(last_frame_image, "last_frame_image")
+        workflow_width, workflow_height = _prepare_video_workflow_size(width, height)
 
         # Prepare task input
         task_input = {
             'video_prompt': prompt,
-            'width': width,
-            'height': height
+            'width': workflow_width,
+            'height': workflow_height
         }
 
         # Prepare downloaded files
@@ -1041,7 +1056,7 @@ async def flf_to_video(
 
         _log_success("flf_to_video", {"video_path": video_path, **request_extra})
         return _format_output(video_path)
-    except WorkflowExecutionError as e:
+    except (ValueError, WorkflowExecutionError) as e:
         _log_failure("flf_to_video", request_extra)
         raise Exception(f"FLF-to-video failed: {e}")
 
@@ -1051,13 +1066,13 @@ async def video_upscale(
     video_file: str
 ) -> str:
     """
-    Upscale and enhance a video using the ComfyUI upscale workflow.
+    Upscale video size to 2X and restore face in the video.
 
     Args:
-        video_file: Video file_id from /upload_file to upscale.
+        video_file: Local video file path or remote URL for face restore and upscale.
 
     Returns:
-        Upscaled video as a URL in MP4 format.
+        Refined 2x upscaled video as a local MP4 file path.
     """
     video_path = _require_local_file(video_file, "Video file")
     request_extra = {"video_file": str(video_path)}
@@ -1087,20 +1102,18 @@ async def image_to_talk_video(
     prompt: str,
     image_file: str,
     audio_file: str,
-    width: int = 448,
-    height: int = 448,
-    upscale: bool = True
+    width: int = 896,
+    height: int = 896
 ) -> str:
     """
     Create a single-person talking or singing video from a face image synchronized with audio.
 
     Args:
         prompt: Optional guidance for the video generation style (e.g., "natural expression", "animated talking", "expressive singing", "energetic performance", etc.)
-        image_file: Face image file_id from /upload_file containing a face that will appear to speak or sing (headshot or portrait works best)
-        audio_file: Speech or singing audio file_id from /upload_file that the face will be synchronized to (supports MP3, WAV formats)
-        width: Width of the generated video in pixels (default: 448)
-        height: Height of the generated video in pixels (default: 448)
-        upscale: When true (default), automatically upscale the generated video before returning
+        image_file: Local face image file path or remote URL containing a face that will appear to speak or sing (headshot or portrait works best)
+        audio_file: Local speech or singing audio file path or remote URL that the face will be synchronized to (supports MP3, WAV formats)
+        width: Final width of the generated video in pixels (default: 896)
+        height: Final height of the generated video in pixels (default: 896)
 
     Returns:
         Generated lip-synced video as a URL in MP4 format with audio, max 3 minutes
@@ -1111,12 +1124,12 @@ async def image_to_talk_video(
             "image_file": image_file,
             "audio_file": audio_file,
             "width": width,
-            "height": height,
-            "upscale": upscale
+            "height": height
         }
         _log_request("image_to_talk_video", request_extra)
         image_file = _resolve_input_file(image_file, "image_file")
         audio_file = _resolve_input_file(audio_file, "audio_file")
+        workflow_width, workflow_height = _prepare_video_workflow_size(width, height)
 
         # Determine clip length to bound frame count
         audio_duration = await get_audio_duration(audio_file)
@@ -1128,8 +1141,8 @@ async def image_to_talk_video(
         # Prepare task input
         task_input = {
             'video_prompt': prompt,
-            'width': width,
-            'height': height,
+            'width': workflow_width,
+            'height': workflow_height,
             'max_frames': max_frames
         }
 
@@ -1152,12 +1165,9 @@ async def image_to_talk_video(
         if not video_path:
             raise WorkflowExecutionError('No video output from workflow')
 
-        if upscale:
-            video_path = await video_upscale(video_path)
-
         _log_success("image_to_talk_video", {"video_path": video_path, **request_extra})
         return _format_output(video_path)
-    except WorkflowExecutionError as e:
+    except (ValueError, WorkflowExecutionError) as e:
         _log_failure("image_to_talk_video", request_extra)
         raise Exception(f"Image-to-talk-video failed: {e}")
 
@@ -1167,9 +1177,8 @@ async def video_to_talk_video(
     prompt: str,
     video_file: str,
     audio_file: str,
-    width: int = 448,
-    height: int = 448,
-    upscale: bool = True,
+    width: int = 896,
+    height: int = 896,
     pingpong: bool = True
 ) -> str:
     """
@@ -1177,11 +1186,10 @@ async def video_to_talk_video(
 
     Args:
         prompt: Optional guidance for the video generation style (e.g., "natural expression", "animated talking", "expressive singing", "energetic performance", etc.)
-        video_file: Source video file_id from /upload_file whose subject will be reanimated to match the audio.
-        audio_file: Speech or singing audio file_id from /upload_file that the face will be synchronized to (supports MP3, WAV formats)
-        width: Width of the generated video in pixels (default: 448)
-        height: Height of the generated video in pixels (default: 448)
-        upscale: When true (default), automatically upscale the generated video before returning
+        video_file: Source local video file path or remote URL whose subject will be reanimated to match the audio.
+        audio_file: Local speech or singing audio file path or remote URL that the face will be synchronized to (supports MP3, WAV formats)
+        width: Final width of the generated video in pixels (default: 896)
+        height: Final height of the generated video in pixels (default: 896)
         pingpong: When true (default), mirror the input clip into a forward+reverse pingpong loop before processing
 
     Returns:
@@ -1193,37 +1201,41 @@ async def video_to_talk_video(
         "audio_file": audio_file,
         "width": width,
         "height": height,
-        "upscale": upscale,
         "pingpong": pingpong
     }
     _log_request("video_to_talk_video", request_extra)
 
     try:
-        video_file = _resolve_input_file(video_file, "video_file")
-        audio_file = _resolve_input_file(audio_file, "audio_file")
-        video_path = _require_local_file(video_file, "Video file")
-        audio_path = _require_local_file(audio_file, "Audio file")
+        video_input = str(video_file or "").strip()
+        audio_input = str(audio_file or "").strip()
+        video_path = Path(_materialize_input_file(video_input, "video_file")).expanduser().resolve()
+        audio_path = Path(_materialize_input_file(audio_input, "audio_file")).expanduser().resolve()
+        video_ref = _resolve_input_file(video_input, "video_file")
+        audio_ref = _resolve_input_file(audio_input, "audio_file")
 
         audio_duration = await get_audio_duration(str(audio_path))
         max_frames = 4500
         if audio_duration is not None and audio_duration > 3 * 60:
             raise WorkflowExecutionError("Audio duration exceeds maximum of 3 minutes")
+        workflow_width, workflow_height = _prepare_video_workflow_size(width, height)
 
         processed_video_path = str(video_path)
+        processed_video_ref = video_ref
         if pingpong:
             processed_video_path = await _create_pingpong_video(str(video_path))
             request_extra["processed_video_file"] = processed_video_path
+            processed_video_ref = _resolve_input_file(processed_video_path, "processed_video_file")
 
         task_input = {
             'video_prompt': prompt,
-            'width': width,
-            'height': height,
+            'width': workflow_width,
+            'height': workflow_height,
             'max_frames': max_frames
         }
 
         downloaded_files = {
-            '{{source_video}}': processed_video_path,
-            '{{ref_audio}}': str(audio_path)
+            '{{source_video}}': processed_video_ref,
+            '{{ref_audio}}': audio_ref
         }
 
         result = await workflow_executor.execute_workflow(
@@ -1237,12 +1249,9 @@ async def video_to_talk_video(
         if not video_path:
             raise WorkflowExecutionError('No video output from workflow')
 
-        if upscale:
-            video_path = await video_upscale(video_path)
-
         _log_success("video_to_talk_video", {"video_path": video_path, **request_extra})
         return _format_output(video_path)
-    except WorkflowExecutionError as e:
+    except (ValueError, WorkflowExecutionError) as e:
         _log_failure("video_to_talk_video", request_extra)
         raise Exception(f"Video-to-talk-video failed: {e}")
 
@@ -1253,8 +1262,8 @@ async def image_to_dialog_video(
     image_file: str,
     audio_file_one: str,
     audio_file_two: str,
-    width: int = 448,
-    height: int = 448,
+    width: int = 896,
+    height: int = 896,
     reverse_order: bool = False,
     max_frames: int = 450
 ) -> Dict[str, str]:
@@ -1263,11 +1272,11 @@ async def image_to_dialog_video(
 
     Args:
         prompt: Required guidance for the animation style and expressions.
-        image_file: Image file_id from /upload_file that will be re-animated for both roles.
-        audio_file_one: Audio file_id from /upload_file for the first role (left/top speaker by default).
-        audio_file_two: Audio file_id from /upload_file for the second role.
-        width: Width of each generated video frame.
-        height: Height of each generated video frame.
+        image_file: Local image file path or remote URL that will be re-animated for both roles.
+        audio_file_one: Local audio file path or remote URL for the first role (left/top speaker by default).
+        audio_file_two: Local audio file path or remote URL for the second role.
+        width: Final width of each generated video.
+        height: Final height of each generated video.
         reverse_order: Swap which audio drives the first/second split outputs (mirrors GPU worker toggle).
         max_frames: Maximum number of frames to render before stopping.
 
@@ -1290,28 +1299,32 @@ async def image_to_dialog_video(
     if not prompt_value:
         raise WorkflowExecutionError("Prompt is required for dialog video generation")
 
-    image_file = _resolve_input_file(image_file, "image_file")
-    audio_file_one = _resolve_input_file(audio_file_one, "audio_file_one")
-    audio_file_two = _resolve_input_file(audio_file_two, "audio_file_two")
-    image_path = _require_local_file(image_file, "Image file")
-    audio_one_path = _require_local_file(audio_file_one, "Dialog audio file #1")
-    audio_two_path = _require_local_file(audio_file_two, "Dialog audio file #2")
+    image_input = str(image_file or "").strip()
+    audio_one_input = str(audio_file_one or "").strip()
+    audio_two_input = str(audio_file_two or "").strip()
+    image_path = Path(_materialize_input_file(image_input, "image_file")).expanduser().resolve()
+    audio_one_path = Path(_materialize_input_file(audio_one_input, "audio_file_one")).expanduser().resolve()
+    audio_two_path = Path(_materialize_input_file(audio_two_input, "audio_file_two")).expanduser().resolve()
+    image_ref = _resolve_input_file(image_input, "image_file")
+    audio_one_ref = _resolve_input_file(audio_one_input, "audio_file_one")
+    audio_two_ref = _resolve_input_file(audio_two_input, "audio_file_two")
 
     await _ensure_audio_within_limit(audio_one_path, "Dialog audio file #1")
     await _ensure_audio_within_limit(audio_two_path, "Dialog audio file #2")
+    workflow_width, workflow_height = _prepare_video_workflow_size(width, height)
 
     task_input = {
         'video_prompt': prompt_value,
-        'width': width,
-        'height': height,
+        'width': workflow_width,
+        'height': workflow_height,
         'max_frames': max_frames,
         'reverse_order': 'true' if reverse_order else 'false'
     }
 
     downloaded_files = {
-        '{{source_image}}': str(image_path),
-        '{{audio_file1}}': str(audio_one_path),
-        '{{audio_file2}}': str(audio_two_path)
+        '{{source_image}}': image_ref,
+        '{{audio_file1}}': audio_one_ref,
+        '{{audio_file2}}': audio_two_ref
     }
 
     try:
@@ -1355,19 +1368,22 @@ async def video_lipsync(
     Run the MuseTalk lip-sync CLI to align a reference video with a new audio track.
 
     Args:
-        audio_file: Speech or singing audio file_id from /upload_file to drive the lip-sync.
-        video_file: Input video file_id from /upload_file whose lip movements should be updated.
+        audio_file: Local speech or singing audio file path or remote URL to drive the lip-sync.
+        video_file: Input local video file path or remote URL whose lip movements should be updated.
         label: Optional identifier that is forwarded to the MuseTalk CLI for logging.
         pingpong: When true (default), mirror the input clip into a forward+reverse pingpong loop before lip-syncing.
 
     Returns:
         Lip-synced video as a URL produced by MuseTalk.
     """
-    audio_file = _resolve_input_file(audio_file, "audio_file")
-    video_file = _resolve_input_file(video_file, "video_file")
-    audio_path = _require_local_file(audio_file, "Audio file")
-    video_path = _require_local_file(video_file, "Video file")
+    audio_input = str(audio_file or "").strip()
+    video_input = str(video_file or "").strip()
+    audio_path = Path(_materialize_input_file(audio_input, "audio_file")).expanduser().resolve()
+    video_path = Path(_materialize_input_file(video_input, "video_file")).expanduser().resolve()
     await _ensure_audio_within_musetalk_limit(audio_path, "Audio file")
+
+    audio_ref = _resolve_input_file(audio_input, "audio_file")
+    video_ref = _resolve_input_file(video_input, "video_file")
 
     request_extra = {
         "audio_file": str(audio_path),
@@ -1375,17 +1391,18 @@ async def video_lipsync(
         "label": label,
         "pingpong": pingpong
     }
-    processed_video_path = str(video_path)
+    processed_video_ref = video_ref
 
     try:
         if pingpong:
             processed_video_path = await _create_pingpong_video(str(video_path))
             request_extra["processed_video_file"] = processed_video_path
+            processed_video_ref = _resolve_input_file(processed_video_path, "processed_video_file")
 
         _log_request("video_lipsync", request_extra)
         output = await script_executor.run_musetalk_lipsync(
-            audio_file=str(audio_path),
-            video_file=processed_video_path,
+            audio_file=audio_ref,
+            video_file=processed_video_ref,
             label=label
         )
         _log_success("video_lipsync", {"output_file": output, **request_extra})
@@ -1406,7 +1423,7 @@ async def image_analysis(
 
     Args:
         prompt: Your question or request about the image (e.g., "What objects are in this image?", "Describe the scene", "What color is the car?", etc.)
-        image_file: Image file_id from /upload_file to analyze (supports PNG, JPEG formats)
+        image_file: Local image file path or remote URL to analyze (supports PNG, JPEG formats)
         max_tokens: Maximum length of the analysis response in tokens (default: 512)
 
     Returns:
@@ -1448,7 +1465,7 @@ async def video_analysis(
 
     Args:
         prompt: Your question or request about the video (e.g., "What happens in this video?", "Describe the actions", "Count how many people appear", etc.)
-        video_file: Video file_id from /upload_file to analyze (supports MP4, AVI, MOV formats)
+        video_file: Local video file path or remote URL to analyze (supports MP4, AVI, MOV formats)
         frame_step: How many frames to skip between samples (1=analyze every frame, 16=analyze every 16th frame for faster processing)
         max_frames: Maximum number of frames to analyze (-1 means analyze all sampled frames)
         max_tokens: Maximum length of the analysis response in tokens (default: 2048)
@@ -1500,7 +1517,7 @@ async def audio_segments(
     - Planning video scene cuts at natural speech boundaries
 
     Args:
-        audio_file: Audio file_id from /upload_file to transcribe (supports MP3, WAV, M4A, etc.)
+        audio_file: Local audio file path or remote URL to transcribe (supports MP3, WAV, M4A, etc.)
         language: Language code for transcription (default: "en"). Common codes: en, es, fr, de, it, pt, ru, ja, zh, ko
         use_fp16: Use FP16 precision for faster processing (default: True, requires CUDA)
 
@@ -1578,7 +1595,7 @@ async def extract_vocals(
     - Extracting singing or speech from mixed audio
 
     Args:
-        audio_file: Audio file_id from /upload_file (supports MP3, WAV, FLAC, M4A, etc.)
+        audio_file: Local audio file path or remote URL (supports MP3, WAV, FLAC, M4A, etc.)
 
     Returns:
         Extracted vocals audio as a URL in WAV format

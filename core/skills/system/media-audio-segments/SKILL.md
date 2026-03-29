@@ -12,7 +12,7 @@ for video editing tasks such as:
 - Planning video scene cuts at natural speech boundaries
 
 Args:
-    audio_file: Audio file_id from /upload_file to transcribe (supports MP3, WAV, M4A, etc.)
+    audio_file: Local audio file path or remote URL to transcribe (supports MP3, WAV, M4A, etc.)
     language: Language code for transcription (default: "en"). Common codes: en, es, fr, de, it, pt, ru, ja, zh, ko
     use_fp16: Use FP16 precision for faster processing (default: True, requires CUDA)
 
@@ -56,10 +56,13 @@ Call the local MCP bridge shell wrapper:
 ```bash
 core/bin/tool-cli request '{"server_id": "media", "tool_name": "audio_segments", "arguments": {}}'
 ```
+**Do not use any Python helper code to invoke the `core/bin/tool-cli` command. Run as shell command with arguments directly.**
+
 
 ## Arguments Schema
 ```json
 {
+  "additionalProperties": false,
   "properties": {
     "audio_file": {
       "type": "string"

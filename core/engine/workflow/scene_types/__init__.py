@@ -13,6 +13,8 @@ from .quiz import create_quiz_scene
 from .definition import create_definition_scene
 from .text_animation import create_text_animation_scene
 from .narration_only import create_narration_only_scene
+from .host_speech_clip import create_host_speech_clip_scene
+from .video_clip import create_video_clip_scene
 
 __all__ = [
     'create_text_only_scene',
@@ -28,4 +30,6 @@ __all__ = [
     'create_definition_scene',
     'create_text_animation_scene',
     'create_narration_only_scene',
+    'create_host_speech_clip_scene',
+    'create_video_clip_scene',
 ]

@@ -60,4 +60,4 @@ Workflows should produce:
 - Workflows must be valid ComfyUI API format JSON
 - All file paths in placeholders will be replaced with local `/tmp/` paths
 - Worker handles file downloads and S3 uploads automatically
-- Workflow execution timeout: 600s (configurable via `GPU_WORKER_MAX_EXECUTION_TIME`)
+- Workflow execution timeout: configurable via `GPU_WORKER_MAX_EXECUTION_TIME`, with fallback to `MCP_TOOL_TIMEOUT` (milliseconds) from `config/mcp.json5`

@@ -2,7 +2,7 @@ FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y vim sudo tmux ffmpeg wget git curl git-lfs python3.10-dev openssh-server
+RUN apt-get update && apt-get install -y vim sudo tmux ffmpeg wget git curl git-lfs python3.10-dev openssh-server coturn
 
 # Create ubuntu user with sudo permission, using workspace /home/ubuntu/workspace
 RUN useradd -m -s /bin/bash ubuntu && \
@@ -82,6 +82,31 @@ RUN chmod +x /home/ubuntu/workspace/download_models.sh /home/ubuntu/workspace/en
 # ---
 WORKDIR /home/ubuntu/workspace
 
-EXPOSE 22 8080 7860 8188 
+EXPOSE 22 8080 7860 8188 3478 3478/udp 5349 5349/udp
+
+# Welcome message shown on login for both root and ubuntu
+RUN sudo sh -c 'printf "%s\n" \
+    "" \
+    "  ╔══════════════════════════════════════════════════════════════╗" \
+    "  ║         ✦  Skill Pilot Media Server  ✦                      ║" \
+    "  ╠══════════════════════════════════════════════════════════════╣" \
+    "  ║                                                              ║" \
+    "  ║  Ready to create with AI-powered tools:                     ║" \
+    "  ║                                                              ║" \
+    "  ║    ComfyUI    ·  AI image & video generation                ║" \
+    "  ║    IndexTTS   ·  High-quality text-to-speech                ║" \
+    "  ║    MuseTalk   ·  Real-time talking face synthesis           ║" \
+    "  ║    SongBloom  ·  AI music & song creation                   ║" \
+    "  ║                                                              ║" \
+    "  ╠══════════════════════════════════════════════════════════════╣" \
+    "  ║  Free & Open Source  ·  MIT License                         ║" \
+    "  ║                                                              ║" \
+    "  ║  Need help? Join our Discord community!                     ║" \
+    "  ║  Find the invite link at:  https://skill-pilot.ai           ║" \
+    "  ╚══════════════════════════════════════════════════════════════╝" \
+    "" \
+    > /etc/motd && \
+    printf "#!/bin/sh\ncat /etc/motd\n" > /etc/profile.d/welcome.sh && \
+    chmod +x /etc/profile.d/welcome.sh'
 
 ENTRYPOINT ["/home/ubuntu/workspace/entrypoint.sh"]

@@ -5,11 +5,11 @@ description: "Generate two synchronized talking-head videos (one per dialog role
 
 Args:
     prompt: Required guidance for the animation style and expressions.
-    image_file: Image file_id from /upload_file that will be re-animated for both roles.
-    audio_file_one: Audio file_id from /upload_file for the first role (left/top speaker by default).
-    audio_file_two: Audio file_id from /upload_file for the second role.
-    width: Width of each generated video frame.
-    height: Height of each generated video frame.
+    image_file: Local image file path or remote URL that will be re-animated for both roles.
+    audio_file_one: Local audio file path or remote URL for the first role (left/top speaker by default).
+    audio_file_two: Local audio file path or remote URL for the second role.
+    width: Final width of each generated video.
+    height: Final height of each generated video.
     reverse_order: Swap which audio drives the first/second split outputs (mirrors GPU worker toggle).
     max_frames: Maximum number of frames to render before stopping.
 
@@ -22,10 +22,13 @@ Call the local MCP bridge shell wrapper:
 ```bash
 core/bin/tool-cli request '{"server_id": "media", "tool_name": "image_to_dialog_video", "arguments": {}}'
 ```
+**Do not use any Python helper code to invoke the `core/bin/tool-cli` command. Run as shell command with arguments directly.**
+
 
 ## Arguments Schema
 ```json
 {
+  "additionalProperties": false,
   "properties": {
     "prompt": {
       "type": "string"
@@ -40,11 +43,11 @@ core/bin/tool-cli request '{"server_id": "media", "tool_name": "image_to_dialog_
       "type": "string"
     },
     "width": {
-      "default": 448,
+      "default": 896,
       "type": "integer"
     },
     "height": {
-      "default": 448,
+      "default": 896,
       "type": "integer"
     },
     "reverse_order": {

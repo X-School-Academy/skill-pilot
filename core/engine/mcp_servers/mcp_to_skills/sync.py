@@ -571,6 +571,8 @@ Call the local MCP bridge shell wrapper:
 ```bash
 core/bin/tool-cli request '{request_json}'
 ```
+**Do not use any Python helper code to invoke the `core/bin/tool-cli` command. Run as shell command with arguments directly.**
+
 {tool_description_section}
 ## Arguments Schema
 ```json

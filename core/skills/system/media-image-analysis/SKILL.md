@@ -5,7 +5,7 @@ description: "Analyze an image using AI vision model to answer questions or prov
 
 Args:
     prompt: Your question or request about the image (e.g., "What objects are in this image?", "Describe the scene", "What color is the car?", etc.)
-    image_file: Image file_id from /upload_file to analyze (supports PNG, JPEG formats)
+    image_file: Local image file path or remote URL to analyze (supports PNG, JPEG formats)
     max_tokens: Maximum length of the analysis response in tokens (default: 512)
 
 Returns:
@@ -17,10 +17,13 @@ Call the local MCP bridge shell wrapper:
 ```bash
 core/bin/tool-cli request '{"server_id": "media", "tool_name": "image_analysis", "arguments": {}}'
 ```
+**Do not use any Python helper code to invoke the `core/bin/tool-cli` command. Run as shell command with arguments directly.**
+
 
 ## Arguments Schema
 ```json
 {
+  "additionalProperties": false,
   "properties": {
     "prompt": {
       "type": "string"

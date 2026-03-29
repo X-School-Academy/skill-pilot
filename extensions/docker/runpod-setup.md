@@ -42,6 +42,7 @@ uv pip install diffusers
 uv pip install facexlib
 uv pip install gfpgan
 uv pip install soundfile demucs openai-whisper
+uv pip install pyloudnorm
 # https://github.com/thu-ml/SageAttention/issues/197
 # Sage attention hacked for NVIDIA Turing GPUs
 uv pip install --no-build-isolation https://github.com/ezhomelabs/SageAttention2/archive/refs/heads/updates.zip
@@ -51,6 +52,11 @@ uv pip install -U triton==3.2
 uv pip install "numpy<2"
 ```
 
+uv pip freeze > ~/workspace/comfyui_f6b869d7d35f7160bf2fdeabaed378d737834540_freeze.txt
+
+
+ComfyUI-MultiGPU 
+https://github.com/pollockjj/ComfyUI-MultiGPU.git commit a05823ff0a5296332ae478b18ab93b46cd996a44 (fix fp16 not existing issue)
 
 https://console.runpod.io/user/settings
 API Keys

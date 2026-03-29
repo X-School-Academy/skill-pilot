@@ -12,7 +12,7 @@ Perfect for:
 - Extracting singing or speech from mixed audio
 
 Args:
-    audio_file: Audio file_id from /upload_file (supports MP3, WAV, FLAC, M4A, etc.)
+    audio_file: Local audio file path or remote URL (supports MP3, WAV, FLAC, M4A, etc.)
 
 Returns:
     Extracted vocals audio as a URL in WAV format
@@ -27,10 +27,13 @@ Call the local MCP bridge shell wrapper:
 ```bash
 core/bin/tool-cli request '{"server_id": "media", "tool_name": "extract_vocals", "arguments": {}}'
 ```
+**Do not use any Python helper code to invoke the `core/bin/tool-cli` command. Run as shell command with arguments directly.**
+
 
 ## Arguments Schema
 ```json
 {
+  "additionalProperties": false,
   "properties": {
     "audio_file": {
       "type": "string"

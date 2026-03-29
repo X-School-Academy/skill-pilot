@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from fastapi import HTTPException
 from json5 import loads as json5_loads
+from json_repair import repair_json
 
 from safe_dotenv import configured_unset_keys, safe_env
 from settings import LLM_PROVIDERS_FILE, PROJECT_DIR, logger
@@ -447,23 +448,97 @@ def _extract_json_payload(text: str) -> Dict[str, Any]:
     if not text:
         raise ValueError("Empty LLM response")
 
-    try:
-        payload = json.loads(text)
-        if isinstance(payload, dict):
-            return payload
-    except JSONDecodeError:
-        pass
+    def _strip_code_fence(value: str) -> str:
+        stripped = value.strip()
+        if not stripped.startswith("```"):
+            return stripped
 
-    decoder = json.JSONDecoder()
-    for idx, ch in enumerate(text):
-        if ch not in "[{":
-            continue
+        lines = stripped.splitlines()
+        if not lines:
+            return stripped
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        while lines and not lines[-1].strip():
+            lines.pop()
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        return "\n".join(lines).strip()
+
+    def _decode_first_object(value: str) -> Optional[Dict[str, Any]]:
+        candidate = value.strip()
+        if not candidate:
+            return None
+
         try:
-            obj, _ = decoder.raw_decode(text[idx:])
+            payload = json.loads(candidate)
+            if isinstance(payload, dict):
+                return payload
         except JSONDecodeError:
+            pass
+
+        try:
+            repaired = repair_json(candidate)
+        except Exception:
+            repaired = ""
+        if repaired and repaired != candidate:
+            try:
+                payload = json.loads(repaired)
+                if isinstance(payload, dict):
+                    return payload
+            except JSONDecodeError:
+                pass
+
+        decoder = json.JSONDecoder()
+        for source in (candidate, repaired):
+            if not source:
+                continue
+            for idx, ch in enumerate(source):
+                if ch not in "[{":
+                    continue
+                try:
+                    obj, _ = decoder.raw_decode(source[idx:])
+                except JSONDecodeError:
+                    continue
+                if isinstance(obj, dict):
+                    return obj
+        return None
+
+    candidates: List[str] = [text]
+    stripped = _strip_code_fence(text)
+    if stripped and stripped != text:
+        candidates.append(stripped)
+
+    for candidate in candidates:
+        payload = _decode_first_object(candidate)
+        if payload is None:
             continue
-        if isinstance(obj, dict):
-            return obj
+
+        # Some providers wrap the real assistant JSON inside a transport object.
+        nested_result = payload.get("result")
+        if isinstance(nested_result, dict):
+            return nested_result
+        if isinstance(nested_result, str):
+            nested_payload = _decode_first_object(_strip_code_fence(nested_result))
+            if nested_payload is not None:
+                return nested_payload
+
+        message = payload.get("message")
+        if isinstance(message, dict):
+            content = message.get("content")
+            if isinstance(content, list):
+                for part in content:
+                    if not isinstance(part, dict):
+                        continue
+                    if part.get("type") != "text":
+                        continue
+                    nested_text = str(part.get("text", "")).strip()
+                    if not nested_text:
+                        continue
+                    nested_payload = _decode_first_object(_strip_code_fence(nested_text))
+                    if nested_payload is not None:
+                        return nested_payload
+
+        return payload
 
     raise ValueError("LLM response does not contain a valid JSON object")
 

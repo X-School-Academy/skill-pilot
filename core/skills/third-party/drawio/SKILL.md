@@ -105,7 +105,6 @@ Every diagram must have this structure:
   <root>
     <mxCell id="0"/>
     <mxCell id="1" parent="0"/>
-    <!-- Diagram cells go here with parent="1" -->
   </root>
 </mxGraphModel>
 ```
@@ -164,6 +163,8 @@ Every diagram must have this structure:
 
 ## CRITICAL: XML well-formedness
 
+- **NEVER use XML comments** (`<!-- -->`). The drawio CLI silently fails to export files that contain XML comments, even valid ones. Remove all comments before writing the file.
 - **NEVER use double hyphens (`--`) inside XML comments.** `--` is illegal inside `<!-- -->` per the XML spec and causes parse errors. Use single hyphens or rephrase.
 - Escape special characters in attribute values: `&amp;`, `&lt;`, `&gt;`, `&quot;`
 - Always use unique `id` values for each `mxCell`
+- **Only use documented style properties.** Unrecognised properties on swimlane cells (e.g. `arcSize=4`) can cause silent export failures. Stick to the styles listed in the table above.

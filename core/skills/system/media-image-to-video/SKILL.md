@@ -5,9 +5,9 @@ description: "Animate a static image into a video using AI to add motion and lif
 
 Args:
     prompt: Description of how the image should be animated (e.g., "camera slowly zooms in", "trees sway in the wind", "person walks forward", etc.)
-    image_file: Static image file_id from /upload_file to animate (supports PNG, JPEG formats)
-    width: Width of the generated video in pixels (default: 768)
-    height: Height of the generated video in pixels (default: 512)
+    image_file: Local image file path or remote URL to animate (supports PNG, JPEG formats)
+    width: Final width of the generated video in pixels (default: 1536)
+    height: Final height of the generated video in pixels (default: 1024)
 
 Returns:
     Generated animated video as a URL in MP4 format, no audio
@@ -18,10 +18,13 @@ Call the local MCP bridge shell wrapper:
 ```bash
 core/bin/tool-cli request '{"server_id": "media", "tool_name": "image_to_video", "arguments": {}}'
 ```
+**Do not use any Python helper code to invoke the `core/bin/tool-cli` command. Run as shell command with arguments directly.**
+
 
 ## Arguments Schema
 ```json
 {
+  "additionalProperties": false,
   "properties": {
     "prompt": {
       "type": "string"
@@ -30,11 +33,11 @@ core/bin/tool-cli request '{"server_id": "media", "tool_name": "image_to_video",
       "type": "string"
     },
     "width": {
-      "default": 768,
+      "default": 1536,
       "type": "integer"
     },
     "height": {
-      "default": 512,
+      "default": 1024,
       "type": "integer"
     }
   },

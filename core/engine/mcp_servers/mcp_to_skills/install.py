@@ -134,6 +134,19 @@ def remove_excluded_symlinks(target_root: Path, source_roots: list[Path]) -> lis
     return removed
 
 
+def remove_disabled_symlinks(target_root: Path, disabled_skills: set[str]) -> list[str]:
+    removed: list[str] = []
+    if not target_root.exists() or not disabled_skills:
+        return removed
+
+    for skill_name in sorted(disabled_skills):
+        entry = target_root / skill_name
+        if entry.is_symlink():
+            entry.unlink()
+            removed.append(skill_name)
+    return removed
+
+
 def main() -> int:
     args = parse_args()
     repo_root = Path(__file__).resolve().parents[4]
@@ -161,6 +174,7 @@ def main() -> int:
 
     removed_broken = remove_broken_symlinks(target_root)
     removed_excluded = remove_excluded_symlinks(target_root, source_roots)
+    removed_disabled = remove_disabled_symlinks(target_root, disabled_skills)
 
     all_skill_dirs: list[Path] = []
     for source_root in source_roots:
@@ -209,6 +223,8 @@ def main() -> int:
         print(f"Removed {len(removed_broken)} broken symlink(s): {', '.join(removed_broken)}")
     if removed_excluded:
         print(f"Removed {len(removed_excluded)} excluded symlink(s): {', '.join(removed_excluded)}")
+    if removed_disabled:
+        print(f"Removed {len(removed_disabled)} disabled symlink(s): {', '.join(removed_disabled)}")
     if skipped_disabled:
         print(f"Skipped {len(skipped_disabled)} disabled skill(s).")
     if failed_verify:

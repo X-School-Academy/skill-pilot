@@ -6,15 +6,22 @@ from ..VideoStyle import VideoStyle
 import uuid
 
 # Import utility functions
-from llm import LLM    
 from image_service import generate_image_from_prompt
 from ..video_utils.html2image import capture_image
 import subprocess
-from tts_service import async_text_to_audio_file
 import base64
+from .shared import get_or_create_voice_audio, resolve_optional_scene_file
 
 
 
+
+
+def _scene_image_style(style: VideoStyle) -> str:
+    if style.width > style.height:
+        return 'landscape'
+    if style.height > style.width:
+        return 'portrait'
+    return 'square'
 
 
 async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
@@ -24,9 +31,10 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
     Args:
         scene: Scene data containing:
             - image_prompt: string - AI prompt which will be used to create the image
-            - image_path: string - local file path to a provided image
+            - image_path: string - set only if an image file is specified in the video design requirements
             - text: string - caption of the image
             - voice_over: string
+            - voice_path: string - set only if a voice file is specified in the video design requirements
         style: Video style configuration
 
     Returns:
@@ -35,15 +43,17 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
 
     # Extract scene data
     image_prompt = scene.get("image_prompt", "")
-    image_path = scene.get("image_path", "")
+    image_path = resolve_optional_scene_file(scene, "image_path")
     caption_text = scene.get("text", "")
     voice_over = scene.get("voice_over", "")
+    voice_path = scene.get("voice_path", "")
 
     width = style.width
     height = style.height
 
-    min_length = min(width, height)
-    image_size = min_length * 0.75  # Use 75% of the minimum dimension for image size
+    has_visible_caption = caption_text != '&nbsp;'
+    max_image_width = width * 0.85
+    max_image_height = height * (0.62 if has_visible_caption else 0.82)
 
     has_image_prompt = bool(image_prompt)
     has_image_path = bool(image_path)
@@ -53,9 +63,6 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
             "Image with caption scene requires exactly one of 'image_prompt' or 'image_path'"
         )
 
-    if has_image_path and not os.path.isfile(image_path):
-        raise ValueError(f"Image with caption scene image_path does not exist: {image_path}")
-    
     if not caption_text:
         raise ValueError("Image with caption scene requires 'text' field")
     
@@ -68,7 +75,7 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
         try:
             generated_image_path = await generate_image_from_prompt(
                 image_prompt,
-                style='icon',
+                style=_scene_image_style(style),
             )
             if not generated_image_path:
                 raise Exception("Failed to generate image from prompt")
@@ -123,11 +130,21 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
             gap: calc(var(--line-height) * 1em);
         }}
         
+        .image-frame {{
+            width: 100%;
+            max-width: {max_image_width}px;
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+
         .main-image {{
-            max-width: 85%;
-            max-height: 85%;
-            width: {image_size}px;  /* Use calculated image size */
-            height: {image_size}px;  /* Use calculated image size */
+            max-width: min(100%, {max_image_width}px);
+            max-height: {max_image_height}px;
+            width: auto;
+            height: auto;
             object-fit: contain;
             border-radius: var(--border-radius);
             box-shadow: var(--box-shadow);
@@ -152,7 +169,9 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
 </head>
 <body>
 
-    <img src="data:{img_mime_type};base64,{img_base64}" alt="Generated Image" class="main-image">
+    <div class="image-frame">
+        <img src="data:{img_mime_type};base64,{img_base64}" alt="Generated Image" class="main-image">
+    </div>
 
     <div class="caption-container">
         <div class="caption-text">{caption_text}</div>
@@ -173,21 +192,11 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
     if not composite_image_path:
         raise Exception("Failed to capture composite image for image with caption scene")
     
-    # Generate audio file using Gemini TTS or fallback to LLM
-    try:
-        audio_path = await async_text_to_audio_file(
-            voice_over,
-            voice=style.voice_name,
-            format="wav",
-        )
-    except Exception as e:
-        print(f"Gemini TTS failed, falling back to LLM: {e}")
-        # Fallback to original LLM method
-        async with LLM() as llm:
-            audio_path = await llm.text_to_audio_file(
-                voice_over, 
-                voice=style.voice_name,
-            )
+    audio_path, should_cleanup_audio = await get_or_create_voice_audio(
+        voice_over,
+        voice_path,
+        style.voice_name,
+    )
     
     if not audio_path:
         raise Exception("Failed to generate audio for image with caption scene")
@@ -236,7 +245,7 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
             os.remove(generated_image_path)
         if os.path.exists(composite_image_path):
             os.remove(composite_image_path)
-        if os.path.exists(audio_path):
+        if should_cleanup_audio and os.path.exists(audio_path):
             os.remove(audio_path)
     except:
         pass  # Ignore cleanup errors

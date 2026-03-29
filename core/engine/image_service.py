@@ -31,6 +31,12 @@ GEMINI_ALLOWED_ASPECT_RATIOS = (
     "21:9",
 )
 
+DEFAULT_IMAGE_STYLE_SIZES = {
+    "square": "1024x1024",
+    "landscape": "1536x1024",
+    "portrait": "1024x1536",
+}
+
 
 def _parse_image_size(size: Optional[str]) -> Optional[tuple[int, int]]:
     if not size:
@@ -50,6 +56,27 @@ def _parse_image_size(size: Optional[str]) -> Optional[tuple[int, int]]:
     if width < 1 or height < 1:
         return None
     return width, height
+
+
+def _normalize_image_style(style: Optional[str]) -> str:
+    normalized = (style or "portrait").strip().lower()
+    if normalized in DEFAULT_IMAGE_STYLE_SIZES:
+        return normalized
+    return "portrait"
+
+
+def resolve_image_size_for_provider(provider: Dict[str, Any], style: Optional[str]) -> str:
+    normalized_style = _normalize_image_style(style)
+    provider_size = provider.get("size")
+
+    if isinstance(provider_size, dict):
+        configured_size = provider_size.get(normalized_style)
+        if isinstance(configured_size, str) and _parse_image_size(configured_size):
+            return configured_size
+    elif isinstance(provider_size, str) and _parse_image_size(provider_size):
+        return provider_size
+
+    return DEFAULT_IMAGE_STYLE_SIZES[normalized_style]
 
 
 def _closest_gemini_aspect_ratio(size: Optional[str], default: str) -> str:
@@ -260,13 +287,14 @@ def generate_image_file(prompt: str, provider_id: Optional[str] = None, size: Op
 
     provider = get_image_provider(provider_id)
     provider_name = provider.get("id")
+    resolved_size = size if _parse_image_size(size) else resolve_image_size_for_provider(provider, "portrait")
 
     if provider_name == "openai":
-        path = _openai_generate_image(prompt, provider, size)
+        path = _openai_generate_image(prompt, provider, resolved_size)
     elif provider_name == "gemini":
-        path = _gemini_generate_image(prompt, provider, size)
+        path = _gemini_generate_image(prompt, provider, resolved_size)
     elif provider_name == "media-mcp":
-        path = _media_mcp_generate_image(prompt, provider, size)
+        path = _media_mcp_generate_image(prompt, provider, resolved_size)
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported image provider: {provider_name}")
 
@@ -282,18 +310,13 @@ async def generate_image_from_prompt(
     **_: Any,
 ) -> str:
     _ = negativePrompt
-    image_size = None
-    if style in {"icon", "square"}:
-        image_size = "1024x1024"
-    elif style == "landscape":
-        image_size = "1536x1024"
-    elif style == "portrait":
-        image_size = "1024x1536"
+    provider_config = get_image_provider(provider)
+    image_size = resolve_image_size_for_provider(provider_config, style)
 
     path = await asyncio.to_thread(
         generate_image_file,
         positivePrompt,
-        provider,
+        provider_config.get("id"),
         image_size,
     )
     return path
