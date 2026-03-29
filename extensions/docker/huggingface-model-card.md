@@ -31,11 +31,27 @@ An all-in-one Media Server for Skill Pilot AI Agent https://skill-pilot.ai. Incl
 ```bash
 docker pull skillpilot/media-server:latest
 docker run --gpus all \
-  -p 8188:8188 -p 7860:7860 -p 8080:8080 \
-  -p 3478:3478 -p 3478:3478/udp \
-  -p 5349:5349 -p 5349:5349/udp \
+  -p 18188:8188 -p 17860:7860 -p 18080:8080 \
+  -p 13478:3478 -p 13478:3478/udp \
+  -p 15349:5349 -p 15349:5349/udp \
   skillpilot/media-server:latest
 ```
+
+When the container is running, it will automatically download the modeles by comand line below:
+
+```bash
+huggingface-cli download skill-pilot/media-mcp --local-dir /home/ubuntu/workspace/models
+```
+
+Use command below to check the downloading process in the container:
+
+```bash
+tmux attach -t download -r
+```
+
+You can use the services until the downloading process is completed. The models will be stored in the `/home/ubuntu/workspace/models` directory inside the container.
+
+For how to use the media mcp server, please check at https://skill-pilot.ai, and find our Discord server invite link at https://skill-pilot.ai and join us for support.
 
 The image is built on runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04, ensuring compatibility with a wide range of NVIDIA GPUs and CUDA versions. 
 
