@@ -2,6 +2,11 @@ FROM skillpilotai/media-mcp:v_1.10
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# --- Scripts ---
+COPY --chown=ubuntu:ubuntu download_models.sh /home/ubuntu/workspace/download_models.sh
+COPY --chown=ubuntu:ubuntu entrypoint.sh /home/ubuntu/workspace/entrypoint.sh
+RUN chmod +x /home/ubuntu/workspace/download_models.sh /home/ubuntu/workspace/entrypoint.sh
+
 # ---
 WORKDIR /home/ubuntu/workspace
 
