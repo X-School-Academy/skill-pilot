@@ -73,7 +73,7 @@ async def create_icon_grid_scene(scene: Dict[str, Any], style: VideoStyle) -> st
         generated_icon_indexes.add(i)
         icon_tasks.append(generate_image_from_prompt(
             prompt,
-            style='icon',
+            style='square',
         ))
 
     try:

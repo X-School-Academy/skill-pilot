@@ -7,17 +7,10 @@ if [ -n "$NO_DOWNLOAD_MODELS" ]; then
 fi
 
 (
-echo "=== Downloading MuseTalk weights ==="
-cd /home/ubuntu/workspace/MuseTalk
-source /home/ubuntu/miniconda3/etc/profile.d/conda.sh
-conda activate MuseTalk
-bash ./download_weights.sh
-)
-
-(
-echo "=== Downloading IndexTTS-2 weights ==="
-cd /home/ubuntu/workspace/index-tts
-/home/ubuntu/.local/bin/uv run hf download IndexTeam/IndexTTS-2 --local-dir=checkpoints
+echo "=== Downloading skill-pilot/media-mcp models ==="
+mkdir -p /home/ubuntu/workspace/models
+/home/ubuntu/.local/bin/uv run huggingface-cli download skill-pilot/media-mcp \
+    --local-dir /home/ubuntu/workspace/models
 )
 
 echo "=== All models downloaded successfully ==="

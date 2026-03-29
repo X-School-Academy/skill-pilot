@@ -292,3 +292,28 @@ These are the assumptions I plan to implement unless you want them changed befor
 2. The skill rename applies to skill metadata and docs, not necessarily the folder path.
 3. The API endpoint/command is renamed to `create_multiple_scene_video`.
 4. For `host_speech_clip`, if `video_path` is absent, I should build the best local host-video path from existing media tools already present in this repo instead of introducing a new remote dependency.
+
+--
+
+## resume
+
+update the code
+
+1. we use the output_path directly without to create a run subdirectory
+2. change file name plan_scenes.repaired.json to plan_scenes.yaml for better readability and editing (using `|-` for long string for each reading any edit), change design_video_spec.repaired.json to design_video_spec.yaml as well
+3. when save plan_scenes.yaml, we save the workflow state to json file as well
+4. we make remove any generated any image, audio, scene video file, or it may be failed to created duo to code error, other network error
+5. provide a new func resume_multiple_scene_video: output_path
+
+the new function will do
+
+load the workflow state json, and the plan_scenes.yaml, and re-generate any image, audio, scene video , and final video if the file is not exist
+
+we do this way
+1. avoid recreate the related files
+2. crash recovery
+3. re-generate some files as needed
+
+if no plan_scenes.yaml file, resume_multiple_scene_video should give error, and exit
+
+thinking the best way to do this - create a new langgraph and reuse and node/funcs ?

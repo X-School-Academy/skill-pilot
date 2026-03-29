@@ -6,11 +6,11 @@ from pathlib import Path
 import uuid
 from typing import Dict, Any
 from ..VideoStyle import VideoStyle
-from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage
 import re
 from logger import log, error
 from .shared import get_or_create_voice_audio
+from ..llm_adapter import WorkflowLLMAdapter
 
 # Import utility functions
 from ..video_utils.html2image import capture_image
@@ -245,17 +245,7 @@ async def generate_mermaid_image_with_retry(diagram_type: str, description: str,
         SVG content as string
     """
     
-    # Initialize LLM model
-    model = init_chat_model(
-        f"azure_openai:{os.environ.get('AZURE_OPENAI_CHAT_MODEL_NAME', 'gpt-4.1')}",
-        azure_deployment=os.environ.get("AZURE_OPENAI_CHAT_MODEL_NAME", "gpt-4.1"),
-        azure_endpoint=os.environ.get("AZURE_OPENAI_CHAT_ENDPOINT"),
-        api_version=os.environ.get("AZURE_OPENAI_CHAT_MODEL_API_VERSION"),
-        api_key=os.environ.get("AZURE_OPENAI_CHAT_API_KEY"),
-        max_retries=3,
-        temperature=0.7,
-        max_tokens=4096 * 2,
-    )
+    llm = WorkflowLLMAdapter()
     
     diagram_prompt = f"""
     Create a {diagram_type} diagram using Mermaid syntax for the following description:
@@ -270,7 +260,7 @@ async def generate_mermaid_image_with_retry(diagram_type: str, description: str,
     for attempt in range(max_retries):
         try:
             # Generate mermaid code
-            response = await model.ainvoke(messages)
+            response = await llm.ainvoke(messages)
             mermaid_code = response.content.strip()
 
             if not mermaid_code:

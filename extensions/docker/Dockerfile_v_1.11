@@ -1,0 +1,37 @@
+FROM skillpilotai/media-mcp:v_1.10
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ---
+WORKDIR /home/ubuntu/workspace
+
+EXPOSE 22 8080 7860 8188 3478 3478/udp 5349 5349/udp
+
+RUN sudo apt-get update && sudo apt-get install -y coturn
+
+# Welcome message shown on login for both root and ubuntu
+RUN sudo sh -c 'printf "%s\n" \
+    "" \
+    "  ╔══════════════════════════════════════════════════════════════╗" \
+    "  ║         ✦  Skill Pilot Media Server  ✦                      ║" \
+    "  ╠══════════════════════════════════════════════════════════════╣" \
+    "  ║                                                              ║" \
+    "  ║  Ready to create with AI-powered tools:                     ║" \
+    "  ║                                                              ║" \
+    "  ║    ComfyUI    ·  AI image & video generation                ║" \
+    "  ║    IndexTTS   ·  High-quality text-to-speech                ║" \
+    "  ║    MuseTalk   ·  Real-time talking face synthesis           ║" \
+    "  ║    SongBloom  ·  AI music & song creation                   ║" \
+    "  ║                                                              ║" \
+    "  ╠══════════════════════════════════════════════════════════════╣" \
+    "  ║  Free & Open Source  ·  MIT License                         ║" \
+    "  ║                                                              ║" \
+    "  ║  Need help? Join our Discord community!                     ║" \
+    "  ║  Find the invite link at:  https://skill-pilot.ai           ║" \
+    "  ╚══════════════════════════════════════════════════════════════╝" \
+    "" \
+    > /etc/motd && \
+    printf "#!/bin/sh\ncat /etc/motd\n" > /etc/profile.d/welcome.sh && \
+    chmod +x /etc/profile.d/welcome.sh'
+
+ENTRYPOINT ["/home/ubuntu/workspace/entrypoint.sh"]

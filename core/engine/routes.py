@@ -4417,3 +4417,11 @@ def create_multiple_scene_video(payload: Dict[str, Any]):
         output_path=output_path,
     )
     return {"video_file_path": video_file_path}
+
+
+@router.post("/api/resume_multiple_scene_video")
+@router.post("/resume_multiple_scene_video")
+def resume_multiple_scene_video(payload: Dict[str, Any]):
+    output_path = str(payload.get("output_path") or "/tmp").strip() or "/tmp"
+    video_file_path = VIDEO_CREATOR.resume_multiple_scene_video(output_path=output_path)
+    return {"video_file_path": video_file_path}

@@ -251,12 +251,12 @@
       name: 'Media MCP Server - TTS',
       voices: {
         'voice_name': 
-        {
-          "emotion": "calm",
-          "emotion_sample": "This is a calm and steady narration voice.",
-          "ref_voice": "assets/custom-voices/your-voice.wav",
-          "ref_emotion_voice": "assets/custom-voices/your-emotion-voice.wav",
-        }
+          {
+            "emotion": "calm",
+            "emotion_sample": "This is a calm and steady narration voice.",
+            "ref_voice": "assets/custom-voices/frank-en-ai.wav",
+            "ref_emotion_voice": "assets/custom-voices/frank-en-ai.wav",
+          }
       },
     },
   ],
@@ -267,7 +267,11 @@
       id: 'openai',
       name: 'OpenAI Image',
       model: 'gpt-image-1',
-      size: '1024x1536',
+      size: {
+        'square': '1024x1024',
+        'landscape': '1536x1024',
+        'portrait': '1024x1536',
+      },
       quality: 'low',
     },
     {
@@ -275,12 +279,21 @@
       name: 'Gemini Image',
       model: 'gemini-3.1-flash-image-preview',
       aspect_ratio: '2:3', // "1:1","1:4","1:8","2:3","3:2","3:4","4:1","4:3","4:5","5:4","8:1","9:16","16:9","21:9"
-      resolution: "1K", // "512", "1K", "2K", "4K"
+      resolution: "1K", // "512", "1K", "2K", "4K",
+      size: {
+        'square': '1024x1024',
+        'landscape': '1280x720',
+        'portrait': '720x1280',
+      },
     },
     {
       id: 'media-mcp',
       name: 'Media MCP Server - Image',
-      size: '1280x720',
+      size: {
+        'square': '1024x1024',
+        'landscape': '1280x720',
+        'portrait': '720x1280',
+      },
     },
   ],
 }

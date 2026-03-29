@@ -470,7 +470,7 @@ Respond with just the image prompt, no additional text.
         try:
             thumbnail_image_path = await generate_image_from_prompt(
                 image_prompt,
-                style='icon',
+                style='square',
             )
             if not thumbnail_image_path:
                 log("Failed to generate thumbnail image, proceeding without thumbnail")

@@ -16,6 +16,14 @@ from .shared import get_or_create_voice_audio, resolve_optional_scene_file
 
 
 
+def _scene_image_style(style: VideoStyle) -> str:
+    if style.width > style.height:
+        return 'landscape'
+    if style.height > style.width:
+        return 'portrait'
+    return 'square'
+
+
 async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
     """
     Create an image with caption scene video.
@@ -43,8 +51,9 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
     width = style.width
     height = style.height
 
-    min_length = min(width, height)
-    image_size = min_length * 0.75  # Use 75% of the minimum dimension for image size
+    has_visible_caption = caption_text != '&nbsp;'
+    max_image_width = width * 0.85
+    max_image_height = height * (0.62 if has_visible_caption else 0.82)
 
     has_image_prompt = bool(image_prompt)
     has_image_path = bool(image_path)
@@ -66,7 +75,7 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
         try:
             generated_image_path = await generate_image_from_prompt(
                 image_prompt,
-                style='icon',
+                style=_scene_image_style(style),
             )
             if not generated_image_path:
                 raise Exception("Failed to generate image from prompt")
@@ -121,11 +130,21 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
             gap: calc(var(--line-height) * 1em);
         }}
         
+        .image-frame {{
+            width: 100%;
+            max-width: {max_image_width}px;
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+
         .main-image {{
-            max-width: 85%;
-            max-height: 85%;
-            width: {image_size}px;  /* Use calculated image size */
-            height: {image_size}px;  /* Use calculated image size */
+            max-width: min(100%, {max_image_width}px);
+            max-height: {max_image_height}px;
+            width: auto;
+            height: auto;
             object-fit: contain;
             border-radius: var(--border-radius);
             box-shadow: var(--box-shadow);
@@ -150,7 +169,9 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
 </head>
 <body>
 
-    <img src="data:{img_mime_type};base64,{img_base64}" alt="Generated Image" class="main-image">
+    <div class="image-frame">
+        <img src="data:{img_mime_type};base64,{img_base64}" alt="Generated Image" class="main-image">
+    </div>
 
     <div class="caption-container">
         <div class="caption-text">{caption_text}</div>

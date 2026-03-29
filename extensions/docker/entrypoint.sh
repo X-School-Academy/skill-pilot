@@ -12,6 +12,18 @@ fi
 sudo ssh-keygen -A
 sudo service ssh start
 
+# Start coturn STUN/TURN server for MuseTalk live avatar WebRTC
+COTURN_USER="${COTURN_USER:-skillpilot}"
+COTURN_PASSWORD="${COTURN_PASSWORD:-skillpilot123}"
+sudo turnserver \
+    --listening-port=3478 \
+    --tls-listening-port=5349 \
+    --lt-cred-mech \
+    --user="${COTURN_USER}:${COTURN_PASSWORD}" \
+    --realm=skill-pilot.ai \
+    --log-file=/var/log/coturn.log \
+    --daemon
+
 # Download models in a tmux session (monitor with: tmux attach -t download)
 tmux new-session -d -s download 'bash /home/ubuntu/workspace/download_models.sh'
 

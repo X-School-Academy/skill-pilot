@@ -1206,10 +1206,12 @@ async def video_to_talk_video(
     _log_request("video_to_talk_video", request_extra)
 
     try:
-        video_file = _resolve_input_file(video_file, "video_file")
-        audio_file = _resolve_input_file(audio_file, "audio_file")
-        video_path = _require_local_file(video_file, "Video file")
-        audio_path = _require_local_file(audio_file, "Audio file")
+        video_input = str(video_file or "").strip()
+        audio_input = str(audio_file or "").strip()
+        video_path = Path(_materialize_input_file(video_input, "video_file")).expanduser().resolve()
+        audio_path = Path(_materialize_input_file(audio_input, "audio_file")).expanduser().resolve()
+        video_ref = _resolve_input_file(video_input, "video_file")
+        audio_ref = _resolve_input_file(audio_input, "audio_file")
 
         audio_duration = await get_audio_duration(str(audio_path))
         max_frames = 4500
@@ -1218,9 +1220,11 @@ async def video_to_talk_video(
         workflow_width, workflow_height = _prepare_video_workflow_size(width, height)
 
         processed_video_path = str(video_path)
+        processed_video_ref = video_ref
         if pingpong:
             processed_video_path = await _create_pingpong_video(str(video_path))
             request_extra["processed_video_file"] = processed_video_path
+            processed_video_ref = _resolve_input_file(processed_video_path, "processed_video_file")
 
         task_input = {
             'video_prompt': prompt,
@@ -1230,8 +1234,8 @@ async def video_to_talk_video(
         }
 
         downloaded_files = {
-            '{{source_video}}': processed_video_path,
-            '{{ref_audio}}': str(audio_path)
+            '{{source_video}}': processed_video_ref,
+            '{{ref_audio}}': audio_ref
         }
 
         result = await workflow_executor.execute_workflow(
@@ -1295,12 +1299,15 @@ async def image_to_dialog_video(
     if not prompt_value:
         raise WorkflowExecutionError("Prompt is required for dialog video generation")
 
-    image_file = _resolve_input_file(image_file, "image_file")
-    audio_file_one = _resolve_input_file(audio_file_one, "audio_file_one")
-    audio_file_two = _resolve_input_file(audio_file_two, "audio_file_two")
-    image_path = _require_local_file(image_file, "Image file")
-    audio_one_path = _require_local_file(audio_file_one, "Dialog audio file #1")
-    audio_two_path = _require_local_file(audio_file_two, "Dialog audio file #2")
+    image_input = str(image_file or "").strip()
+    audio_one_input = str(audio_file_one or "").strip()
+    audio_two_input = str(audio_file_two or "").strip()
+    image_path = Path(_materialize_input_file(image_input, "image_file")).expanduser().resolve()
+    audio_one_path = Path(_materialize_input_file(audio_one_input, "audio_file_one")).expanduser().resolve()
+    audio_two_path = Path(_materialize_input_file(audio_two_input, "audio_file_two")).expanduser().resolve()
+    image_ref = _resolve_input_file(image_input, "image_file")
+    audio_one_ref = _resolve_input_file(audio_one_input, "audio_file_one")
+    audio_two_ref = _resolve_input_file(audio_two_input, "audio_file_two")
 
     await _ensure_audio_within_limit(audio_one_path, "Dialog audio file #1")
     await _ensure_audio_within_limit(audio_two_path, "Dialog audio file #2")
@@ -1315,9 +1322,9 @@ async def image_to_dialog_video(
     }
 
     downloaded_files = {
-        '{{source_image}}': str(image_path),
-        '{{audio_file1}}': str(audio_one_path),
-        '{{audio_file2}}': str(audio_two_path)
+        '{{source_image}}': image_ref,
+        '{{audio_file1}}': audio_one_ref,
+        '{{audio_file2}}': audio_two_ref
     }
 
     try:
