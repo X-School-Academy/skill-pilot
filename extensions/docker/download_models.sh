@@ -3,6 +3,8 @@ set -e
 
 if [ -n "$NO_DOWNLOAD_MODELS" ]; then
     echo "=== NO_DOWNLOAD_MODELS is set, skipping model downloads ==="
+    # sleep to avoid tmux session race issue
+    sleep 5
     exit 0
 fi
 
