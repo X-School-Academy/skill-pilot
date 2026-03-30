@@ -4410,18 +4410,18 @@ def create_multiple_scene_video(payload: Dict[str, Any]):
         target_duration = 60
     resolution = str(payload.get("resolution") or "1080x1920")
     output_path = str(payload.get("output_path") or "/tmp").strip() or "/tmp"
-    video_file_path = VIDEO_CREATOR.create_multiple_scene_video(
+    result = VIDEO_CREATOR.create_multiple_scene_video(
         requirement=requirement,
         target_duration=target_duration,
         resolution=resolution,
         output_path=output_path,
     )
-    return {"video_file_path": video_file_path}
+    return result
 
 
 @router.post("/api/resume_multiple_scene_video")
 @router.post("/resume_multiple_scene_video")
 def resume_multiple_scene_video(payload: Dict[str, Any]):
     output_path = str(payload.get("output_path") or "/tmp").strip() or "/tmp"
-    video_file_path = VIDEO_CREATOR.resume_multiple_scene_video(output_path=output_path)
-    return {"video_file_path": video_file_path}
+    result = VIDEO_CREATOR.resume_multiple_scene_video(output_path=output_path)
+    return result

@@ -589,7 +589,7 @@ Below are the available scene types you can use. Each scene type must follow the
 {{
   "scene_type": "definition",
   "term": "string",
-  "definition": "Definition in markdown style. It can be a code block for code statements, LaTeX for math or physics equations, or rich markdown text to explain the concept.",
+  "definition": "Definition in markdown style. It can be a code block for code statements, LaTeX for math or physics equations, or rich markdown text to explain the concept. Avoid using any emoji icons in the markdown text.",
   "voice_over": "The text for voice-over.",
   "voice_path": "string - set only if a voice file is specified in the video design requirements"
 }}
@@ -964,12 +964,46 @@ Use the original requirement as the source of truth for any explicitly requested
         return scenes
 
     def _build_result(self, state_values: Dict[str, Any]) -> Dict[str, Any]:
+        final_video_path = state_values.get("final_video_path")
         return {
-            "final_video_path": state_values.get("final_video_path"),
+            "final_video_path": final_video_path,
+            "video_file_path": final_video_path,
             "video_spec": asdict(state_values["video_spec"]) if state_values.get("video_spec") else {},
             "scene_videos": state_values.get("scene_videos", []),
             "scene_plan": [self._scene_to_dict(scene) for scene in state_values.get("scene_plan") or []],
         }
+
+    def _copy_thumbnail_to_output_path(
+        self,
+        thumbnail_path: str,
+        video_file_path: str,
+        width: int,
+        height: int,
+    ) -> str:
+        from PIL import Image
+
+        source_path = Path(thumbnail_path).expanduser().resolve()
+        destination_path = Path(video_file_path).expanduser().resolve().with_name("thumbnail.png")
+
+        with Image.open(source_path) as image:
+            processed = image.convert("RGB")
+            source_ratio = processed.width / processed.height if processed.height else 1
+            target_ratio = width / height if height else source_ratio
+
+            if abs(source_ratio - target_ratio) > 1e-6:
+                if source_ratio > target_ratio:
+                    crop_width = int(processed.height * target_ratio)
+                    crop_x = max((processed.width - crop_width) // 2, 0)
+                    processed = processed.crop((crop_x, 0, crop_x + crop_width, processed.height))
+                else:
+                    crop_height = int(processed.width / target_ratio) if target_ratio else processed.height
+                    crop_y = max((processed.height - crop_height) // 2, 0)
+                    processed = processed.crop((0, crop_y, processed.width, crop_y + crop_height))
+
+            resized = processed.resize((width, height), Image.Resampling.LANCZOS)
+            resized.save(destination_path, format="PNG")
+
+        return str(destination_path)
 
     def _resolve_existing_file(self, raw_path: str, field_name: str) -> str:
         if not raw_path:
@@ -1838,7 +1872,7 @@ Use the original requirement as the source of truth for any explicitly requested
         target_duration: int = 60,
         resolution: str = "1080x1920",
         output_path: str = "/tmp",
-    ) -> str:
+    ) -> Dict[str, Any]:
         result = asyncio.run(
             self.create_video(
                 requirement=requirement,
@@ -1847,7 +1881,7 @@ Use the original requirement as the source of truth for any explicitly requested
                 output_path=output_path,
             )
         )
-        return str(result.get("final_video_path") or "")
+        return result
 
     async def resume_video(self, output_path: str) -> Dict[str, Any]:
         run_output_dir = self._create_run_output_dir(output_path, "")
@@ -1946,9 +1980,9 @@ Use the original requirement as the source of truth for any explicitly requested
                 log(f"Warning: Failed to extract video metadata during resume: {e}")
         return result
 
-    def resume_multiple_scene_video(self, output_path: str) -> str:
+    def resume_multiple_scene_video(self, output_path: str) -> Dict[str, Any]:
         result = asyncio.run(self.resume_video(output_path))
-        return str(result.get("final_video_path") or "")
+        return result
     
     async def _extract_video_metadata_and_thumbnail(self, video_url: str, requirement: str = None, video_spec = None) -> Dict[str, Any]:
         """
@@ -2016,9 +2050,21 @@ Use the original requirement as the source of truth for any explicitly requested
                 'height': int(video_stream.get('height', 0)),
             }
             
-            # Generate thumbnail at 1 second mark using AI image generation
-            thumbnail_url = await self._generate_ai_thumbnail(requirement, video_spec)
-            metadata['thumbnail_url'] = thumbnail_url
+            thumbnail_source_path = await self._generate_ai_thumbnail(
+                requirement,
+                video_spec,
+                metadata["width"],
+                metadata["height"],
+            )
+            temp_thumbnail_path = thumbnail_source_path
+            thumbnail_image = self._copy_thumbnail_to_output_path(
+                thumbnail_source_path,
+                video_url,
+                metadata["width"],
+                metadata["height"],
+            )
+            metadata["thumbnail_image"] = thumbnail_image
+            metadata["thumbnail_url"] = thumbnail_image
             
             return metadata
             
@@ -2032,7 +2078,13 @@ Use the original requirement as the source of truth for any explicitly requested
             if temp_thumbnail_path and os.path.exists(temp_thumbnail_path):
                 os.remove(temp_thumbnail_path)
     
-    async def _generate_ai_thumbnail(self, requirement: str = None, video_spec: VideoSpec = None) -> str:
+    async def _generate_ai_thumbnail(
+        self,
+        requirement: str = None,
+        video_spec: VideoSpec = None,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+    ) -> str:
         """
         Generate a contextual thumbnail using AI based on video requirement
         
@@ -2047,8 +2099,8 @@ Use the original requirement as the source of truth for any explicitly requested
             # Extract visual context from requirement text
             prompt = await self._build_thumbnail_prompt(requirement, video_spec)
 
-            # Generate thumbnail image
-            thumbnail_path = await generate_image_from_prompt(prompt, style='square')
+            image_style = self._image_style_for_dimensions(width or 1024, height or 1024)
+            thumbnail_path = await generate_image_from_prompt(prompt, style=image_style)
             if not thumbnail_path:
                 raise Exception("Failed to generate thumbnail image")
             
@@ -2095,7 +2147,7 @@ Return ONLY the final image prompt (no extra lines)."""
                     "OUTPUT: Return a SINGLE, fully specified image-generation prompt (no commentary). "
                     "MODEL BEHAVIOR: The prompt will be used with GPT-Image-1 / 4o Images. Be explicit and layout-aware. "
                     "REQUIREMENTS:\n"
-                    "- Thumbnail aspect 1:1. Reserve safe areas (≈96px top for title bars, 180px bottom for subtitles).\n"
+                    "- Match the source video frame aspect ratio as a full-bleed rectangle with no rounded corners.\n"
                     "- One clear focal subject; include at most 0–3 small icons; avoid clutter.\n"
                     "- If on-image text is needed, keep ≤3 words; provide exact wording + font family (with generic fallback), weight/size/color/placement; add subtle outline/shadow for legibility.\n"
                     "- Specify style, 3–5 color palette with high contrast; lighting/mood; POV/composition; foreground/midground/background and spacing so the subject stays inside the central 60%.\n"
@@ -2115,7 +2167,7 @@ Return ONLY the final image prompt (no extra lines)."""
         except Exception as e:
             log(f"Error generating AI thumbnail prompt: {e}")
             # Fallback to simple prompt
-            return "Educational video thumbnail, clean modern design, bright engaging colors, professional educational style, eye-catching composition"
+            return "Educational video thumbnail, clean modern design, bright engaging colors, professional educational style, eye-catching composition, full-bleed rectangular frame, no rounded corners"
 
 
 # Factory function for easy initialization
