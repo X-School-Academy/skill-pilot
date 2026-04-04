@@ -357,12 +357,14 @@ show_screen() {
 install_free_cli_tools() {
   # Accepts a list of agent names to install: claude, copilot, gemini, codex, opencode
   local agents_to_install=("$@")
-  local -A pkg_map=(
-    [copilot]="@github/copilot"
-    [gemini]="@google/gemini-cli"
-    [codex]="@openai/codex"
-    [opencode]="opencode-ai"
-  )
+  get_install_pkg() {
+    case "$1" in
+      copilot)  echo "@github/copilot" ;;
+      gemini)   echo "@google/gemini-cli" ;;
+      codex)    echo "@openai/codex" ;;
+      opencode) echo "opencode-ai" ;;
+    esac
+  }
   for agent in "${agents_to_install[@]}"; do
     if [[ "${agent}" == "claude" ]]; then
       if ! command -v curl >/dev/null 2>&1; then
@@ -373,7 +375,8 @@ install_free_cli_tools() {
       curl -fsSL https://claude.ai/install.sh | bash || echo "Claude installer failed."
       continue
     fi
-    local pkg="${pkg_map[$agent]:-}"
+    local pkg
+    pkg="$(get_install_pkg "${agent}")"
     if [[ -z "$pkg" ]]; then
       echo "Unknown agent: $agent — skipping."
       continue
@@ -857,27 +860,31 @@ run_init_wizard_if_needed() {
     echo ""
     echo "The following are not yet installed:"
     echo ""
-    local -A agent_labels=(
-      [claude]="Claude Code        — free plan available"
-      [copilot]="GitHub Copilot CLI — free plan available"
-      [gemini]="Google Gemini CLI — free tier available"
-      [codex]="OpenAI Codex CLI  — free tier available"
-      [opencode]="OpenCode           — free tier available"
-    )
-    local -A agent_pkgs=(
-      [claude]="curl -fsSL https://claude.ai/install.sh | bash"
-      [copilot]="@github/copilot"
-      [gemini]="@google/gemini-cli"
-      [codex]="@openai/codex"
-      [opencode]="opencode-ai"
-    )
+    get_agent_label() {
+      case "$1" in
+        claude)   echo "Claude Code        — free plan available" ;;
+        copilot)  echo "GitHub Copilot CLI — free plan available" ;;
+        gemini)   echo "Google Gemini CLI — free tier available" ;;
+        codex)    echo "OpenAI Codex CLI  — free tier available" ;;
+        opencode) echo "OpenCode           — free tier available" ;;
+      esac
+    }
+    get_agent_pkg() {
+      case "$1" in
+        claude)   echo "curl -fsSL https://claude.ai/install.sh | bash" ;;
+        copilot)  echo "@github/copilot" ;;
+        gemini)   echo "@google/gemini-cli" ;;
+        codex)    echo "@openai/codex" ;;
+        opencode) echo "opencode-ai" ;;
+      esac
+    }
     for agent in claude copilot gemini codex opencode; do
       local is_missing=0
       for m in "${missing_free[@]}"; do
         [[ "$m" == "$agent" ]] && is_missing=1 && break
       done
       if ((is_missing)); then
-        printf '  %-10s  %s\n' "${agent}" "${agent_labels[$agent]}"
+        printf '  %-10s  %s\n' "${agent}" "$(get_agent_label "${agent}")"
       else
         printf '  %-10s  (already installed — skipped)\n' "${agent}"
       fi
@@ -892,9 +899,9 @@ run_init_wizard_if_needed() {
     echo ""
     for agent in "${missing_free[@]}"; do
       if [[ "${agent}" == "claude" ]]; then
-        echo "  ${agent_pkgs[$agent]}"
+        echo "  $(get_agent_pkg "${agent}")"
       else
-        echo "  pnpm install -g ${agent_pkgs[$agent]}"
+        echo "  pnpm install -g $(get_agent_pkg "${agent}")"
       fi
     done
     echo ""
