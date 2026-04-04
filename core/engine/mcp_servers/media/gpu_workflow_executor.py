@@ -8,6 +8,7 @@ without Strapi task queue dependencies.
 import os
 import json
 import uuid
+import hashlib
 import aiohttp
 import asyncio
 import aiofiles
@@ -99,6 +100,31 @@ def _resolve_max_execution_time_seconds() -> int:
     return GPU_WORKER_MAX_EXECUTION_TIME
 
 
+def _build_local_upload_cache_key(local_path: str, upload_type: str = "input") -> str:
+    path = Path(local_path).expanduser().resolve()
+    stat = path.stat()
+    return ":".join(
+        [
+            upload_type,
+            str(path),
+            str(stat.st_size),
+            str(stat.st_mtime_ns),
+        ]
+    )
+
+
+def _build_cached_remote_filename(local_path: str) -> str:
+    file_path = Path(local_path).expanduser().resolve()
+    stat = file_path.stat()
+    suffix = file_path.suffix or '.bin'
+    stem = ''.join(ch if ch.isalnum() or ch in {'_', '-'} else '_' for ch in file_path.stem).strip('_')
+    stem = stem or 'input'
+    fingerprint = hashlib.sha1(
+        f"{file_path.name}:{stat.st_size}:{stat.st_mtime_ns}".encode('utf-8')
+    ).hexdigest()[:12]
+    return f"{stem}_{fingerprint}{suffix}"
+
+
 class WorkflowExecutor:
     """Execute ComfyUI workflows without Strapi task queue"""
 
@@ -111,6 +137,7 @@ class WorkflowExecutor:
         """
         self.tmp_dir = Path(tmp_dir)
         self.tmp_dir.mkdir(parents=True, exist_ok=True)
+        self._uploaded_to_comfy_by_local_file: Dict[str, Dict[str, str]] = {}
 
     async def load_workflow(self, workflow_id: str) -> Dict:
         """
@@ -204,8 +231,16 @@ class WorkflowExecutor:
                         uploaded_by_placeholder[placeholder] = uploaded_by_local_path[resolved_path]
                         continue
 
+                    cache_key = _build_local_upload_cache_key(resolved_path)
+                    cached_refs = self._uploaded_to_comfy_by_local_file.get(cache_key)
+                    if cached_refs:
+                        uploaded_by_local_path[resolved_path] = cached_refs
+                        uploaded_by_placeholder[placeholder] = cached_refs
+                        continue
+
                     refs = await self._upload_single_file(session, resolved_path)
                     uploaded_by_local_path[resolved_path] = refs
+                    self._uploaded_to_comfy_by_local_file[cache_key] = refs
                     uploaded_by_placeholder[placeholder] = refs
                 else:
                     # Already a ComfyUI-side path reference (e.g., input/abc.png).
@@ -231,7 +266,7 @@ class WorkflowExecutor:
             ("/upload", "file"),
             ("/upload", "image"),
         ]
-        upload_name = f"{uuid.uuid4().hex}{file_path.suffix or '.bin'}"
+        upload_name = _build_cached_remote_filename(str(file_path))
         upload_payload: Optional[Dict[str, Any]] = None
         last_error = ""
 

@@ -157,11 +157,11 @@ async def record_screen(
         raise Exception("FFmpeg is not installed or not found in the system PATH.") from exc
     except Exception as exc:
         raise Exception(f"An error occurred while creating the video: {str(exc)}") from exc
-    finally:
-        try:
-            shutil.rmtree(frames_dir)
-        except Exception:
-            pass
+    # finally:
+    #     try:
+    #         shutil.rmtree(frames_dir)
+    #     except Exception:
+    #         pass
 
     logger.info("Done. Video is at %s.", output_file)
 

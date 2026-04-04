@@ -5,6 +5,7 @@ import uuid
 import sys
 import os
 import aiofiles
+from logger import get_logger
 from playwright.async_api import async_playwright
 from workflow.video_utils.playwright_browser import launch_playwright_chromium
 
@@ -22,6 +23,8 @@ async def capture_image(
     Returns the path to the final image if successful, otherwise None.
     """
 
+    logger = get_logger("workflow.video_utils.html2image")
+
     width, height = (1920, 1080) if isHorizontal else (1080, 1920)
 
     if view_width is not None and view_height is not None:
@@ -29,9 +32,12 @@ async def capture_image(
         height = view_height
 
     image_file = f"/tmp/code_image_{uuid.uuid4()}.png"
+    logger.info("image_file: %s", image_file)
 
     # for debugging purposes, write the HTML code to a temporary file
     html_file = f'/tmp/video_image_{str(uuid.uuid4())}.html'
+    logger.info("html_file: %s", html_file)
+    
     async with aiofiles.open(html_file, 'w') as f:
         await f.write(html_code)
         print(f"html_file: {html_file}")
@@ -58,8 +64,8 @@ async def capture_image(
             result = await asyncio.wait_for(capture_task, timeout=timeout)
 
             # Success - clean up and return
-            if os.path.exists(html_file):
-                os.remove(html_file)
+            # if os.path.exists(html_file):
+            #     os.remove(html_file)
             return result
 
         except asyncio.TimeoutError:
@@ -87,8 +93,8 @@ async def capture_image(
                     print(f"[html2image.py] Error stopping playwright: {e}", file=sys.stderr)
 
     # All retries failed - clean up HTML file
-    if os.path.exists(html_file):
-        os.remove(html_file)
+    # if os.path.exists(html_file):
+    #     os.remove(html_file)
     return None
 
 async def main():

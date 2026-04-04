@@ -140,6 +140,12 @@ const TerminalPage = () => {
     window.open(processesUrl, "_blank", "noopener,noreferrer");
   }, []);
 
+  const handleHistory = useCallback(() => {
+    if (typeof window === "undefined" || !sessionName) return;
+    const historyUrl = `/terminal/history?session=${encodeURIComponent(sessionName)}`;
+    window.open(historyUrl, "_blank", "noopener,noreferrer");
+  }, [sessionName]);
+
   useEffect(() => {
     if (!isOpen) return;
     if (!terminalContainerRef.current) return;
@@ -436,6 +442,15 @@ const TerminalPage = () => {
               {sessionName ? `session=${sessionName}` : ""}
             </div>
             <div className="flex gap-2">
+              {sessionName && (
+                <button
+                  type="button"
+                  onClick={handleHistory}
+                  className="rounded bg-[#1d6f5f] px-3 py-1 text-xs hover:opacity-90"
+                >
+                  History
+                </button>
+              )}
               {sessionName && !isReadonly && !isProtectedSession(sessionName) && (
                 <button
                   type="button"

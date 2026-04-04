@@ -623,6 +623,43 @@ def _is_protected_tmux_session(session_name: str) -> bool:
     return session_name.startswith(PROTECTED_TMUX_SESSION_PREFIXES)
 
 
+def _tmux_pane_target_any(session_name: str) -> str:
+    safe_name = _validate_tmux_session_name_any(session_name)
+    proc = _run_tmux_command(
+        ["display-message", "-p", "-t", safe_name, "#{session_name}:#{window_index}.#{pane_index}"],
+        check=False,
+    )
+    if proc.returncode != 0:
+        message = (proc.stderr or proc.stdout or "").strip().lower()
+        if "can't find session" in message:
+            raise RuntimeError(f"tmux session not found: {safe_name}")
+        raise RuntimeError((proc.stderr or proc.stdout or "").strip() or "unable to resolve tmux pane target")
+    pane_target = (proc.stdout or "").strip()
+    if not pane_target:
+        raise RuntimeError("unable to resolve tmux pane target")
+    return pane_target
+
+
+def _capture_tmux_pane_history_any(session_name: str) -> Dict[str, str]:
+    pane_target = _tmux_pane_target_any(session_name)
+    proc = _run_tmux_command(
+        ["capture-pane", "-pJ", "-S", "-", "-E", "-", "-t", pane_target],
+        check=False,
+    )
+    if proc.returncode != 0:
+        message = (proc.stderr or proc.stdout or "").strip().lower()
+        if "can't find pane" in message or "can't find session" in message:
+            raise RuntimeError(f"tmux session not found: {session_name}")
+        raise RuntimeError((proc.stderr or proc.stdout or "").strip() or "unable to capture tmux pane history")
+    command = f"tmux capture-pane -pJ -S - -E - -t {pane_target}"
+    return {
+        "session": _validate_tmux_session_name_any(session_name),
+        "pane_target": pane_target,
+        "command": command,
+        "content": proc.stdout or "",
+    }
+
+
 def _pane_current_command_any(session_name: str) -> str:
     safe_name = _validate_tmux_session_name_any(session_name)
     proc = _run_tmux_command(["display-message", "-p", "-t", safe_name, "#{pane_current_command}"], check=False)
@@ -1593,6 +1630,18 @@ def terminal_tmux_kill(payload: Dict[str, Any]):
     except RuntimeError as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})
     return {"status": "ok", "removed": removed, "session": session_name}
+
+
+@router.get("/api/terminal/tmux/history")
+def terminal_tmux_history(session: str):
+    try:
+        safe_session = _validate_tmux_session_name_any(session)
+        history = _capture_tmux_pane_history_any(safe_session)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except RuntimeError as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc)})
+    return history
 
 
 @router.post("/api/terminal/tmux/cleanup")
@@ -4410,11 +4459,15 @@ def create_multiple_scene_video(payload: Dict[str, Any]):
         target_duration = 60
     resolution = str(payload.get("resolution") or "1080x1920")
     output_path = str(payload.get("output_path") or "/tmp").strip() or "/tmp"
+    voice_name = str(payload.get("voice_name") or "").strip() or None
+    theme = str(payload.get("theme") or "").strip() or None
     result = VIDEO_CREATOR.create_multiple_scene_video(
         requirement=requirement,
         target_duration=target_duration,
         resolution=resolution,
         output_path=output_path,
+        voice_name=voice_name,
+        theme=theme,
     )
     return result
 

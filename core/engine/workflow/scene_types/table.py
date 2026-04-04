@@ -7,7 +7,7 @@ from ..VideoStyle import VideoStyle
 # Import utility functions
 from ..video_utils.html2image import capture_image
 import subprocess
-from .shared import get_or_create_voice_audio
+from .shared import get_or_create_voice_audio, render_markdown_html
 
 
 
@@ -39,6 +39,8 @@ async def create_table_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
     
     if not voice_over:
         raise ValueError("Table scene requires 'voice_over' field")
+
+    caption_html = render_markdown_html(caption_text) if caption_text else ""
     
     # Generate HTML table rows
     table_html = ""
@@ -169,6 +171,31 @@ async def create_table_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
             word-wrap: break-word;
             font-family: var(--primary-font);
         }}
+
+        .caption-text > :first-child {{
+            margin-top: 0;
+        }}
+
+        .caption-text > :last-child {{
+            margin-bottom: 0;
+        }}
+
+        .caption-text p,
+        .caption-text li {{
+            font-size: var(--subtitle-size);
+        }}
+
+        .caption-text ul,
+        .caption-text ol {{
+            display: inline-block;
+            text-align: left;
+            padding-left: 1.2em;
+            margin: 0.4em auto;
+        }}
+
+        .caption-text strong {{
+            color: var(--accent-color);
+        }}
         
         /* Mobile-optimized scrollbar styling */
         .table-container::-webkit-scrollbar {{
@@ -197,7 +224,7 @@ async def create_table_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
             {table_html}
         </table>
     </div>
-    {f'<div class="caption-container"><div class="caption-text">{caption_text}</div></div>' if caption_text else ''}
+    {f'<div class="caption-container"><div class="caption-text">{caption_html}</div></div>' if caption_text else ''}
 </body>
 </html>
 """

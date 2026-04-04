@@ -1,14 +1,11 @@
-"""Definition scene type module for video creation"""
-
 import os
-import markdown
 from typing import Dict, Any
 from ..VideoStyle import VideoStyle
 
 # Import utility functions
 from ..video_utils.html2image import capture_image
 import subprocess
-from .shared import get_or_create_voice_audio
+from .shared import get_or_create_voice_audio, render_markdown_html
 
 
 
@@ -44,15 +41,10 @@ async def create_definition_scene(scene: Dict[str, Any], style: VideoStyle) -> s
     if not voice_over:
         raise ValueError("Definition scene requires 'voice_over' field")
     
-    # Convert markdown definition to HTML
-    try:
-        definition_html = markdown.markdown(
-            definition,
-            extensions=['codehilite', 'fenced_code', 'tables', 'toc']
-        )
-    except Exception as e:
-        # Fallback to plain text if markdown conversion fails
-        definition_html = f"<p>{definition}</p>"
+    definition_html = render_markdown_html(
+        definition,
+        extensions=['codehilite', 'fenced_code', 'tables', 'toc'],
+    )
     
     # Create HTML content for definition display
     css_vars = style.to_css_vars()

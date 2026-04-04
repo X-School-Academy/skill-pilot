@@ -296,6 +296,32 @@ def _provider_uses_opencode_json(provider: Dict[str, Any]) -> bool:
     )
 
 
+def _extract_claude_stream_text(payload: Dict[str, Any]) -> List[str]:
+    chunks: List[str] = []
+
+    if payload.get("type") == "stream_event":
+        event = payload.get("event") or {}
+        if event.get("type") == "content_block_delta":
+            delta = event.get("delta") or {}
+            if delta.get("type") == "text_delta" and delta.get("text"):
+                chunks.append(str(delta["text"]))
+
+    if payload.get("type") == "assistant":
+        message = payload.get("message") or {}
+        content = message.get("content")
+        if isinstance(content, list):
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                if part.get("type") != "text":
+                    continue
+                text = part.get("text")
+                if text:
+                    chunks.append(str(text))
+
+    return chunks
+
+
 def format_command_for_log(cmd: List[str], env: Optional[Dict[str, str]] = None) -> str:
     ordered_env_parts: List[str] = []
     if env:
@@ -411,12 +437,7 @@ def _parse_stream_json_text(provider: Dict[str, Any], output: str) -> str:
                 if text:
                     chunks.append(str(text))
         elif is_claude_json:
-            if payload.get("type") == "stream_event":
-                event = payload.get("event") or {}
-                if event.get("type") == "content_block_delta":
-                    delta = event.get("delta") or {}
-                    if delta.get("type") == "text_delta" and delta.get("text"):
-                        chunks.append(str(delta["text"]))
+            chunks.extend(_extract_claude_stream_text(payload))
 
     if chunks:
         return "".join(chunks).strip()
@@ -708,14 +729,9 @@ def llm_stream(
                             if text:
                                 yield text.encode("utf-8")
                     elif is_claude_json:
-                        if payload.get("type") == "stream_event":
-                            event = payload.get("event") or {}
-                            if event.get("type") == "content_block_delta":
-                                delta = event.get("delta") or {}
-                                if delta.get("type") == "text_delta":
-                                    text = delta.get("text")
-                                    if text:
-                                        yield text.encode("utf-8")
+                        for text in _extract_claude_stream_text(payload):
+                            if text:
+                                yield text.encode("utf-8")
                     elif is_opencode_json:
                         if payload.get("type") == "text":
                             part = payload.get("part") or {}
@@ -740,14 +756,9 @@ def llm_stream(
                             if text:
                                 yield text.encode("utf-8")
                     elif is_claude_json:
-                        if payload.get("type") == "stream_event":
-                            event = payload.get("event") or {}
-                            if event.get("type") == "content_block_delta":
-                                delta = event.get("delta") or {}
-                                if delta.get("type") == "text_delta":
-                                    text = delta.get("text")
-                                    if text:
-                                        yield text.encode("utf-8")
+                        for text in _extract_claude_stream_text(payload):
+                            if text:
+                                yield text.encode("utf-8")
                     elif is_opencode_json:
                         if payload.get("type") == "text":
                             part = payload.get("part") or {}

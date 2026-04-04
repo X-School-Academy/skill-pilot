@@ -7,10 +7,7 @@ from ..VideoStyle import VideoStyle
 # Import utility functions
 from ..video_utils.html2image import capture_image
 import subprocess
-from .shared import get_or_create_voice_audio
-
-
-
+from .shared import get_or_create_voice_audio, render_markdown_html
 
 
 async def create_split_screen_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
@@ -42,6 +39,9 @@ async def create_split_screen_scene(scene: Dict[str, Any], style: VideoStyle) ->
     
     if not voice_over:
         raise ValueError("Split screen scene requires 'voice_over' field")
+
+    text1_html = render_markdown_html(text1)
+    text2_html = render_markdown_html(text2)
     
     # Create HTML content for split screen display
     css_vars = style.to_css_vars()
@@ -73,12 +73,14 @@ async def create_split_screen_scene(scene: Dict[str, Any], style: VideoStyle) ->
             width: var(--video-width);
             height: var(--video-height);
             background: var(--bg-color);
+            background-image: var(--bg-gradient);
             font-family: var(--primary-font);
             color: var(--primary-color);
             display: flex;
             align-items: center;
             justify-content: center;
             padding: var(--margin);
+            overflow: hidden;
         }}
         
         .split-container {{
@@ -116,13 +118,63 @@ async def create_split_screen_scene(scene: Dict[str, Any], style: VideoStyle) ->
         }}
         
         .split-text {{
-            font-size: var(--title-size);
-            font-weight: var(--title-weight);
+            width: 100%;
             color: var(--primary-color);
             line-height: var(--line-height);
             word-wrap: break-word;
             z-index: 1;
             position: relative;
+            text-align: left;
+        }}
+
+        .split-text > :first-child {{
+            margin-top: 0;
+        }}
+
+        .split-text > :last-child {{
+            margin-bottom: 0;
+        }}
+
+        .split-text p,
+        .split-text li {{
+            font-size: var(--body-size);
+            font-weight: var(--body-weight);
+        }}
+
+        .split-text ul,
+        .split-text ol {{
+            padding-left: 1.2em;
+            margin: 0.5em 0;
+        }}
+
+        .split-text h1,
+        .split-text h2,
+        .split-text h3 {{
+            font-size: var(--title-size);
+            font-weight: var(--title-weight);
+        }}
+
+        .split-text strong {{
+            font-weight: var(--title-weight);
+            color: var(--accent-color);
+        }}
+
+        .split-text code {{
+            font-family: var(--code-font);
+            font-size: var(--code-size);
+            background: var(--code-bg);
+            color: var(--code-color);
+            padding: 0.1em 0.3em;
+            border-radius: var(--small-radius);
+        }}
+
+        .split-text pre {{
+            overflow: hidden;
+            background: var(--code-bg);
+            color: var(--code-color);
+            padding: var(--inner-padding);
+            border-radius: var(--border-radius);
+            margin: 0.5em 0;
         }}
         
         .split-item:first-child {{
@@ -156,10 +208,10 @@ async def create_split_screen_scene(scene: Dict[str, Any], style: VideoStyle) ->
 <body>
     <div class="split-container">
         <div class="split-item">
-            <div class="split-text">{text1}</div>
+            <div class="split-text">{text1_html}</div>
         </div>
         <div class="split-item">
-            <div class="split-text">{text2}</div>
+            <div class="split-text">{text2_html}</div>
         </div>
     </div>
     <div class="vs-separator">VS</div>

@@ -1,6 +1,7 @@
 """Bullet List scene type module for video creation"""
 
 import os
+import math
 from typing import Dict, Any, List
 from ..VideoStyle import VideoStyle
 
@@ -47,6 +48,37 @@ async def create_bullet_list_scene(scene: Dict[str, Any], style: VideoStyle) -> 
     bullet_items_html = ""
     for item in items:
         bullet_items_html += f"<li class='bullet-item'>{item}</li>\n"
+
+    item_count = len(items)
+    available_height = max(style.height - 120, 200)
+    base_font_size = style.bullet_font_size
+    base_gap = style.card_gap
+    base_vertical_padding = 40
+    base_horizontal_padding = 40
+    base_left_padding = 100
+    base_icon_size = base_font_size + 4
+    base_icon_left = 36
+
+    estimated_item_height = (base_font_size * 1.4) + (base_vertical_padding * 2)
+    estimated_total_height = (
+        estimated_item_height * item_count
+    ) + (base_gap * max(item_count - 1, 0))
+    scale = 1.0
+    if estimated_total_height > available_height:
+        scale = max(0.55, available_height / estimated_total_height)
+
+    bullet_font_size = max(22, math.floor(base_font_size * scale))
+    bullet_gap = max(10, math.floor(base_gap * scale))
+    bullet_vertical_padding = max(16, math.floor(base_vertical_padding * scale))
+    bullet_horizontal_padding = max(20, math.floor(base_horizontal_padding * scale))
+    bullet_left_padding = max(
+        bullet_horizontal_padding + 42,
+        math.floor(base_left_padding * scale),
+    )
+    bullet_radius = max(style.border_radius, math.floor(style.border_radius * 3 * scale))
+    bullet_border_width = max(4, math.floor(style.card_border_width * scale))
+    bullet_icon_size = max(bullet_font_size, math.floor(base_icon_size * scale))
+    bullet_icon_left = max(22, math.floor(base_icon_left * scale))
     
     # Create HTML content for the bullet list display
     css_vars = style.to_css_vars()
@@ -85,6 +117,8 @@ async def create_bullet_list_scene(scene: Dict[str, Any], style: VideoStyle) -> 
         .list-container {{
             width: 100%;
             text-align: left;
+            max-height: 100%;
+            overflow: hidden;
         }}
         
         .bullet-list {{
@@ -92,19 +126,19 @@ async def create_bullet_list_scene(scene: Dict[str, Any], style: VideoStyle) -> 
             padding: 0;
             display: flex;
             flex-direction: column;
-            gap: var(--card-gap);
+            gap: {bullet_gap}px;
         }}
         
         .bullet-item {{
-            font-size: var(--bullet-font-size);
+            font-size: {bullet_font_size}px;
             font-weight: 500;
             color: var(--primary-color);
             line-height: 1.4;
             position: relative;
-            padding: 40px 40px 40px 100px;
+            padding: {bullet_vertical_padding}px {bullet_horizontal_padding}px {bullet_vertical_padding}px {bullet_left_padding}px;
             background: var(--card-bg);
-            border-radius: calc(var(--border-radius) * 3);
-            border-left: var(--card-border-width) solid var(--accent-color);
+            border-radius: {bullet_radius}px;
+            border-left: {bullet_border_width}px solid var(--accent-color);
             backdrop-filter: var(--backdrop-blur);
             word-wrap: break-word;
             text-align: left;
@@ -113,9 +147,9 @@ async def create_bullet_list_scene(scene: Dict[str, Any], style: VideoStyle) -> 
         .bullet-item::before {{
             content: "✦";
             color: var(--accent-color);
-            font-size: calc(var(--bullet-font-size) + 4px);
+            font-size: {bullet_icon_size}px;
             position: absolute;
-            left: 36px;
+            left: {bullet_icon_left}px;
             top: 50%;
             transform: translateY(-50%);
             text-shadow: 0 0 var(--glow-intensity) var(--accent-color);

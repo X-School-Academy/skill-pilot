@@ -1,5 +1,6 @@
 """Image With Caption scene type module for video creation"""
 
+import html
 import os
 from typing import Dict, Any
 from ..VideoStyle import VideoStyle
@@ -10,7 +11,7 @@ from image_service import generate_image_from_prompt
 from ..video_utils.html2image import capture_image
 import subprocess
 import base64
-from .shared import get_or_create_voice_audio, resolve_optional_scene_file
+from .shared import get_or_create_voice_audio, render_markdown_html, resolve_optional_scene_file
 
 
 
@@ -45,15 +46,16 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
     image_prompt = scene.get("image_prompt", "")
     image_path = resolve_optional_scene_file(scene, "image_path")
     caption_text = scene.get("text", "")
+    fullscreen_image = bool(scene.get("fullscreen_image"))
     voice_over = scene.get("voice_over", "")
     voice_path = scene.get("voice_path", "")
 
     width = style.width
     height = style.height
 
-    has_visible_caption = caption_text != '&nbsp;'
-    max_image_width = width * 0.85
-    max_image_height = height * (0.62 if has_visible_caption else 0.82)
+    has_visible_caption = not fullscreen_image and caption_text not in {"", "&nbsp;"}
+    max_image_width = width if fullscreen_image else width * 0.85
+    max_image_height = height if fullscreen_image else height * (0.62 if has_visible_caption else 0.82)
 
     has_image_prompt = bool(image_prompt)
     has_image_path = bool(image_path)
@@ -63,7 +65,7 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
             "Image with caption scene requires exactly one of 'image_prompt' or 'image_path'"
         )
 
-    if not caption_text:
+    if not fullscreen_image and not caption_text:
         raise ValueError("Image with caption scene requires 'text' field")
     
     if not voice_over:
@@ -90,6 +92,8 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
     with open(generated_image_path, "rb") as img_file:
         img_base64 = base64.b64encode(img_file.read()).decode('utf-8')
         img_mime_type = "image/png" if generated_image_path.endswith('.png') else "image/jpeg"
+
+    caption_html = render_markdown_html(caption_text)
     
     # Create HTML content with image and caption
     css_vars = style.to_css_vars()
@@ -124,30 +128,32 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: var(--margin);
+            padding: {"0" if fullscreen_image else "var(--margin)"};
             font-size: var(--base-font-size);
             line-height: var(--line-height);
-            gap: calc(var(--line-height) * 1em);
+            gap: {"0" if fullscreen_image else "calc(var(--line-height) * 1em)"};
+            overflow: hidden;
         }}
         
         .image-frame {{
             width: 100%;
-            max-width: {max_image_width}px;
             flex: 1 1 auto;
             min-height: 0;
             display: flex;
             align-items: center;
             justify-content: center;
+            max-width: {max_image_width}px;
+            max-height: {max_image_height}px;
         }}
 
         .main-image {{
             max-width: min(100%, {max_image_width}px);
             max-height: {max_image_height}px;
-            width: auto;
-            height: auto;
+            width: {"100%" if fullscreen_image else "auto"};
+            height: {"100%" if fullscreen_image else "auto"};
             object-fit: contain;
-            border-radius: var(--border-radius);
-            box-shadow: var(--box-shadow);
+            border-radius: {"0" if fullscreen_image else "var(--border-radius)"};
+            box-shadow: {"none" if fullscreen_image else "var(--box-shadow)"};
         }}
         
         .caption-container {{
@@ -165,6 +171,31 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
             word-wrap: break-word;
             font-family: var(--primary-font);
         }}
+
+        .caption-text > :first-child {{
+            margin-top: 0;
+        }}
+
+        .caption-text > :last-child {{
+            margin-bottom: 0;
+        }}
+
+        .caption-text p,
+        .caption-text li {{
+            font-size: var(--subtitle-size);
+        }}
+
+        .caption-text ul,
+        .caption-text ol {{
+            display: inline-block;
+            text-align: left;
+            padding-left: 1.2em;
+            margin: 0.4em auto;
+        }}
+
+        .caption-text strong {{
+            color: var(--accent-color);
+        }}
     </style>
 </head>
 <body>
@@ -173,9 +204,7 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
         <img src="data:{img_mime_type};base64,{img_base64}" alt="Generated Image" class="main-image">
     </div>
 
-    <div class="caption-container">
-        <div class="caption-text">{caption_text}</div>
-    </div>
+    {f'<div class="caption-container"><div class="caption-text">{caption_html}</div></div>' if has_visible_caption else ''}
 </body>
 </html>
 """
@@ -206,7 +235,7 @@ async def create_image_with_caption_scene(scene: Dict[str, Any], style: VideoSty
 
     # Create video by combining image and audio using ffmpeg
     video_filename = f"image_caption_scene_{uuid.uuid4()}.mp4"
-    if caption_text == '&nbsp;':
+    if fullscreen_image:
         video_filename = f"image_scene_{uuid.uuid4()}.mp4"
     
     video_path = f"/tmp/{video_filename}"

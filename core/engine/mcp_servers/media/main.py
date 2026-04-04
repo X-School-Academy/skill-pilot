@@ -10,6 +10,7 @@ import asyncio
 import base64
 import binascii
 from contextlib import asynccontextmanager
+import hashlib
 import json
 import json5
 import math
@@ -109,6 +110,7 @@ _comfy_server_base_url: str = ""
 _uploaded_input_files: dict[str, str] = {}
 _downloaded_input_files: dict[str, str] = {}
 _uploaded_to_comfy_files: dict[str, str] = {}
+_uploaded_to_comfy_by_local_file: dict[str, str] = {}
 _download_dir = Path("/tmp/mcp_video_http_outputs")
 _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
@@ -133,12 +135,34 @@ def _sanitize_label(label: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9_-]+", "_", label.strip().lower())
     return cleaned or "input"
 
+
+def _build_local_upload_cache_key(local_path: str, upload_type: str = "input") -> str:
+    path = Path(local_path).expanduser().resolve()
+    stat = path.stat()
+    return ":".join(
+        [
+            upload_type,
+            str(path),
+            str(stat.st_size),
+            str(stat.st_mtime_ns),
+        ]
+    )
+
+
+def _build_cached_remote_filename(local_path: str) -> str:
+    path = Path(local_path).expanduser().resolve()
+    stat = path.stat()
+    suffix = path.suffix or ".bin"
+    stem = re.sub(r"[^a-zA-Z0-9_-]+", "_", path.stem).strip("_") or "input"
+    fingerprint = hashlib.sha1(
+        f"{path.name}:{stat.st_size}:{stat.st_mtime_ns}".encode("utf-8")
+    ).hexdigest()[:12]
+    return f"{stem}_{fingerprint}{suffix}"
+
 def _resolve_input_file(value: str, label: str) -> str:
     if not isinstance(value, str):
         return value
     candidate = value.strip()
-    if candidate in _uploaded_to_comfy_files:
-        return _uploaded_to_comfy_files[candidate]
     if candidate in _uploaded_input_files:
         comfy_ref = _upload_input_file(_uploaded_input_files[candidate], label)
         _uploaded_to_comfy_files[candidate] = comfy_ref
@@ -149,6 +173,9 @@ def _resolve_input_file(value: str, label: str) -> str:
         comfy_ref = _upload_input_file(str(path_candidate.resolve()), label)
         _uploaded_to_comfy_files[candidate] = comfy_ref
         return comfy_ref
+
+    if candidate in _uploaded_to_comfy_files:
+        return _uploaded_to_comfy_files[candidate]
 
     if candidate.startswith("http://") or candidate.startswith("https://"):
         comfy_ref = _upload_input_file(candidate, label)
@@ -169,11 +196,19 @@ def _resolve_local_input_path(value: str) -> Path:
 
 def _upload_input_file(source: str, label: str, upload_type: str = "input") -> str:
     local_path = _materialize_input_file(source, label)
-    return _upload_local_file_to_comfy(
+    cache_key = _build_local_upload_cache_key(local_path, upload_type=upload_type)
+    cached = _uploaded_to_comfy_by_local_file.get(cache_key)
+    if cached:
+        return cached
+
+    remote_filename = _build_cached_remote_filename(local_path)
+    comfy_ref = _upload_local_file_to_comfy(
         local_path,
         upload_type=upload_type,
-        remote_filename=f"{uuid.uuid4().hex}{Path(local_path).suffix or '.bin'}"
+        remote_filename=remote_filename
     )
+    _uploaded_to_comfy_by_local_file[cache_key] = comfy_ref
+    return comfy_ref
 
 
 def _materialize_input_file(source: str, label: str) -> str:

@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+import json
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -66,3 +67,38 @@ def test_llm_stream():
     )
     print(f"llm_stream raw output:\n{streamed_text}")
     assert "The total number of a is:" in streamed_text
+
+
+def test_parse_stream_json_text_claude_assistant_message():
+    provider = {"bin": "claude", "args": ["--output-format=stream-json"]}
+    sample = "\n".join(
+        [
+            json.dumps(
+                {
+                    "type": "system",
+                    "subtype": "init",
+                    "cwd": "/tmp",
+                    "session_id": "session-1",
+                }
+            ),
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "message": {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": '{"scenes":[{"scene_type":"text_only","text":"hello","voice_over":"hi"}]}',
+                            }
+                        ]
+                    },
+                }
+            ),
+            json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "done"}),
+        ]
+    )
+
+    parsed = llm_service._parse_stream_json_text(provider, sample)
+
+    assert parsed == '{"scenes":[{"scene_type":"text_only","text":"hello","voice_over":"hi"}]}'
+    assert llm_service._extract_json_payload(parsed)["scenes"][0]["scene_type"] == "text_only"

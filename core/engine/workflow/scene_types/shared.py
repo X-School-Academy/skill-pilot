@@ -1,6 +1,9 @@
 """Shared helpers for scene file resolution and voice-over audio handling."""
 
+import html
 import json
+import markdown
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -11,6 +14,7 @@ from tts_service import async_text_to_audio_file
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
+LIST_ITEM_PATTERN = re.compile(r"^(\s*)([-*+]|\d+[.)])\s+")
 
 
 def resolve_project_file_path(raw_path: str, field_name: str) -> str:
@@ -50,6 +54,35 @@ def copy_file_to_path(source_path: str, destination_path: str) -> str:
         shutil.copy2(source, destination)
 
     return str(destination.resolve())
+
+
+def normalize_markdown_lists(text: str) -> str:
+    """Insert a blank line before list items when authors omit it after a paragraph."""
+    lines = text.splitlines()
+    if not lines:
+        return text
+
+    normalized: list[str] = []
+    for line in lines:
+        if (
+            normalized
+            and line.strip()
+            and LIST_ITEM_PATTERN.match(line)
+            and normalized[-1].strip()
+            and not LIST_ITEM_PATTERN.match(normalized[-1])
+        ):
+            normalized.append("")
+        normalized.append(line)
+    return "\n".join(normalized)
+
+
+def render_markdown_html(text: str, extensions: Optional[list[str]] = None) -> str:
+    """Render lenient markdown for scene text blocks and captions."""
+    normalized = normalize_markdown_lists(text)
+    try:
+        return markdown.markdown(normalized, extensions=extensions or ["fenced_code", "tables"])
+    except Exception:
+        return f"<p>{html.escape(text)}</p>"
 
 
 def extract_mcp_text_content(payload: Any) -> Optional[str]:

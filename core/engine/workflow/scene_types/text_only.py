@@ -7,7 +7,7 @@ from ..VideoStyle import VideoStyle
 # Import utility functions
 from ..video_utils.html2image import capture_image
 import subprocess
-from .shared import get_or_create_voice_audio
+from .shared import get_or_create_voice_audio, render_markdown_html
 
 
 async def create_text_only_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
@@ -34,6 +34,8 @@ async def create_text_only_scene(scene: Dict[str, Any], style: VideoStyle) -> st
     
     if not voice_over:
         raise ValueError("Text-only scene requires 'voice_over' field")
+
+    text_html = render_markdown_html(text)
     
     # Create HTML content for the text display
     css_vars = style.to_css_vars()
@@ -82,11 +84,37 @@ async def create_text_only_scene(scene: Dict[str, Any], style: VideoStyle) -> st
             text-align: center;
             color: var(--primary-color);
         }}
+
+        .main-text > :first-child {{
+            margin-top: 0;
+        }}
+
+        .main-text > :last-child {{
+            margin-bottom: 0;
+        }}
+
+        .main-text p,
+        .main-text li {{
+            font-size: var(--title-size);
+            font-weight: var(--title-weight);
+        }}
+
+        .main-text ul,
+        .main-text ol {{
+            display: inline-block;
+            text-align: left;
+            padding-left: 1.2em;
+            margin: 0.5em auto;
+        }}
+
+        .main-text strong {{
+            color: var(--accent-color);
+        }}
     </style>
 </head>
 <body>
     <div class="text-container">
-        <div class="main-text">{text}</div>
+        <div class="main-text">{text_html}</div>
     </div>
 </body>
 </html>

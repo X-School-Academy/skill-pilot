@@ -82,6 +82,8 @@ class VideoSpec:
     target_audience: str
     learning_objectives: List[str]
     is_dialog: bool
+    voice_name: Optional[str] = None
+    theme: Optional[str] = None
 
 
 @dataclass
@@ -115,6 +117,8 @@ class State(TypedDict):
     target_duration: int
     resolution: str
     output_path: str
+    voice_name: Optional[str]
+    theme: Optional[str]
 
     # Workflow state
     video_spec: Optional[VideoSpec]
@@ -170,6 +174,22 @@ class VideoCreatorWorkflow:
         if scene_type == SceneType.ICON_GRID.value:
             return "square"
         return cls._image_style_for_dimensions(video_style.width, video_style.height)
+
+    @staticmethod
+    def _build_video_style(
+        resolution: str,
+        theme: Optional[str] = None,
+        voice_name: Optional[str] = None,
+    ) -> VideoStyle:
+        resolution_parts = str(resolution).lower().split("x")
+        width = int(resolution_parts[0]) if len(resolution_parts) >= 2 else 1920
+        height = int(resolution_parts[1]) if len(resolution_parts) >= 2 else 1080
+
+        selected_theme = theme if theme in VideoStyle.get_available_themes() else None
+        video_style = VideoStyle(theme=selected_theme, width=width, height=height)
+        if voice_name:
+            video_style.voice_name = voice_name
+        return video_style
 
     async def __aenter__(self):
         """Async context manager entry"""
@@ -235,10 +255,31 @@ class VideoCreatorWorkflow:
         requirement = state.get("requirement", "")
         target_duration = state.get("target_duration", 60)  # Default 1-minute
         resolution = state.get("resolution", "1080x1920")
+        voice_name = state.get("voice_name")
+        theme = state.get("theme")
         run_output_dir = state.get("run_output_dir")
 
         if not requirement:
             raise ValueError("Requirement must be provided to design video specification")
+
+        if run_output_dir:
+            design_video_spec_path = self._get_design_video_spec_path(run_output_dir)
+            if design_video_spec_path.exists():
+                try:
+                    cached_video_spec = self._load_video_spec_yaml(run_output_dir)
+                    if cached_video_spec:
+                        log(f"Reusing existing video specification from {design_video_spec_path}")
+                        return {
+                            "video_spec": cached_video_spec,
+                            "messages": state.get("messages", []) + [
+                                AIMessage(content=f"Reused existing video specification from {design_video_spec_path}")
+                            ],
+                        }
+                except Exception as e:
+                    log(
+                        f"Failed to load cached video specification from {design_video_spec_path}: {e}. "
+                        "Regenerating video specification."
+                    )
         
         system_prompt = f"""\
 You are an expert educational designer, and your task is to act as the first step in a two-part video creation workflow. Your goal is to take a user's raw educational request and transform it into a foundational blueprint for an educational video. This blueprint will be passed to another AI responsible for creating the detailed, scene-by-scene video plan.
@@ -317,7 +358,9 @@ Please analyze the requirement and extract all contextual information to create 
                 other_requirements=spec_data.get("other_requirements", ""),
                 target_audience=spec_data.get("target_audience", "General learners"),
                 learning_objectives=spec_data.get("learning_objectives", []),
-                is_dialog=spec_data.get("is_dialog", False)
+                is_dialog=spec_data.get("is_dialog", False),
+                voice_name=voice_name,
+                theme=theme,
             )
             
             log(f"Video specification created: {video_spec.title}")
@@ -342,23 +385,28 @@ Please analyze the requirement and extract all contextual information to create 
         
         if not video_spec:
             return {"messages": [AIMessage(content="Error: No video specification found")]}
-        
-        # Parse resolution from video spec
-        resolution_parts = video_spec.resolution.lower().split('x')
-        width = int(resolution_parts[0]) if len(resolution_parts) >= 2 else 1920
-        height = int(resolution_parts[1]) if len(resolution_parts) >= 2 else 1080
-        
-        # Create default style configuration with voice name
-        video_style = VideoStyle(
-            width=width,
-            height=height
+
+        video_style = self._build_video_style(
+            resolution=video_spec.resolution,
+            theme=video_spec.theme,
+            voice_name=video_spec.voice_name,
         )
-        
-        log(f"Video style initialized: {width}x{height}")
+
+        log(
+            f"Video style initialized: {video_style.width}x{video_style.height}, "
+            f"theme={video_style.theme}, voice_name={video_style.voice_name}"
+        )
         
         return {
             "video_style": video_style,
-            "messages": [AIMessage(content=f"Video style configured for {width}x{height} resolution")]
+            "messages": [
+                AIMessage(
+                    content=(
+                        f"Video style configured for "
+                        f"{video_style.width}x{video_style.height} resolution"
+                    )
+                )
+            ]
         }
     
     async def plan_scenes_node(self, state: State) -> Dict[str, Any]:
@@ -561,12 +609,12 @@ Below are the available scene types you can use. Each scene type must follow the
 }}
 ```
 
-* Split-Screen – Two short string items shown side-by-side for direct comparison.
+* Split-Screen – Two short markdown string items shown side-by-side for direct comparison.
 ```json
 {{
   "scene_type": "split_screen",
-  "text1": "string",
-  "text2": "string",
+  "text1": "string - markdown format",
+  "text2": "string - markdown format",
   "voice_over": "The text for voice-over.",
   "voice_path": "string - set only if a voice file is specified in the video design requirements"
 }}
@@ -916,7 +964,37 @@ Use the original requirement as the source of truth for any explicitly requested
             return None
         if isinstance(payload, VideoStyle):
             return payload
-        return VideoStyle(**payload)
+        style_payload = dict(payload)
+        style = VideoStyle(
+            theme=style_payload.get("theme"),
+            width=style_payload.get("width", 1080),
+            height=style_payload.get("height", 1920),
+        )
+        for field_name, value in style_payload.items():
+            if field_name in VideoStyle.__dataclass_fields__:
+                setattr(style, field_name, value)
+        return style
+
+    def _load_video_spec_yaml(
+        self,
+        run_output_dir: str,
+        existing_video_spec: Optional[VideoSpec] = None,
+    ) -> Optional[VideoSpec]:
+        spec_path = self._get_design_video_spec_path(run_output_dir)
+        if not spec_path.exists():
+            return existing_video_spec
+
+        payload = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+        if not isinstance(payload, dict):
+            raise ValueError(f"Invalid video spec payload in {spec_path}")
+
+        base_payload: Dict[str, Any] = {}
+        if isinstance(existing_video_spec, VideoSpec):
+            base_payload = asdict(existing_video_spec)
+        elif isinstance(existing_video_spec, dict):
+            base_payload = dict(existing_video_spec)
+
+        return self._deserialize_video_spec({**base_payload, **payload})
 
     def _deserialize_scene_plan(self, scene_plan_payload: List[Dict[str, Any]]) -> List[Scene]:
         scenes: List[Scene] = []
@@ -1788,6 +1866,8 @@ Use the original requirement as the source of truth for any explicitly requested
         resolution: str = "1920x1080",
         thread_id: str = None,
         output_path: str = "/tmp",
+        voice_name: Optional[str] = None,
+        theme: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create an educational video based on a requirement
@@ -1798,6 +1878,8 @@ Use the original requirement as the source of truth for any explicitly requested
             resolution: Video resolution (default: "1920x1080")
             thread_id: Optional thread ID for conversation tracking
             output_path: Parent directory to save generated artifacts
+            voice_name: Optional TTS voice override
+            theme: Optional visual theme override
 
         Returns:
             Dictionary containing final video path and metadata
@@ -1814,6 +1896,8 @@ Use the original requirement as the source of truth for any explicitly requested
             "target_duration": duration,
             "resolution": resolution,
             "output_path": output_path,
+            "voice_name": voice_name,
+            "theme": theme,
             "run_output_dir": run_output_dir,
             "resume_mode": False,
             "thread_id": thread_id,
@@ -1872,6 +1956,8 @@ Use the original requirement as the source of truth for any explicitly requested
         target_duration: int = 60,
         resolution: str = "1080x1920",
         output_path: str = "/tmp",
+        voice_name: Optional[str] = None,
+        theme: Optional[str] = None,
     ) -> Dict[str, Any]:
         result = asyncio.run(
             self.create_video(
@@ -1879,6 +1965,8 @@ Use the original requirement as the source of truth for any explicitly requested
                 duration=target_duration,
                 resolution=resolution,
                 output_path=output_path,
+                voice_name=voice_name,
+                theme=theme,
             )
         )
         return result
@@ -1911,13 +1999,28 @@ Use the original requirement as the source of truth for any explicitly requested
             "total_scenes": persisted_state.get("total_scenes", 0),
         }
 
-        if not state_values["video_style"]:
-            video_spec = state_values.get("video_spec")
-            resolution = getattr(video_spec, "resolution", None) or state_values.get("resolution", "1080x1920")
-            resolution_parts = str(resolution).lower().split("x")
-            width = int(resolution_parts[0]) if len(resolution_parts) >= 2 else 1920
-            height = int(resolution_parts[1]) if len(resolution_parts) >= 2 else 1080
-            state_values["video_style"] = VideoStyle(width=width, height=height)
+        state_values["video_spec"] = self._load_video_spec_yaml(
+            run_output_dir,
+            state_values.get("video_spec"),
+        )
+
+        video_spec = state_values.get("video_spec")
+        if video_spec:
+            state_values["requirement"] = getattr(video_spec, "requirement", "") or state_values.get("requirement", "")
+            state_values["target_duration"] = getattr(video_spec, "duration", None) or state_values.get("target_duration", 60)
+            state_values["resolution"] = getattr(video_spec, "resolution", None) or state_values.get("resolution", "1080x1920")
+
+        video_style = state_values.get("video_style")
+        resolution = getattr(video_spec, "resolution", None) or state_values.get("resolution", "1080x1920")
+        theme = getattr(video_spec, "theme", None)
+        voice_name = getattr(video_spec, "voice_name", None)
+
+        if theme or voice_name or not video_style:
+            state_values["video_style"] = self._build_video_style(
+                resolution=resolution,
+                theme=theme,
+                voice_name=voice_name,
+            )
 
         state_values["scene_plan"] = self._load_scene_plan_yaml(
             run_output_dir,
