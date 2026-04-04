@@ -1,6 +1,7 @@
 ---
 name: create-update-agent-skill
-description: Create or update agent skills following the agent skill specification. Use when user asks to create a new skill or update an existing skill.
+description: >-
+  Create, add, edit, or update agent skills by generating YAML frontmatter, writing markdown instructions, organizing reference files, and validating against the agent skill specification. Use when the user asks to create a new skill, add a skill, edit or modify an existing skill, update skill instructions, write a SKILL.md, teach the agent a new ability, or build a reusable skill from scratch.
 ---
 
 # AI Builder - Create/Update Agent Skill
