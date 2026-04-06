@@ -354,42 +354,6 @@ show_screen() {
   printf '\033[1m============================================================\033[0m\n\n'
 }
 
-install_free_cli_tools() {
-  # Accepts a list of agent names to install: claude, copilot, gemini, codex, opencode
-  local agents_to_install=("$@")
-  get_install_pkg() {
-    case "$1" in
-      copilot)  echo "@github/copilot" ;;
-      gemini)   echo "@google/gemini-cli" ;;
-      codex)    echo "@openai/codex" ;;
-      opencode) echo "opencode-ai" ;;
-    esac
-  }
-  for agent in "${agents_to_install[@]}"; do
-    if [[ "${agent}" == "claude" ]]; then
-      if ! command -v curl >/dev/null 2>&1; then
-        echo "curl not found — cannot install Claude Code automatically."
-        continue
-      fi
-      echo "Installing Claude Code..."
-      curl -fsSL https://claude.ai/install.sh | bash || echo "Claude installer failed."
-      continue
-    fi
-    local pkg
-    pkg="$(get_install_pkg "${agent}")"
-    if [[ -z "$pkg" ]]; then
-      echo "Unknown agent: $agent — skipping."
-      continue
-    fi
-    if ! command -v pnpm >/dev/null 2>&1; then
-      echo "pnpm not found — cannot install ${pkg} automatically."
-      continue
-    fi
-    echo "Installing ${pkg}..."
-    pnpm install -g "${pkg}" || echo "${pkg} install failed."
-  done
-}
-
 ask_yes_no() {
   local prompt="$1"
   local default_no="${2:-1}"
@@ -655,40 +619,6 @@ detect_available_providers() {
   fi
 }
 
-maybe_install_cli_tools() {
-  local installed_any=1
-
-  if ask_yes_no "Install Claude Code CLI now with: curl -fsSL https://claude.ai/install.sh | bash?" 1; then
-    if curl -fsSL https://claude.ai/install.sh | bash; then
-      installed_any=0
-    else
-      echo "Claude installer failed."
-    fi
-  fi
-
-  if command -v pnpm >/dev/null 2>&1; then
-    if ask_yes_no "Install GitHub Copilot CLI now with: pnpm install -g @github/copilot?" 1; then
-      if pnpm install -g @github/copilot; then
-        installed_any=0
-      else
-        echo "pnpm install -g @github/copilot failed."
-      fi
-    fi
-
-    if ask_yes_no "Install OpenAI Codex CLI now with: pnpm install -g @openai/codex?" 1; then
-      if pnpm install -g @openai/codex; then
-        installed_any=0
-      else
-        echo "pnpm install -g @openai/codex failed."
-      fi
-    fi
-  else
-    echo "pnpm is not available, skipping pnpm-based CLI installs."
-  fi
-
-  return "${installed_any}"
-}
-
 run_init_wizard_if_needed() {
   if [[ -f "${ENGINE_ENV_FILE}" ]]; then
     return
@@ -844,83 +774,10 @@ run_init_wizard_if_needed() {
   done
   echo ""
 
-  # Wizard Screen 5b — Install free CLI tools
-  local missing_free=()
-  for agent in claude copilot gemini codex opencode; do
-    local found=0
-    for p in "${AVAILABLE_PROVIDERS[@]}"; do
-      [[ "$p" == "$agent" ]] && found=1 && break
-    done
-    ((found)) || missing_free+=("$agent")
-  done
-
-  if ((${#missing_free[@]} > 0)); then
-    show_screen "Install Free AI Agent CLIs"
-    echo "We recommend installing the free (open source) alternatives too."
-    echo ""
-    echo "The following are not yet installed:"
-    echo ""
-    get_agent_label() {
-      case "$1" in
-        claude)   echo "Claude Code        — free plan available" ;;
-        copilot)  echo "GitHub Copilot CLI — free plan available" ;;
-        gemini)   echo "Google Gemini CLI — free tier available" ;;
-        codex)    echo "OpenAI Codex CLI  — free tier available" ;;
-        opencode) echo "OpenCode           — free tier available" ;;
-      esac
-    }
-    get_agent_pkg() {
-      case "$1" in
-        claude)   echo "curl -fsSL https://claude.ai/install.sh | bash" ;;
-        copilot)  echo "@github/copilot" ;;
-        gemini)   echo "@google/gemini-cli" ;;
-        codex)    echo "@openai/codex" ;;
-        opencode) echo "opencode-ai" ;;
-      esac
-    }
-    for agent in claude copilot gemini codex opencode; do
-      local is_missing=0
-      for m in "${missing_free[@]}"; do
-        [[ "$m" == "$agent" ]] && is_missing=1 && break
-      done
-      if ((is_missing)); then
-        printf '  %-10s  %s\n' "${agent}" "$(get_agent_label "${agent}")"
-      else
-        printf '  %-10s  (already installed — skipped)\n' "${agent}"
-      fi
-    done
-    echo ""
-    echo "Why install all of them?"
-    echo "  Different AI models have different strengths."
-    echo "  Having all available lets you compare results and choose"
-    echo "  the best tool for each task — for free."
-    echo ""
-    echo "Press any key and I will install the missing ones for you:"
-    echo ""
-    for agent in "${missing_free[@]}"; do
-      if [[ "${agent}" == "claude" ]]; then
-        echo "  $(get_agent_pkg "${agent}")"
-      else
-        echo "  pnpm install -g $(get_agent_pkg "${agent}")"
-      fi
-    done
-    echo ""
-    if ((${#AVAILABLE_PROVIDERS[@]} == 0)); then
-      echo "Note: No AI agent is installed — installation is required to continue."
-      press_any_key "Press any key to install, or Ctrl-C to exit."
-      install_free_cli_tools "${missing_free[@]}"
-      detect_available_providers
-      if ((${#AVAILABLE_PROVIDERS[@]} == 0)); then
-        echo "Error: No AI agent CLI is available after installation attempt."
-        echo "Please install one manually and re-run: ./skillpilot.sh"
-        exit 1
-      fi
-    else
-      echo "Or press Ctrl-C to skip."
-      press_any_key "Press any key to install, or Ctrl-C to skip."
-      install_free_cli_tools "${missing_free[@]}" || true
-      detect_available_providers
-    fi
+  if ((${#AVAILABLE_PROVIDERS[@]} == 0)); then
+    echo "Error: no AI agent CLI is available."
+    echo "Run 'bash install.sh' to install supported AI code agents, then re-run ./skillpilot.sh."
+    exit 1
   fi
 
   # Wizard Screen 6 — Choose default provider

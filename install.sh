@@ -4,6 +4,7 @@
 SOMETHING_INSTALLED=0
 FAILED_INSTALLS=()
 UPDATED_RC_FILES=()
+AVAILABLE_AI_AGENTS=()
 NEEDS_LOCAL_BIN_PATH=0
 NEEDS_PNPM_HOME_PATH=0
 NEEDS_BREW_SHELLENV=0
@@ -63,7 +64,8 @@ Options:
 
 Steps performed:
   1. Install Homebrew, Git, curl, wget, uv, pnpm, Node.js, Python 3, tmux, ffmpeg
-  2. Clone the Skill Pilot repository
+  2. Clone the Skill Pilot repository when needed
+  3. Install supported AI code agent CLIs
 EOF
 }
 
@@ -581,6 +583,188 @@ setup_branches() {
   fi
 }
 
+detect_available_ai_agents() {
+  AVAILABLE_AI_AGENTS=()
+
+  if command -v claude >/dev/null 2>&1; then
+    AVAILABLE_AI_AGENTS+=("claude")
+  fi
+  if command -v copilot >/dev/null 2>&1; then
+    AVAILABLE_AI_AGENTS+=("copilot")
+  fi
+  if command -v codex >/dev/null 2>&1; then
+    AVAILABLE_AI_AGENTS+=("codex")
+  fi
+  if command -v gemini >/dev/null 2>&1; then
+    AVAILABLE_AI_AGENTS+=("gemini")
+  fi
+  if command -v opencode >/dev/null 2>&1; then
+    AVAILABLE_AI_AGENTS+=("opencode")
+  fi
+}
+
+ai_agent_label() {
+  case "$1" in
+    claude)   echo "Claude Code        — free plan available" ;;
+    copilot)  echo "GitHub Copilot CLI — free plan available" ;;
+    gemini)   echo "Google Gemini CLI  — free tier available" ;;
+    codex)    echo "OpenAI Codex CLI   — free tier available" ;;
+    opencode) echo "OpenCode           — free tier available" ;;
+    *)        echo "$1" ;;
+  esac
+}
+
+ai_agent_install_cmd() {
+  case "$1" in
+    claude)   echo "curl -fsSL https://claude.ai/install.sh | bash" ;;
+    copilot)  echo "pnpm install -g @github/copilot" ;;
+    gemini)   echo "pnpm install -g @google/gemini-cli" ;;
+    codex)    echo "pnpm install -g @openai/codex" ;;
+    opencode) echo "pnpm install -g opencode-ai" ;;
+    *)        echo "" ;;
+  esac
+}
+
+install_ai_code_agents() {
+  local agents_to_install=("$@")
+  local agent pkg installed_count=0
+
+  for agent in "${agents_to_install[@]}"; do
+    case "$agent" in
+      claude)
+        if ! command -v curl >/dev/null 2>&1; then
+          warn "curl not found — cannot install Claude Code automatically."
+          FAILED_INSTALLS+=("Claude Code CLI")
+          continue
+        fi
+        info "Installing Claude Code..."
+        if curl -fsSL https://claude.ai/install.sh | bash; then
+          SOMETHING_INSTALLED=1
+          mark_path_requirement "local_bin"
+          installed_count=$((installed_count + 1))
+        else
+          warn "Claude Code installation failed."
+          FAILED_INSTALLS+=("Claude Code CLI")
+        fi
+        ;;
+      copilot)
+        pkg="@github/copilot"
+        ;;
+      gemini)
+        pkg="@google/gemini-cli"
+        ;;
+      codex)
+        pkg="@openai/codex"
+        ;;
+      opencode)
+        pkg="opencode-ai"
+        ;;
+      *)
+        warn "Unknown AI agent '${agent}' — skipping."
+        continue
+        ;;
+    esac
+
+    if [ "$agent" = "claude" ]; then
+      continue
+    fi
+
+    if ! command -v pnpm >/dev/null 2>&1; then
+      warn "pnpm not found — cannot install ${pkg} automatically."
+      FAILED_INSTALLS+=("${agent} CLI")
+      continue
+    fi
+
+    info "Installing ${pkg}..."
+    if pnpm install -g "${pkg}"; then
+      SOMETHING_INSTALLED=1
+      mark_path_requirement "pnpm_home"
+      installed_count=$((installed_count + 1))
+    else
+      warn "${pkg} installation failed."
+      FAILED_INSTALLS+=("${agent} CLI")
+    fi
+  done
+
+  if [ "$installed_count" -gt 0 ]; then
+    reload_shell_env
+  fi
+}
+
+run_ai_code_agent_install_step() {
+  local all_agents=(claude copilot gemini codex opencode)
+  local missing_agents=()
+  local agent found installed installed_before
+
+  show_screen "AI Agent CLI Tools"
+  say "Skill Pilot works with these AI code agent CLIs:"
+  say ""
+  say "  claude    Claude Code by Anthropic"
+  say "  copilot   GitHub Copilot CLI"
+  say "  codex     OpenAI Codex CLI"
+  say "  gemini    Google Gemini CLI"
+  say "  opencode  OpenCode (open source, OpenAI-compatible)"
+  say ""
+  say "Checking what you have installed..."
+  say ""
+
+  detect_available_ai_agents
+  installed_before=("${AVAILABLE_AI_AGENTS[@]}")
+  for agent in "${all_agents[@]}"; do
+    found=0
+    for installed in "${AVAILABLE_AI_AGENTS[@]}"; do
+      if [ "$installed" = "$agent" ]; then
+        found=1
+        break
+      fi
+    done
+    if [ "$found" -eq 1 ]; then
+      say "  ${GREEN}$(printf '%-10s  installed' "${agent}")${NC}"
+    else
+      say "  ${YELLOW}$(printf '%-10s  not found' "${agent}")${NC}"
+      missing_agents+=("${agent}")
+    fi
+  done
+
+  if [ "${#missing_agents[@]}" -eq 0 ]; then
+    say ""
+    ok "All supported AI agent CLIs are already installed."
+    press_any_key
+    return 0
+  fi
+
+  show_screen "Install AI Code Agents"
+  say "The following AI code agents are not yet installed:"
+  say ""
+  for agent in "${missing_agents[@]}"; do
+    say "  $(printf '%-10s  %s' "${agent}" "$(ai_agent_label "${agent}")")"
+  done
+  say ""
+  say "Press any key and I will install the missing ones for you:"
+  say ""
+  for agent in "${missing_agents[@]}"; do
+    say "  $(ai_agent_install_cmd "${agent}")"
+  done
+  say ""
+
+  if [ "${#installed_before[@]}" -eq 0 ]; then
+    warn "At least one AI agent CLI is required to continue."
+    press_any_key "Press any key to install the missing AI agents, or Ctrl-C to exit."
+    install_ai_code_agents "${missing_agents[@]}"
+    detect_available_ai_agents
+    if [ "${#AVAILABLE_AI_AGENTS[@]}" -eq 0 ]; then
+      err "No AI agent CLI is available after installation attempt."
+      err "Please install one manually and re-run: bash install.sh"
+      return 1
+    fi
+    return 0
+  fi
+
+  press_any_key "Press any key to install the missing AI agents, or Ctrl-C to skip."
+  install_ai_code_agents "${missing_agents[@]}" || true
+  detect_available_ai_agents
+}
+
 # --- Next-steps reminder ---
 print_next_steps() {
   if [ "${#UPDATED_RC_FILES[@]}" -eq 0 ]; then
@@ -658,12 +842,11 @@ main() {
       ;;
   esac
 
-  local script_path
-  script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
-  local skip_clone="false"
-  case "$script_path" in
-    */core/engine/dev_swarm/*) skip_clone="true" ;;
-  esac
+  local current_dir source_checkout="false"
+  current_dir="$(pwd -P)"
+  if [ -f "$current_dir/core/bin/keys-safe-guard" ]; then
+    source_checkout="true"
+  fi
 
   # Screen 3 — macOS only: Xcode Command Line Tools
   if [ "$OS_KIND" = "mac" ]; then
@@ -885,6 +1068,150 @@ main() {
       "install_gxmessage_linux"
   fi
 
+  local workspace_dir=""
+  if [ "$source_checkout" = "true" ]; then
+    workspace_dir="$current_dir"
+    warn "Detected source checkout in the current directory via core/bin/keys-safe-guard; skipping git clone and branch setup."
+  else
+    # Screen 13 — Choose install location
+    show_screen "Choose Install Location"
+    say "The ~/  symbol means your home folder."
+    say "On macOS:  /Users/your-username/"
+    say "On Linux:  /home/your-username/"
+    say ""
+    say "This is your personal space on the computer. Installing"
+    say "here does not affect other users and requires no special"
+    say "permissions."
+    say ""
+    say "We recommend installing under your home folder:"
+    say ""
+
+    local opt1="$HOME/workspace/skill-pilot"
+    local opt2
+    opt2="$(pwd)/skill-pilot"
+    local install_base
+    local input_fd="/dev/tty"
+    { true </dev/tty; } 2>/dev/null || input_fd="/dev/stdin"
+
+    say "  ${BOLD}1)${NC} ~/workspace/skill-pilot          ${BLUE}(recommended)${NC}"
+    say "     ${BLUE}-> $opt1${NC}"
+    say ""
+    say "  ${BOLD}2)${NC} Current folder / skill-pilot"
+    say "     ${BLUE}-> $opt2${NC}"
+    say ""
+    say "  ${BOLD}3)${NC} Enter a custom path (you specify the full project folder)"
+    say ""
+
+    local choice
+    while true; do
+      read -r -p "Enter your choice [1/2/3]: " choice <"$input_fd"
+      case "${choice:-}" in
+        1)
+          install_base="$opt1"
+          ok "Install location: $install_base"
+          break
+          ;;
+        2)
+          install_base="$opt2"
+          ok "Install location: $install_base"
+          break
+          ;;
+        3)
+          local custom_base
+          printf "\nEnter the full installation path (this will be the project folder): " >/dev/tty 2>&1 \
+            || printf "\nEnter the full installation path (this will be the project folder): "
+          IFS= read -r custom_base <"$input_fd" || true
+          custom_base="${custom_base%/}"
+          if [ -z "$custom_base" ]; then
+            warn "No path entered — using default: $opt1"
+            install_base="$opt1"
+          else
+            install_base="$custom_base"
+          fi
+          ok "Install location: $install_base"
+          break
+          ;;
+        *) warn "Please enter 1, 2, or 3." ;;
+      esac
+    done
+
+    local clone_dir="$install_base"
+    local parent_dir
+    parent_dir="$(dirname "$clone_dir")"
+
+    if [ ! -d "$parent_dir" ]; then
+      say "Creating directory: $parent_dir"
+      mkdir -p "$parent_dir" || { warn "Could not create $parent_dir — skipping clone."; return 0; }
+    fi
+
+    if [ ! -w "$parent_dir" ]; then
+      warn "Directory is not writable: $parent_dir — skipping clone."
+      return 0
+    fi
+
+    # Screen 14 — Git clone
+    show_screen "Downloading Skill Pilot (git clone)"
+    say "What is git?"
+    say "  git is a version control tool — it tracks every change"
+    say "  made to a codebase over time. Like \"Track Changes\" in a"
+    say "  document, but for code."
+    say ""
+    say "What is git clone?"
+    say "  git clone downloads a full copy of a codebase from the"
+    say "  internet to your computer. Unlike a zip download, a clone"
+    say "  keeps a connection to the original — so you can receive"
+    say "  future updates."
+    say ""
+    say "  In Skill Pilot, updates to the codeware (the stable"
+    say "  release layer) come in as git updates, just like any"
+    say "  normal software update."
+    say ""
+    say "Cloning Skill Pilot into: $clone_dir"
+    press_any_key "Press any key to start the download, or Ctrl-C to exit."
+
+    if [ -d "$clone_dir/.git" ]; then
+      warn "Repository already exists at $clone_dir — reusing existing repository."
+    else
+      if ! git clone --depth 1 https://github.com/x-school-academy/skill-pilot "$clone_dir"; then
+        warn "git clone failed — skipping remaining setup."
+        return 0
+      fi
+    fi
+
+    cd "$clone_dir"
+    workspace_dir="$clone_dir"
+
+    # Screen 15 — Git branches
+    show_screen "Setting Up Your Workspace Branches"
+    say "git uses branches to manage parallel versions of the same"
+    say "codebase."
+    say ""
+    say "Skill Pilot uses two branches during normal local setup:"
+    say ""
+    say "  codeware  The stable release layer — maintained by the"
+    say "            Skill Pilot team. Think of this as the \"main\""
+    say "            software release. You keep it clean and use it"
+    say "            as your update source."
+    say ""
+    say "  user      Your personal workspace — where you and AI"
+    say "            make all your daily changes. This branch is"
+    say "            yours to edit freely."
+    say ""
+    say "Contribution branches are created only when you are ready"
+    say "to prepare a clean contribution back to the official repo."
+    say ""
+    say "Normal flow:"
+    say "  codeware -> user       (you receive updates)"
+    say ""
+    say "Contribution flow, only when needed:"
+    say "  user -> feature branch from upstream/contrib -> pull request"
+    press_any_key "Press any key to create the 'user' branch and switch to it now."
+
+    setup_branches
+  fi
+
+  run_ai_code_agent_install_step || return 1
+
   if [ "$SOMETHING_INSTALLED" -eq 1 ]; then
     setup_shell_paths
   fi
@@ -919,157 +1246,6 @@ main() {
     press_any_key
   fi
 
-  if [ "$skip_clone" = "true" ]; then
-    warn "Detected installer path under 'core/engine/dev_swarm'; skipping repository clone step."
-    ok "Installation bootstrap completed."
-    say ""
-    say "Current directory: $(pwd)"
-    if [ -x "./skillpilot.sh" ]; then
-      setup_branches
-      say ""
-      info "Running: ./skillpilot.sh help"
-      ./skillpilot.sh help
-    else
-      warn "Skipping './skillpilot.sh help' because ./skillpilot.sh is not executable in current directory."
-    fi
-    return 0
-  fi
-
-  # Screen 13 — Choose install location
-  show_screen "Choose Install Location"
-  say "The ~/  symbol means your home folder."
-  say "On macOS:  /Users/your-username/"
-  say "On Linux:  /home/your-username/"
-  say ""
-  say "This is your personal space on the computer. Installing"
-  say "here does not affect other users and requires no special"
-  say "permissions."
-  say ""
-  say "We recommend installing under your home folder:"
-  say ""
-
-  local opt1="$HOME/workspace/skill-pilot"
-  local opt2
-  opt2="$(pwd)/skill-pilot"
-  local install_base
-  local input_fd="/dev/tty"
-  { true </dev/tty; } 2>/dev/null || input_fd="/dev/stdin"
-
-  say "  ${BOLD}1)${NC} ~/workspace/skill-pilot          ${BLUE}(recommended)${NC}"
-  say "     ${BLUE}-> $opt1${NC}"
-  say ""
-  say "  ${BOLD}2)${NC} Current folder / skill-pilot"
-  say "     ${BLUE}-> $opt2${NC}"
-  say ""
-  say "  ${BOLD}3)${NC} Enter a custom path (you specify the full project folder)"
-  say ""
-
-  local choice
-  while true; do
-    read -r -p "Enter your choice [1/2/3]: " choice <"$input_fd"
-    case "${choice:-}" in
-      1)
-        install_base="$opt1"
-        ok "Install location: $install_base"
-        break
-        ;;
-      2)
-        install_base="$opt2"
-        ok "Install location: $install_base"
-        break
-        ;;
-      3)
-        local custom_base
-        printf "\nEnter the full installation path (this will be the project folder): " >/dev/tty 2>&1 \
-          || printf "\nEnter the full installation path (this will be the project folder): "
-        IFS= read -r custom_base <"$input_fd" || true
-        custom_base="${custom_base%/}"
-        if [ -z "$custom_base" ]; then
-          warn "No path entered — using default: $opt1"
-          install_base="$opt1"
-        else
-          install_base="$custom_base"
-        fi
-        ok "Install location: $install_base"
-        break
-        ;;
-      *) warn "Please enter 1, 2, or 3." ;;
-    esac
-  done
-
-  local clone_dir="$install_base"
-  local parent_dir
-  parent_dir="$(dirname "$clone_dir")"
-
-  if [ ! -d "$parent_dir" ]; then
-    say "Creating directory: $parent_dir"
-    mkdir -p "$parent_dir" || { warn "Could not create $parent_dir — skipping clone."; return 0; }
-  fi
-
-  if [ ! -w "$parent_dir" ]; then
-    warn "Directory is not writable: $parent_dir — skipping clone."
-    return 0
-  fi
-
-  # Screen 14 — Git clone
-  show_screen "Downloading Skill Pilot (git clone)"
-  say "What is git?"
-  say "  git is a version control tool — it tracks every change"
-  say "  made to a codebase over time. Like \"Track Changes\" in a"
-  say "  document, but for code."
-  say ""
-  say "What is git clone?"
-  say "  git clone downloads a full copy of a codebase from the"
-  say "  internet to your computer. Unlike a zip download, a clone"
-  say "  keeps a connection to the original — so you can receive"
-  say "  future updates."
-  say ""
-  say "  In Skill Pilot, updates to the codeware (the stable"
-  say "  release layer) come in as git updates, just like any"
-  say "  normal software update."
-  say ""
-  say "Cloning Skill Pilot into: $clone_dir"
-  press_any_key "Press any key to start the download, or Ctrl-C to exit."
-
-  if [ -d "$clone_dir/.git" ]; then
-    warn "Repository already exists at $clone_dir — reusing existing repository."
-  else
-    if ! git clone --depth 1 https://github.com/x-school-academy/skill-pilot "$clone_dir"; then
-      warn "git clone failed — skipping remaining setup."
-      return 0
-    fi
-  fi
-
-  cd "$clone_dir"
-
-  # Screen 15 — Git branches
-  show_screen "Setting Up Your Workspace Branches"
-  say "git uses branches to manage parallel versions of the same"
-  say "codebase."
-  say ""
-  say "Skill Pilot uses two branches during normal local setup:"
-  say ""
-  say "  codeware  The stable release layer — maintained by the"
-  say "            Skill Pilot team. Think of this as the \"main\""
-  say "            software release. You keep it clean and use it"
-  say "            as your update source."
-  say ""
-  say "  user      Your personal workspace — where you and AI"
-  say "            make all your daily changes. This branch is"
-  say "            yours to edit freely."
-  say ""
-  say "Contribution branches are created only when you are ready"
-  say "to prepare a clean contribution back to the official repo."
-  say ""
-  say "Normal flow:"
-  say "  codeware -> user       (you receive updates)"
-  say ""
-  say "Contribution flow, only when needed:"
-  say "  user -> feature branch from upstream/contrib -> pull request"
-  press_any_key "Press any key to create the 'user' branch and switch to it now."
-
-  setup_branches
-
   # Screen 17 — Installation complete
   show_screen "Installation Complete"
   if [ "${#FAILED_INSTALLS[@]}" -eq 0 ]; then
@@ -1099,13 +1275,13 @@ main() {
   say "   (or open a new terminal window instead)"
   say ""
   say "2. Run the Skill Pilot setup wizard:"
-  say "     cd $clone_dir"
+  say "     cd $workspace_dir"
   say "     ./skillpilot.sh"
   say ""
   say "The wizard will:"
   say "  - Explain ports, addresses, and network settings"
-  say "  - Install free AI agent CLIs"
-  say "  - Set up your AI provider"
+  say "  - Detect your installed AI agent CLIs"
+  say "  - Set up your default AI provider"
   say "  - Start Skill Pilot for the first time"
   press_any_key "Press any key to exit the installer."
 }

@@ -26,6 +26,15 @@ curl -fsSL https://skill-pilot.ai/install.sh | bash
 
 Follow the step-by-step guide in [SETUP.md](SETUP.md).
 
+### Media MCP
+
+For media generation and speech workflows support, you need to setup Skill Pilot Media docker separately:
+
+- Docker Image: [skillpilotai/media-mcp](https://hub.docker.com/r/skillpilotai/media-mcp)
+- AI Models: [skill-pilot/media-mcp](https://huggingface.co/skill-pilot/media-mcp)
+
+Supported model families include Wan2.2, Z-Image, IndexTTS, SongBloom, and others.
+
 Then see [Usage](#usage) to get started.
 
 ---
