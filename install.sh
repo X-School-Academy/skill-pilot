@@ -435,7 +435,7 @@ setup_shell_paths() {
       warn "eval \"\$($brew_bin shellenv)\""
     fi
     warn "────────────────────────────────────────────"
-    warn "Then run: source <rc-file> (example: source ~/.zshrc)"
+    warn "Then run: source <rc-file> (example: source ~/.zshrc or ~/.bashrc)"
     warn "Or open a new terminal to apply changes."
     return 0
   fi
@@ -527,7 +527,7 @@ setup_shell_paths() {
       warn "eval \"\$($brew_bin shellenv)\""
     fi
     warn "────────────────────────────────────────────"
-    warn "Then run: source <rc-file> (example: source ~/.zshrc)"
+    warn "Then run: source <rc-file> (example: source ~/.zshrc or ~/.bashrc))"
     warn "Or open a new terminal to apply changes."
   fi
 }
