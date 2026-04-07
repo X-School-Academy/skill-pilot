@@ -10,19 +10,29 @@ from pathlib import Path
 _child_proc: subprocess.Popen[str] | None = None
 
 
+def _forward_signal(sig: int) -> bool:
+    proc = _child_proc
+    if proc is None:
+        return False
+    try:
+        os.killpg(proc.pid, sig)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        try:
+            proc.send_signal(sig)
+            return True
+        except ProcessLookupError:
+            return False
+
+
 def _forward_and_wait(sig: int) -> None:
     proc = _child_proc
     if proc is None:
         raise SystemExit(128 + sig)
-    try:
-        os.killpg(proc.pid, sig)
-    except ProcessLookupError:
+    if not _forward_signal(sig):
         raise SystemExit(128 + sig)
-    except PermissionError:
-        try:
-            proc.send_signal(sig)
-        except ProcessLookupError:
-            raise SystemExit(128 + sig)
     deadline = time.monotonic() + 1.5
     while time.monotonic() < deadline:
         if proc.poll() is not None:
@@ -42,8 +52,12 @@ def _install_signal_handlers() -> None:
     def _handler(sig: int, _frame: object) -> None:
         _forward_and_wait(sig)
 
+    def _passthrough(sig: int, _frame: object) -> None:
+        _forward_signal(sig)
+
     for handled in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
         signal.signal(handled, _handler)
+    signal.signal(signal.SIGWINCH, _passthrough)
 
 
 def main() -> int:
