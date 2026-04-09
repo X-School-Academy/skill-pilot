@@ -147,6 +147,8 @@ type ActiveView =
   | 'ai-security'
   | 'profile';
 
+type LiveSessionMode = 'llm' | 'shell';
+
 interface SecurityFlags {
   sandbox: boolean;
   auto: boolean;
@@ -198,6 +200,8 @@ export default function HomePage() {
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
   const [llmProvider, setLlmProvider] = useState<string | null>(null);
   const [liveSessionName, setLiveSessionName] = useState<string | null>(null);
+  const [liveSessionMode, setLiveSessionMode] = useState<LiveSessionMode>('llm');
+  const [liveSessionPath, setLiveSessionPath] = useState<string>('');
   const [startingSession, setStartingSession] = useState(false);
   const [externalSessions, setExternalSessions] = useState<ExternalTmuxSession[]>([]);
   const [activeProcessSession, setActiveProcessSession] = useState<string | null>(null);
@@ -256,7 +260,9 @@ export default function HomePage() {
   const [newSessionWorkflowResume, setNewSessionWorkflowResume] = useState(false);
   const [continuingWorkflow, setContinuingWorkflow] = useState(false);
   const [defaultLlmProvider, setDefaultLlmProvider] = useState<string>('');
+  const [defaultDoctorProvider, setDefaultDoctorProvider] = useState<string>('');
   const [profileData, setProfileData] = useState<Record<string, string>>({});
+  const terminalQueryLaunchRef = useRef<string>('');
 
   // Discord Bot state
   const [discordStatus, setDiscordStatus] = useState<{ has_token: boolean; connected: boolean; bot_name: string | null; guild_count: number } | null>(null);
@@ -284,8 +290,10 @@ export default function HomePage() {
       const res = await axios.get(`${API_BASE_URL}/llm/providers`);
       const providers: LlmProvider[] = res.data.providers || [];
       const serverDefault: string = res.data.default || '';
+      const doctorDefault: string = res.data.doctor_default || '';
       setLlmProviders(providers);
       setDefaultLlmProvider(serverDefault);
+      setDefaultDoctorProvider(doctorDefault);
       const defaultId = resolveSelectedProvider(providers, serverDefault, 'gemini');
       if (defaultId) {
         setSelectedProvider(defaultId);
@@ -575,30 +583,7 @@ export default function HomePage() {
     });
   }, [activeView, detectValidIanaTimezone]);
 
-  useEffect(() => {
-    if (router.isReady) {
-      const { prompt, new_session, view, workflow, next_node_trigger, resume, resume_available } = router.query;
-      if (new_session === 'true' && prompt) {
-        setPromptText(prompt as string);
-        setNewSessionWorkflow(typeof workflow === 'string' && workflow ? workflow : null);
-        setNewSessionNextNodeTrigger(next_node_trigger === 'start_by_prompt' ? 'start_by_prompt' : 'auto_continue');
-        setNewSessionWorkflowResumeAvailable(resume_available === 'true');
-        setNewSessionWorkflowResume(resume === 'true');
-        setActiveView('home');
-      } else if (typeof view === 'string' && view) {
-        const validViews: ActiveView[] = [
-          'home', 'live-terminal', 'learning', 'projects', 'research', 'tasks',
-          'development', 'processes', 'discord-bot', 'skills', 'mcp-servers',
-          'schedule', 'extensions', 'ai-security', 'profile',
-        ];
-        if (validViews.includes(view as ActiveView)) {
-          setActiveView(view as ActiveView);
-        }
-      }
-    }
-  }, [router.isReady, router.query]);
-
-  const handleStart = async () => {
+  const handleStart = useCallback(async () => {
     const trimmedPrompt = promptText.trim();
     if (!trimmedPrompt || startingSession) return;
     const provider = llmProvider || 'gemini';
@@ -638,6 +623,8 @@ export default function HomePage() {
           }
         } else {
           setLiveSessionName(sessionName);
+          setLiveSessionMode('llm');
+          setLiveSessionPath('');
           setActiveView('live-terminal');
         }
         if (newSessionWorkflow) {
@@ -655,7 +642,92 @@ export default function HomePage() {
     } finally {
       setStartingSession(false);
     }
-  };
+  }, [
+    llmProvider,
+    newSessionAuto,
+    newSessionNativeTerminal,
+    newSessionNetwork,
+    newSessionNextNodeTrigger,
+    newSessionSandbox,
+    newSessionWorkflow,
+    newSessionWorkflowResume,
+    promptText,
+    startingSession,
+  ]);
+
+  const handleStartShellTerminal = useCallback(async (pathOverride?: string) => {
+    if (startingSession) return;
+    const requestedPath = (pathOverride ?? '').trim();
+    setStartingSession(true);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/terminal/tmux/create`, {
+        session_type: 'shell',
+        path: requestedPath || undefined,
+      });
+      const sessionName: string | undefined = res.data?.session?.name;
+      if (sessionName) {
+        setLiveSessionName(sessionName);
+        setLiveSessionMode('shell');
+        setLiveSessionPath(String(res.data?.session?.cwd || requestedPath || ''));
+        setActiveView('live-terminal');
+      }
+    } catch (err) {
+      console.error('Failed to start terminal session:', err);
+    } finally {
+      setStartingSession(false);
+    }
+  }, [startingSession]);
+
+  useEffect(() => {
+    if (!router.isReady) return;
+
+    const {
+      prompt,
+      new_session,
+      new_terminal,
+      view,
+      workflow,
+      next_node_trigger,
+      resume,
+      resume_available,
+      path,
+      ...restQuery
+    } = router.query;
+
+    if (new_session === 'true' && prompt) {
+      setPromptText(prompt as string);
+      setNewSessionWorkflow(typeof workflow === 'string' && workflow ? workflow : null);
+      setNewSessionNextNodeTrigger(next_node_trigger === 'start_by_prompt' ? 'start_by_prompt' : 'auto_continue');
+      setNewSessionWorkflowResumeAvailable(resume_available === 'true');
+      setNewSessionWorkflowResume(resume === 'true');
+      setActiveView('home');
+      return;
+    }
+
+    if (new_terminal === 'true') {
+      const requestedPath = typeof path === 'string' ? path : '';
+      const launchKey = requestedPath || '__project_root__';
+      if (terminalQueryLaunchRef.current === launchKey) return;
+      terminalQueryLaunchRef.current = launchKey;
+      setActiveView('home');
+      void handleStartShellTerminal(requestedPath);
+      void router.replace({ pathname: '/', query: restQuery }, undefined, { shallow: true });
+      return;
+    }
+
+    terminalQueryLaunchRef.current = '';
+
+    if (typeof view === 'string' && view) {
+      const validViews: ActiveView[] = [
+        'home', 'live-terminal', 'learning', 'projects', 'research', 'tasks',
+        'development', 'processes', 'discord-bot', 'skills', 'mcp-servers',
+        'schedule', 'extensions', 'ai-security', 'profile',
+      ];
+      if (validViews.includes(view as ActiveView)) {
+        setActiveView(view as ActiveView);
+      }
+    }
+  }, [handleStartShellTerminal, router.isReady, router.query, router.replace]);
 
   const handleWorkflowContinue = async () => {
     if (continuingWorkflow) return;
@@ -673,6 +745,8 @@ export default function HomePage() {
 
   const handleDetachSession = () => {
     setLiveSessionName(null);
+    setLiveSessionMode('llm');
+    setLiveSessionPath('');
     setActiveView('home');
   };
 
@@ -682,7 +756,7 @@ export default function HomePage() {
     }
   };
 
-  const navItems: { label: string; view?: ActiveView; icon: React.ReactNode; action?: () => void; dividerBefore?: string; disabled?: boolean }[] = [
+  const navItems: { label: string; view?: ActiveView; icon: React.ReactNode; action?: () => void; dividerBefore?: string; disabled?: boolean; active?: boolean }[] = [
     {
       label: 'New Session',
       icon: <IconPlus size="1rem" />,
@@ -730,7 +804,7 @@ export default function HomePage() {
         );
       }
 
-      const isActive = item.view ? activeView === item.view : false;
+      const isActive = item.active ?? (item.view ? activeView === item.view : false);
 
       elements.push(
         <NavLink
@@ -767,12 +841,27 @@ export default function HomePage() {
       justifyContent: 'center',
       height: '100%',
       padding: '40px 20px',
+      position: 'relative',
     }}>
-      <Text size={36} weight={800} mb={8}>Skill Pilot</Text>
-      <Text size="lg" color="dimmed" mb={32} italic>
-        Do anything first, then learn anything you want
-      </Text>
+      <div style={{ position: 'absolute', top: 20, right: 20 }}>
+        <Button
+          size="sm"
+          variant="subtle"
+          leftIcon={<IconPlus size="1rem" />}
+          onClick={() => void handleStartShellTerminal()}
+          loading={startingSession}
+          aria-label="New terminal"
+        >
+          Terminal
+        </Button>
+      </div>
       <Stack spacing="md" style={{ width: '100%', maxWidth: 600 }}>
+        <div>
+          <Text size={36} weight={800} mb={8}>Skill Pilot</Text>
+          <Text size="lg" color="dimmed" italic>
+            Do anything first, then learn anything you want
+          </Text>
+        </div>
         <Textarea
           placeholder="What would you like to do?"
           value={promptText}
@@ -874,12 +963,17 @@ export default function HomePage() {
 
   const renderLiveTerminalView = () => (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '12px 16px 16px 16px' }}>
-      {workflowExecuteStatus && (workflowExecuteStatus.status === 'error' || workflowExecuteStatus.status === 'terminated') && (
+      {liveSessionMode === 'shell' && (
+        <div style={{ padding: '8px 12px', marginBottom: 8, borderRadius: 6, background: '#eef6ff', color: '#1d4ed8', fontSize: 13 }}>
+          Web terminal session{liveSessionPath ? ` · ${liveSessionPath}` : ''}
+        </div>
+      )}
+      {liveSessionMode === 'llm' && workflowExecuteStatus && (workflowExecuteStatus.status === 'error' || workflowExecuteStatus.status === 'terminated') && (
         <div style={{ padding: '8px 12px', marginBottom: 8, borderRadius: 6, background: '#fde8e8', color: '#c0392b', fontSize: 13 }}>
           Workflow execution failed{workflowExecuteStatus.error ? `: ${workflowExecuteStatus.error}` : ''}
         </div>
       )}
-      {workflowExecuteStatus && workflowExecuteStatus.status === 'finished' && (
+      {liveSessionMode === 'llm' && workflowExecuteStatus && workflowExecuteStatus.status === 'finished' && (
         <div style={{ padding: '8px 12px', marginBottom: 8, borderRadius: 6, background: '#e8fde8', color: '#27ae60', fontSize: 13 }}>
           Workflow completed
         </div>
@@ -2229,10 +2323,14 @@ export default function HomePage() {
     );
   };
 
-  const handleDefaultProviderChange = async (value: string) => {
-    setDefaultLlmProvider(value);
+  const handleDefaultProviderChange = async (value: string, target: 'llm' | 'doctor' = 'llm') => {
+    if (target === 'doctor') {
+      setDefaultDoctorProvider(value);
+    } else {
+      setDefaultLlmProvider(value);
+    }
     try {
-      await axios.post(`${API_BASE_URL}/config/default-provider`, { provider: value });
+      await axios.post(`${API_BASE_URL}/config/default-provider`, { provider: value, target });
     } catch (err) {
       console.error('Failed to update default provider:', err);
     }
@@ -2962,6 +3060,18 @@ export default function HomePage() {
             placeholder="Select default provider"
             value={defaultLlmProvider || null}
             onChange={(value) => { if (value) void handleDefaultProviderChange(value); }}
+            data={llmProviders.map((p) => ({ value: p.id, label: p.name }))}
+            size="xs"
+            style={{ maxWidth: 300 }}
+          />
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <Select
+            label="Default AI Doctor Provider"
+            placeholder="Select default doctor provider"
+            value={defaultDoctorProvider || null}
+            onChange={(value) => { if (value) void handleDefaultProviderChange(value, 'doctor'); }}
             data={llmProviders.map((p) => ({ value: p.id, label: p.name }))}
             size="xs"
             style={{ maxWidth: 300 }}

@@ -393,9 +393,6 @@ const TerminalPage = () => {
       resizeDispose.dispose();
 
       const ws = wsRef.current;
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "close" }));
-      }
       ws?.close();
       wsRef.current = null;
       pendingResizeRef.current = null;

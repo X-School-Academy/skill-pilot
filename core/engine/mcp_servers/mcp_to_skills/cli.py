@@ -16,16 +16,23 @@ class EngineNotStartedError(RuntimeError):
     pass
 
 
+def normalize_runtime_mode(value: str | None) -> str | None:
+    normalized = (value or "").strip().lower()
+    if not normalized:
+        return None
+    if normalized in {"dev", "development"}:
+        return "development"
+    if normalized in {"prod", "production", "release"}:
+        return "production"
+    return None
+
+
 def socket_root() -> Path:
     return Path(__file__).resolve().parents[4] / ".skillpilot/temp"
 
 
 def runtime_mode_env() -> str | None:
-    value = os.getenv("SKILL_PILOT_RUNTIME_MODE")
-    if value is None:
-        return None
-    value = value.strip().lower()
-    return value or None
+    return normalize_runtime_mode(os.getenv("SKILL_PILOT_RUNTIME_MODE"))
 
 
 def default_socket_candidates() -> list[Path]:
@@ -40,6 +47,15 @@ def default_socket_candidates() -> list[Path]:
 
 def default_socket_path() -> Path:
     return default_socket_candidates()[0]
+
+
+def socket_candidates_for_mode(mode: str | None) -> list[Path]:
+    root = socket_root()
+    if mode == "development":
+        return [root / "engine-dev.sock"]
+    if mode == "production":
+        return [root / "engine.sock"]
+    return [root / "engine.sock", root / "engine-dev.sock"]
 
 
 def default_request_timeout_seconds() -> float:
@@ -96,6 +112,7 @@ def send_request_with_runtime_fallback(
     socket_path: Path | None = None,
     *,
     explicit_socket: bool,
+    socket_candidates: list[Path] | None = None,
 ) -> str:
     if explicit_socket:
         if socket_path is None:
@@ -103,7 +120,7 @@ def send_request_with_runtime_fallback(
         return send_request(json_str, socket_path, timeout)
 
     errors: list[str] = []
-    for candidate in default_socket_candidates():
+    for candidate in socket_candidates or default_socket_candidates():
         try:
             return send_request(json_str, candidate, timeout)
         except Exception as exc:
@@ -142,6 +159,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers.add_parser("engine-restart", help="Request engine restart from memory via socket signal")
     subparsers.add_parser("engine-reload", help="Request engine reload (.env read) then restart via socket signal")
+    get_webui_url_parser = subparsers.add_parser(
+        "get_webui_url",
+        help="Return the active WebUI HTTP URL with auth token from the running engine environment",
+    )
+    get_webui_url_parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="Force development mode and use the dev engine socket",
+    )
     skill_agent_parser = subparsers.add_parser(
         "skill-agent",
         help="Run prompt inference through core engine default LLM provider and print plain text output",
@@ -293,6 +319,48 @@ def main() -> int:
         signal_name = result.get("signal", "")
         pid = result.get("pid", "")
         print(f"{args.command} requested: {signal_name} -> pid {pid}")
+        return 0
+
+    if args.command == "get_webui_url":
+        payload = {"operation": "get_webui_url"}
+        requested_mode = "development" if bool(getattr(args, "dev", False)) else None
+        if requested_mode:
+            payload["mode"] = requested_mode
+        try:
+            response_raw = send_request_with_runtime_fallback(
+                json.dumps(payload, ensure_ascii=True),
+                timeout,
+                socket_path,
+                explicit_socket=explicit_socket,
+                socket_candidates=socket_candidates_for_mode(requested_mode),
+            )
+        except EngineNotStartedError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        except Exception as exc:
+            print(f"get_webui_url request failed: {exc}", file=sys.stderr)
+            return 2
+        try:
+            response = json.loads(response_raw)
+        except json.JSONDecodeError:
+            print(response_raw)
+            return 0
+
+        if not isinstance(response, dict):
+            print(response_raw)
+            return 0
+        if response.get("status") != "ok":
+            detail = response.get("detail") or "get_webui_url request failed"
+            print(str(detail), file=sys.stderr)
+            return 2
+
+        result = response.get("result") or {}
+        if isinstance(result, dict):
+            url = result.get("url")
+            if url is not None:
+                print(str(url))
+                return 0
+        print(response_raw)
         return 0
 
     if args.command == "skill-agent":

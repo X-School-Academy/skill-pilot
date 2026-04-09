@@ -5,6 +5,7 @@ import ipaddress
 import json
 import mimetypes
 import os
+import pwd
 import pty
 import re
 import secrets
@@ -63,6 +64,7 @@ from llm_service import (
     build_terminal_command,
     build_translate_system_message,
     format_command_for_log,
+    get_default_doctor_provider_id,
     get_default_llm_provider_id,
     get_provider,
     llm_stream,
@@ -106,6 +108,7 @@ _IMAGE_URL_PATTERN = re.compile(
 _IMAGE_FETCH_TIMEOUT_SECONDS = 3.0
 _IMAGE_FETCH_MAX_BYTES = 5 * 1024 * 1024
 TMUX_SESSION_PREFIX = "webui-live-"
+WEB_SHELL_TMUX_SESSION_PREFIX = "webui-live-sh-"
 NATIVE_TMUX_SESSION_PREFIX = "native-terminal-"
 WORKFLOW_EXECUTE_SESSION_NAME = "sp-workflow-execute"
 PROTECTED_TMUX_SESSION_PREFIXES = ("sp-engine-", "sp-webui-")
@@ -336,6 +339,40 @@ async def _replace_image_urls_with_iip(payload: bytes, cache: Dict[bytes, bytes]
 def _coerce_command(command: str) -> str:
     value = (command or "").strip()
     return value or "top"
+
+
+def _resolve_system_shell() -> str:
+    candidates = [
+        str(os.environ.get("SHELL") or "").strip(),
+    ]
+    try:
+        candidates.append(str(pwd.getpwuid(os.getuid()).pw_shell or "").strip())
+    except Exception:
+        pass
+    candidates.extend(["/bin/zsh", "/bin/bash", "/bin/sh"])
+
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            return candidate
+    return "/bin/sh"
+
+
+def _resolve_terminal_start_dir(raw_path: Any) -> Path:
+    value = str(raw_path or "").strip()
+    if not value:
+        return _REPO_ROOT
+
+    candidate = Path(os.path.expanduser(value))
+    if not candidate.is_absolute():
+        candidate = (_REPO_ROOT / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
+
+    if not candidate.exists():
+        raise ValueError(f"terminal path does not exist: {candidate}")
+    if not candidate.is_dir():
+        raise ValueError(f"terminal path is not a directory: {candidate}")
+    return candidate
 
 
 def _validate_tmux_session_name(session_name: str) -> str:
@@ -594,6 +631,16 @@ def _create_native_tmux_session(command: str) -> str:
         check=True,
     )
     _send_tmux_command_literal(session_name, command)
+    return session_name
+
+
+def _create_web_shell_tmux_session(start_dir: Path, shell_path: str | None = None) -> str:
+    session_name = f"{WEB_SHELL_TMUX_SESSION_PREFIX}{secrets.token_hex(4)}"
+    resolved_shell = shell_path or _resolve_system_shell()
+    _run_tmux_command(
+        ["new-session", "-d", "-s", session_name, "-c", str(start_dir), resolved_shell, "-l"],
+        check=True,
+    )
     return session_name
 
 
@@ -1548,10 +1595,13 @@ def terminal_tmux_external_sessions():
 @router.post("/api/terminal/tmux/create")
 def terminal_tmux_create(payload: Dict[str, Any]):
     prompt = (str(payload.get("prompt") or "")).strip()
+    session_type = str(payload.get("session_type") or "").strip().lower()
     provider_id = (str(payload.get("provider_id") or "")).strip() or None
     native_terminal = _bool_with_default(payload.get("native_terminal"), False)
     provider: Dict[str, Any] | None = None
     launch_command = ""
+    start_dir: Path | None = None
+    start_shell = ""
     sandbox = payload.get("sandbox")
     auto = payload.get("auto")
     network = payload.get("network")
@@ -1566,12 +1616,26 @@ def terminal_tmux_create(payload: Dict[str, Any]):
         )
         logger.info("[tmux-create] provider=%s command=%s", provider.get("id"), command)
     else:
-        launch_command = _coerce_command(str(payload.get("command") or ""))
-        command = launch_command
-        logger.info("[tmux-create] raw command=%s", command)
+        if session_type == "shell":
+            try:
+                start_dir = _resolve_terminal_start_dir(payload.get("path"))
+            except ValueError as exc:
+                return JSONResponse(status_code=400, content={"error": str(exc)})
+            start_shell = _resolve_system_shell()
+            launch_command = ""
+            command = start_shell
+            logger.info("[tmux-create] shell cwd=%s shell=%s", start_dir, start_shell)
+        else:
+            launch_command = _coerce_command(str(payload.get("command") or ""))
+            command = launch_command
+            logger.info("[tmux-create] raw command=%s", command)
 
     try:
-        if native_terminal:
+        if session_type == "shell":
+            session_name = _create_web_shell_tmux_session(start_dir or _REPO_ROOT, shell_path=start_shell or None)
+            native_status = {"requested": False, "opened": False}
+            attach_command = _build_tmux_attach_command(session_name)
+        elif native_terminal:
             session_name = _create_native_tmux_session(launch_command)
             native_status = _open_native_terminal_for_tmux(session_name)
             attach_command = _build_tmux_attach_command_any(session_name)
@@ -1595,6 +1659,8 @@ def terminal_tmux_create(payload: Dict[str, Any]):
             "name": session_name,
             "command": command,
             "attach_command": attach_command,
+            "cwd": str(start_dir or _REPO_ROOT) if session_type == "shell" else None,
+            "shell": start_shell or None,
         },
         "native_terminal": native_status,
     }
@@ -1776,6 +1842,14 @@ _DEFAULT_LLM_RE_JSON5 = re.compile(
     r"""(default\s*:\s*\{[^}]*?llm\s*:\s*)'([^']*)' """.strip(),
     re.DOTALL,
 )
+_DEFAULT_DOCTOR_RE = re.compile(
+    r"""("default"\s*:\s*\{[^}]*?"doctor"\s*:\s*)"([^"]*)" """.strip(),
+    re.DOTALL,
+)
+_DEFAULT_DOCTOR_RE_JSON5 = re.compile(
+    r"""(default\s*:\s*\{[^}]*?doctor\s*:\s*)'([^']*)' """.strip(),
+    re.DOTALL,
+)
 
 
 @router.post("/api/config/default-provider")
@@ -1787,21 +1861,30 @@ async def config_default_provider(request: Request):
     provider_id = (str(body.get("provider") or "")).strip()
     if not provider_id:
         return JSONResponse(status_code=400, content={"error": "provider is required"})
+    target = (str(body.get("target") or "llm")).strip().lower()
+    if target not in {"llm", "doctor"}:
+        return JSONResponse(status_code=400, content={"error": "target must be llm or doctor"})
     try:
         text = _AI_PROVIDERS_PATH.read_text(encoding="utf-8")
     except Exception as exc:
         return JSONResponse(status_code=500, content={"error": f"Failed to read ai_providers: {exc}"})
-    # Try double-quoted JSON keys first, then unquoted JSON5 keys
-    new_text, count = _DEFAULT_LLM_RE.subn(rf'\g<1>"{provider_id}"', text, count=1)
-    if count == 0:
-        new_text, count = _DEFAULT_LLM_RE_JSON5.subn(rf"\g<1>'{provider_id}'", text, count=1)
-    if count == 0:
-        return JSONResponse(status_code=500, content={"error": "Could not find default.llm in ai_providers config"})
+    if target == "llm":
+        new_text, count = _DEFAULT_LLM_RE.subn(rf'\g<1>"{provider_id}"', text, count=1)
+        if count == 0:
+            new_text, count = _DEFAULT_LLM_RE_JSON5.subn(rf"\g<1>'{provider_id}'", text, count=1)
+        if count == 0:
+            return JSONResponse(status_code=500, content={"error": "Could not find default.llm in ai_providers config"})
+    else:
+        new_text, count = _DEFAULT_DOCTOR_RE.subn(rf'\g<1>"{provider_id}"', text, count=1)
+        if count == 0:
+            new_text, count = _DEFAULT_DOCTOR_RE_JSON5.subn(rf"\g<1>'{provider_id}'", text, count=1)
+        if count == 0:
+            return JSONResponse(status_code=500, content={"error": "Could not find default.doctor in ai_providers config"})
     try:
         _AI_PROVIDERS_PATH.write_text(new_text, encoding="utf-8")
     except OSError as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})
-    return {"status": "ok", "provider": provider_id}
+    return {"status": "ok", "provider": provider_id, "target": target}
 
 
 _PROFILE_PATH = _REPO_ROOT / "config" / "profile.json5"
@@ -3797,6 +3880,7 @@ def llm_providers():
     return {
         "providers": [{"id": p.get("id"), "name": p.get("name")} for p in providers],
         "default": get_default_llm_provider_id(),
+        "doctor_default": get_default_doctor_provider_id(),
     }
 
 

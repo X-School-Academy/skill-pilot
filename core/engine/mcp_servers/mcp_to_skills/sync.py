@@ -323,14 +323,21 @@ def expand_env_placeholders(value: Any, env: dict[str, str], missing: set[str]) 
     if isinstance(value, list):
         return [expand_env_placeholders(item, env, missing) for item in value]
     if isinstance(value, str):
-        pattern = re.compile(r"\$\{([A-Za-z0-9_]+)\}")
+        pattern = re.compile(r"\$\{([A-Za-z0-9_]+)(?:(:-|-)([^}]*))?\}")
 
         def replace(match: re.Match[str]) -> str:
             var = match.group(1)
-            if var not in env:
-                missing.add(var)
-                return match.group(0)
-            return env[var]
+            operator = match.group(2)
+            default = match.group(3)
+            if var in env:
+                resolved = env[var]
+                if operator == ":-" and resolved == "":
+                    return default or ""
+                return resolved
+            if operator is not None:
+                return default or ""
+            missing.add(var)
+            return match.group(0)
 
         return pattern.sub(replace, value)
     return value

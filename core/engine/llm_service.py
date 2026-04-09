@@ -81,6 +81,10 @@ def get_default_llm_provider_id() -> Optional[str]:
     return _default_id("llm", load_llm_providers())
 
 
+def get_default_doctor_provider_id() -> Optional[str]:
+    return _default_id("doctor", load_llm_providers())
+
+
 def get_provider(provider_id: Optional[str]) -> Dict[str, Any]:
     providers = load_llm_providers()
     if not providers:

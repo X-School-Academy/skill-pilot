@@ -6,9 +6,11 @@ import os
 import queue
 import signal
 import threading
+import tempfile
 import time
 import wave
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import uuid
@@ -40,8 +42,21 @@ except ModuleNotFoundError:
 
 class LiveAPIProvider(Enum):
     OPENAI = "openai"
-    AZURE = "azure" 
+    AZURE = "azure"
     GEMINI = "gemini"
+    QWEN3_TTS = "qwen3-tts"
+
+
+def _env_str(name: str) -> Optional[str]:
+    value = os.getenv(name)
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
+
+
+def _env_str_default(name: str, default: str) -> str:
+    return _env_str(name) or default
 
 class AudioManager:
     """Manages audio playback using PyAudio"""
@@ -60,16 +75,19 @@ class AudioManager:
         self.request_queue = queue.Queue()
         self._request_processor_thread = None
         self._request_processor_active = False
+        self._capture_lock = threading.Lock()
+        self._capture_buffer = bytearray()
+        self._capture_path: Optional[Path] = None
         
         # NEW: Track when audio has been requested but not yet completed
         self.audio_requested = False
-        self._log_audio_stats = os.getenv("LIVE_TTS_LOG_AUDIO_STATS", "0") == "1"
+        self._log_audio_stats = _env_str_default("LIVE_TTS_LOG_AUDIO_STATS", "0") == "1"
         self._last_non_silent_ts: Optional[float] = None
-        self._output_device_name = os.getenv("LIVE_TTS_OUTPUT_DEVICE_NAME")
+        self._output_device_name = _env_str("LIVE_TTS_OUTPUT_DEVICE_NAME")
         self._output_device_index: Optional[int] = None
         try:
-            raw_index = os.getenv("LIVE_TTS_OUTPUT_DEVICE_INDEX")
-            if raw_index is not None and raw_index.strip() != "":
+            raw_index = _env_str("LIVE_TTS_OUTPUT_DEVICE_INDEX")
+            if raw_index is not None:
                 self._output_device_index = int(raw_index)
         except Exception:
             self._output_device_index = None
@@ -209,10 +227,52 @@ class AudioManager:
     def mark_audio_requested(self):
         """Mark that a remote audio response has been requested (streaming may follow)."""
         self.audio_requested = True
+
+    def start_capture(self) -> Path:
+        """Start capturing incoming PCM audio so it can be persisted as a WAV file."""
+        capture_dir = Path(tempfile.gettempdir()) / "live_tts_audio"
+        capture_dir.mkdir(parents=True, exist_ok=True)
+        capture_path = capture_dir / f"{uuid.uuid4()}.wav"
+        with self._capture_lock:
+            self._capture_buffer = bytearray()
+            self._capture_path = capture_path
+        return capture_path
     
     def mark_audio_complete(self):
         """Mark that the remote audio response is complete (no more audio expected)."""
         self.audio_requested = False
+
+    def append_capture_audio(self, audio_data: bytes):
+        """Append a received PCM chunk to the current capture buffer."""
+        with self._capture_lock:
+            if self._capture_path is None:
+                return
+            self._capture_buffer.extend(audio_data)
+
+    def finalize_capture(self) -> Optional[str]:
+        """Write the captured PCM stream to a WAV file and return its path."""
+        with self._capture_lock:
+            capture_path = self._capture_path
+            capture_bytes = bytes(self._capture_buffer)
+            self._capture_path = None
+            self._capture_buffer = bytearray()
+
+        if capture_path is None:
+            return None
+
+        if not capture_bytes:
+            try:
+                capture_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+            return None
+
+        with wave.open(str(capture_path), "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(24000)
+            wav_file.writeframes(capture_bytes)
+        return str(capture_path)
     
     def is_busy(self) -> bool:
         """Check if audio is currently playing, queued, or requested"""
@@ -294,6 +354,7 @@ class AudioManager:
     
     def add_audio(self, audio_data: bytes):
         """Add audio data to playback queue"""
+        self.append_capture_audio(audio_data)
         self.audio_queue.put(audio_data)
     
     def has_queued_requests(self) -> bool:
@@ -323,6 +384,9 @@ class AudioManager:
         self.is_playing = False
         self.audio_started = False
         self.mark_audio_complete()
+        with self._capture_lock:
+            self._capture_path = None
+            self._capture_buffer = bytearray()
 
 class LiveTTSSession:
     """Manages a live TTS session with AI providers"""
@@ -335,6 +399,18 @@ class LiveTTSSession:
         self.is_ready = False
         self._listen_task = None
         self._ready_event = None
+
+    def _uses_openai_realtime_protocol(self) -> bool:
+        return self.provider in {
+            LiveAPIProvider.OPENAI,
+            LiveAPIProvider.AZURE,
+            LiveAPIProvider.QWEN3_TTS,
+        }
+
+    def _get_realtime_voice(self) -> str:
+        if self.provider == LiveAPIProvider.QWEN3_TTS:
+            return _env_str("QWEN3_TTS_VOICE") or _env_str_default("OPENAI_VOICE", "default")
+        return _env_str_default("OPENAI_VOICE", "alloy")
         
     async def connect(self):
         """Connect to the live API provider"""
@@ -359,6 +435,8 @@ class LiveTTSSession:
                 await self._connect_azure()
             elif self.provider == LiveAPIProvider.GEMINI:
                 await self._connect_gemini()
+            elif self.provider == LiveAPIProvider.QWEN3_TTS:
+                await self._connect_qwen3_tts()
             else:
                 raise ValueError(f"Unsupported provider: {self.provider}")
                 
@@ -378,8 +456,8 @@ class LiveTTSSession:
     
     async def _connect_openai(self):
         """Connect to OpenAI Realtime API"""
-        api_key = os.getenv("OPENAI_API_KEY")
-        model = os.getenv("OPENAI_LIVE_CHAT_MODEL", "gpt-4o-realtime-preview")
+        api_key = _env_str("OPENAI_API_KEY")
+        model = _env_str_default("OPENAI_LIVE_CHAT_MODEL", "gpt-4o-realtime-preview")
         
         if not api_key:
             raise ValueError("OPENAI_API_KEY not found in environment")
@@ -400,10 +478,10 @@ class LiveTTSSession:
     
     async def _connect_azure(self):
         """Connect to Azure OpenAI Realtime API"""
-        api_key = os.getenv("AZURE_OPENAI_API_KEY")
-        endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-        model = os.getenv("AZURE_OPENAI_MODEL", "gpt-4o-realtime-preview")
-        api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-17")
+        api_key = _env_str("AZURE_OPENAI_API_KEY")
+        endpoint = _env_str("AZURE_OPENAI_ENDPOINT")
+        model = _env_str_default("AZURE_OPENAI_MODEL", "gpt-4o-realtime-preview")
+        api_version = _env_str_default("AZURE_OPENAI_API_VERSION", "2024-12-17")
         
         if not all([api_key, endpoint]):
             raise ValueError("Azure OpenAI configuration incomplete")
@@ -428,8 +506,8 @@ class LiveTTSSession:
     
     async def _connect_gemini(self):
         """Connect to Gemini Live API"""
-        api_key = os.getenv("GEMINI_API_KEY")
-        model = os.getenv("GEMINI_LIVE_CHAT_MODEL", "gemini-2.0-flash-live-001")
+        api_key = _env_str("GEMINI_API_KEY")
+        model = _env_str_default("GEMINI_LIVE_CHAT_MODEL", "gemini-2.0-flash-live-001")
         
         if not api_key:
             raise ValueError("GEMINI_API_KEY not found in environment")
@@ -439,7 +517,7 @@ class LiveTTSSession:
         self.websocket = await websockets.connect(url, additional_headers={"Content-Type": "application/json"})
         
         # Setup session
-        language = os.getenv("LANGUAGE", "English")
+        language = _env_str_default("LANGUAGE", "English")
         setup_message = {
             "setup": {
                 "model": f"models/{model}",
@@ -449,7 +527,7 @@ class LiveTTSSession:
                         "language_code": "en-US" if language == "English" else "cmn-CN",
                         "voice_config": {
                             "prebuilt_voice_config": {
-                                "voice_name": os.getenv("GEMINI_VOICE", "Puck")
+                                "voice_name": _env_str_default("GEMINI_VOICE", "Puck")
                             }
                         }
                     }
@@ -475,6 +553,17 @@ If the request is to ask to read text, you will only read the text in the specif
         
         # Wait for setup complete with timeout
         await asyncio.wait_for(self._ready_event.wait(), timeout=10.0)
+
+    async def _connect_qwen3_tts(self):
+        """Connect to a local Qwen3 TTS websocket server using the OpenAI-style realtime event flow."""
+        url = _env_str_default("QWEN3_TTS_API_URL", "ws://127.0.0.1:8081")
+        self.websocket = await websockets.connect(url)
+
+        # The standalone Qwen3 TTS websocket server mirrors the subset of the OpenAI
+        # realtime protocol that this client already consumes.
+        self._listen_task = asyncio.create_task(self._listen_openai())
+
+        await asyncio.wait_for(self._ready_event.wait(), timeout=10.0)
     
     async def _listen_openai(self):
         """Listen for OpenAI responses"""
@@ -485,13 +574,13 @@ If the request is to ask to read text, you will only read the text in the specif
                 logging.info(f"OpenAI event: {event_type}")
                 
                 if event_type == "session.created":
-                    logging.info("OpenAI session created - sending session update")
+                    logging.info("%s session created - sending session update", self.provider.value)
                     # Send session update after receiving session.created (like reference)
                     setup_message = {
                         "type": "session.update",
                         "session": {
                             "modalities": ["text", "audio"],
-                            "voice": os.getenv("OPENAI_VOICE", "alloy"),
+                            "voice": self._get_realtime_voice(),
                             "input_audio_format": "pcm16",
                             "output_audio_format": "pcm16",
                             "turn_detection": {
@@ -505,7 +594,7 @@ If the request is to ask to read text, you will only read the text in the specif
                     await self.websocket.send(json.dumps(setup_message))
                 
                 elif event_type == "session.updated":
-                    logging.info("OpenAI session updated - ready to accept commands")
+                    logging.info("%s session updated - ready to accept commands", self.provider.value)
                     self.is_ready = True
                     self._ready_event.set()
                 
@@ -528,7 +617,7 @@ If the request is to ask to read text, you will only read the text in the specif
                 
                 elif event_type == "error":
                     error_info = event.get("error", {})
-                    logging.error(f"OpenAI error: {error_info}")
+                    logging.error("%s error: %s", self.provider.value, error_info)
                     # Ensure any waiter unblocks and pending audio is dropped.
                     self.audio_manager.cancel_pending_audio()
                     self.audio_manager.mark_audio_complete()
@@ -537,13 +626,13 @@ If the request is to ask to read text, you will only read the text in the specif
                     logging.debug(f"Unhandled OpenAI event: {event_type}")
                         
         except asyncio.CancelledError:
-            logging.info("OpenAI listen task cancelled")
+            logging.info("%s listen task cancelled", self.provider.value)
             raise
         except websockets.exceptions.ConnectionClosed as e:
-            logging.warning(f"OpenAI WebSocket connection closed: {e}")
+            logging.warning("%s WebSocket connection closed: %s", self.provider.value, e)
             self.is_connected = False
         except Exception as e:
-            logging.error(f"Error listening to OpenAI: {e}")
+            logging.error("Error listening to %s: %s", self.provider.value, e)
             self.is_connected = False
     
     async def _listen_gemini(self):
@@ -574,9 +663,18 @@ If the request is to ask to read text, you will only read the text in the specif
                                     self.audio_manager.add_audio(audio_bytes)
                                     logging.info(f"Gemini audio chunk added to queue: {len(audio_bytes)} bytes")
                     
+                    if server_content.get("interrupted"):
+                        logging.info("Gemini turn interrupted")
+                        self.audio_manager.cancel_pending_audio()
+                        self.audio_manager.mark_audio_complete()
+
+                    if server_content.get("generationComplete"):
+                        logging.info("Gemini generation complete")
+
                     turn_complete = server_content.get("turnComplete")
                     if turn_complete:
                         logging.info("Gemini turn complete")
+                        self.audio_manager.mark_audio_complete()
                         
         except asyncio.CancelledError:
             logging.info("Gemini listen task cancelled")
@@ -584,9 +682,11 @@ If the request is to ask to read text, you will only read the text in the specif
         except websockets.exceptions.ConnectionClosed as e:
             logging.warning(f"Gemini WebSocket connection closed: {e}")
             self.is_connected = False
+            self.audio_manager.cancel_pending_audio()
         except Exception as e:
             logging.error(f"Error listening to Gemini: {e}")
             self.is_connected = False
+            self.audio_manager.cancel_pending_audio()
     
     async def send_text_for_tts(self, text: str):
         """Send text for simple TTS (just read the text)"""
@@ -594,9 +694,12 @@ If the request is to ask to read text, you will only read the text in the specif
             raise RuntimeError("Session not ready")
         
         try:
-            if self.provider in [LiveAPIProvider.OPENAI, LiveAPIProvider.AZURE]:
+            if self._uses_openai_realtime_protocol():
                 self.is_playing = True
-                await self._send_text_openai_tts(text)
+                if self.provider == LiveAPIProvider.QWEN3_TTS:
+                    await self._send_text_realtime_tts(text, wrap_text=False)
+                else:
+                    await self._send_text_realtime_tts(text, wrap_text=True)
             elif self.provider == LiveAPIProvider.GEMINI:
                 self.is_playing = True
                 await self._send_text_gemini_tts(text)
@@ -615,9 +718,9 @@ If the request is to ask to read text, you will only read the text in the specif
             raise RuntimeError("Session not ready")
         
         try:
-            if self.provider in [LiveAPIProvider.OPENAI, LiveAPIProvider.AZURE]:
+            if self._uses_openai_realtime_protocol():
                 self.is_playing = True
-                await self._send_text_openai_conversation(text)
+                await self._send_text_realtime_conversation(text)
             elif self.provider == LiveAPIProvider.GEMINI:
                 self.is_playing = True
                 await self._send_text_gemini_conversation(text)
@@ -630,8 +733,13 @@ If the request is to ask to read text, you will only read the text in the specif
             logging.error(f"Error sending text for conversation: {e}")
             raise
     
-    async def _send_text_openai_tts(self, text: str, emotion: str = "neutral"):
-        """Send text to OpenAI for simple TTS (just read the text)"""
+    async def _send_text_realtime_tts(self, text: str, emotion: str = "neutral", wrap_text: bool = True):
+        """Send text to an OpenAI-style realtime websocket server for simple TTS."""
+        text_prompt = (
+            f"Repeat exactly: '{text}' in a '{emotion}' style. No additional words or commentary."
+            if wrap_text
+            else text
+        )
         message = {
             "type": "response.create",
             "response": {
@@ -642,8 +750,8 @@ If the request is to ask to read text, you will only read the text in the specif
                     "role": "user",
                     "content": [
                         {
-                            "type": "input_text", 
-                            "text": f"Repeat exactly: '{text}' in a '{emotion}' style. No additional words or commentary."
+                            "type": "input_text",
+                            "text": text_prompt,
                         }
                     ]
                 }],
@@ -656,9 +764,9 @@ If the request is to ask to read text, you will only read the text in the specif
         }
         logging.info(f"Sending TTS request: {text}")
         await self.websocket.send(json.dumps(message))
-    
-    async def _send_text_openai_conversation(self, prompt: str):
-        """Send prompt to OpenAI for conversational response"""
+
+    async def _send_text_realtime_conversation(self, prompt: str):
+        """Send prompt to an OpenAI-style realtime websocket server."""
         message = {
             "type": "response.create",
             "response": {
@@ -734,7 +842,9 @@ class LiveTTSManager:
     def __init__(self):
         self.audio_manager = AudioManager()
         self.session: Optional[LiveTTSSession] = None
-        self.provider = LiveAPIProvider.OPENAI  # Default
+        provider_name = _env_str_default("TTS_PROVIDER", LiveAPIProvider.OPENAI.value)
+        self.provider = LiveAPIProvider.OPENAI
+        self.set_provider(provider_name)
         self.is_ready = False
         self.audio_manager.start_playback_thread()
         self.audio_manager.start_request_processor(self)
@@ -777,14 +887,20 @@ class LiveTTSManager:
         except Exception as e:
             raise
     
-    async def text_to_audio(self, text: str) -> str:
-        """Convert text to audio and play it completely before returning"""
+    async def text_to_audio(self, text: str) -> dict[str, str]:
+        """Convert text to audio, play it completely, and persist the WAV file."""
         if self.audio_manager.is_busy():
-            return "service is busy, try again later"
+            return {
+                "audio_file": "",
+                "status_message": "service is busy, try again later",
+            }
         
+        audio_file_path = ""
         try:
             # NEW: Mark audio as requested immediately
             self.audio_manager.mark_audio_requested()
+            capture_path = self.audio_manager.start_capture()
+            audio_file_path = str(capture_path)
             
             await self._send_text_for_tts(text)
             
@@ -796,16 +912,28 @@ class LiveTTSManager:
                     logging.warning(f"Audio playback timeout after {timeout}s, extending for another 30 seconds...")
                     timeout += 30.0  # Extend timeout for next check
                 await asyncio.sleep(0.1)
-            
-            return "audio playback completed"
+
+            finalized_audio = self.audio_manager.finalize_capture() or ""
+            return {
+                "audio_file": finalized_audio,
+                "status_message": "audio playback completed",
+            }
         except asyncio.CancelledError:
             self.audio_manager.cancel_pending_audio()
-            return "cancelled"
+            return {
+                "audio_file": "",
+                "status_message": "cancelled",
+            }
         except Exception as e:
+            finalized_audio = self.audio_manager.finalize_capture() or ""
             self.audio_manager.is_playing = False
             self.audio_manager.mark_audio_complete()  # NEW: Mark complete on error
+            self.audio_manager.cancel_pending_audio()
             logging.error(f"Error in text_to_audio: {e}")
-            return f"error: {str(e)}"
+            return {
+                "audio_file": finalized_audio,
+                "status_message": f"error: {str(e)}",
+            }
     
     async def async_text_to_audio(self, text: str) -> str:
         """Convert text to audio and return immediately"""
@@ -920,15 +1048,15 @@ def _close_tts_manager() -> None:
 
 
 @mcp.tool()
-async def text_to_audio(text: str) -> str:
+async def text_to_audio(text: str) -> dict[str, str]:
     """
-    Convert text to audio and play it completely before returning.
+    Convert text to audio, play it completely, and save it to a temporary WAV file.
 
     Args:
         text: The text to convert to speech.
 
     Returns:
-        Status message indicating completion or error.
+        JSON object containing the saved audio path and a status message.
     """
     manager = _ensure_tts_manager()
     try:
@@ -938,7 +1066,10 @@ async def text_to_audio(text: str) -> str:
             manager.audio_manager.cancel_pending_audio()
         except Exception:
             pass
-        return "cancelled"
+        return {
+            "audio_file": "",
+            "status_message": "cancelled",
+        }
 
 
 def _cleanup_and_exit(*_args) -> None:

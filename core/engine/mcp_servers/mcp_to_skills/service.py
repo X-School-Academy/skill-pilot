@@ -17,6 +17,7 @@ import shutil
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 import json5
 from fastapi.responses import JSONResponse
@@ -25,6 +26,7 @@ from fastapi.routing import APIRoute
 from llm_service import build_terminal_command, get_provider, llm_get_text, load_llm_providers
 from safe_dotenv import apply_env_key_values, loaded_env_key_names, safe_env
 from session_agent_store import get_session_agent_meta, set_session_agent_meta
+from settings import get_auth_token, get_runtime_mode, get_service_host_port
 
 from .sync import MCPClient, create_client, is_server_enabled, load_mcp_configs
 
@@ -88,6 +90,44 @@ class Bridge:
             if key in provider_sec:
                 merged[key] = bool(provider_sec[key])
         return merged
+
+    @staticmethod
+    def _normalize_runtime_mode(value: Any, default: str = "production") -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized in {"dev", "development"}:
+            return "development"
+        if normalized in {"prod", "production", "release"}:
+            return "production"
+        return default
+
+    def _get_webui_url(self, mode_override: Any = None) -> dict[str, Any]:
+        runtime_mode = self._normalize_runtime_mode(mode_override, default=get_runtime_mode())
+        if runtime_mode == "development":
+            host, port = get_service_host_port(
+                "webui",
+                mode="development",
+                default_host="127.0.0.1",
+                default_port=3003,
+            )
+        else:
+            host, port = get_service_host_port(
+                "engine",
+                mode="production",
+                default_host="127.0.0.1",
+                default_port=3001,
+            )
+
+        token = str(get_auth_token() or "").strip()
+        base_url = f"http://{host}:{port}"
+        url = f"{base_url}?{urlencode({'token': token})}" if token else base_url
+        return {
+            "url": url,
+            "base_url": base_url,
+            "host": host,
+            "port": port,
+            "runtime_mode": runtime_mode,
+            "has_token": bool(token),
+        }
 
     def _run_tmux(self, args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
         if shutil.which("tmux") is None:
@@ -578,6 +618,11 @@ class Bridge:
                     "provider_id": provider.get("id"),
                     "security": {"sandbox": sandbox, "auto": auto, "network": network},
                 },
+            }
+        if operation == "get_webui_url":
+            return {
+                "status": "ok",
+                "result": self._get_webui_url(payload.get("mode")),
             }
         if operation == "api_invoke":
             api_name_raw = payload.get("api_name")

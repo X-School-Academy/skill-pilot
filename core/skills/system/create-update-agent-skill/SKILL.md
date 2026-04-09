@@ -170,6 +170,9 @@ Detailed instructions for this step...
 - If the skill uses a tool or command, keep `SKILL.md` focused on when to use that tool.
 - Put the usage details, payload shapes, flags, and command examples in `references/` files.
 - Document how to use the tool effectively, but do not explain how the tool itself is technically implemented unless that is required for correct usage.
+- For user-facing tool references, describe invocation, inputs, outputs, environment variables, prompt patterns, and decision points only.
+- Apply this rule consistently to CLI commands, local or remote API calls, MCP tools, helper scripts, and similar interfaces.
+- Do not include transport details, API payload formats, wire protocols, request serialization, internal adapters, backend plumbing, or other implementation internals unless the user explicitly asks for them or they are required to operate the tool correctly.
 
 **When to use reference files:**
 - **Multiple tools/technologies**: Create separate reference files for each tool (e.g., `references/claude-code.md`, `references/gemini-cli.md`)
@@ -234,6 +237,7 @@ If your skill includes executable scripts:
    - [ ] Frontmatter description is capability-first and optimized for skill selection
    - [ ] `SKILL.md` avoids implementation details that are not needed for skill selection
    - [ ] Tool-specific usage detail lives in `references/` files instead of the main skill file
+   - [ ] Tool reference files focus on how to use the tool, not internal transport, payload, protocol, or plumbing mechanics
    - [ ] `SKILL.md` is concise (under 200 lines preferred), defers details to references
    - [ ] Reference files created for different tools/platforms/methods
    - [ ] No steps to update documentation files (AGENTS.md, README.md, etc.) unless explicitly requested by user
@@ -280,6 +284,7 @@ Ask: "The skill has been created/updated. Would you like me to make any changes?
 - **Description for selection**: Write descriptions for LLM pickup, focusing on capability, trigger phrases, outputs, and use context rather than internal implementation
 - **Use reference files proactively**: Create separate reference files for different tools, platforms, installation methods, frameworks, etc.
 - **Tool usage over tool internals**: When a skill depends on tools, document how to use them, not how they are implemented internally
+- **Tool references stay user-facing**: For CLI commands, APIs, MCP tools, scripts, and related interfaces, explain usage and inputs only; avoid exposing transport, schema, request-format, or backend-wiring internals unless operationally necessary
 - **No unsolicited documentation updates**: NEVER add steps to update AGENTS.md, README.md, or other documentation files unless the user explicitly requests it
 - **Clear instructions**: Write step-by-step instructions that are easy to follow
 - **Appropriate roles**: Choose roles that match the task from file `dev-swarm/docs/dev-swarm-roles.md`
@@ -310,6 +315,9 @@ Ask: "The skill has been created/updated. Would you like me to make any changes?
 
 **Issue: SKILL.md contains too much tool detail**
 - Solution: Keep only the routing and trigger logic in `SKILL.md`, then move usage details into focused `references/` files
+
+**Issue: Tool reference leaks implementation internals**
+- Solution: Rewrite it to focus on how to use the tool, including commands, inputs, env vars, prompt patterns, and expected outputs; remove transport, payload, protocol, schema, and backend-wiring details unless they are necessary to operate the tool
 
 **Issue: SKILL.md too long (over 200 lines)**
 - Solution: Move detailed content to reference files. Create separate files for different tools, platforms, or methods

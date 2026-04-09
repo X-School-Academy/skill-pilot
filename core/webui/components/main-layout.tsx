@@ -76,6 +76,7 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
   const currentView = pathname === '/' && typeof query.view === 'string' ? query.view : null;
 
   const isActive = (item: NavItemDef): boolean => {
+    if (item.href.includes('?')) return false;
     if (!item.view) return pathname === item.href;   // exact path match (e.g. /live-avatar)
     return currentView === item.view;                // /?view=xxx match
   };
