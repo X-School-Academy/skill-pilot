@@ -149,8 +149,9 @@ After [installation](#installation), run:
 ```
 
 ```
-Usage: ./skillpilot.sh [help|build|start|stop|test] [--dev]
+Usage: ./skillpilot.sh [help|build|start|stop|test|doctor] [--dev]
        ./skillpilot.sh <enable|disable> <human-detection|live-tts>
+       ./skillpilot.sh doctor [question]
 
 Commands:
   help    Show this help message.
@@ -158,6 +159,7 @@ Commands:
   start   Start services. Default command.
   stop    Stop running tmux sessions. Use `--dev` to stop only development sessions.
   test    Run engine pytest suite, or only the named files under core/engine/tests.
+  doctor  Open the configured doctor AI agent for troubleshooting and guided help.
   enable human-detection    Install optional human detection dependencies.
   disable human-detection   Uninstall optional human detection dependencies.
   enable live-tts           Install optional live-tts dependencies.
@@ -221,6 +223,40 @@ gemini
 ```
 
 This ensures the agent CLI can see the same runtime mode as the development engine.
+
+### Troubleshooting with `./skillpilot.sh doctor`
+
+If you get stuck during setup or normal usage, you can open the built-in doctor agent:
+
+```bash
+./skillpilot.sh doctor
+```
+
+You can also pass the problem directly on the command line:
+
+```bash
+./skillpilot.sh doctor "install.sh failed while installing dependencies"
+./skillpilot.sh doctor "skillpilot.sh start does not open the WebUI"
+```
+
+What it is useful for:
+
+- Troubleshooting `install.sh` or `skillpilot.sh`
+- Explaining technical terms or error messages in plain language
+- Finding likely environment or dependency problems on your machine
+- Investigating bugs in the Skill Pilot codebase
+
+Behavior:
+
+- If no question is provided, Skill Pilot will prompt you and show example questions
+- It will try to use the configured doctor provider from `config/ai_providers.json5`
+- If the doctor provider is `opencode` and it is not installed yet, Skill Pilot will try to install it automatically
+- Once the doctor session starts, you can chat with it like a normal AI assistant
+- Exit the doctor session with `/exit` or double `Ctrl-C`
+
+The doctor agent is designed for beginners and can inspect project docs, skills, and source code to help diagnose issues. If a real code fix is needed, it should ask for your approval before making code changes.
+
+For beginner-friendly examples of how to write a good doctor request, see [Skill Pilot Doctor Message Guide](DOCTOR-MESSAGE-GUIDE.md).
 
 ---
 
