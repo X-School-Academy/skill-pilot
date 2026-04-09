@@ -1,4 +1,9 @@
 {
+  // Env placeholder rules used in this file:
+  // - `${VAR}`: required. The MCP loader marks the server as missing env when VAR is unset.
+  // - `${VAR:-}`: optional. Missing VAR resolves to an empty string.
+  // - `${VAR:-default}`: optional with fallback. Missing VAR resolves to `default`.
+  // - `${VAR-default}`: fallback only when VAR is unset; an explicit empty value is preserved.
   mcpServers: {
     terminal: {
       system: true,
@@ -41,6 +46,26 @@
         "run",
         "mcp_servers/live_tts/main.py",
       ],
+      env: {
+        TTS_PROVIDER: "${TTS_PROVIDER}",
+        QWEN3_TTS_API_URL: "${QWEN3_TTS_API_URL:-}",
+        QWEN3_TTS_VOICE: "${QWEN3_TTS_VOICE:-}",
+        OPENAI_API_KEY: "${OPENAI_API_KEY:-}",
+        OPENAI_LIVE_CHAT_MODEL: "${OPENAI_LIVE_CHAT_MODEL:-}",
+        OPENAI_VOICE: "${OPENAI_VOICE:-}",
+        AZURE_OPENAI_API_KEY: "${AZURE_OPENAI_API_KEY:-}",
+        AZURE_OPENAI_ENDPOINT: "${AZURE_OPENAI_ENDPOINT:-}",
+        AZURE_OPENAI_MODEL: "${AZURE_OPENAI_MODEL:-}",
+        AZURE_OPENAI_API_VERSION: "${AZURE_OPENAI_API_VERSION:-}",
+        GEMINI_API_KEY: "${GEMINI_API_KEY:-}",
+        GEMINI_LIVE_CHAT_MODEL: "${GEMINI_LIVE_CHAT_MODEL:-}",
+        GEMINI_VOICE: "${GEMINI_VOICE:-}",
+        LANGUAGE: "${LANGUAGE:-}",
+        LIVE_TTS_LOG_AUDIO_STATS: "${LIVE_TTS_LOG_AUDIO_STATS:-}",
+        LIVE_TTS_OUTPUT_DEVICE_NAME: "${LIVE_TTS_OUTPUT_DEVICE_NAME:-}",
+        LIVE_TTS_OUTPUT_DEVICE_INDEX: "${LIVE_TTS_OUTPUT_DEVICE_INDEX:-}",
+        MCP_TOOL_TIMEOUT:60000
+      },
     },
     cameras: {
       system: true,

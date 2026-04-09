@@ -24,6 +24,7 @@
   // Default provider selection used when no explicit provider is requested.
   default: {
     llm: 'claude',
+    doctor: 'opencode',
     tts: 'media-mcp',
     image: 'media-mcp',
   },
