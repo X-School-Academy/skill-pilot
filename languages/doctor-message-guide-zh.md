@@ -1,6 +1,6 @@
 <div align="center">
 
-[English](../docs/doctor-message-guide.md) | [中文](languages/doctor-message-guide-zh.md)
+[English](../DOCTOR-MESSAGE-GUIDE.md) | [中文](doctor-message-guide-zh.md)
 
 </div>
 

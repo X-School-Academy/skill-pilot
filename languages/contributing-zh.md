@@ -1,6 +1,6 @@
 <div align="center">
 
-[English](../docs/contributing.md) | [中文](languages/contributing-zh.md)
+[English](../CONTRIBUTING.md) | [中文](contributing-zh.md)
 
 </div>
 

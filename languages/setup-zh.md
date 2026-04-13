@@ -1,6 +1,6 @@
 <div align="center">
 
-[English](../docs/setup.md) | [中文](languages/setup-zh.md)
+[English](../SETUP.md) | [中文](setup-zh.md)
 
 </div>
 
@@ -36,4 +36,4 @@
 
 ## 故障排除
 
-如遇到问题，请参考[医生消息指南](languages/doctor-message-guide-zh.md)或查看项目文档。
+如遇到问题，请参考[医生消息指南](doctor-message-guide-zh.md)或查看项目文档。

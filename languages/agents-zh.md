@@ -1,6 +1,6 @@
 <div align="center">
 
-[English](../docs/agents.md) | [中文](languages/agents-zh.md)
+[English](../AGENTS.md) | [中文](agents-zh.md)
 
 </div>
 
