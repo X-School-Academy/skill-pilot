@@ -1,3 +1,11 @@
+<div align="center">
+
+[English](README.md) | [中文](languages/readme-zh.md)
+
+</div>
+
+---
+
 # Skill Pilot AI Agent
 
 **Your personal AI workspace — learn, automate, and build from a single idea.**
