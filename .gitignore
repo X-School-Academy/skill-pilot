@@ -25,3 +25,5 @@ config/profile.json5
 
 ._*
 .pytest_cache
+
+output

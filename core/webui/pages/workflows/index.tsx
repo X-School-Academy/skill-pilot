@@ -245,6 +245,7 @@ function isSafeWorkflowDoc(value: unknown): value is WorkflowDoc {
 
 export default function WorkflowsPage() {
   const router = useRouter();
+  const isDevMode = process.env.NODE_ENV === 'development';
 
   const [opened, setOpened] = useState(false);
   const [treeData, setTreeData] = useState<FileItem[]>([]);
@@ -1009,7 +1010,13 @@ export default function WorkflowsPage() {
       }}
       navbarOffsetBreakpoint="sm"
       header={
-        <Header height={{ base: 60 }} p="md">
+        <Header
+          height={{ base: 60 }}
+          p="md"
+          styles={{
+            root: isDevMode ? { borderBottom: '2px solid #228be6' } : undefined,
+          }}
+        >
           <Group position="apart" style={{ height: '100%' }}>
             <Group>
               <MediaQuery largerThan="sm" styles={{ display: 'none' }}>

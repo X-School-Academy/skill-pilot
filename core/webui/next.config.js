@@ -47,7 +47,9 @@ module.exports = (phase) => {
   return {
     env: {
       CODES_API_SSR: engineBaseUrl,
+      NEXT_PUBLIC_FILE_EVENTS_API: engineBaseUrl,
     },
+    devIndicators: false,
     reactStrictMode: true,
     ...(isStaticExport ? { output: 'export', distDir: 'www'} : {}),
     ...(isStaticExport ? {} : { i18n }),

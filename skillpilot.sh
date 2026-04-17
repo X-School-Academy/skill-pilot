@@ -35,6 +35,7 @@ ACTION_TARGET=""
 TEST_FILES=()
 DOCTOR_QUESTION=""
 IS_DEV=0
+SOURCE="manual"
 AVAILABLE_PROVIDERS=()
 HUMAN_DETECTION_REQUIREMENTS="${ROOT_DIR}/core/engine/mcp_servers/cameras/requirements-human-detection.txt"
 LIVE_TTS_REQUIREMENTS="${ROOT_DIR}/core/engine/mcp_servers/live_tts/requirements-live-tts.txt"
@@ -60,6 +61,8 @@ Commands:
 
 Options:
   --dev   Use development mode for `start`, or stop only development sessions for `stop`.
+  --source <manual|webui>
+          Identify the caller. `webui` restarts dev sessions and uses GUI auth for protected env reads when possible.
 
 Defaults:
   - Command defaults to: start
@@ -115,6 +118,18 @@ parse_args() {
   local expect_test_files=0
   while (($# > 0)); do
     case "$1" in
+      --source)
+        shift
+        if (($# == 0)); then
+          echo "Error: --source requires a value."
+          print_help
+          exit 1
+        fi
+        SOURCE="$1"
+        ;;
+      --source=*)
+        SOURCE="${1#*=}"
+        ;;
       --dev)
         IS_DEV=1
         ;;
@@ -169,6 +184,12 @@ parse_args() {
 
   if ((IS_DEV == 1)) && [[ "${ACTION}" != "start" && "${ACTION}" != "stop" ]]; then
     echo "Error: --dev is only supported with 'start' or 'stop'."
+    print_help
+    exit 1
+  fi
+
+  if [[ "${SOURCE}" != "manual" && "${SOURCE}" != "webui" ]]; then
+    echo "Error: unsupported source '${SOURCE}'. Supported: manual, webui."
     print_help
     exit 1
   fi
@@ -1382,9 +1403,13 @@ load_guarded_env() {
     env_content="$(cat "${ENGINE_ENV_FILE}")"
   else
     echo "Loading protected env from ${ENGINE_ENV_FILE} (sudo required)..."
-    sudo -k
-    env_content="$(sudo cat -- "${ENGINE_ENV_FILE}")"
-    sudo -k
+    if [[ "${SOURCE}" == "webui" ]] && has_gui_env; then
+      env_content="$(read_protected_file_with_gui "${ENGINE_ENV_FILE}")"
+    else
+      sudo -k
+      env_content="$(sudo cat -- "${ENGINE_ENV_FILE}")"
+      sudo -k
+    fi
   fi
 
   local parser_python
@@ -1436,18 +1461,39 @@ get_webui_base_url() {
   fi
 }
 
+_sp_has_interactive_tty() {
+  [[ -t 0 && -t 1 && -t 2 ]]
+}
+
+_sp_is_ssh() {
+  [[ -n "${SSH_CONNECTION-}" || -n "${SSH_TTY-}" ]]
+}
+
+_sp_has_linux_gui() {
+  if [[ -n "${DISPLAY-}" || -n "${WAYLAND_DISPLAY-}" ]]; then
+    return 0
+  fi
+  if command -v loginctl >/dev/null 2>&1 && [[ -n "${XDG_SESSION_ID-}" ]]; then
+    local session_type
+    session_type="$(loginctl show-session "${XDG_SESSION_ID}" -p Type --value 2>/dev/null || true)"
+    [[ "${session_type}" == "x11" || "${session_type}" == "wayland" ]] && return 0
+  fi
+  return 1
+}
+
+_sp_has_macos_gui() {
+  local console_user
+  console_user="$(/usr/bin/stat -f%Su /dev/console 2>/dev/null || true)"
+  [[ -n "${console_user}" && "${console_user}" != "root" && "${console_user}" != "loginwindow" ]] && ! _sp_is_ssh
+}
+
 has_gui_env() {
   local os_type
-  os_type="$(uname -s 2>/dev/null)"
+  os_type="$(uname -s 2>/dev/null || true)"
   if [[ "${os_type}" == "Darwin" ]]; then
-    # macOS: no GUI only when inside an SSH session without X11 forwarding
-    if [[ -n "${SSH_TTY:-}" || -n "${SSH_CLIENT:-}" ]] && [[ -z "${DISPLAY:-}" ]]; then
-      return 1
-    fi
-    return 0
+    _sp_has_macos_gui
   else
-    # Linux/other: GUI requires DISPLAY or WAYLAND_DISPLAY
-    [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]
+    _sp_has_linux_gui && ! _sp_is_ssh
   fi
 }
 
@@ -1458,6 +1504,74 @@ open_in_browser() {
   else
     xdg-open "${url}" 2>/dev/null || true
   fi
+}
+
+read_protected_file_with_gui() {
+  local file_path="$1"
+  local os_type rc tmp_script
+  os_type="$(uname -s 2>/dev/null || true)"
+
+  if ! has_gui_env; then
+    echo "Error: GUI auth requested but no GUI session detected (SSH session or no display)." >&2
+    return 1
+  fi
+
+  tmp_script="$(mktemp /tmp/skillpilot-read-env.XXXXXX.sh)"
+  cat > "${tmp_script}" <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+cat -- "$1"
+SCRIPT
+  chmod +x "${tmp_script}"
+
+  if [[ "${os_type}" == "Darwin" ]]; then
+    local cmd esc
+    cmd="bash $(printf '%q' "${tmp_script}") $(printf '%q' "${file_path}")"
+    esc="${cmd//\\/\\\\}"
+    esc="${esc//\"/\\\"}"
+    if /usr/bin/osascript -e "do shell script \"${esc}\" with administrator privileges" 2>/dev/null; then
+      rm -f "${tmp_script}"
+      return 0
+    fi
+    rm -f "${tmp_script}"
+    echo "Error: macOS GUI auth dialog failed or was cancelled." >&2
+    return 1
+  fi
+
+  if command -v pkexec >/dev/null 2>&1; then
+    if pkexec bash "${tmp_script}" "${file_path}"; then
+      rm -f "${tmp_script}"
+      return 0
+    fi
+    rc=$?
+    echo "Warning: pkexec failed (exit ${rc}); trying askpass fallback." >&2
+  fi
+
+  local askpass_tmp=""
+  if command -v zenity >/dev/null 2>&1; then
+    askpass_tmp="$(mktemp /tmp/askpass.XXXXXX.sh)"
+    printf '#!/bin/sh\nexec zenity --password --title="sudo password"\n' > "${askpass_tmp}"
+    chmod +x "${askpass_tmp}"
+  elif command -v kdialog >/dev/null 2>&1; then
+    askpass_tmp="$(mktemp /tmp/askpass.XXXXXX.sh)"
+    printf '#!/bin/sh\nexec kdialog --password "sudo password"\n' > "${askpass_tmp}"
+    chmod +x "${askpass_tmp}"
+  fi
+
+  if [[ -n "${askpass_tmp}" ]]; then
+    sudo -k
+    if SUDO_ASKPASS="${askpass_tmp}" sudo -A bash "${tmp_script}" "${file_path}"; then
+      rc=0
+    else
+      rc=$?
+    fi
+    rm -f "${askpass_tmp}" "${tmp_script}"
+    return ${rc}
+  fi
+
+  rm -f "${tmp_script}"
+  echo "Error: No GUI askpass helper found (zenity/kdialog) and pkexec is unavailable." >&2
+  return 1
 }
 
 wait_for_http_ready() {
@@ -1632,6 +1746,19 @@ open_or_print_webui_url() {
   fi
 
   echo ""
+  if [[ "${SOURCE}" == "webui" ]]; then
+    echo "Waiting for Skill Pilot to become reachable: ${ready_url}"
+    if wait_for_service_ready_or_session_exit "${mode}" "${ready_url}"; then
+      echo "Skill Pilot is reachable."
+      echo "Monitoring URL:"
+      echo "  ${url}"
+    else
+      print_startup_troubleshooting "${mode}"
+      return 1
+    fi
+    return 0
+  fi
+
   if has_gui_env; then
     echo "Waiting for Skill Pilot to become reachable: ${ready_url}"
     if wait_for_service_ready_or_session_exit "${mode}" "${ready_url}"; then
@@ -1658,13 +1785,19 @@ open_or_print_webui_url() {
 start_session() {
   local session_name="$1"
   local command="$2"
+  local replace_existing="${3:-0}"
 
   if tmux has-session -t "${session_name}" 2>/dev/null; then
-    echo "Session '${session_name}' already exists. Skipping."
-    return
+    if [[ "${replace_existing}" == "1" ]]; then
+      tmux kill-session -t "${session_name}"
+      echo "Stopped existing session '${session_name}'."
+    else
+      echo "Session '${session_name}' already exists. Skipping."
+      return
+    fi
   fi
 
-  tmux new-session -d -s "${session_name}" "cd '${ROOT_DIR}' && ${command}"
+  tmux new-session -d -s "${session_name}" "cd '${ROOT_DIR}' && ${command}" \; set -g status off
   echo "Started session '${session_name}'."
 }
 
@@ -1700,7 +1833,7 @@ case "${ACTION}" in
     require_tmux
     ensure_engine_venv
     if ((IS_DEV == 1)); then
-      if engine_socket_running "dev"; then
+      if [[ "${SOURCE}" != "webui" ]] && engine_socket_running "dev"; then
         _running_url="$(get_running_webui_url "dev")"
         echo "Skill Pilot is already running in development mode."
         if [[ -n "${_running_url}" ]]; then
@@ -1709,16 +1842,14 @@ case "${ACTION}" in
         fi
         exit 0
       fi
-    else
-      if engine_socket_running "prod"; then
-        _running_url="$(get_running_webui_url "prod")"
-        echo "Skill Pilot is already running in production mode."
-        if [[ -n "${_running_url}" ]]; then
-          echo "Access it at:"
-          echo "  ${_running_url}"
-        fi
-        exit 0
+    elif engine_socket_running "prod"; then
+      _running_url="$(get_running_webui_url "prod")"
+      echo "Skill Pilot is already running in production mode."
+      if [[ -n "${_running_url}" ]]; then
+        echo "Access it at:"
+        echo "  ${_running_url}"
       fi
+      exit 0
     fi
     run_init_wizard_if_needed
     load_guarded_env
@@ -1727,11 +1858,15 @@ case "${ACTION}" in
     echo "Launching services in tmux background sessions..."
     echo ""
     if ((IS_DEV == 1)); then
+      _replace_existing_dev_sessions=0
       ensure_webui_deps
       _dev_webui_host="$(get_service_host "webui" "development")"
       _dev_webui_port="$(get_service_port "webui" "development")"
-      start_session "sp-webui-dev" "cd core/webui && SKILL_PILOT_RUNTIME_MODE=development HOSTNAME=${_dev_webui_host} PORT=${_dev_webui_port} node scripts/with-timestamp-logs.js dev --webpack --hostname ${_dev_webui_host} --port ${_dev_webui_port}"
-      start_session "sp-engine-dev" "SKILL_PILOT_RUNTIME_MODE=development uv --project core/engine run core/engine/main.py --reload --reload-dir core/engine --reload-exclude core/engine/tests"
+      if [[ "${SOURCE}" == "webui" ]]; then
+        _replace_existing_dev_sessions=1
+      fi
+      start_session "sp-webui-dev" "cd core/webui && SKILL_PILOT_RUNTIME_MODE=development HOSTNAME=${_dev_webui_host} PORT=${_dev_webui_port} node scripts/with-timestamp-logs.js dev --webpack --hostname ${_dev_webui_host} --port ${_dev_webui_port}" "${_replace_existing_dev_sessions}"
+      start_session "sp-engine-dev" "SKILL_PILOT_RUNTIME_MODE=development uv --project core/engine run core/engine/main.py --reload --reload-dir core/engine --reload-exclude core/engine/tests" "${_replace_existing_dev_sessions}"
       _dev_engine_url="$(get_service_base_url "engine" "development")"
       _webui_url="$(get_webui_base_url "dev")"
       echo "  Dev engine   ->  ${_dev_engine_url%/}"

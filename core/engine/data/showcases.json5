@@ -1,0 +1,81 @@
+[
+  {
+    "category": "Basic",
+    "description": "Basic knowledge and skills for using AI agents for beginners.",
+    "thumbnail": null,
+    "id": "basic"
+  },
+  {
+    "category": "Media Generation",
+    "description": "Generate different types of media like videos and more.",
+    "subcategories": [
+      {
+        "category": "Videos",
+        "description": "Create videos with AI agent by prompting.",
+        "thumbnail": null,
+        "id": "videos"
+      }
+    ],
+    "id": "media-generation"
+  },
+  {
+    "category": "Games",
+    "description": "Create games with AI agent by prompting.",
+    "thumbnail": null,
+    "id": "games"
+  },
+  {
+    "category": "Websites",
+    "description": "Create websites with AI agent by prompting.",
+    "thumbnail": null,
+    "id": "websites"
+  },
+  {
+    "category": "Slides",
+    "description": "Create slides with AI agent by prompting.",
+    "thumbnail": null,
+    "id": "slides"
+  },
+  {
+    "category": "Mobile Apps",
+    "description": "Create mobile apps with AI agent by prompting.",
+    "thumbnail": null,
+    "id": "mobile-apps"
+  },
+  {
+    "category": "Tutorials",
+    "description": "Create tutorials for learning with AI agent by prompting.",
+    "thumbnail": null,
+    "id": "tutorials"
+  },
+  {
+    "category": "MCP Servers",
+    "description": "Create MCP servers with AI agent by prompting.",
+    "thumbnail": null,
+    "id": "mcp-servers"
+  },
+  {
+    "category": "AI Agent Skills",
+    "description": "Create AI agent skills with AI agent by prompting.",
+    "thumbnail": null,
+    "id": "ai-agent-skills"
+  },
+  {
+    "category": "AI Agents",
+    "description": "Create AI agent apps with AI agent by prompting.",
+    "thumbnail": null,
+    "id": "ai-agents"
+  },
+  {
+    "category": "Extensions",
+    "description": "Create Skill Pilot extensions with AI agent by prompting.",
+    "thumbnail": null,
+    "id": "extensions"
+  },
+  {
+    "category": "Skill Pilot Development",
+    "description": "Skill Pilot development with AI agent by prompting.",
+    "thumbnail": null,
+    "id": "skill-pilot-development"
+  }
+]

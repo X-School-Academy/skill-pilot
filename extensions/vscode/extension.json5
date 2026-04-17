@@ -1,0 +1,8 @@
+{
+  name: 'Skill Pilot for VS Code (Local)',
+  description: 'VS Code extension for local Skill Pilot integration.',
+  version: '0.0.13',
+  license: 'MIT',
+  type: 'prompt',
+  prompt: 'Build and install this extension. Before proceeding, verify the environment has the required tools installed (e.g. VS Code availability and build dependencies). If any prerequisites are missing or need user action, prompt the user to confirm or assist.',
+}

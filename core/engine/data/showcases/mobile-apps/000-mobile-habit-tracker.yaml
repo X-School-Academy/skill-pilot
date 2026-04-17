@@ -1,0 +1,18 @@
+id: mobile-habit-tracker
+title: Habit Tracker App
+description: Prototype a simple mobile habit tracker with a clean daily workflow.
+thumbnail: null
+video: null
+tutorial: null
+prompt: Create a mobile habit tracking app with onboarding, daily check-in, streaks,
+  and progress charts.
+git_tag: null
+in_mode: dev
+use_worktree: true
+skills: []
+tools: []
+files: []
+links: []
+popularity: 82
+level: 5
+rate: 4.6

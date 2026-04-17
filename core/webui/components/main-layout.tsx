@@ -6,10 +6,10 @@ import {
   MediaQuery, Burger, ScrollArea, useMantineTheme,
 } from '@mantine/core';
 import {
-  IconTerminal2, IconPlus, IconSchool, IconBriefcase, IconSearch,
+  IconTerminal2, IconPlus, IconSparkles, IconSchool, IconBriefcase, IconSearch,
   IconChecklist, IconCode, IconRocket, IconProgress, IconWand,
   IconServer, IconCalendar, IconPuzzle, IconUser, IconShieldLock,
-  IconBrandDiscord, IconVectorBezier2, IconVideo, IconCamera,
+  IconBrandDiscord, IconVectorBezier2, IconVideo, IconCamera, IconFolderOpen,
 } from '@tabler/icons-react';
 import axios from 'axios';
 import { apiUrl } from '../libs/api-base';
@@ -26,12 +26,14 @@ interface NavItemDef {
 }
 
 const NAV_ITEMS: NavItemDef[] = [
-  { label: 'New Session',      href: '/',                                           icon: <IconPlus size="1rem" /> },
+  { label: 'Explore',          href: '/?view=explore',                              view: 'explore',      icon: <IconSparkles size="1rem" /> },
+  { dividerBefore: '', label: 'New Session', href: '/',                             icon: <IconPlus size="1rem" /> },
   { label: 'Live Sessions',    href: '/terminals',                                  icon: <IconTerminal2 size="1rem" /> },
   { dividerBefore: 'Workspace', label: 'Learning', href: '/courses',                icon: <IconSchool size="1rem" /> },
   { label: 'Vibe Coding',      href: '/vibe-coding',                               icon: <IconBriefcase size="1rem" /> },
   { label: 'Research',         href: '/research',                                  icon: <IconSearch size="1rem" /> },
   { label: 'Tasks',            href: '/tasks',                                    icon: <IconChecklist size="1rem" /> },
+  { label: 'File Manager',    href: '/file-manager',                             icon: <IconFolderOpen size="1rem" /> },
   { dividerBefore: 'Skill Pilot', label: 'Development', href: '/skill-pilot-development', icon: <IconCode size="1rem" /> },
   { dividerBefore: 'Commercial Project', label: 'Dev Swarm', href: '/dev-swarm',    icon: <IconRocket size="1rem" /> },
   { dividerBefore: '', label: 'Processes',     href: '/?view=processes',    view: 'processes',    icon: <IconProgress size="1rem" /> },
@@ -55,6 +57,7 @@ interface MainLayoutProps {
 export default function MainLayout({ children, title }: MainLayoutProps) {
   const router = useRouter();
   const theme = useMantineTheme();
+  const isDevMode = process.env.NODE_ENV === 'development';
   const [opened, setOpened] = useState(false);
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
   const [llmProvider, setLlmProvider] = useState<string | null>(null);
@@ -76,9 +79,19 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
   const currentView = pathname === '/' && typeof query.view === 'string' ? query.view : null;
 
   const isActive = (item: NavItemDef): boolean => {
+    if (item.view) return currentView === item.view;
     if (item.href.includes('?')) return false;
-    if (!item.view) return pathname === item.href;   // exact path match (e.g. /live-avatar)
-    return currentView === item.view;                // /?view=xxx match
+    return pathname === item.href;
+  };
+
+  const handleNavClick = (event: React.MouseEvent, item: NavItemDef) => {
+    if (event.shiftKey) {
+      window.open(item.href, '_blank', 'noopener,noreferrer');
+      setOpened(false);
+      return;
+    }
+    void router.push(item.href);
+    setOpened(false);
   };
 
   return (
@@ -111,10 +124,7 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
                   label={item.label}
                   icon={item.icon}
                   active={isActive(item)}
-                  onClick={() => {
-                    void router.push(item.href);
-                    setOpened(false);
-                  }}
+                  onClick={(event) => handleNavClick(event, item)}
                 />
               );
               return elements;
@@ -123,7 +133,13 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
         </Navbar>
       }
       header={
-        <Header height={{ base: 60 }} p="md">
+        <Header
+          height={{ base: 60 }}
+          p="md"
+          styles={{
+            root: isDevMode ? { borderBottom: '2px solid #228be6' } : undefined,
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', height: '100%', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <MediaQuery largerThan="sm" styles={{ display: 'none' }}>

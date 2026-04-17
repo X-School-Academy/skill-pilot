@@ -68,6 +68,11 @@ Location: ~/.local/bin/claude
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
 
 
+git clone https://github.com/k2-fsa/OmniVoice.git
+cd OmniVoice
+uv sync
+uv run omnivoice-demo --ip 0.0.0.0 --port 8001
+
 df -h
 Filesystem                Size  Used Avail Use% Mounted on
 overlay                   160G  106G   55G  66% /

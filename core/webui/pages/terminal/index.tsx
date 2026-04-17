@@ -34,13 +34,67 @@ const toWsBase = (base: string): string => {
 type TerminalTargetExt = TerminalTarget & {
   readonly: boolean;
   allowKill: boolean;
+  compactChrome: boolean;
+};
+
+type ProjectLinkMatch = {
+  displayText: string;
+  fullPath: string;
+  sourceStart: number;
+  sourceEnd: number;
+};
+
+const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const trimTrailingPunctuation = (value: string): string =>
+  value.replace(/[),.;:[\]{}]+$/g, "");
+
+const buildProjectLinkMatches = (line: string, projectRoot: string): ProjectLinkMatch[] => {
+  const matches: ProjectLinkMatch[] = [];
+  const seen = new Set<string>();
+
+  const rootPattern = new RegExp(`${escapeRegex(projectRoot)}(?:\\/[^\\s:]+)*`, "g");
+  let absoluteMatch: RegExpExecArray | null;
+  while ((absoluteMatch = rootPattern.exec(line)) !== null) {
+    const raw = trimTrailingPunctuation(absoluteMatch[0]);
+    if (!raw.startsWith(projectRoot)) continue;
+    const key = `abs:${absoluteMatch.index}:${raw}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    matches.push({
+      displayText: raw.slice(projectRoot.length + 1) || raw,
+      fullPath: raw,
+      sourceStart: absoluteMatch.index,
+      sourceEnd: absoluteMatch.index + raw.length,
+    });
+  }
+
+  const relativePattern = /@([A-Za-z0-9._/-]+)/g;
+  let relativeMatch: RegExpExecArray | null;
+  while ((relativeMatch = relativePattern.exec(line)) !== null) {
+    const relativeRaw = trimTrailingPunctuation(relativeMatch[1]);
+    if (!relativeRaw || relativeRaw.startsWith("/")) continue;
+    const fullPath = `${projectRoot}/${relativeRaw}`.replace(/\/+/g, "/");
+    const key = `rel:${relativeMatch.index}:${relativeRaw}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    matches.push({
+      displayText: relativeRaw,
+      fullPath,
+      sourceStart: relativeMatch.index,
+      sourceEnd: relativeMatch.index + 1 + relativeRaw.length,
+    });
+  }
+
+  return matches;
 };
 
 const readTargetFromUrl = (): TerminalTargetExt => {
-  if (typeof window === "undefined") return { command: "top", session: null, readonly: false, allowKill: false };
+  if (typeof window === "undefined") return { command: "top", session: null, readonly: false, allowKill: false, compactChrome: false };
   const params = new URLSearchParams(window.location.search);
   const isReadonly = params.get("readonly") === "1";
   const allowKill = params.get("allowKill") === "1";
+  const compactChrome = params.get("compact") === "1";
   const session = params.get("session");
   if (session && session.trim()) {
     const readonlyFlag = isReadonly ? " -r" : "";
@@ -49,6 +103,7 @@ const readTargetFromUrl = (): TerminalTargetExt => {
       session: session.trim(),
       readonly: isReadonly,
       allowKill,
+      compactChrome,
     };
   }
   const value = params.get("command");
@@ -57,6 +112,7 @@ const readTargetFromUrl = (): TerminalTargetExt => {
     session: null,
     readonly: false,
     allowKill: false,
+    compactChrome,
   };
 };
 
@@ -74,6 +130,7 @@ const TerminalPage = () => {
   const [sessionName, setSessionName] = useState<string | null>(null);
   const [isReadonly, setIsReadonly] = useState(false);
   const [allowReadonlyKill, setAllowReadonlyKill] = useState(false);
+  const [compactChrome, setCompactChrome] = useState(false);
 
   const fitAndReadSize = useCallback(() => {
     const fitAddon = fitAddonRef.current;
@@ -155,12 +212,14 @@ const TerminalPage = () => {
     setSessionName(currentTarget.session);
     setIsReadonly(currentTarget.readonly);
     setAllowReadonlyKill(currentTarget.allowKill);
+    setCompactChrome(currentTarget.compactChrome);
 
     let disposed = false;
     let term: XTerm | null = null;
     let dataDispose: IDisposable = { dispose: () => undefined };
     let binaryDispose: IDisposable = { dispose: () => undefined };
     let resizeDispose: IDisposable = { dispose: () => undefined };
+    let projectLinkDispose: IDisposable = { dispose: () => undefined };
 
     const connectSocket = () => {
       if (wsRef.current || !term) return;
@@ -331,6 +390,56 @@ const TerminalPage = () => {
         fitAddon.fit();
         term.focus();
 
+        try {
+          const infoResp = await fetch(`${getApiBase()}/api/files/info`, { credentials: "include" });
+          const infoData = await infoResp.json().catch(() => ({}));
+          const projectRoot =
+            typeof infoData.root === "string" && infoData.root.trim()
+              ? infoData.root.trim().replace(/\/$/, "")
+              : "";
+
+          if (projectRoot) {
+            projectLinkDispose = term.registerLinkProvider({
+              provideLinks: (bufferLineNumber, callback) => {
+                const activeTerm = xtermRef.current;
+                if (!activeTerm) {
+                  callback(undefined);
+                  return;
+                }
+
+                const line = activeTerm.buffer.active.getLine(bufferLineNumber - 1);
+                if (!line) {
+                  callback(undefined);
+                  return;
+                }
+
+                const text = line.translateToString(true);
+                const links = buildProjectLinkMatches(text, projectRoot).map((match) => ({
+                  text: match.displayText,
+                  range: {
+                    start: { x: match.sourceStart + 1, y: bufferLineNumber },
+                    end: { x: match.sourceEnd + 1, y: bufferLineNumber },
+                  },
+                  activate: (_event: MouseEvent, _text: string) => {
+                    const target = `/file-manager?path=${encodeURIComponent(match.fullPath)}`;
+                    window.open(target, "_blank", "noopener,noreferrer");
+                  },
+                  hover: () => {
+                    activeTerm.element?.classList.add("xterm-cursor-pointer");
+                  },
+                  leave: () => {
+                    activeTerm.element?.classList.remove("xterm-cursor-pointer");
+                  },
+                }));
+
+                callback(links.length ? links : undefined);
+              },
+            });
+          }
+        } catch (error) {
+          console.warn("[terminal] failed to initialize project path links", error);
+        }
+
         if (!currentTarget.readonly) {
           dataDispose = term.onData((data: string) => {
             const ws = wsRef.current;
@@ -391,6 +500,7 @@ const TerminalPage = () => {
       dataDispose.dispose();
       binaryDispose.dispose();
       resizeDispose.dispose();
+      projectLinkDispose.dispose();
 
       const ws = wsRef.current;
       ws?.close();
@@ -430,20 +540,20 @@ const TerminalPage = () => {
           ref={panelRef}
           className="flex-1 flex flex-col min-h-0"
         >
-          <div className="h-[42px] border-b border-[#2f3645] px-3 flex items-center justify-between bg-[#161b26] flex-shrink-0">
-            <div className="text-sm font-medium">
+          <div className={`${compactChrome ? "h-[32px] px-2" : "h-[42px] px-3"} border-b border-[#2f3645] flex items-center justify-between bg-[#161b26] flex-shrink-0 gap-2`}>
+            <div className={`${compactChrome ? "hidden" : "text-sm font-medium truncate"}`}>
               command: <code>{command}</code>{" "}
               {isReadonly
                 ? connected ? "(read-only)" : "(disconnected)"
                 : connected ? "(connected)" : "(disconnected)"}{" "}
               {sessionName ? `session=${sessionName}` : ""}
             </div>
-            <div className="flex gap-2">
+            <div className={`flex gap-1 ${compactChrome ? "ml-auto" : ""}`}>
               {sessionName && (
                 <button
                   type="button"
                   onClick={handleHistory}
-                  className="rounded bg-[#1d6f5f] px-3 py-1 text-xs hover:opacity-90"
+                  className={`${compactChrome ? "rounded-sm px-2 py-0.5 text-[11px]" : "rounded px-3 py-1 text-xs"} bg-[#1d6f5f] leading-none hover:opacity-90`}
                 >
                   History
                 </button>
@@ -452,7 +562,7 @@ const TerminalPage = () => {
                 <button
                   type="button"
                   onClick={handleKillSession}
-                  className="rounded bg-[#8b1d24] px-3 py-1 text-xs hover:opacity-90"
+                  className={`${compactChrome ? "rounded-sm px-2 py-0.5 text-[11px]" : "rounded px-3 py-1 text-xs"} bg-[#8b1d24] leading-none hover:opacity-90`}
                 >
                   Kill Session
                 </button>
@@ -461,7 +571,7 @@ const TerminalPage = () => {
                 <button
                   type="button"
                   onClick={handleBackground}
-                  className="rounded bg-[#1f4f8b] px-3 py-1 text-xs hover:opacity-90"
+                  className={`${compactChrome ? "rounded-sm px-2 py-0.5 text-[11px]" : "rounded px-3 py-1 text-xs"} bg-[#1f4f8b] leading-none hover:opacity-90`}
                 >
                   Processes
                 </button>
@@ -469,7 +579,7 @@ const TerminalPage = () => {
               <button
                 type="button"
                 onClick={handleClose}
-                className="rounded bg-[#3a3f52] px-3 py-1 text-xs hover:opacity-90"
+                className={`${compactChrome ? "rounded-sm px-2 py-0.5 text-[11px]" : "rounded px-3 py-1 text-xs"} bg-[#3a3f52] leading-none hover:opacity-90`}
               >
                 {sessionName && !isReadonly ? "Detach" : "Close"}
               </button>
@@ -477,7 +587,7 @@ const TerminalPage = () => {
                 <button
                   type="button"
                   onClick={handleKillSession}
-                  className="rounded bg-[#8b1d24] px-3 py-1 text-xs hover:opacity-90"
+                  className={`${compactChrome ? "rounded-sm px-2 py-0.5 text-[11px]" : "rounded px-3 py-1 text-xs"} bg-[#8b1d24] leading-none hover:opacity-90`}
                 >
                   Kill Session
                 </button>

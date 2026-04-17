@@ -1,0 +1,10 @@
+{
+  name: "Awesome Design MD",
+  description: "Curated collection of DESIGN.md files inspired by developer-focused websites. Use them to tell your AI agent how your UI should look.",
+  version: "1.0.0",
+  license: "MIT",
+  type: "script",
+  script: "extension.py",
+  entrypoint: "index.html",
+  installed: false
+}

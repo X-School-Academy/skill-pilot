@@ -206,6 +206,35 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_workflow_parser.add_argument("prompt", nargs="*", help="Global workflow instruction")
     run_workflow_parser.add_argument(
+        "--workflow",
+        dest="workflow_opt",
+        default=None,
+        help="Workflow JSON path (named form, preserved alongside positional form)",
+    )
+    run_workflow_parser.add_argument(
+        "--prompt",
+        dest="prompt_opt",
+        default=None,
+        help="Global workflow instruction text (named form)",
+    )
+    run_workflow_parser.add_argument(
+        "--tmux-session",
+        dest="tmux_session",
+        default=None,
+        help="Existing tmux session name to use for workflow monitor mode; use 'none' or omit for non-tmux mode",
+    )
+    run_workflow_parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume an existing tmux-session-backed workflow run; valid only with --tmux-session",
+    )
+    run_workflow_parser.add_argument(
+        "--auto-continue",
+        dest="auto_continue",
+        action="store_true",
+        help="Use automatic downstream continuation in tmux mode; valid only with --tmux-session",
+    )
+    run_workflow_parser.add_argument(
         "--max-workers",
         type=int,
         default=1,
@@ -248,6 +277,28 @@ def build_parser() -> argparse.ArgumentParser:
     new_agent_parser.add_argument("--no-sandbox", dest="sandbox", action="store_false")
 
     return parser
+
+
+def _resolve_run_workflow_inputs(args: argparse.Namespace) -> tuple[str, str, str | None]:
+    workflow_positional = str(getattr(args, "workflow", "") or "").strip()
+    workflow_named = str(getattr(args, "workflow_opt", "") or "").strip()
+    if workflow_named and workflow_positional and workflow_named != workflow_positional:
+        raise ValueError("workflow path provided by positional and --workflow must match")
+    workflow = workflow_named or workflow_positional
+
+    prompt_parts = getattr(args, "prompt", []) or []
+    prompt_positional = " ".join(str(part) for part in prompt_parts).strip()
+    prompt_named = str(getattr(args, "prompt_opt", "") or "").strip()
+    if prompt_named and prompt_positional and prompt_named != prompt_positional:
+        raise ValueError("prompt provided by positional and --prompt must match")
+    prompt = prompt_named or prompt_positional
+
+    raw_tmux_session = str(getattr(args, "tmux_session", "") or "").strip()
+    normalized_tmux_session = raw_tmux_session or None
+    if normalized_tmux_session and normalized_tmux_session.lower() == "none":
+        normalized_tmux_session = None
+
+    return workflow, prompt, normalized_tmux_session
 
 
 def main() -> int:
@@ -495,18 +546,83 @@ def main() -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if bool(result.get("accepted")) else 2
 
-        if not args.workflow:
+        try:
+            workflow_arg, workflow_prompt, tmux_session = _resolve_run_workflow_inputs(args)
+        except ValueError as exc:
+            print(f"run-workflow setup failed: {exc}", file=sys.stderr)
+            return 2
+
+        if (bool(args.resume) or bool(args.auto_continue)) and not tmux_session:
+            print(
+                "run-workflow setup failed: --resume and --auto-continue require --tmux-session=<session-name>",
+                file=sys.stderr,
+            )
+            return 2
+
+        if not workflow_arg:
             print("run-workflow setup failed: workflow path is required", file=sys.stderr)
             return 2
-        if not args.prompt:
+        if not workflow_prompt:
             print("run-workflow setup failed: prompt is required", file=sys.stderr)
             return 2
+
+        if tmux_session:
+            payload = {
+                "operation": "start_workflow_terminal",
+                "workflow": workflow_arg,
+                "prompt": workflow_prompt,
+                "tmux_session": tmux_session,
+                "resume": bool(args.resume),
+                "next_node_trigger": "auto_continue" if bool(args.auto_continue) else "start_by_prompt",
+            }
+            if args.auto is not None:
+                payload["auto"] = bool(args.auto)
+            if args.network is not None:
+                payload["network"] = bool(args.network)
+            if args.sandbox is not None:
+                payload["sandbox"] = bool(args.sandbox)
+            try:
+                response_raw = send_request_with_runtime_fallback(
+                    json.dumps(payload, ensure_ascii=True),
+                    timeout,
+                    socket_path,
+                    explicit_socket=explicit_socket,
+                )
+            except EngineNotStartedError as exc:
+                print(str(exc), file=sys.stderr)
+                return 2
+            except Exception as exc:
+                print(f"run-workflow start request failed: {exc}", file=sys.stderr)
+                return 2
+            try:
+                response = json.loads(response_raw)
+            except json.JSONDecodeError:
+                print(response_raw)
+                return 0
+
+            if not isinstance(response, dict):
+                print(response_raw)
+                return 0
+            if response.get("status") != "ok":
+                detail = response.get("detail") or "run-workflow start request failed"
+                print(str(detail), file=sys.stderr)
+                return 2
+
+            result = response.get("result") or {}
+            startup = result.get("startup") if isinstance(result, dict) else {}
+            if isinstance(startup, dict):
+                prompt_text = startup.get("prompt")
+                if isinstance(prompt_text, str) and prompt_text.strip():
+                    print(prompt_text.strip())
+                    return 0
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
 
         repo_root = Path(__file__).resolve().parents[4]
         workflows_root = repo_root / "core" / "workflows"
 
         try:
-            workflow_file = resolve_workflow_file(args.workflow, workflows_root)
+            workflow_file = resolve_workflow_file(workflow_arg, workflows_root)
         except Exception as exc:
             print(f"run-workflow setup failed: {exc}", file=sys.stderr)
             return 2
@@ -560,7 +676,7 @@ def main() -> int:
         try:
             result = run_workflow(
                 workflow_file=workflow_file,
-                workflow_prompt=" ".join(args.prompt).strip(),
+                workflow_prompt=workflow_prompt,
                 max_workers=effective_workers,
                 infer_fn=infer_fn,
                 log_fn=lambda message: print(message, file=sys.stderr),

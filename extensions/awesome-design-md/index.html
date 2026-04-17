@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Awesome Design MD</title>
+  <style>
+    :root {
+      --bg: #f8f9fa;
+      --card-bg: #fff;
+      --text: #1a1a2e;
+      --text-dim: #6b7280;
+      --border: #e5e7eb;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --tab-bg: #f1f5f9;
+      --tab-active: #3b82f6;
+      --tab-text: #64748b;
+      --code-bg: #1e1e2e;
+      --code-text: #cdd6f4;
+      --prompt-bg: #f0fdf4;
+      --prompt-border: #86efac;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .header {
+      padding: 24px 32px;
+      border-bottom: 1px solid var(--border);
+      background: var(--card-bg);
+    }
+    .header h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .header p {
+      font-size: 14px;
+      color: var(--text-dim);
+    }
+    .container {
+      display: flex;
+      height: calc(100vh - 85px);
+    }
+    .sidebar {
+      width: 320px;
+      min-width: 320px;
+      border-right: 1px solid var(--border);
+      background: var(--card-bg);
+      overflow-y: auto;
+      padding: 12px 0;
+    }
+    .sidebar-search {
+      padding: 8px 16px;
+      margin-bottom: 8px;
+    }
+    .sidebar-search input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+    }
+    .sidebar-search input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+    }
+    .category-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      padding: 12px 16px 4px;
+    }
+    .template-item {
+      padding: 10px 16px;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: all 0.15s;
+    }
+    .template-item:hover {
+      background: var(--tab-bg);
+    }
+    .template-item.active {
+      background: rgba(59,130,246,0.08);
+      border-left-color: var(--accent);
+    }
+    .template-item .name {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .template-item .desc {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .tab-bar {
+      display: flex;
+      gap: 0;
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+    }
+    .tab-btn {
+      padding: 12px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      background: none;
+      color: var(--tab-text);
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .tab-btn:hover {
+      color: var(--text);
+    }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .tab-content {
+      flex: 1;
+      overflow: auto;
+      background: var(--bg);
+    }
+    .tab-content iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    .design-md-view {
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .design-md-view .copy-bar {
+      display: flex;
+      justify-content: flex-end;
+      padding: 10px 16px;
+      background: var(--code-bg);
+      border-bottom: 1px solid #313244;
+      flex-shrink: 0;
+    }
+    .design-md-view pre {
+      background: var(--code-bg);
+      color: var(--code-text);
+      padding: 16px 20px;
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.6;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      flex: 1;
+    }
+    .design-md-view .copy-btn {
+      padding: 5px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .design-md-view .copy-btn:hover {
+      background: var(--accent-hover);
+    }
+    .use-design-view {
+      padding: 24px 32px;
+      max-width: 700px;
+    }
+    .use-design-view h3 {
+      font-size: 18px;
+      margin-bottom: 12px;
+    }
+    .use-design-view .prompt-box {
+      background: var(--prompt-bg);
+      border: 1px solid var(--prompt-border);
+      border-radius: 8px;
+      padding: 16px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      margin-bottom: 16px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .use-design-view .send-btn {
+      padding: 10px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .use-design-view .send-btn:hover {
+      background: var(--accent-hover);
+    }
+    .placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-dim);
+      font-size: 15px;
+    }
+    .template-count {
+      font-size: 12px;
+      color: var(--text-dim);
+      padding: 4px 16px 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Awesome Design MD</h1>
+    <p>Curated DESIGN.md files inspired by developer-focused websites. Pick a design, preview it, then use it in your project.</p>
+  </div>
+  <div class="container">
+    <div class="sidebar">
+      <div class="sidebar-search">
+        <input type="text" id="searchInput" placeholder="Search templates..." />
+      </div>
+      <div class="template-count" id="templateCount"></div>
+      <div id="templateList"></div>
+    </div>
+    <div class="main-content">
+      <div class="tab-bar" id="tabBar" style="display:none;">
+        <button class="tab-btn active" data-tab="light">Light</button>
+        <button class="tab-btn" data-tab="dark">Dark</button>
+        <button class="tab-btn" data-tab="designmd">DESIGN.md</button>
+        <button class="tab-btn" data-tab="use">Use Design</button>
+      </div>
+      <div class="tab-content" id="tabContent">
+        <div class="placeholder">Select a design template from the sidebar</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const TEMPLATES = [
+      { category: "AI & Machine Learning", items: [
+        { dir: "claude", name: "Claude", desc: "Anthropic's AI assistant. Warm terracotta accent, clean editorial layout" },
+        { dir: "cohere", name: "Cohere", desc: "Enterprise AI platform. Vibrant gradients, data-rich dashboard aesthetic" },
+        { dir: "elevenlabs", name: "ElevenLabs", desc: "AI voice platform. Dark cinematic UI, audio-waveform aesthetics" },
+        { dir: "minimax", name: "Minimax", desc: "AI model provider. Bold dark interface with neon accents" },
+        { dir: "mistral.ai", name: "Mistral AI", desc: "Open-weight LLM provider. French-engineered minimalism, purple-toned" },
+        { dir: "ollama", name: "Ollama", desc: "Run LLMs locally. Terminal-first, monochrome simplicity" },
+        { dir: "opencode.ai", name: "OpenCode AI", desc: "AI coding platform. Developer-centric dark theme" },
+        { dir: "replicate", name: "Replicate", desc: "Run ML models via API. Clean white canvas, code-forward" },
+        { dir: "runwayml", name: "RunwayML", desc: "AI video generation. Cinematic dark UI, media-rich layout" },
+        { dir: "together.ai", name: "Together AI", desc: "Open-source AI infrastructure. Technical, blueprint-style design" },
+        { dir: "voltagent", name: "VoltAgent", desc: "AI agent framework. Void-black canvas, emerald accent, terminal-native" },
+        { dir: "x.ai", name: "xAI", desc: "Elon Musk's AI lab. Stark monochrome, futuristic minimalism" },
+      ]},
+      { category: "Developer Tools & Platforms", items: [
+        { dir: "cursor", name: "Cursor", desc: "AI-first code editor. Sleek dark interface, gradient accents" },
+        { dir: "expo", name: "Expo", desc: "React Native platform. Dark theme, tight letter-spacing, code-centric" },
+        { dir: "linear.app", name: "Linear", desc: "Project management for engineers. Ultra-minimal, precise, purple accent" },
+        { dir: "lovable", name: "Lovable", desc: "AI full-stack builder. Playful gradients, friendly dev aesthetic" },
+        { dir: "mintlify", name: "Mintlify", desc: "Documentation platform. Clean, green-accented, reading-optimized" },
+        { dir: "posthog", name: "PostHog", desc: "Product analytics. Playful hedgehog branding, developer-friendly dark UI" },
+        { dir: "raycast", name: "Raycast", desc: "Productivity launcher. Sleek dark chrome, vibrant gradient accents" },
+        { dir: "resend", name: "Resend", desc: "Email API for developers. Minimal dark theme, monospace accents" },
+        { dir: "sentry", name: "Sentry", desc: "Error monitoring. Dark dashboard, data-dense, pink-purple accent" },
+        { dir: "supabase", name: "Supabase", desc: "Open-source Firebase alternative. Dark emerald theme, code-first" },
+        { dir: "superhuman", name: "Superhuman", desc: "Fast email client. Premium dark UI, keyboard-first, purple glow" },
+        { dir: "vercel", name: "Vercel", desc: "Frontend deployment platform. Black and white precision, Geist font" },
+        { dir: "warp", name: "Warp", desc: "Modern terminal. Dark IDE-like interface, block-based command UI" },
+        { dir: "zapier", name: "Zapier", desc: "Automation platform. Warm orange, friendly illustration-driven" },
+      ]},
+      { category: "Infrastructure & Cloud", items: [
+        { dir: "clickhouse", name: "ClickHouse", desc: "Fast analytics database. Yellow-accented, technical documentation style" },
+        { dir: "composio", name: "Composio", desc: "Tool integration platform. Modern dark with colorful integration icons" },
+        { dir: "hashicorp", name: "HashiCorp", desc: "Infrastructure automation. Enterprise-clean, black and white" },
+        { dir: "mongodb", name: "MongoDB", desc: "Document database. Green leaf branding, developer documentation focus" },
+        { dir: "sanity", name: "Sanity", desc: "Headless CMS. Red accent, content-first editorial layout" },
+        { dir: "stripe", name: "Stripe", desc: "Payment infrastructure. Signature purple gradients, weight-300 elegance" },
+      ]},
+      { category: "Design & Productivity", items: [
+        { dir: "airtable", name: "Airtable", desc: "Spreadsheet-database hybrid. Colorful, friendly, structured data aesthetic" },
+        { dir: "cal", name: "Cal.com", desc: "Open-source scheduling. Clean neutral UI, developer-oriented simplicity" },
+        { dir: "clay", name: "Clay", desc: "Creative agency. Organic shapes, soft gradients, art-directed layout" },
+        { dir: "figma", name: "Figma", desc: "Collaborative design tool. Vibrant multi-color, playful yet professional" },
+        { dir: "framer", name: "Framer", desc: "Website builder. Bold black and blue, motion-first, design-forward" },
+        { dir: "intercom", name: "Intercom", desc: "Customer messaging. Friendly blue palette, conversational UI patterns" },
+        { dir: "miro", name: "Miro", desc: "Visual collaboration. Bright yellow accent, infinite canvas aesthetic" },
+        { dir: "notion", name: "Notion", desc: "All-in-one workspace. Warm minimalism, serif headings, soft surfaces" },
+        { dir: "pinterest", name: "Pinterest", desc: "Visual discovery platform. Red accent, masonry grid, image-first" },
+        { dir: "webflow", name: "Webflow", desc: "Visual web builder. Blue-accented, polished marketing site aesthetic" },
+      ]},
+      { category: "Fintech & Crypto", items: [
+        { dir: "coinbase", name: "Coinbase", desc: "Crypto exchange. Clean blue identity, trust-focused, institutional feel" },
+        { dir: "kraken", name: "Kraken", desc: "Crypto trading platform. Purple-accented dark UI, data-dense dashboards" },
+        { dir: "revolut", name: "Revolut", desc: "Digital banking. Sleek dark interface, gradient cards, fintech precision" },
+        { dir: "wise", name: "Wise", desc: "International money transfer. Bright green accent, friendly and clear" },
+      ]},
+      { category: "Enterprise & Consumer", items: [
+        { dir: "airbnb", name: "Airbnb", desc: "Travel marketplace. Warm coral accent, photography-driven, rounded UI" },
+        { dir: "apple", name: "Apple", desc: "Consumer electronics. Premium white space, SF Pro, cinematic imagery" },
+        { dir: "ibm", name: "IBM", desc: "Enterprise technology. Carbon design system, structured blue palette" },
+        { dir: "nvidia", name: "NVIDIA", desc: "GPU computing. Green-black energy, technical power aesthetic" },
+        { dir: "spacex", name: "SpaceX", desc: "Space technology. Stark black and white, full-bleed imagery, futuristic" },
+        { dir: "spotify", name: "Spotify", desc: "Music streaming. Vibrant green on dark, bold type, album-art-driven" },
+        { dir: "uber", name: "Uber", desc: "Mobility platform. Bold black and white, tight type, urban energy" },
+      ]},
+      { category: "Car Brands", items: [
+        { dir: "bmw", name: "BMW", desc: "Luxury automotive. Dark premium surfaces, precise German engineering aesthetic" },
+        { dir: "ferrari", name: "Ferrari", desc: "Luxury automotive. Chiaroscuro black-white editorial, Ferrari Red" },
+        { dir: "lamborghini", name: "Lamborghini", desc: "Luxury automotive. True black cathedral, gold accent, LamboType" },
+        { dir: "renault", name: "Renault", desc: "French automotive. Vivid aurora gradients, NouvelR typeface" },
+        { dir: "tesla", name: "Tesla", desc: "Electric vehicles. Radical subtraction, cinematic photography" },
+      ]},
+    ];
+
+    // Derive the static API base from the current URL.
+    // The page is served at /api/config/extensions/awesome-design-md/static
+    // so sub-resources must be fetched from /api/config/extensions/awesome-design-md/static/src/design-md/...
+    const STATIC_BASE = window.location.pathname.replace(/\/$/, '');
+    const BASE_PATH = `${STATIC_BASE}/src/design-md`;
+    let activeTemplate = null;
+    let activeTab = "light";
+
+    function getWebUIOrigin() {
+      return window.location.origin;
+    }
+
+    function renderSidebar(filter = "") {
+      const list = document.getElementById("templateList");
+      const lowerFilter = filter.toLowerCase();
+      let html = "";
+      let count = 0;
+
+      for (const cat of TEMPLATES) {
+        const filtered = cat.items.filter(t =>
+          t.name.toLowerCase().includes(lowerFilter) ||
+          t.desc.toLowerCase().includes(lowerFilter)
+        );
+        if (filtered.length === 0) continue;
+
+        html += `<div class="category-label">${cat.category}</div>`;
+        for (const t of filtered) {
+          const isActive = activeTemplate && activeTemplate.dir === t.dir;
+          html += `<div class="template-item${isActive ? ' active' : ''}" data-dir="${t.dir}" onclick="selectTemplate('${t.dir}')">
+            <div class="name">${t.name}</div>
+            <div class="desc">${t.desc}</div>
+          </div>`;
+          count++;
+        }
+      }
+
+      list.innerHTML = html;
+      document.getElementById("templateCount").textContent = `${count} design templates`;
+    }
+
+    function findTemplate(dir) {
+      for (const cat of TEMPLATES) {
+        for (const t of cat.items) {
+          if (t.dir === dir) return t;
+        }
+      }
+      return null;
+    }
+
+    function selectTemplate(dir) {
+      activeTemplate = findTemplate(dir);
+      if (!activeTemplate) return;
+
+      document.getElementById("tabBar").style.display = "flex";
+      renderSidebar(document.getElementById("searchInput").value);
+      showTab(activeTab);
+    }
+
+    function showTab(tab) {
+      activeTab = tab;
+      const content = document.getElementById("tabContent");
+      const buttons = document.querySelectorAll(".tab-btn");
+      buttons.forEach(btn => btn.classList.toggle("active", btn.dataset.tab === tab));
+
+      if (!activeTemplate) {
+        content.innerHTML = '<div class="placeholder">Select a design template from the sidebar</div>';
+        return;
+      }
+
+      const dir = activeTemplate.dir;
+
+      if (tab === "light") {
+        content.innerHTML = `<iframe src="${BASE_PATH}/${dir}/preview.html"></iframe>`;
+      } else if (tab === "dark") {
+        content.innerHTML = `<iframe src="${BASE_PATH}/${dir}/preview-dark.html"></iframe>`;
+      } else if (tab === "designmd") {
+        content.innerHTML = '<div class="design-md-view"><p>Loading DESIGN.md...</p></div>';
+        fetch(`${BASE_PATH}/${dir}/DESIGN.md`)
+          .then(res => {
+            if (!res.ok) throw new Error("Failed to load DESIGN.md");
+            return res.text();
+          })
+          .then(text => {
+            const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            content.innerHTML = `<div class="design-md-view">
+              <div class="copy-bar"><button class="copy-btn" onclick="copyDesignMd()">Copy to Clipboard</button></div>
+              <pre id="designMdContent">${escaped}</pre>
+            </div>`;
+          })
+          .catch(err => {
+            content.innerHTML = `<div class="design-md-view"><div style="padding:24px;"><p style="color:red;">Error: ${err.message}. Make sure the extension is installed first.</p></div></div>`;
+          });
+      } else if (tab === "use") {
+        const designPath = `extensions/awesome-design-md/src/design-md/${dir}/DESIGN.md`;
+        const prompt = `Use ${designPath} to create a website for demo the design system`;
+        const escaped = prompt.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        content.innerHTML = `<div class="use-design-view">
+          <h3>Use ${activeTemplate.name} Design</h3>
+          <p style="color:var(--text-dim);margin-bottom:16px;font-size:14px;">
+            Click the button below to open a new session with this prompt. The AI agent will use the DESIGN.md
+            to build a demo website matching the ${activeTemplate.name} design system.
+          </p>
+          <div class="prompt-box" id="promptContent">${escaped}</div>
+          <button class="send-btn" onclick="sendPrompt()">Send to New Session</button>
+        </div>`;
+      }
+    }
+
+    function copyDesignMd() {
+      const el = document.getElementById("designMdContent");
+      if (!el) return;
+      navigator.clipboard.writeText(el.textContent).then(() => {
+        const btn = document.querySelector(".copy-btn");
+        if (btn) { btn.textContent = "Copied!"; setTimeout(() => btn.textContent = "Copy to Clipboard", 2000); }
+      });
+    }
+
+    function sendPrompt() {
+      if (!activeTemplate) return;
+      const designPath = `extensions/awesome-design-md/src/design-md/${activeTemplate.dir}/DESIGN.md`;
+      const prompt = `Use ${designPath} to create a website for demo the design system`;
+      const origin = getWebUIOrigin();
+      // Navigate to webui new session with the prompt
+      const url = `${origin}/?new_session=true&prompt=${encodeURIComponent(prompt)}`;
+      window.open(url, '_blank');
+    }
+
+    // Tab bar event delegation
+    document.getElementById("tabBar").addEventListener("click", (e) => {
+      if (e.target.classList.contains("tab-btn")) {
+        showTab(e.target.dataset.tab);
+      }
+    });
+
+    // Search
+    document.getElementById("searchInput").addEventListener("input", (e) => {
+      renderSidebar(e.target.value);
+    });
+
+    // Initial render — select the first template by default
+    renderSidebar();
+    if (TEMPLATES.length > 0 && TEMPLATES[0].items.length > 0) {
+      selectTemplate(TEMPLATES[0].items[0].dir);
+    }
+  </script>
+</body>
+</html>

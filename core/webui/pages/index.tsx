@@ -25,6 +25,7 @@ import {
 import {
   IconTerminal2,
   IconPlus,
+  IconSparkles,
   IconSchool,
   IconBriefcase,
   IconSearch,
@@ -42,11 +43,14 @@ import {
   IconVectorBezier2,
   IconVideo,
   IconCamera,
+  IconFolderOpen,
 } from '@tabler/icons-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { apiUrl } from '../libs/api-base';
 import { resolveSelectedProvider, setSelectedProvider } from '../libs/llm';
+import { useSessionRoots } from '../libs/session-roots';
+import ExploreView from '../components/explore/ExploreView';
 
 const API_BASE_URL = apiUrl('/api');
 axios.defaults.withCredentials = true;
@@ -125,12 +129,29 @@ interface ScheduleFormData {
   monthday: number;
 }
 
+type ExtensionType = 'prompt' | 'skill' | 'script';
+
+interface ExtensionItem {
+  dir: string;
+  name: string;
+  description: string;
+  type: ExtensionType;
+  version?: string;
+  license?: string;
+  prompt?: string;
+  skill?: string;
+  script?: string;
+  entrypoint?: string;
+  installed?: boolean;
+}
+
 const EMPTY_MCP_FORM: McpFormData = {
   name: '', type: 'stdio', command: '', args: '', env: [['', '']],
   url: '', headers: [['', '']], disabled: false,
 };
 
 type ActiveView =
+  | 'explore'
   | 'home'
   | 'live-terminal'
   | 'learning'
@@ -193,8 +214,9 @@ interface EnvSafeguardStatus {
 export default function HomePage() {
   const router = useRouter();
   const theme = useMantineTheme();
+  const isDevMode = process.env.NODE_ENV === 'development';
   const [opened, setOpened] = useState(false);
-  const [activeView, setActiveView] = useState<ActiveView>('home');
+  const [activeView, setActiveView] = useState<ActiveView>('explore');
   const [promptText, setPromptText] = useState('');
   const [newSessionWorkflow, setNewSessionWorkflow] = useState<string | null>(null);
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
@@ -203,6 +225,7 @@ export default function HomePage() {
   const [liveSessionMode, setLiveSessionMode] = useState<LiveSessionMode>('llm');
   const [liveSessionPath, setLiveSessionPath] = useState<string>('');
   const [startingSession, setStartingSession] = useState(false);
+  const startingShellRef = useRef(false);
   const [externalSessions, setExternalSessions] = useState<ExternalTmuxSession[]>([]);
   const [activeProcessSession, setActiveProcessSession] = useState<string | null>(null);
   const [loadingExternalSessions, setLoadingExternalSessions] = useState(false);
@@ -236,6 +259,11 @@ export default function HomePage() {
   const [scheduleError, setScheduleError] = useState('');
   const [scheduleSkillFocused, setScheduleSkillFocused] = useState(false);
   const [scheduleProviderFocused, setScheduleProviderFocused] = useState(false);
+  const [extensions, setExtensions] = useState<ExtensionItem[]>([]);
+  const [extensionsLoading, setExtensionsLoading] = useState(false);
+  const [extensionsError, setExtensionsError] = useState('');
+  const [extensionActionLoading, setExtensionActionLoading] = useState<Record<string, string>>({});
+  const [extensionActionOutput, setExtensionActionOutput] = useState<Record<string, string>>({});
   const [securitySettings, setSecuritySettings] = useState<SecuritySettings>({
     security: {
       schedules: { sandbox: true, auto: true, network: true },
@@ -284,6 +312,12 @@ export default function HomePage() {
   const [timezoneList, setTimezoneList] = useState<string[]>([]);
   const [timezoneFocused, setTimezoneFocused] = useState(false);
   const initBootstrapRef = useRef(false);
+  const {
+    sessionRootOptions,
+    hasSessionWorktrees,
+    selectedSessionPath,
+    setSelectedSessionPath,
+  } = useSessionRoots();
 
   const fetchLlmProviders = async () => {
     try {
@@ -354,6 +388,20 @@ export default function HomePage() {
       setSchedules(res.data?.schedules || []);
     } catch (err) {
       console.error('Failed to fetch schedules:', err);
+    }
+  }, []);
+
+  const fetchExtensions = useCallback(async () => {
+    setExtensionsLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/config/extensions`);
+      setExtensions(res.data?.extensions || []);
+      setExtensionsError('');
+    } catch (err: any) {
+      setExtensions([]);
+      setExtensionsError(err?.response?.data?.error || 'Failed to load extensions');
+    } finally {
+      setExtensionsLoading(false);
     }
   }, []);
 
@@ -555,6 +603,12 @@ export default function HomePage() {
   }, [activeView, fetchSchedules, fetchSkills]);
 
   useEffect(() => {
+    if (activeView === 'extensions') {
+      void fetchExtensions();
+    }
+  }, [activeView, fetchExtensions]);
+
+  useEffect(() => {
     if (activeView === 'ai-security') {
       void fetchSecuritySettings();
       void fetchEnvSafeguardStatus();
@@ -594,6 +648,7 @@ export default function HomePage() {
         ? {
             workflow: newSessionWorkflow,
             prompt: trimmedPrompt,
+            path: selectedSessionPath || undefined,
             sandbox: newSessionSandbox,
             auto: newSessionAuto,
             network: newSessionNetwork,
@@ -604,6 +659,7 @@ export default function HomePage() {
         : {
             provider_id: provider,
             prompt: trimmedPrompt,
+            path: selectedSessionPath || undefined,
             sandbox: newSessionSandbox,
             auto: newSessionAuto,
             network: newSessionNetwork,
@@ -624,7 +680,7 @@ export default function HomePage() {
         } else {
           setLiveSessionName(sessionName);
           setLiveSessionMode('llm');
-          setLiveSessionPath('');
+          setLiveSessionPath(String(res.data?.session?.cwd || selectedSessionPath || ''));
           setActiveView('live-terminal');
         }
         if (newSessionWorkflow) {
@@ -652,12 +708,14 @@ export default function HomePage() {
     newSessionWorkflow,
     newSessionWorkflowResume,
     promptText,
+    selectedSessionPath,
     startingSession,
   ]);
 
   const handleStartShellTerminal = useCallback(async (pathOverride?: string) => {
-    if (startingSession) return;
+    if (startingShellRef.current) return;
     const requestedPath = (pathOverride ?? '').trim();
+    startingShellRef.current = true;
     setStartingSession(true);
     try {
       const res = await axios.post(`${API_BASE_URL}/terminal/tmux/create`, {
@@ -674,9 +732,10 @@ export default function HomePage() {
     } catch (err) {
       console.error('Failed to start terminal session:', err);
     } finally {
+      startingShellRef.current = false;
       setStartingSession(false);
     }
-  }, [startingSession]);
+  }, []);
 
   useEffect(() => {
     if (!router.isReady) return;
@@ -696,11 +755,13 @@ export default function HomePage() {
 
     if (new_session === 'true' && prompt) {
       setPromptText(prompt as string);
+      setSelectedSessionPath(typeof path === 'string' ? path : '');
       setNewSessionWorkflow(typeof workflow === 'string' && workflow ? workflow : null);
       setNewSessionNextNodeTrigger(next_node_trigger === 'start_by_prompt' ? 'start_by_prompt' : 'auto_continue');
       setNewSessionWorkflowResumeAvailable(resume_available === 'true');
       setNewSessionWorkflowResume(resume === 'true');
       setActiveView('home');
+      void router.replace({ pathname: '/', query: restQuery }, undefined, { shallow: true });
       return;
     }
 
@@ -719,7 +780,7 @@ export default function HomePage() {
 
     if (typeof view === 'string' && view) {
       const validViews: ActiveView[] = [
-        'home', 'live-terminal', 'learning', 'projects', 'research', 'tasks',
+        'explore', 'home', 'live-terminal', 'learning', 'projects', 'research', 'tasks',
         'development', 'processes', 'discord-bot', 'skills', 'mcp-servers',
         'schedule', 'extensions', 'ai-security', 'profile',
       ];
@@ -756,9 +817,16 @@ export default function HomePage() {
     }
   };
 
-  const navItems: { label: string; view?: ActiveView; icon: React.ReactNode; action?: () => void; dividerBefore?: string; disabled?: boolean; active?: boolean }[] = [
+  const navItems: { label: string; view?: ActiveView; href?: string; icon: React.ReactNode; action?: () => void; dividerBefore?: string; disabled?: boolean; active?: boolean }[] = [
+    {
+      label: 'Explore',
+      href: '/?view=explore',
+      view: 'explore',
+      icon: <IconSparkles size="1rem" />,
+    },
     {
       label: 'New Session',
+      href: '/',
       icon: <IconPlus size="1rem" />,
       action: () => {
         if (activeView === 'live-terminal') {
@@ -769,25 +837,44 @@ export default function HomePage() {
       },
       disabled: activeView === 'home',
     },
-    { label: 'Live Sessions', icon: <IconTerminal2 size="1rem" />, action: () => { void router.push('/terminals'); } },
-    { dividerBefore: 'Workspace', label: 'Learning', icon: <IconSchool size="1rem" />, action: () => router.push('/courses') },
-    { label: 'Vibe Coding', icon: <IconBriefcase size="1rem" />, action: () => router.push('/vibe-coding') },
-    { label: 'Research', icon: <IconSearch size="1rem" />, action: () => router.push('/research') },
-    { label: 'Tasks', icon: <IconChecklist size="1rem" />, action: () => router.push('/tasks') },
-    { dividerBefore: 'Skill Pilot', label: 'Development', icon: <IconCode size="1rem" />, action: () => router.push('/skill-pilot-development') },
-    { dividerBefore: 'Commercial Project', label: 'Dev Swarm', icon: <IconRocket size="1rem" />, action: () => router.push('/dev-swarm') },
-    { dividerBefore: '', label: 'Processes', view: 'processes', icon: <IconProgress size="1rem" /> },
-    { label: 'Discord Bot', view: 'discord-bot', icon: <IconBrandDiscord size="1rem" /> },
-    { label: 'Live Avatar', icon: <IconVideo size="1rem" />, action: () => router.push('/live-avatar') },
-    { label: 'Security Cameras', icon: <IconCamera size="1rem" />, action: () => router.push('/cameras') },
-    { dividerBefore: '', label: 'Skills', view: 'skills', icon: <IconWand size="1rem" /> },
-    { label: 'Workflows', icon: <IconVectorBezier2 size="1rem" />, action: () => router.push('/workflows') },
-    { label: 'MCP Servers', view: 'mcp-servers', icon: <IconServer size="1rem" /> },
-    { label: 'Schedules', view: 'schedule', icon: <IconCalendar size="1rem" /> },
-    { label: 'Extensions', view: 'extensions', icon: <IconPuzzle size="1rem" /> },
-    { label: 'AI & Security', view: 'ai-security', icon: <IconShieldLock size="1rem" /> },
-    { label: 'Profile', view: 'profile', icon: <IconUser size="1rem" /> },
+    { dividerBefore: '', label: 'Live Sessions', href: '/terminals', icon: <IconTerminal2 size="1rem" />, action: () => { void router.push('/terminals'); } },
+    { dividerBefore: 'Workspace', label: 'Learning', href: '/courses', icon: <IconSchool size="1rem" />, action: () => router.push('/courses') },
+    { label: 'Vibe Coding', href: '/vibe-coding', icon: <IconBriefcase size="1rem" />, action: () => router.push('/vibe-coding') },
+    { label: 'Research', href: '/research', icon: <IconSearch size="1rem" />, action: () => router.push('/research') },
+    { label: 'Tasks', href: '/tasks', icon: <IconChecklist size="1rem" />, action: () => router.push('/tasks') },
+    { label: 'File Manager', href: '/file-manager', icon: <IconFolderOpen size="1rem" />, action: () => router.push('/file-manager') },
+    { dividerBefore: 'Skill Pilot', label: 'Development', href: '/skill-pilot-development', icon: <IconCode size="1rem" />, action: () => router.push('/skill-pilot-development') },
+    { dividerBefore: 'Commercial Project', label: 'Dev Swarm', href: '/dev-swarm', icon: <IconRocket size="1rem" />, action: () => router.push('/dev-swarm') },
+    { dividerBefore: '', label: 'Processes', href: '/?view=processes', view: 'processes', icon: <IconProgress size="1rem" /> },
+    { label: 'Discord Bot', href: '/?view=discord-bot', view: 'discord-bot', icon: <IconBrandDiscord size="1rem" /> },
+    { label: 'Live Avatar', href: '/live-avatar', icon: <IconVideo size="1rem" />, action: () => router.push('/live-avatar') },
+    { label: 'Security Cameras', href: '/cameras', icon: <IconCamera size="1rem" />, action: () => router.push('/cameras') },
+    { dividerBefore: '', label: 'Skills', href: '/?view=skills', view: 'skills', icon: <IconWand size="1rem" /> },
+    { label: 'Workflows', href: '/workflows', icon: <IconVectorBezier2 size="1rem" />, action: () => router.push('/workflows') },
+    { label: 'MCP Servers', href: '/?view=mcp-servers', view: 'mcp-servers', icon: <IconServer size="1rem" /> },
+    { label: 'Schedules', href: '/?view=schedule', view: 'schedule', icon: <IconCalendar size="1rem" /> },
+    { label: 'Extensions', href: '/?view=extensions', view: 'extensions', icon: <IconPuzzle size="1rem" /> },
+    { label: 'AI & Security', href: '/?view=ai-security', view: 'ai-security', icon: <IconShieldLock size="1rem" /> },
+    { label: 'Profile', href: '/?view=profile', view: 'profile', icon: <IconUser size="1rem" /> },
   ];
+
+  const handleNavItemClick = (event: React.MouseEvent, item: typeof navItems[number]) => {
+    if (item.disabled) return;
+    if (event.shiftKey && item.href) {
+      window.open(item.href, '_blank', 'noopener,noreferrer');
+      setOpened(false);
+      return;
+    }
+    if (activeView === 'live-terminal' && (item.view || item.action)) {
+      setLiveSessionName(null);
+    }
+    if (item.action) {
+      item.action();
+    } else if (item.view) {
+      setActiveView(item.view);
+    }
+    setOpened(false);
+  };
 
   const renderNavItems = () => {
     return navItems.map((item, idx) => {
@@ -814,18 +901,7 @@ export default function HomePage() {
           active={isActive}
           disabled={item.disabled}
           styles={item.disabled ? { root: { opacity: 0.5, cursor: 'default' } } : undefined}
-          onClick={() => {
-            if (item.disabled) return;
-            if (activeView === 'live-terminal' && (item.view || item.action)) {
-              setLiveSessionName(null);
-            }
-            if (item.action) {
-              item.action();
-            } else if (item.view) {
-              setActiveView(item.view);
-            }
-            setOpened(false);
-          }}
+          onClick={(event) => handleNavItemClick(event, item)}
         />
       );
 
@@ -862,6 +938,15 @@ export default function HomePage() {
             Do anything first, then learn anything you want
           </Text>
         </div>
+        {hasSessionWorktrees && (
+          <Select
+            label="Worktree"
+            placeholder="Choose where to start"
+            value={selectedSessionPath || null}
+            onChange={(value) => setSelectedSessionPath(value || '')}
+            data={sessionRootOptions.map((root) => ({ value: root.value, label: root.label }))}
+          />
+        )}
         <Textarea
           placeholder="What would you like to do?"
           value={promptText}
@@ -2863,51 +2948,187 @@ export default function HomePage() {
     );
   };
 
-  const EXTENSIONS = [
-    {
-      name: 'Skill Pilot Chrome Extension',
-      dir: 'chrome',
-      description: 'Browser extension for integrating Skill Pilot with Chrome.',
-    },
-    {
-      name: 'Skill Pilot for VS Code (Local)',
-      dir: 'vscode',
-      description: 'VS Code extension for local Skill Pilot integration.',
-    },
-  ];
-
-  const extensionInstall = (ext: typeof EXTENSIONS[number]) => {
-    const prompt = `Build and install the "${ext.name}" extension located at extensions/${ext.dir}. Before proceeding, verify the environment has the required tools installed (e.g. browser or editor availability, build dependencies). If any prerequisites are missing or need user action, prompt the user to confirm or assist.`;
+  const startPromptExtensionSession = (prompt: string) => {
     void router.push({ pathname: '/', query: { new_session: 'true', prompt } });
+  };
+
+  const extensionInstall = (ext: ExtensionItem) => {
+    if (ext.type === 'prompt') {
+      const promptBase = (ext.prompt || '').trim();
+      if (!promptBase) {
+        window.alert(`Extension "${ext.name}" is missing its prompt configuration.`);
+        return;
+      }
+      startPromptExtensionSession(`${promptBase}\n\nExtension path: extensions/${ext.dir}`);
+      return;
+    }
+
+    if (ext.type === 'skill') {
+      const skillName = (ext.skill || '').trim();
+      if (!skillName) {
+        window.alert(`Extension "${ext.name}" is missing its skill configuration.`);
+        return;
+      }
+      startPromptExtensionSession(`Use agent skill ${skillName} to install extension "${ext.name}" in extensions/${ext.dir}.`);
+      return;
+    }
+
+    window.alert(`Unsupported extension type for install: ${ext.type}`);
+  };
+
+  const runScriptExtensionAction = async (ext: ExtensionItem, action: 'install' | 'update' | 'uninstall') => {
+    const actionKey = `${ext.dir}:${action}`;
+    setExtensionActionLoading((prev) => ({ ...prev, [ext.dir]: action }));
+    try {
+      const res = await axios.post(`${API_BASE_URL}/config/extensions/action`, { dir: ext.dir, action });
+      const output = String(res.data?.output || '').trim();
+      setExtensionActionOutput((prev) => ({
+        ...prev,
+        [ext.dir]: output || `${action} completed successfully.`,
+      }));
+      setExtensionsError('');
+      void fetchExtensions();
+    } catch (err: any) {
+      const output = String(err?.response?.data?.output || err?.response?.data?.error || `${action} failed.`);
+      setExtensionActionOutput((prev) => ({ ...prev, [ext.dir]: output }));
+    } finally {
+      setExtensionActionLoading((prev) => {
+        const next = { ...prev };
+        if (next[ext.dir] === action) delete next[ext.dir];
+        return next;
+      });
+    }
   };
 
   const renderExtensionsView = () => (
     <div style={{ padding: 16 }}>
       <Text size="lg" weight={700} mb={12}>Extensions</Text>
-      {EXTENSIONS.map((ext) => (
+      <Text size="xs" color="dimmed" mb={12}>
+        Extension entries are loaded from subfolders under <code>extensions/</code> that contain <code>extension.json5</code>.
+      </Text>
+      {extensionsError && (
+        <Text size="sm" color="red" mb={12}>{extensionsError}</Text>
+      )}
+      {extensionsLoading && (
+        <Text size="sm" color="dimmed" mb={12}>Loading extensions...</Text>
+      )}
+      {!extensionsLoading && extensions.length === 0 && !extensionsError && (
+        <Text size="sm" color="dimmed">No extensions found.</Text>
+      )}
+      {extensions.map((ext) => (
         <div
           key={ext.dir}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             border: `1px solid ${theme.colors.gray[3]}`, borderRadius: 8, padding: '10px 12px', marginBottom: 8,
             background: theme.colorScheme === 'dark' ? theme.colors.dark[7] : '#fff',
+            gap: 12,
           }}
         >
-          <div>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <Text size="sm" weight={600}>{ext.name}</Text>
             <Text size="xs" color="dimmed">{ext.description}</Text>
+            <Text size="xs" color="dimmed">Type: {ext.type}</Text>
+            {ext.version && (
+              <Text size="xs" color="dimmed">Version: {ext.version}</Text>
+            )}
+            {ext.license && (
+              <Text size="xs" color="dimmed">License: {ext.license}</Text>
+            )}
+            {ext.type === 'prompt' && ext.prompt && (
+              <Text size="xs" color="dimmed">Prompt: configured</Text>
+            )}
+            {ext.type === 'skill' && ext.skill && (
+              <Text size="xs" color="dimmed">Skill: {ext.skill}</Text>
+            )}
+            {ext.type === 'script' && (
+              <Text size="xs" color="dimmed">Script: {ext.script || 'extension.py'}</Text>
+            )}
+            {extensionActionOutput[ext.dir] && (
+              <pre style={{
+                fontSize: 11, padding: 10, borderRadius: 6, maxHeight: 180, overflowY: 'auto',
+                background: theme.colorScheme === 'dark' ? theme.colors.dark[8] : theme.colors.gray[1],
+                border: `1px solid ${theme.colors.gray[3]}`, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                marginTop: 8,
+              }}>
+                {extensionActionOutput[ext.dir]}
+              </pre>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={() => extensionInstall(ext)}
-            style={{
-              padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
-              border: `1px solid ${theme.colors.blue[5]}`, background: theme.colors.blue[6], color: '#fff',
-              flexShrink: 0, marginLeft: 12,
-            }}
-          >
-            Install
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            {ext.installed && ext.entrypoint && ext.entrypoint.endsWith('.html') && (
+              <button
+                type="button"
+                onClick={() => {
+                  const staticUrl = `${API_BASE_URL}/config/extensions/${encodeURIComponent(ext.dir)}/static/`;
+                  window.open(staticUrl, '_blank');
+                }}
+                style={{
+                  padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+                  border: `1px solid ${theme.colors.teal[5]}`, background: theme.colors.teal[6], color: '#fff',
+                }}
+              >
+                View
+              </button>
+            )}
+            {ext.type === 'script' ? (
+              ext.installed ? (
+                <>
+                  {(['update', 'uninstall'] as const).map((action) => {
+                    const activeAction = extensionActionLoading[ext.dir];
+                    const busy = activeAction === action;
+                    const anyBusy = Boolean(activeAction);
+                    return (
+                      <button
+                        key={action}
+                        type="button"
+                        onClick={() => void runScriptExtensionAction(ext, action)}
+                        disabled={anyBusy}
+                        style={{
+                          padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8,
+                          cursor: anyBusy ? 'not-allowed' : 'pointer',
+                          border: `1px solid ${theme.colors.blue[5]}`, background: theme.colors.blue[6], color: '#fff',
+                        }}
+                      >
+                        {busy ? `${action[0].toUpperCase()}${action.slice(1)}...` : `${action[0].toUpperCase()}${action.slice(1)}`}
+                      </button>
+                    );
+                  })}
+                </>
+              ) : (
+                (() => {
+                  const activeAction = extensionActionLoading[ext.dir];
+                  const busy = activeAction === 'install';
+                  const anyBusy = Boolean(activeAction);
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => void runScriptExtensionAction(ext, 'install')}
+                      disabled={anyBusy}
+                      style={{
+                        padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8,
+                        cursor: anyBusy ? 'not-allowed' : 'pointer',
+                        border: `1px solid ${theme.colors.blue[5]}`, background: theme.colors.blue[6], color: '#fff',
+                      }}
+                    >
+                      {busy ? 'Installing...' : 'Install'}
+                    </button>
+                  );
+                })()
+              )
+            ) : (
+              <button
+                type="button"
+                onClick={() => extensionInstall(ext)}
+                style={{
+                  padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+                  border: `1px solid ${theme.colors.blue[5]}`, background: theme.colors.blue[6], color: '#fff',
+                }}
+              >
+                Install
+              </button>
+            )}
+          </div>
         </div>
       ))}
     </div>
@@ -3426,6 +3647,8 @@ export default function HomePage() {
 
   const renderMainContent = () => {
     switch (activeView) {
+      case 'explore':
+        return <ExploreView />;
       case 'home':
         return renderHomeView();
       case 'live-terminal':
@@ -3457,7 +3680,7 @@ export default function HomePage() {
       case 'profile':
         return renderProfileView();
       default:
-        return renderHomeView();
+        return <ExploreView />;
     }
   };
 
@@ -3483,7 +3706,13 @@ export default function HomePage() {
         </Navbar>
       }
       header={
-        <Header height={{ base: 60 }} p="md">
+        <Header
+          height={{ base: 60 }}
+          p="md"
+          styles={{
+            root: isDevMode ? { borderBottom: '2px solid #228be6' } : undefined,
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', height: '100%', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <MediaQuery largerThan="sm" styles={{ display: 'none' }}>

@@ -1,0 +1,19 @@
+id: basic-agent-chat
+title: First Agent Chat
+description: A beginner-friendly sample for starting a useful AI agent session.
+thumbnail: null
+video: null
+tutorial: null
+prompt: Show me how to start a productive AI agent task in Skill Pilot and explain
+  the basic workflow.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+skills: []
+tools: []
+files: []
+links: []
+popularity: 92
+level: 1
+rate: 4.8

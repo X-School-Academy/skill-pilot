@@ -1,0 +1,18 @@
+id: website-landing-page
+title: Startup Landing Page
+description: Generate a polished marketing site for a fictional startup.
+thumbnail: null
+video: null
+tutorial: null
+prompt: Create a modern landing page for an AI startup with hero, features, pricing,
+  and contact sections.
+git_tag: null
+in_mode: dev
+use_worktree: true
+skills: []
+tools: []
+files: []
+links: []
+popularity: 95
+level: 2
+rate: 4.9

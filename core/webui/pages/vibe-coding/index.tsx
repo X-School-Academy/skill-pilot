@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { GetStaticPropsContext } from 'next';
@@ -39,7 +39,9 @@ import {
   IconRefresh,
   IconSortAscending,
 } from '@tabler/icons-react';
+import EmbeddedSessionPanel, { WorkflowExecuteStatus } from '../../components/EmbeddedSessionPanel';
 import { apiUrl } from '../../libs/api-base';
+import { AUTO_EXECUTE_OPTION, buildExecuteSelectOptions, isAutoExecuteTarget } from '../../libs/execute-targets';
 import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
 
 const API_BASE_URL = apiUrl('/api');
@@ -109,10 +111,35 @@ const collectDirectoryPaths = (items: FileItem[]): string[] => {
   return paths;
 };
 
+const PAGE_HEADER_BAR_STYLE: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+  padding: '8px 18px',
+  borderBottom: '1px solid #eef2f7',
+  background: '#ffffff',
+  flexShrink: 0,
+  flexWrap: 'wrap',
+};
+
+const PAGE_ACTION_BAR_STYLE: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'flex-end',
+  gap: 8,
+  padding: '8px 16px',
+  borderTop: '1px solid #eef2f7',
+  background: '#f8fafc',
+  flexShrink: 0,
+};
+
+const PAGE_EDITOR_FONT = "'JetBrains Mono', 'Fira Mono', 'Cascadia Code', 'Consolas', monospace";
+
 export default function VibeCodingPage() {
   const router = useRouter();
   const { task } = router.query;
   const theme = useMantineTheme();
+  const isDevMode = process.env.NODE_ENV === 'development';
   const [opened, setOpened] = useState(false);
   const [treeData, setTreeData] = useState<FileItem[]>([]);
   const [selectedKind, setSelectedKind] = useState<FileKind>('text');
@@ -140,15 +167,34 @@ export default function VibeCodingPage() {
   const [executeMode, setExecuteMode] = useState<ExecuteMode>('skill');
   const [skillOptions, setSkillOptions] = useState<string[]>([]);
   const [workflowOptions, setWorkflowOptions] = useState<string[]>([]);
-  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
-  const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(AUTO_EXECUTE_OPTION);
+  const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(AUTO_EXECUTE_OPTION);
   const [pendingAction, setPendingAction] = useState<VibeAction | null>(null);
   const [navbarWidth, setNavbarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
+  const [sessionPanelOpen, setSessionPanelOpen] = useState(false);
+  const [sessionPanelHeight, setSessionPanelHeight] = useState(50);
+  const [isSessionPanelResizing, setIsSessionPanelResizing] = useState(false);
+  const [sessionPromptText, setSessionPromptText] = useState('');
+  const [newSessionWorkflow, setNewSessionWorkflow] = useState<string | null>(null);
+  const [newSessionSandbox, setNewSessionSandbox] = useState(false);
+  const [newSessionAuto, setNewSessionAuto] = useState(false);
+  const [newSessionNetwork, setNewSessionNetwork] = useState(true);
+  const [newSessionNextNodeTrigger, setNewSessionNextNodeTrigger] = useState<'auto_continue' | 'start_by_prompt'>('auto_continue');
+  const [newSessionWorkflowResumeAvailable, setNewSessionWorkflowResumeAvailable] = useState(false);
+  const [newSessionWorkflowResume, setNewSessionWorkflowResume] = useState(false);
+  const [startingSession, setStartingSession] = useState(false);
+  const [liveSessionName, setLiveSessionName] = useState<string | null>(null);
+  const [workflowSessionActive, setWorkflowSessionActive] = useState(false);
+  const [workflowExecuteStatus, setWorkflowExecuteStatus] = useState<WorkflowExecuteStatus | null>(null);
+  const [continuingWorkflow, setContinuingWorkflow] = useState(false);
+  const rightPaneRef = useRef<HTMLDivElement | null>(null);
 
   const currentTask = typeof task === 'string' ? task : '';
   const currentProject = currentTask.includes('/') ? currentTask.split('/')[0] : '';
   const currentFileName = currentTask.split('/').pop() || '';
+  const skillSelectOptions = useMemo(() => buildExecuteSelectOptions(skillOptions), [skillOptions]);
+  const workflowSelectOptions = useMemo(() => buildExecuteSelectOptions(workflowOptions), [workflowOptions]);
 
   const startResizing = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -173,6 +219,26 @@ export default function VibeCodingPage() {
       window.removeEventListener('mouseup', stopResizing);
     };
   }, [isResizing]);
+
+  useEffect(() => {
+    if (!isSessionPanelResizing) return undefined;
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!rightPaneRef.current) return;
+      const bounds = rightPaneRef.current.getBoundingClientRect();
+      if (bounds.height <= 0) return;
+      const offsetY = event.clientY - bounds.top;
+      const nextTopPercent = (offsetY / bounds.height) * 100;
+      const nextBottomPercent = Math.max(28, Math.min(72, 100 - nextTopPercent));
+      setSessionPanelHeight(nextBottomPercent);
+    };
+    const handleMouseUp = () => setIsSessionPanelResizing(false);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isSessionPanelResizing]);
 
   useEffect(() => {
     if (!currentTask) return;
@@ -402,8 +468,8 @@ export default function VibeCodingPage() {
   const openExecuteModal = (action: VibeAction) => {
     setPendingAction(action);
     setExecuteMode('skill');
-    setSelectedSkill(action.defaultSkill);
-    setSelectedWorkflow(null);
+    setSelectedSkill(AUTO_EXECUTE_OPTION);
+    setSelectedWorkflow(AUTO_EXECUTE_OPTION);
     setExecuteOpened(true);
   };
 
@@ -411,30 +477,114 @@ export default function VibeCodingPage() {
     if (!currentTask || !pendingAction) return;
     const target = executeMode === 'skill' ? selectedSkill : selectedWorkflow;
     if (!target) return;
+    const shouldRunWorkflow = executeMode === 'workflow' && !isAutoExecuteTarget(target);
 
     const saved = await saveCurrentContent();
     if (!saved) return;
 
-    const workspacePath = currentProject ? vibeProjectPath(currentProject) : 'workspace/vibe-coding';
     const projectLabel = currentProject ? `\nVibe coding project name: ${currentProject}` : '';
     const prompt = executeMode === 'skill'
-      ? `Use agent skill ${target} ${pendingAction.skillPromptSuffix}${projectLabel}`
-      : `Execute workflow ${workflowProjectPath(target)}. ${pendingAction.skillPromptSuffix.charAt(0).toUpperCase()}${pendingAction.skillPromptSuffix.slice(1)}\n\nYour Workspace path: ${workspacePath}${projectLabel}\n\nIf you create any intermediate files, save them inside the project workspace above.`;
+      ? (isAutoExecuteTarget(target)
+          ? `Find and use the correct agent skill ${pendingAction.skillPromptSuffix}${projectLabel}`
+          : `Use agent skill ${target} ${pendingAction.skillPromptSuffix}${projectLabel}`)
+      : (shouldRunWorkflow
+          ? `Execute workflow ${workflowProjectPath(target)}. ${pendingAction.skillPromptSuffix.charAt(0).toUpperCase()}${pendingAction.skillPromptSuffix.slice(1)}\n\nYour Workspace path: ${currentProject ? vibeProjectPath(currentProject) : 'workspace/vibe-coding'}${projectLabel}\n\nIf you create any intermediate files, save them inside the project workspace above.`
+          : `Find and use the correct workflow ${pendingAction.skillPromptSuffix}${projectLabel}`);
 
     setExecuteOpened(false);
-    if (executeMode === 'workflow') {
-      void router.push(
-        `/?new_session=true&prompt=${encodeURIComponent(prompt)}&workflow=${encodeURIComponent(`${target}.json`)}&next_node_trigger=${encodeURIComponent('auto_continue')}&resume=false&resume_available=false`,
-      );
-      return;
+    setSessionPromptText(prompt);
+    setNewSessionWorkflow(shouldRunWorkflow ? `${target}.json` : null);
+    setNewSessionNextNodeTrigger('auto_continue');
+    setNewSessionWorkflowResumeAvailable(false);
+    setNewSessionWorkflowResume(false);
+    setLiveSessionName(null);
+    setWorkflowSessionActive(false);
+    setWorkflowExecuteStatus(null);
+    setSessionPanelHeight(50);
+    setSessionPanelOpen(true);
+  };
+
+  const closeSessionPanel = () => {
+    setSessionPanelOpen(false);
+    setIsSessionPanelResizing(false);
+    setLiveSessionName(null);
+    setWorkflowSessionActive(false);
+    setWorkflowExecuteStatus(null);
+    setStartingSession(false);
+    setNewSessionWorkflow(null);
+    setNewSessionWorkflowResumeAvailable(false);
+    setNewSessionWorkflowResume(false);
+  };
+
+  const handleStartSession = async (path?: string) => {
+    const trimmedPrompt = sessionPromptText.trim();
+    if (!trimmedPrompt || startingSession) return;
+    const provider = llmProvider || 'gemini';
+    setStartingSession(true);
+    try {
+      const endpoint = newSessionWorkflow ? `${API_BASE_URL}/workflows/execute` : `${API_BASE_URL}/terminal/tmux/create`;
+      const payload = newSessionWorkflow
+        ? {
+            workflow: newSessionWorkflow,
+            prompt: trimmedPrompt,
+            path: path || undefined,
+            sandbox: newSessionSandbox,
+            auto: newSessionAuto,
+            network: newSessionNetwork,
+            next_node_trigger: newSessionNextNodeTrigger,
+            resume: newSessionWorkflowResume,
+          }
+        : {
+            provider_id: provider,
+            prompt: trimmedPrompt,
+            path: path || undefined,
+            sandbox: newSessionSandbox,
+            auto: newSessionAuto,
+            network: newSessionNetwork,
+          };
+      const res = await axios.post(endpoint, payload);
+      const sessionName: string | undefined = res.data?.session?.name;
+      if (sessionName) {
+        setLiveSessionName(sessionName);
+        if (newSessionWorkflow) {
+          setWorkflowSessionActive(true);
+          setWorkflowExecuteStatus(null);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to start vibe coding session:', err);
+    } finally {
+      setStartingSession(false);
     }
-    void router.push(`/?new_session=true&prompt=${encodeURIComponent(prompt)}`);
+  };
+
+  const handleWorkflowContinue = async () => {
+    if (continuingWorkflow) return;
+    setContinuingWorkflow(true);
+    try {
+      await axios.post(`${API_BASE_URL}/workflows/execute/continue`, {}, { withCredentials: true });
+      const res = await axios.get(`${API_BASE_URL}/workflows/execute/status`, { withCredentials: true });
+      setWorkflowExecuteStatus(res.data as WorkflowExecuteStatus);
+    } catch (err) {
+      console.error('Failed to continue workflow:', err);
+    } finally {
+      setContinuingWorkflow(false);
+    }
   };
 
   useEffect(() => {
     fetchTree();
     fetchLlmProviders();
     fetchExecuteOptions();
+    void axios.get(`${API_BASE_URL}/config/settings`).then((res) => {
+      const security = res.data?.security?.newSession;
+      if (!security) return;
+      setNewSessionSandbox(Boolean(security.sandbox));
+      setNewSessionAuto(Boolean(security.auto));
+      setNewSessionNetwork(security.network !== false);
+    }).catch((err) => {
+      console.error('Failed to fetch vibe coding session settings:', err);
+    });
   }, []);
 
   useEffect(() => {
@@ -444,6 +594,27 @@ export default function VibeCodingPage() {
       fetchLatest();
     }
   }, [currentTask, router.isReady]);
+
+  useEffect(() => {
+    if (!workflowSessionActive) return undefined;
+
+    const poll = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/workflows/execute/status`, { withCredentials: true });
+        const status = res.data as WorkflowExecuteStatus;
+        setWorkflowExecuteStatus(status);
+        if (status.status === 'finished' || status.status === 'error' || status.status === 'terminated') {
+          setWorkflowSessionActive(false);
+        }
+      } catch {
+        // Ignore transient polling failures while the session is running.
+      }
+    };
+
+    void poll();
+    const intervalId = window.setInterval(() => void poll(), 3000);
+    return () => window.clearInterval(intervalId);
+  }, [workflowSessionActive]);
 
   const sortItems = (items: FileItem[]): FileItem[] => {
     const sorted = [...items].sort((a, b) => {
@@ -599,22 +770,26 @@ export default function VibeCodingPage() {
   const mediaUrl = currentTask ? `${API_BASE_URL}/vibe-coding/file?path=${encodeURIComponent(currentTask)}` : '';
   const isMarkdownEditor = selectedKind === 'markdown';
   const isTextEditor = selectedKind === 'text';
-
-  const renderActionButtons = () => {
-    if (fileActions.length === 0) return null;
+  const renderHeaderActions = () => {
+    if (!currentTask) return null;
     return (
-      <Group spacing="xs" mb="md" noWrap={false}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flex: '0 0 auto', flexWrap: 'wrap' }}>
+        {isMarkdownEditor && (
+          <>
+            <Button size="xs" variant={markdownView === 'editor' ? 'filled' : 'default'} onClick={() => setMarkdownView('editor')}>
+              Edit
+            </Button>
+            <Button size="xs" variant={markdownView === 'preview' ? 'filled' : 'default'} onClick={() => setMarkdownView('preview')}>
+              Preview
+            </Button>
+          </>
+        )}
         {fileActions.map((action) => (
-          <Button
-            key={action.label}
-            size="xs"
-            variant="default"
-            onClick={() => openExecuteModal(action)}
-          >
+          <Button key={action.label} size="xs" variant="default" onClick={() => openExecuteModal(action)}>
             {action.label}
           </Button>
         ))}
-      </Group>
+      </div>
     );
   };
 
@@ -673,94 +848,94 @@ export default function VibeCodingPage() {
 
     if (selectedKind === 'image' && currentTask) {
       return (
-        <>
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 480 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 16, overflow: 'auto' }}>
             <img src={mediaUrl} alt={currentFileName} style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 8 }} />
           </div>
-          <Group position="right" mt="md">
-            <Button color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
-          </Group>
-        </>
+          <div style={PAGE_ACTION_BAR_STYLE}>
+            <Button size="xs" color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
+          </div>
+        </div>
       );
     }
 
     if (selectedKind === 'audio' && currentTask) {
       return (
-        <>
-          <div style={{ paddingTop: 40 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, padding: 24 }}>
             <audio controls src={mediaUrl} style={{ width: '100%' }}>
               Your browser does not support audio playback.
             </audio>
           </div>
-          <Group position="right" mt="md">
-            <Button color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
-          </Group>
-        </>
+          <div style={PAGE_ACTION_BAR_STYLE}>
+            <Button size="xs" color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
+          </div>
+        </div>
       );
     }
 
     if (selectedKind === 'video' && currentTask) {
       return (
-        <>
-          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', justifyContent: 'center', padding: 16 }}>
             <video controls src={mediaUrl} style={{ width: '100%', maxHeight: '70vh', borderRadius: 8 }}>
               Your browser does not support video playback.
             </video>
           </div>
-          <Group position="right" mt="md">
-            <Button color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
-          </Group>
-        </>
+          <div style={PAGE_ACTION_BAR_STYLE}>
+            <Button size="xs" color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
+          </div>
+        </div>
       );
     }
 
     if (isMarkdownEditor) {
       return (
-        <div>
-          <Group spacing="xs" mb="md" noWrap={false}>
-            <Button size="xs" variant={markdownView === 'editor' ? 'filled' : 'default'} onClick={() => setMarkdownView('editor')}>
-              Edit
-            </Button>
-            <Button size="xs" variant={markdownView === 'preview' ? 'filled' : 'default'} onClick={() => setMarkdownView('preview')}>
-              Preview
-            </Button>
-            {fileActions.map((action) => (
-              <Button
-                key={action.label}
-                size="xs"
-                variant="default"
-                onClick={() => openExecuteModal(action)}
-              >
-                {action.label}
-              </Button>
-            ))}
-          </Group>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           {markdownView === 'editor' ? (
             <>
-              <Textarea
-                value={editorContent}
-                onChange={(e) => {
-                  setEditorContent(e.currentTarget.value);
-                  if (editorError) setEditorError('');
-                  if (notice) setNotice('');
-                }}
-                minRows={24}
-                autosize
-                styles={{ input: { fontFamily: 'Menlo, Monaco, Consolas, monospace' } }}
-              />
-              <Group position="right" mt="md">
-                <Button onClick={() => void saveCurrentContent()} loading={editorSaving}>Save</Button>
-                <Button color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
-              </Group>
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <Textarea
+                  value={editorContent}
+                  onChange={(e) => {
+                    setEditorContent(e.currentTarget.value);
+                    if (editorError) setEditorError('');
+                    if (notice) setNotice('');
+                  }}
+                  autosize={false}
+                  minRows={1}
+                  styles={{
+                    root: { height: '100%' },
+                    wrapper: { height: '100%' },
+                    input: {
+                      height: '100%',
+                      minHeight: '100%',
+                      resize: 'none',
+                      border: 'none',
+                      borderRadius: 0,
+                      padding: '18px 20px',
+                      fontFamily: PAGE_EDITOR_FONT,
+                      fontSize: 13,
+                      lineHeight: 1.65,
+                    },
+                  }}
+                />
+              </div>
+              <div style={PAGE_ACTION_BAR_STYLE}>
+                <Button size="xs" onClick={() => void saveCurrentContent()} loading={editorSaving}>Save</Button>
+                <Button size="xs" color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
+              </div>
             </>
           ) : (
             <>
-              <div className="doc-markdown">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+              <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '20px 24px' }}>
+                <div className="doc-markdown" style={{ maxWidth: 'none', margin: 0, minHeight: '100%', padding: '18px 20px 24px', border: 'none', borderRadius: 0, boxShadow: 'none', background: '#ffffff' }}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+                </div>
               </div>
-              <Group position="right" mt="md">
-                <Button color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
-              </Group>
+              <div style={PAGE_ACTION_BAR_STYLE}>
+                <Button size="xs" color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
+              </div>
             </>
           )}
         </div>
@@ -769,24 +944,39 @@ export default function VibeCodingPage() {
 
     if (isTextEditor) {
       return (
-        <>
-          {renderActionButtons()}
-          <Textarea
-            value={editorContent}
-            onChange={(e) => {
-              setEditorContent(e.currentTarget.value);
-              if (editorError) setEditorError('');
-              if (notice) setNotice('');
-            }}
-            minRows={24}
-            autosize
-            styles={{ input: { fontFamily: 'Menlo, Monaco, Consolas, monospace' } }}
-          />
-          <Group position="right" mt="md">
-            <Button onClick={() => void saveCurrentContent()} loading={editorSaving}>Save</Button>
-            <Button color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
-          </Group>
-        </>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <Textarea
+              value={editorContent}
+              onChange={(e) => {
+                setEditorContent(e.currentTarget.value);
+                if (editorError) setEditorError('');
+                if (notice) setNotice('');
+              }}
+              autosize={false}
+              minRows={1}
+              styles={{
+                root: { height: '100%' },
+                wrapper: { height: '100%' },
+                input: {
+                  height: '100%',
+                  minHeight: '100%',
+                  resize: 'none',
+                  border: 'none',
+                  borderRadius: 0,
+                  padding: '18px 20px',
+                  fontFamily: PAGE_EDITOR_FONT,
+                  fontSize: 13,
+                  lineHeight: 1.65,
+                },
+              }}
+            />
+          </div>
+          <div style={PAGE_ACTION_BAR_STYLE}>
+            <Button size="xs" onClick={() => void saveCurrentContent()} loading={editorSaving}>Save</Button>
+            <Button size="xs" color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
+          </div>
+        </div>
       );
     }
 
@@ -803,12 +993,19 @@ export default function VibeCodingPage() {
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          height: '100vh',
+          height: 'calc(100vh - 60px)',
+          minHeight: 0,
         },
       }}
       navbarOffsetBreakpoint="sm"
       header={
-        <Header height={{ base: 60 }} p="md">
+        <Header
+          height={{ base: 60 }}
+          p="md"
+          styles={{
+            root: isDevMode ? { borderBottom: '2px solid #228be6' } : undefined,
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', height: '100%', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <MediaQuery largerThan="sm" styles={{ display: 'none' }}>
@@ -941,7 +1138,7 @@ export default function VibeCodingPage() {
               placeholder="Select a skill"
               value={selectedSkill}
               onChange={setSelectedSkill}
-              data={skillOptions.map((item) => ({ value: item, label: item }))}
+              data={skillSelectOptions}
               searchable
               clearable={false}
             />
@@ -951,9 +1148,9 @@ export default function VibeCodingPage() {
               placeholder="Select a workflow"
               value={selectedWorkflow}
               onChange={setSelectedWorkflow}
-              data={workflowOptions.map((item) => ({ value: item, label: item }))}
+              data={workflowSelectOptions}
               searchable
-              clearable
+              clearable={false}
             />
           )}
 
@@ -973,61 +1170,71 @@ export default function VibeCodingPage() {
         </Group>
       </Modal>
 
-      <div className="shrink-0 border-b border-[#d6def8] bg-white/60 px-6 py-2">
-        <button
-          type="button"
-          onClick={() => { void router.push('/'); }}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-[#5e6b9d] hover:bg-[#eef2ff] hover:text-[#1a2455] transition"
-          title="Back to Home"
-        >
-          <IconArrowLeft size="1rem" />
-          <span>Back to Home</span>
-        </button>
-      </div>
-
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <Navbar
-          p="md"
-          hiddenBreakpoint="sm"
-          hidden={!opened}
-          width={{ sm: navbarWidth }}
-          style={{
-            position: 'relative',
-            transition: isResizing ? 'none' : 'width 200ms ease',
-            height: '100%',
+        <MediaQuery
+          smallerThan="sm"
+          styles={{
+            display: opened ? 'flex' : 'none',
+            position: 'absolute',
+            inset: '0 auto 0 0',
+            zIndex: 30,
           }}
         >
-          <Navbar.Section mb="md">
-            <Group position="apart" align="center">
-              <Text weight={700} size="lg">Projects</Text>
-              <Group spacing={4}>
-                <Tooltip label="New">
-                  <ActionIcon variant="subtle" onClick={openProjectModal}>
-                    <IconPlus size="1.1rem" />
+          <aside
+            style={{
+              width: navbarWidth,
+              flexShrink: 0,
+              minHeight: 0,
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              background: '#ffffff',
+              borderRight: '1px solid #e9ecef',
+              position: 'relative',
+              transition: isResizing ? 'none' : 'width 200ms ease',
+            }}
+          >
+            <div style={{ padding: '12px 14px', minHeight: 46, borderBottom: '1px solid #eef2f7', flexShrink: 0 }}>
+              <Group position="apart" align="center">
+                <Group spacing={6} align="center">
+                  <ActionIcon
+                    variant="subtle"
+                    onClick={() => { void router.push('/'); }}
+                    title="Back to Home"
+                  >
+                    <IconArrowLeft size="1rem" />
                   </ActionIcon>
-                </Tooltip>
-                <Tooltip label="Refresh">
-                  <ActionIcon variant="subtle" onClick={() => void fetchTree()}>
-                    <IconRefresh size="1.1rem" />
-                  </ActionIcon>
-                </Tooltip>
-                <Tooltip label={sortByTime ? 'Sorted by Time' : 'Sorted Alpha'}>
-                  <ActionIcon variant="subtle" onClick={() => setSortByTime(!sortByTime)}>
-                    {sortByTime ? <IconClock size="1.1rem" /> : <IconSortAscending size="1.1rem" />}
-                  </ActionIcon>
-                </Tooltip>
+                  <Text weight={700} size="lg">Projects</Text>
+                </Group>
+                <Group spacing={4}>
+                  <Tooltip label="New">
+                    <ActionIcon variant="subtle" onClick={openProjectModal}>
+                      <IconPlus size="1.1rem" />
+                    </ActionIcon>
+                  </Tooltip>
+                  <Tooltip label="Refresh">
+                    <ActionIcon variant="subtle" onClick={() => void fetchTree()}>
+                      <IconRefresh size="1.1rem" />
+                    </ActionIcon>
+                  </Tooltip>
+                  <Tooltip label={sortByTime ? 'Sorted by Time' : 'Sorted Alpha'}>
+                    <ActionIcon variant="subtle" onClick={() => setSortByTime(!sortByTime)}>
+                      {sortByTime ? <IconClock size="1.1rem" /> : <IconSortAscending size="1.1rem" />}
+                    </ActionIcon>
+                  </Tooltip>
+                </Group>
               </Group>
-            </Group>
-          </Navbar.Section>
-          <Navbar.Section grow component={ScrollArea} mx="-md" px="md">
-            {treeLoading && treeData.length === 0 ? (
-              <Box py="xl" sx={{ textAlign: 'center' }}><Text size="sm" color="dimmed">Loading...</Text></Box>
-            ) : (
-              renderTree(sortedTreeData)
-            )}
-          </Navbar.Section>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <ScrollArea style={{ height: '100%' }} px="md" py="sm">
+                {treeLoading && treeData.length === 0 ? (
+                  <Box py="xl" sx={{ textAlign: 'center' }}><Text size="sm" color="dimmed">Loading...</Text></Box>
+                ) : (
+                  renderTree(sortedTreeData)
+                )}
+              </ScrollArea>
+            </div>
 
-          <MediaQuery smallerThan="sm" styles={{ display: 'none' }}>
             <div
               onMouseDown={startResizing}
               style={{
@@ -1048,26 +1255,79 @@ export default function VibeCodingPage() {
                 if (!isResizing) e.currentTarget.style.backgroundColor = 'transparent';
               }}
             />
-          </MediaQuery>
-        </Navbar>
+          </aside>
+        </MediaQuery>
 
         <main
+          ref={rightPaneRef}
           style={{
             flex: 1,
-            display: 'flex',
-            justifyContent: 'center',
-            overflowY: 'auto',
-            padding: '20px',
+            minWidth: 0,
+            display: 'grid',
+            gridTemplateRows: sessionPanelOpen ? `${100 - sessionPanelHeight}fr 12px ${sessionPanelHeight}fr` : '1fr',
+            overflow: 'hidden',
           }}
         >
-          <div className="w-full max-w-4xl bg-white p-6 rounded-lg shadow-sm relative" style={{ height: 'fit-content', minHeight: '100%', marginTop: 24 }}>
-            <LoadingOverlay visible={loading} overlayBlur={2} />
-            {currentFileName ? <h1 className="mb-4">{currentFileName}</h1> : null}
-            {currentProject ? <Text size="sm" color="dimmed" mb="sm">Project: {currentProject}</Text> : null}
-            {editorError && <Text color="red" size="sm" mb="sm">{editorError}</Text>}
-            {notice && !editorError && <Text color="green" size="sm" mb="sm">{notice}</Text>}
-            {renderMainContent()}
+          <div style={{ minHeight: 0, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#ffffff', borderLeft: '1px solid #d6def8' }}>
+              <div style={PAGE_HEADER_BAR_STYLE}>
+                <div style={{ fontSize: 12, color: '#64748b', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 240px' }}>
+                  {currentTask || 'Select a project file from the sidebar'}
+                </div>
+                {renderHeaderActions()}
+              </div>
+              {(editorError || notice) && (
+                <div style={{ flexShrink: 0 }}>
+                  {editorError && <Text color="red" size="sm" px={18} py={10}>{editorError}</Text>}
+                  {!editorError && notice && <Text color="green" size="sm" px={18} py={10}>{notice}</Text>}
+                </div>
+              )}
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                <LoadingOverlay visible={loading} overlayBlur={2} />
+                {renderMainContent()}
+              </div>
+            </div>
           </div>
+          {sessionPanelOpen && (
+            <>
+              <div
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  setIsSessionPanelResizing(true);
+                }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'row-resize', color: '#93a4cc' }}
+              >
+                <span style={{ fontSize: 16, lineHeight: 1 }}>⋯</span>
+              </div>
+              <div style={{ minHeight: 0, overflow: 'hidden' }}>
+                <EmbeddedSessionPanel
+                  currentLabel={currentTask || 'Vibe coding session'}
+                  liveSessionName={liveSessionName}
+                  sessionPromptText={sessionPromptText}
+                  setSessionPromptText={setSessionPromptText}
+                  newSessionWorkflow={newSessionWorkflow}
+                  newSessionSandbox={newSessionSandbox}
+                  setNewSessionSandbox={setNewSessionSandbox}
+                  newSessionAuto={newSessionAuto}
+                  setNewSessionAuto={setNewSessionAuto}
+                  newSessionNetwork={newSessionNetwork}
+                  setNewSessionNetwork={setNewSessionNetwork}
+                  newSessionNextNodeTrigger={newSessionNextNodeTrigger}
+                  setNewSessionNextNodeTrigger={setNewSessionNextNodeTrigger}
+                  newSessionWorkflowResumeAvailable={newSessionWorkflowResumeAvailable}
+                  newSessionWorkflowResume={newSessionWorkflowResume}
+                  setNewSessionWorkflowResume={setNewSessionWorkflowResume}
+                  startingSession={startingSession}
+                  onStart={(path) => void handleStartSession(path)}
+                  onClose={closeSessionPanel}
+                  workflowExecuteStatus={workflowExecuteStatus}
+                  workflowSessionActive={workflowSessionActive}
+                  continuingWorkflow={continuingWorkflow}
+                  onContinueWorkflow={() => void handleWorkflowContinue()}
+                />
+              </div>
+            </>
+          )}
         </main>
       </div>
     </AppShell>

@@ -660,6 +660,24 @@ class Bridge:
             source = str(source_raw).strip() if isinstance(source_raw, str) else "cli"
             result = request_workflow_continue_signal(source=source or "cli")
             return {"status": "ok", "result": result}
+        if operation == "start_workflow_terminal":
+            from routes import start_workflow_execute_in_session  # lazy import to avoid module cycle at startup
+
+            workflow = str(payload.get("workflow") or "").strip()
+            prompt = str(payload.get("prompt") or "").strip()
+            session_name = str(payload.get("tmux_session") or "").strip()
+            next_node_trigger = str(payload.get("next_node_trigger") or "start_by_prompt").strip()
+            result = start_workflow_execute_in_session(
+                workflow=workflow,
+                workflow_prompt=prompt,
+                session_name=session_name,
+                resume=bool(payload.get("resume")),
+                sandbox=payload.get("sandbox"),
+                auto=payload.get("auto"),
+                network=payload.get("network"),
+                next_node_trigger=next_node_trigger,
+            )
+            return {"status": "ok", "result": result}
         if operation == "safe_dotenv_key_names":
             return {"status": "ok", "result": {"keys": loaded_env_key_names()}}
         if operation == "safe_dotenv_set_key_values":
