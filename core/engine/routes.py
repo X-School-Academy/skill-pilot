@@ -1,1538 +1,27 @@
-import asyncio
-import base64
-import fcntl
-import ipaddress
-import json
-import mimetypes
-import os
-import pwd
-import pty
-import re
-import secrets
-import shlex
-import shutil
-import socket
-import signal
-import struct
-import subprocess
-import sys
-import termios
-import threading
-import time
-import urllib.parse
-import urllib.request
-from uuid import uuid4
-from urllib.parse import quote
-from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List
+from routes_shared import *
 
-from fastapi import APIRouter, File, Form, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-
-from apscheduler.triggers.cron import CronTrigger
-
-from code_executor import execute_code_impl
-from course_utils import build_tree, find_latest_course, read_course_meta, safe_course_path, write_course_meta
-from dev_swarm.router import router as dev_swarm_router
-import json5
-from workflow_editor_utils import (
-    build_workflow_tree,
-    find_latest_workflow,
-    is_valid_workflow_filename,
-    normalize_workflow_filename,
-    safe_workflow_path,
-    validate_workflow_doc,
-)
-from mcp_servers.mcp_to_skills.workflow_execution import (
-    build_node_prompt,
-    create_run_output_dir,
-    load_workflow_graph,
-    node_name,
-    node_output_path,
-    parse_instruction_file_path,
-    parse_reference_file_paths,
-    parse_task_workspace,
-    workflow_task_output_dir,
+import routes_config  # noqa: F401
+import routes_integrations  # noqa: F401
+import routes_file_manager  # noqa: F401
+from routes_file_manager import (
+    files_copy,
+    files_delete,
+    files_download,
+    files_events,
+    files_info,
+    files_list,
+    files_mkdir,
+    files_move,
+    files_read,
+    files_rename,
+    files_upload,
+    files_write,
 )
 
-from llm_service import (
-    _resolve_provider_env,
-    build_chat_system_message,
-    build_code_system_message,
-    build_llm_command,
-    build_terminal_command,
-    build_translate_system_message,
-    format_command_for_log,
-    get_default_doctor_provider_id,
-    get_default_llm_provider_id,
-    get_provider,
-    llm_stream,
-    load_llm_providers,
-    load_provider_config,
-    stop_client,
-)
-from socket_service import emit_to_vscode_clients
-from settings import (
-    COURSES_DIR,
-    FEATURES_DIR,
-    PROJECT_DIR,
-    RESEARCH_DIR,
-    SKILL_PILOT_DEVELOPMENT_DIR,
-    TASKS_DIR,
-    VIBE_CODING_DIR,
-    WORKFLOWS_DIR,
-    LOCAL_DEV_TOKEN,
-    TERMINAL_AUTO_IMAGE_URL_PREVIEW,
-    get_auth_token,
-    get_discord_bot_token,
-    get_only_allow_https,
-    get_live_avatar_server_url,
-    get_turn_server_urls,
-    get_turn_server_username,
-    get_turn_server_password,
-    logger,
-)
-from safe_dotenv import safe_env
-from session_agent_store import set_session_agent_meta
-from workflow import CoursePlannerWorkflow, VideoCreatorWorkflow
-
-router = APIRouter()
-router.include_router(dev_swarm_router)
-COURSE_PLANNER = CoursePlannerWorkflow()
-VIDEO_CREATOR = VideoCreatorWorkflow()
-_IMAGE_URL_PATTERN = re.compile(
-    rb"https?://[^\s<>'\"`]+?\.(?:png|jpe?g|gif)(?:\?[^\s<>'\"`]*)?",
-    re.IGNORECASE,
-)
-_IMAGE_FETCH_TIMEOUT_SECONDS = 3.0
-_IMAGE_FETCH_MAX_BYTES = 5 * 1024 * 1024
-TMUX_SESSION_PREFIX = "webui-live-"
-WEB_SHELL_TMUX_SESSION_PREFIX = "webui-live-sh-"
-NATIVE_TMUX_SESSION_PREFIX = "native-terminal-"
-WORKFLOW_EXECUTE_SESSION_NAME = "sp-workflow-execute"
-PROTECTED_TMUX_SESSION_PREFIXES = ("sp-engine-", "sp-webui-")
-TMUX_SESSION_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
-_last_heartbeat_time: float = time.time()
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_MCP_CONFIG_PATH = _REPO_ROOT / "config" / "mcp.json5"
-_MCP_SERVER_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
-_MCP_SKILLS_DIR = _REPO_ROOT / "core" / "skills" / "mcp"
-_SYSTEM_SKILLS_DIR = _REPO_ROOT / "core" / "skills" / "system"
-_DISABLED_SKILLS_PATH = _REPO_ROOT / "config" / "disabled_skills.json5"
-_SKILL_CATEGORIES: List[tuple[str, str, Path]] = [
-    ("system", "System", _REPO_ROOT / "core" / "skills" / "system"),
-    ("dev-swarm", "Dev Swarm", _REPO_ROOT / "dev-swarm" / "skills"),
-    ("mcp", "MCP", _REPO_ROOT / "core" / "skills" / "mcp"),
-    ("third-party", "Third Party", _REPO_ROOT / "core" / "skills" / "third-party"),
-    ("user", "User", _REPO_ROOT / "core" / "skills" / "user"),
-]
-_HEARTBEAT_TIMEOUT_SECONDS = 10.0
-_heartbeat_watcher_started = False
-_last_native_cleanup_time: float = 0.0
-_NATIVE_STALE_CLEANUP_INTERVAL_SECONDS = 60.0
-_SETTINGS_PATH = _REPO_ROOT / "config" / "settings.json5"
-_AI_PROVIDERS_PATH = _REPO_ROOT / "config" / "ai_providers.json5"
-_CONFIG_ENV_PATH = _REPO_ROOT / "config" / ".env"
-_AUTH_COOKIE_NAME = "auth_token"
-_AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
-_WORKFLOW_EXECUTE_LOCK = threading.Lock()
-_WORKFLOW_EXECUTE_STOP = threading.Event()
-_WORKFLOW_EXECUTE_CONTINUE = threading.Event()
-_WORKFLOW_EXECUTE_STATE: Dict[str, Any] = {
-    "thread": None,
-    "token": "",
-    "status": "idle",
-    "session_name": WORKFLOW_EXECUTE_SESSION_NAME,
-    "workflow": "",
-    "run_id": "",
-    "output_root": "",
-    "error": "",
-    "started_at": 0.0,
-    "finished_at": 0.0,
-    "next_node_trigger": "auto_continue",
-    "waiting_for_continue": False,
-    "current_node_id": 0,
-    "current_node_name": "",
-    "current_output_file": "",
-    "current_provider_id": "",
-    "current_provider_bin": "",
-    "has_remaining_nodes": False,
-}
-
-_DEFAULT_SETTINGS: Dict[str, Any] = {
-    "security": {
-        "schedules": {"sandbox": True, "auto": True, "network": True},
-        "newSession": {"sandbox": False, "auto": False, "network": True},
-        "remoteBot": {"sandbox": True, "auto": True, "network": False},
-        "devSwarm": {"sandbox": True, "auto": True, "network": True},
-        "skillAgent": {},
-    },
-}
-
-
-def _read_settings() -> Dict[str, Any]:
-    if not _SETTINGS_PATH.is_file():
-        return dict(_DEFAULT_SETTINGS)
-    try:
-        data = json5.loads(_SETTINGS_PATH.read_text(encoding="utf-8"))
-        if isinstance(data, dict):
-            merged = dict(_DEFAULT_SETTINGS)
-            merged.update(data)
-            merged_security = dict(_DEFAULT_SETTINGS.get("security", {}))
-            data_security = data.get("security")
-            if isinstance(data_security, dict):
-                for section, defaults in _DEFAULT_SETTINGS.get("security", {}).items():
-                    candidate = data_security.get(section)
-                    if isinstance(defaults, dict):
-                        merged_section = dict(defaults)
-                        if isinstance(candidate, dict):
-                            merged_section.update(candidate)
-                        merged_security[section] = merged_section
-                    elif candidate is not None:
-                        merged_security[section] = candidate
-            merged["security"] = merged_security
-            return merged
-    except Exception as exc:
-        logger.warning("Failed to read settings: %s", exc)
-    return dict(_DEFAULT_SETTINGS)
-
-
-def _write_settings(data: Dict[str, Any]) -> None:
-    _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _SETTINGS_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-
-
-def _record_tmux_agent_meta(
-    session_name: str,
-    provider: Dict[str, Any],
-    sandbox: Any,
-    auto: Any,
-    network: Any,
-) -> None:
-    set_session_agent_meta(session_name, {
-        "provider_id": str(provider.get("id") or "").strip(),
-        "provider_bin": str(provider.get("bin") or "").strip(),
-        "sandbox": _bool_with_default(sandbox, False),
-        "auto": _bool_with_default(auto, False),
-        "network": _bool_with_default(network, True),
-        "updated_at": int(time.time()),
-    })
-
-
-def _bool_with_default(value: Any, default: bool) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in {"true", "1", "yes", "on"}:
-            return True
-        if lowered in {"false", "0", "no", "off"}:
-            return False
-    return bool(value)
-
-
-def _sanitize_single_line_secret(value: str) -> str:
-    return re.sub(r"[\r\n]+", "", value).strip()
-
-
-def _is_authorized_request(request: Request) -> bool:
-    cookie_token = _sanitize_single_line_secret(request.cookies.get(_AUTH_COOKIE_NAME, ""))
-    expected = _sanitize_single_line_secret(get_auth_token())
-    if not cookie_token or not expected:
-        return False
-    return secrets.compare_digest(cookie_token, expected)
-
-
-def _auth_required_response() -> JSONResponse:
-    return JSONResponse(status_code=401, content={"error": "auth required"})
-
-
-def _is_public_url(url: str) -> bool:
-    if not url.startswith(("http://", "https://")):
-        return False
-    try:
-        host = urllib.parse.urlparse(url).hostname
-    except ValueError:
-        return False
-    if not host:
-        return False
-    try:
-        addresses = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
-    except OSError:
-        return False
-    for item in addresses:
-        ip_text = item[4][0]
-        try:
-            ip = ipaddress.ip_address(ip_text)
-        except ValueError:
-            return False
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_multicast
-            or ip.is_reserved
-            or ip.is_unspecified
-        ):
-            return False
-    return True
-
-
-def _build_iip_sequence_for_url(url: str) -> bytes | None:
-    if not _is_public_url(url):
-        return None
-    req = urllib.request.Request(url, headers={"User-Agent": "JuniorIT-Terminal/1.0"})
-    try:
-        with urllib.request.urlopen(req, timeout=_IMAGE_FETCH_TIMEOUT_SECONDS) as resp:
-            if resp.status < 200 or resp.status >= 300:
-                return None
-            content_type = (resp.headers.get("Content-Type") or "").lower()
-            if content_type and not content_type.startswith("image/"):
-                return None
-            data = resp.read(_IMAGE_FETCH_MAX_BYTES + 1)
-            if not data or len(data) > _IMAGE_FETCH_MAX_BYTES:
-                return None
-    except OSError:
-        return None
-    encoded = base64.b64encode(data)
-    image = (
-        b"\x1b]1337;File=inline=1;width=50%;height=50%;preserveAspectRatio=1;size="
-        + str(len(data)).encode()
-        + b":"
-        + encoded
-        + b"\x07"
-    )
-    url_bytes = url.encode("utf-8", errors="replace")
-    link = b"\x1b]8;;" + url_bytes + b"\x07Open image in new tab\x1b]8;;\x07"
-    return image + b"\r\n" + url_bytes + b"\r\n" + link + b"\r\n"
-
-
-async def _replace_image_urls_with_iip(payload: bytes, cache: Dict[bytes, bytes]) -> bytes:
-    matches = list(_IMAGE_URL_PATTERN.finditer(payload))
-    if not matches:
-        return payload
-
-    out: list[bytes] = []
-    start = 0
-    for match in matches:
-        out.append(payload[start : match.start()])
-        url_bytes = match.group(0)
-        replacement = cache.get(url_bytes)
-        if replacement is None:
-            try:
-                url_text = url_bytes.decode("ascii")
-            except UnicodeDecodeError:
-                replacement = url_bytes
-            else:
-                iip_sequence = await asyncio.to_thread(_build_iip_sequence_for_url, url_text)
-                replacement = iip_sequence if iip_sequence else url_bytes
-            cache[url_bytes] = replacement
-        out.append(replacement)
-        start = match.end()
-    out.append(payload[start:])
-    return b"".join(out)
-
-
-def _coerce_command(command: str) -> str:
-    value = (command or "").strip()
-    return value or "top"
-
-
-def _resolve_system_shell() -> str:
-    candidates = [
-        str(os.environ.get("SHELL") or "").strip(),
-    ]
-    try:
-        candidates.append(str(pwd.getpwuid(os.getuid()).pw_shell or "").strip())
-    except Exception:
-        pass
-    candidates.extend(["/bin/zsh", "/bin/bash", "/bin/sh"])
-
-    for candidate in candidates:
-        if candidate and Path(candidate).is_file():
-            return candidate
-    return "/bin/sh"
-
-
-def _resolve_terminal_start_dir(raw_path: Any) -> Path:
-    value = str(raw_path or "").strip()
-    if not value:
-        return _REPO_ROOT
-
-    candidate = Path(os.path.expanduser(value))
-    if not candidate.is_absolute():
-        candidate = (_REPO_ROOT / candidate).resolve()
-    else:
-        candidate = candidate.resolve()
-
-    if not candidate.exists():
-        raise ValueError(f"terminal path does not exist: {candidate}")
-    if not candidate.is_dir():
-        raise ValueError(f"terminal path is not a directory: {candidate}")
-    return candidate
-
-
-def _validate_tmux_session_name(session_name: str) -> str:
-    value = (session_name or "").strip()
-    if not value:
-        raise ValueError("tmux session name is required")
-    if not value.startswith(TMUX_SESSION_PREFIX):
-        raise ValueError(f"tmux session must start with '{TMUX_SESSION_PREFIX}'")
-    if not TMUX_SESSION_NAME_RE.fullmatch(value):
-        raise ValueError("invalid tmux session name format")
-    return value
-
-
-def _validate_tmux_session_name_any(session_name: str) -> str:
-    value = (session_name or "").strip()
-    if not value:
-        raise ValueError("tmux session name is required")
-    if not TMUX_SESSION_NAME_RE.fullmatch(value):
-        raise ValueError("invalid tmux session name format")
-    return value
-
-
-def _ensure_tmux_available() -> None:
-    if shutil.which("tmux") is None:
-        raise RuntimeError("tmux is not installed or not available in PATH")
-
-
-def _run_tmux_command(args: List[str], check: bool = True) -> subprocess.CompletedProcess[str]:
-    _ensure_tmux_available()
-    proc = subprocess.run(
-        ["tmux", *args],
-        capture_output=True,
-        text=True,
-        shell=False,
-        env=safe_env(),
-    )
-    if check and proc.returncode != 0:
-        message = (proc.stderr or proc.stdout or "").strip()
-        raise RuntimeError(message or f"tmux command failed: {' '.join(args)}")
-    return proc
-
-
-def _list_webui_tmux_sessions() -> List[Dict[str, Any]]:
-    proc = _run_tmux_command(
-        ["ls", "-F", "#{session_name}\t#{session_attached}\t#{session_created}\t#{session_windows}"],
-        check=False,
-    )
-    if proc.returncode != 0:
-        message = (proc.stderr or proc.stdout or "").strip().lower()
-        if "failed to connect to server" in message or "no server running" in message:
-            return []
-        raise RuntimeError((proc.stderr or proc.stdout or "").strip() or "unable to list tmux sessions")
-
-    sessions: List[Dict[str, Any]] = []
-    for line in proc.stdout.splitlines():
-        raw = line.strip()
-        if not raw:
-            continue
-        parts = raw.split("\t")
-        name = parts[0].strip() if parts else ""
-        if not name.startswith(TMUX_SESSION_PREFIX):
-            continue
-        attached_raw = parts[1].strip() if len(parts) > 1 else "0"
-        created_raw = parts[2].strip() if len(parts) > 2 else "0"
-        windows_raw = parts[3].strip() if len(parts) > 3 else "0"
-        try:
-            created_at = int(created_raw)
-        except ValueError:
-            created_at = 0
-        try:
-            windows = int(windows_raw)
-        except ValueError:
-            windows = 0
-        sessions.append(
-            {
-                "name": name,
-                "attached": attached_raw == "1",
-                "created_at": created_at,
-                "windows": windows,
-                "system": _is_protected_tmux_session(name),
-            }
-        )
-    sessions.sort(key=lambda item: item["name"])
-    return sessions
-
-
-def _list_live_tmux_sessions() -> List[Dict[str, Any]]:
-    sessions = _list_webui_tmux_sessions()
-    if not any(session["name"] == WORKFLOW_EXECUTE_SESSION_NAME for session in sessions):
-        try:
-            if _tmux_session_exists(WORKFLOW_EXECUTE_SESSION_NAME):
-                sessions.append(
-                    {
-                        "name": WORKFLOW_EXECUTE_SESSION_NAME,
-                        "attached": False,
-                        "created_at": 0,
-                        "windows": 1,
-                    }
-                )
-        except RuntimeError:
-            pass
-    sessions.sort(key=lambda item: item["name"])
-    return sessions
-
-
-def _list_native_tmux_sessions() -> List[Dict[str, Any]]:
-    proc = _run_tmux_command(
-        [
-            "ls",
-            "-F",
-            "#{session_name}\t#{session_attached}\t#{session_created}\t#{session_windows}\t#{session_activity}",
-        ],
-        check=False,
-    )
-    if proc.returncode != 0:
-        message = (proc.stderr or proc.stdout or "").strip().lower()
-        if "failed to connect to server" in message or "no server running" in message:
-            return []
-        raise RuntimeError((proc.stderr or proc.stdout or "").strip() or "unable to list tmux sessions")
-
-    sessions: List[Dict[str, Any]] = []
-    for line in proc.stdout.splitlines():
-        raw = line.strip()
-        if not raw:
-            continue
-        parts = raw.split("\t")
-        name = parts[0].strip() if parts else ""
-        if not name.startswith(NATIVE_TMUX_SESSION_PREFIX):
-            continue
-        attached_raw = parts[1].strip() if len(parts) > 1 else "0"
-        created_raw = parts[2].strip() if len(parts) > 2 else "0"
-        windows_raw = parts[3].strip() if len(parts) > 3 else "0"
-        activity_raw = parts[4].strip() if len(parts) > 4 else "0"
-        try:
-            created_at = int(created_raw)
-        except ValueError:
-            created_at = 0
-        try:
-            windows = int(windows_raw)
-        except ValueError:
-            windows = 0
-        try:
-            activity_at = int(activity_raw)
-        except ValueError:
-            activity_at = 0
-        sessions.append(
-            {
-                "name": name,
-                "attached": attached_raw == "1",
-                "created_at": created_at,
-                "windows": windows,
-                "activity_at": activity_at,
-            }
-        )
-    sessions.sort(key=lambda item: item["name"])
-    return sessions
-
-
-def _list_external_tmux_sessions() -> List[Dict[str, Any]]:
-    proc = _run_tmux_command(
-        ["ls", "-F", "#{session_name}\t#{session_attached}\t#{session_created}\t#{session_windows}"],
-        check=False,
-    )
-    if proc.returncode != 0:
-        message = (proc.stderr or proc.stdout or "").strip().lower()
-        if "failed to connect to server" in message or "no server running" in message:
-            return []
-        raise RuntimeError((proc.stderr or proc.stdout or "").strip() or "unable to list tmux sessions")
-
-    sessions: List[Dict[str, Any]] = []
-    for line in proc.stdout.splitlines():
-        raw = line.strip()
-        if not raw:
-            continue
-        parts = raw.split("\t")
-        name = parts[0].strip() if parts else ""
-        if name.startswith(TMUX_SESSION_PREFIX):
-            continue
-        if name == WORKFLOW_EXECUTE_SESSION_NAME:
-            continue
-        if not name:
-            continue
-        attached_raw = parts[1].strip() if len(parts) > 1 else "0"
-        created_raw = parts[2].strip() if len(parts) > 2 else "0"
-        windows_raw = parts[3].strip() if len(parts) > 3 else "0"
-        try:
-            created_at = int(created_raw)
-        except ValueError:
-            created_at = 0
-        try:
-            windows = int(windows_raw)
-        except ValueError:
-            windows = 0
-        sessions.append(
-            {
-                "name": name,
-                "attached": attached_raw == "1",
-                "created_at": created_at,
-                "windows": windows,
-            }
-        )
-    sessions.sort(key=lambda item: item["name"])
-    return sessions
-
-
-def _tmux_session_exists(session_name: str) -> bool:
-    safe_name = _validate_tmux_session_name_any(session_name)
-    proc = _run_tmux_command(["has-session", "-t", safe_name], check=False)
-    return proc.returncode == 0
-
-
-def _build_tmux_attach_command(session_name: str, readonly: bool = False) -> str:
-    safe_name = _validate_tmux_session_name(session_name)
-    readonly_flag = " -r" if readonly else ""
-    return f"tmux attach -t {shlex.quote(safe_name)}{readonly_flag}"
-
-
-def _build_tmux_attach_command_any(session_name: str, readonly: bool = False) -> str:
-    safe_name = _validate_tmux_session_name_any(session_name)
-    readonly_flag = " -r" if readonly else ""
-    return f"tmux attach -t {shlex.quote(safe_name)}{readonly_flag}"
-
-
-def _create_named_tmux_session(session_name: str) -> str:
-    safe_name = _validate_tmux_session_name_any(session_name)
-    _run_tmux_command(
-        ["new-session", "-d", "-s", safe_name, "/bin/bash"],
-        check=True,
-    )
-    return safe_name
-
-
-def _send_tmux_command_literal(session_name: str, command: str) -> None:
-    safe_name = _validate_tmux_session_name_any(session_name)
-    safe_command = _coerce_command(command)
-    _run_tmux_command(["set-buffer", "--", safe_command], check=True)
-    _run_tmux_command(["paste-buffer", "-t", safe_name], check=True)
-    _run_tmux_command(["send-keys", "-t", safe_name, "Enter"], check=True)
-    _run_tmux_command(["delete-buffer"], check=False)
-
-
-def _create_webui_tmux_session(command: str) -> str:
-    session_name = f"{TMUX_SESSION_PREFIX}{int(time.time())}-{secrets.token_hex(2)}"
-    _run_tmux_command(
-        ["new-session", "-d", "-s", session_name, "/bin/bash"],
-        check=True,
-    )
-    _send_tmux_command_literal(session_name, command)
-    return session_name
-
-
-def _create_native_tmux_session(command: str) -> str:
-    session_name = f"{NATIVE_TMUX_SESSION_PREFIX}{int(time.time())}-{secrets.token_hex(2)}"
-    _run_tmux_command(
-        ["new-session", "-d", "-s", session_name, "/bin/bash"],
-        check=True,
-    )
-    _send_tmux_command_literal(session_name, command)
-    return session_name
-
-
-def _create_web_shell_tmux_session(start_dir: Path, shell_path: str | None = None) -> str:
-    session_name = f"{WEB_SHELL_TMUX_SESSION_PREFIX}{secrets.token_hex(4)}"
-    resolved_shell = shell_path or _resolve_system_shell()
-    _run_tmux_command(
-        ["new-session", "-d", "-s", session_name, "-c", str(start_dir), resolved_shell, "-l"],
-        check=True,
-    )
-    return session_name
-
-
-def _kill_tmux_session(session_name: str) -> bool:
-    safe_name = _validate_tmux_session_name(session_name)
-    proc = _run_tmux_command(["kill-session", "-t", safe_name], check=False)
-    if proc.returncode == 0:
-        return True
-    message = (proc.stderr or proc.stdout or "").lower()
-    if "can't find session" in message:
-        return False
-    raise RuntimeError((proc.stderr or proc.stdout or "").strip() or "unable to kill tmux session")
-
-
-def _kill_tmux_session_any(session_name: str) -> bool:
-    safe_name = _validate_tmux_session_name_any(session_name)
-    proc = _run_tmux_command(["kill-session", "-t", safe_name], check=False)
-    if proc.returncode == 0:
-        return True
-    message = (proc.stderr or proc.stdout or "").lower()
-    if "can't find session" in message:
-        return False
-    raise RuntimeError((proc.stderr or proc.stdout or "").strip() or "unable to kill tmux session")
-
-
-def _is_protected_tmux_session(session_name: str) -> bool:
-    return session_name.startswith(PROTECTED_TMUX_SESSION_PREFIXES)
-
-
-def _tmux_pane_target_any(session_name: str) -> str:
-    safe_name = _validate_tmux_session_name_any(session_name)
-    proc = _run_tmux_command(
-        ["display-message", "-p", "-t", safe_name, "#{session_name}:#{window_index}.#{pane_index}"],
-        check=False,
-    )
-    if proc.returncode != 0:
-        message = (proc.stderr or proc.stdout or "").strip().lower()
-        if "can't find session" in message:
-            raise RuntimeError(f"tmux session not found: {safe_name}")
-        raise RuntimeError((proc.stderr or proc.stdout or "").strip() or "unable to resolve tmux pane target")
-    pane_target = (proc.stdout or "").strip()
-    if not pane_target:
-        raise RuntimeError("unable to resolve tmux pane target")
-    return pane_target
-
-
-def _capture_tmux_pane_history_any(session_name: str) -> Dict[str, str]:
-    pane_target = _tmux_pane_target_any(session_name)
-    proc = _run_tmux_command(
-        ["capture-pane", "-pJ", "-S", "-", "-E", "-", "-t", pane_target],
-        check=False,
-    )
-    if proc.returncode != 0:
-        message = (proc.stderr or proc.stdout or "").strip().lower()
-        if "can't find pane" in message or "can't find session" in message:
-            raise RuntimeError(f"tmux session not found: {session_name}")
-        raise RuntimeError((proc.stderr or proc.stdout or "").strip() or "unable to capture tmux pane history")
-    command = f"tmux capture-pane -pJ -S - -E - -t {pane_target}"
-    return {
-        "session": _validate_tmux_session_name_any(session_name),
-        "pane_target": pane_target,
-        "command": command,
-        "content": proc.stdout or "",
-    }
-
-
-def _pane_current_command_any(session_name: str) -> str:
-    safe_name = _validate_tmux_session_name_any(session_name)
-    proc = _run_tmux_command(["display-message", "-p", "-t", safe_name, "#{pane_current_command}"], check=False)
-    if proc.returncode != 0:
-        return ""
-    pane_command = (proc.stdout or "").strip().lower()
-    if pane_command and pane_command not in {"python", "python3", "bash", "sh"}:
-        return pane_command
-    detected = _detect_agent_bin_for_session_any(safe_name)
-    return detected or pane_command
-
-
-def _known_provider_bins() -> set[str]:
-    bins: set[str] = set()
-    for provider in load_llm_providers():
-        bin_name = str(provider.get("bin") or "").strip().lower()
-        if bin_name:
-            bins.add(bin_name)
-    return bins
-
-
-def _ps_children_pids(parent_pid: int) -> list[int]:
-    if parent_pid <= 1 or shutil.which("pgrep") is None:
-        return []
-    proc = subprocess.run(
-        ["pgrep", "-P", str(parent_pid)],
-        capture_output=True,
-        text=True,
-        check=False,
-        env=safe_env(),
-    )
-    if proc.returncode != 0:
-        return []
-    child_pids: list[int] = []
-    for line in (proc.stdout or "").splitlines():
-        raw = line.strip()
-        if raw.isdigit():
-            child_pids.append(int(raw))
-    return child_pids
-
-
-def _ps_command(pid: int) -> str:
-    if pid <= 1:
-        return ""
-    proc = subprocess.run(
-        ["ps", "-p", str(pid), "-o", "comm="],
-        capture_output=True,
-        text=True,
-        check=False,
-        env=safe_env(),
-    )
-    if proc.returncode != 0:
-        return ""
-    return (proc.stdout or "").strip().lower()
-
-
-def _detect_agent_bin_for_session_any(session_name: str) -> str:
-    safe_name = _validate_tmux_session_name_any(session_name)
-    pane_proc = _run_tmux_command(["display-message", "-p", "-t", safe_name, "#{pane_pid}"], check=False)
-    if pane_proc.returncode != 0:
-        return ""
-    pane_pid_raw = (pane_proc.stdout or "").strip()
-    if not pane_pid_raw.isdigit():
-        return ""
-    known_bins = _known_provider_bins()
-    if not known_bins:
-        return ""
-
-    queue = _ps_children_pids(int(pane_pid_raw))
-    seen = set(queue)
-    matches: list[str] = []
-    while queue:
-        pid = queue.pop(0)
-        command = os.path.basename(_ps_command(pid))
-        if command in known_bins:
-            matches.append(command)
-        for child_pid in _ps_children_pids(pid):
-            if child_pid not in seen:
-                seen.add(child_pid)
-                queue.append(child_pid)
-    return matches[-1] if matches else ""
-
-
-def _provider_exit_session_shortcut(provider: Dict[str, Any]) -> str:
-    raw = provider.get("exit-session")
-    if not isinstance(raw, str) or not raw.strip():
-        raw = provider.get("exit_session")
-    if isinstance(raw, str) and raw.strip():
-        return raw.strip()
-    return "ctrl+c"
-
-
-def _send_exit_session_shortcut_any(session_name: str, provider: Dict[str, Any]) -> str:
-    safe_name = _validate_tmux_session_name_any(session_name)
-    raw = _provider_exit_session_shortcut(provider)
-    steps = [step.strip().lower() for step in raw.splitlines() if step.strip()]
-    if not steps:
-        steps = ["ctrl+c"]
-    time.sleep(1.5)
-    for step in steps:
-        if step in {"ctrl+c", "^c", "c-c"}:
-            _run_tmux_command(["send-keys", "-t", safe_name, "C-c"], check=False)
-        elif step in {"enter", "return"}:
-            _run_tmux_command(["send-keys", "-t", safe_name, "Enter"], check=False)
-        elif step in {"esc", "escape"}:
-            _run_tmux_command(["send-keys", "-t", safe_name, "Escape"], check=False)
-            time.sleep(1.0)
-            continue
-        else:
-            _run_tmux_command(["send-keys", "-t", safe_name, step, "Enter"], check=False)
-        time.sleep(0.35)
-    return raw
-
-
-def _maybe_send_exit_session_shortcut_any(session_name: str, provider: Dict[str, Any]) -> str:
-    safe_name = _validate_tmux_session_name_any(session_name)
-    provider_id = str(provider.get("id") or "").strip()
-    provider_bin = str(provider.get("bin") or "").strip().lower()
-    current_command = _pane_current_command_any(safe_name)
-    logger.info(
-        "[workflow-execute] exit_session_check session=%s provider=%s provider_bin=%s current_command=%s",
-        safe_name,
-        provider_id,
-        provider_bin,
-        current_command,
-    )
-    shortcut = _send_exit_session_shortcut_any(safe_name, provider)
-    logger.info(
-        "[workflow-execute] exit_session_sent session=%s provider=%s shortcut=%r",
-        safe_name,
-        provider_id,
-        shortcut,
-    )
-    return shortcut
-
-
-def _build_provider_command(
-    *,
-    provider_id: str,
-    prompt: str,
-    sandbox: Any,
-    auto: Any,
-    network: Any,
-) -> tuple[Dict[str, Any], str, str]:
-    provider = get_provider(provider_id)
-    cmd_list = build_terminal_command(
-        provider,
-        prompt,
-        auto_allow=auto,
-        network_allow=network,
-        sandbox_mode=sandbox,
-    )
-    env_overrides: Dict[str, str] = _resolve_provider_env(provider)
-    if provider.get("id") == "opencode" and auto:
-        opencode_config = str(_REPO_ROOT / "config" / "opencode-yolo.json")
-        env_overrides["OPENCODE_CONFIG"] = opencode_config
-        display_command = format_command_for_log(cmd_list, env_overrides)
-    else:
-        display_command = format_command_for_log(cmd_list, env_overrides)
-
-    launch_dir = _REPO_ROOT / ".skillpilot" / "temp" / "tmux-argv"
-    launch_dir.mkdir(parents=True, exist_ok=True)
-    payload_path = launch_dir / f"{int(time.time())}-{uuid4().hex[:8]}.json"
-    payload_path.write_text(
-        json.dumps({"argv": cmd_list, "env": env_overrides}, ensure_ascii=False),
-        encoding="utf-8",
-    )
-    launcher = _REPO_ROOT / "core" / "engine" / "exec_argv.py"
-    command = shlex.join(["python3", str(launcher), str(payload_path)])
-    return provider, command, display_command
-
-
-def _start_workflow_agent_in_session(
-    *,
-    session_name: str,
-    prompt: str,
-    provider_id: str,
-    sandbox: Any,
-    auto: Any,
-    network: Any,
-    previous_provider: Dict[str, Any] | None,
-) -> tuple[Dict[str, Any], str]:
-    safe_name = _validate_tmux_session_name_any(session_name)
-    if previous_provider is not None:
-        previous_provider_bin = str(previous_provider.get("bin") or "").strip().lower()
-        shortcut = _send_exit_session_shortcut_any(safe_name, previous_provider)
-        logger.info(
-            "[workflow-execute] session_rotate session=%s previous_provider=%s exit_shortcut=%s",
-            safe_name,
-            str(previous_provider.get("id") or ""),
-            shortcut,
-        )
-        time.sleep(1.0)
-        if previous_provider_bin and _pane_current_command_any(safe_name) == previous_provider_bin:
-            _send_exit_session_shortcut_any(safe_name, previous_provider)
-            time.sleep(1.0)
-        if previous_provider_bin and _pane_current_command_any(safe_name) == previous_provider_bin:
-            raise RuntimeError(
-                f"Failed to exit current agent session '{previous_provider_bin}' in tmux session '{safe_name}'."
-            )
-    provider, command, display_command = _build_provider_command(
-        provider_id=provider_id,
-        prompt=prompt,
-        sandbox=sandbox,
-        auto=auto,
-        network=network,
-    )
-    _send_tmux_command_literal(safe_name, command)
-    logger.info(
-        "[workflow-execute] session_launch session=%s provider=%s command=%s launcher=%s",
-        safe_name,
-        str(provider.get("id") or ""),
-        display_command,
-        command,
-    )
-    return provider, command
-
-
-def _workflow_execute_status() -> Dict[str, Any]:
-    with _WORKFLOW_EXECUTE_LOCK:
-        thread = _WORKFLOW_EXECUTE_STATE.get("thread")
-        data = {k: v for k, v in _WORKFLOW_EXECUTE_STATE.items() if k != "thread"}
-        data["thread_alive"] = bool(thread and thread.is_alive())
-        return data
-
-
-def _set_workflow_execute_state(**updates: Any) -> None:
-    with _WORKFLOW_EXECUTE_LOCK:
-        _WORKFLOW_EXECUTE_STATE.update(updates)
-
-
-def _reset_workflow_execute_state(status: str = "idle", error: str = "") -> None:
-    with _WORKFLOW_EXECUTE_LOCK:
-        _WORKFLOW_EXECUTE_STATE.update(
-            {
-                "thread": None,
-                "token": "",
-                "status": status,
-                "workflow": "",
-                "run_id": "",
-                "output_root": "",
-                "error": error,
-                "started_at": 0.0,
-                "finished_at": time.time() if status in {"finished", "error", "terminated"} else 0.0,
-                "next_node_trigger": "auto_continue",
-                "waiting_for_continue": False,
-                "current_node_id": 0,
-                "current_node_name": "",
-                "current_output_file": "",
-                "current_provider_id": "",
-                "current_provider_bin": "",
-                "has_remaining_nodes": False,
-            }
-        )
-
-
-def _notify_workflow_tmux_message(session_name: str, message: str) -> None:
-    safe_message = str(message or "").strip()
-    if not safe_message:
-        return
-    _send_tmux_command_literal(session_name, f"echo {shlex.quote(safe_message)}")
-
-
-def _await_workflow_continue_transition(timeout_s: float = 5.0) -> Dict[str, Any]:
-    deadline = time.time() + max(0.0, float(timeout_s))
-    latest = _workflow_execute_status()
-    while time.time() < deadline:
-        latest = _workflow_execute_status()
-        if not latest.get("thread_alive"):
-            return latest
-        if not bool(latest.get("waiting_for_continue")):
-            return latest
-        time.sleep(0.1)
-    return _workflow_execute_status()
-
-
-def request_workflow_continue_signal(source: str = "api") -> Dict[str, Any]:
-    status = _workflow_execute_status()
-    if not status.get("thread_alive"):
-        return {
-            "accepted": False,
-            "status": status,
-            "message": "No active workflow execution thread.",
-        }
-    if status.get("next_node_trigger") != "start_by_prompt":
-        return {
-            "accepted": False,
-            "status": status,
-            "message": "Workflow is not using start-by-prompt mode.",
-        }
-
-    session_name = str(status.get("session_name") or WORKFLOW_EXECUTE_SESSION_NAME)
-    output_file = str(status.get("current_output_file") or "").strip()
-    waiting_for_continue = bool(status.get("waiting_for_continue"))
-    has_remaining_nodes = bool(status.get("has_remaining_nodes"))
-    if not waiting_for_continue:
-        return {
-            "accepted": False,
-            "status": status,
-            "message": "Workflow is not currently waiting for a continue signal.",
-        }
-    if not has_remaining_nodes:
-        return {
-            "accepted": False,
-            "status": status,
-            "message": "No remaining workflow nodes to continue.",
-        }
-
-    if not output_file:
-        try:
-            _notify_workflow_tmux_message(
-                session_name,
-                "User asked to continue to the next workflow node, but the current node output file is not ready. Please finish the current task first.",
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("[workflow-execute] continue_notify_failed session=%s error=%s", session_name, exc)
-        return {
-            "accepted": False,
-            "status": _workflow_execute_status(),
-            "message": "Current node output file is not ready.",
-        }
-
-    if not Path(output_file).exists():
-        try:
-            _notify_workflow_tmux_message(
-                session_name,
-                "User asked to continue to the next workflow node, but the current node output file is not ready. Please finish the current task first.",
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("[workflow-execute] continue_notify_failed session=%s error=%s", session_name, exc)
-        return {
-            "accepted": False,
-            "status": _workflow_execute_status(),
-            "message": "Current node output file is not ready.",
-        }
-
-    _WORKFLOW_EXECUTE_CONTINUE.set()
-    logger.info(
-        "[workflow-execute] continue_signal source=%s session=%s output_file=%s waiting_for_continue=%s",
-        source,
-        session_name,
-        output_file,
-        waiting_for_continue,
-    )
-    updated_status = _await_workflow_continue_transition()
-    advanced = not bool(updated_status.get("waiting_for_continue"))
-    return {
-        "accepted": True,
-        "status": updated_status,
-        "message": "Continue signal accepted and workflow resumed."
-        if advanced
-        else "Continue signal accepted, but workflow is still waiting to advance.",
-    }
-
-
-def _validate_writable_session_name(session_name: str) -> str:
-    value = (session_name or "").strip()
-    if value == WORKFLOW_EXECUTE_SESSION_NAME:
-        return _validate_tmux_session_name_any(value)
-    return _validate_tmux_session_name(value)
-
-
-def _cleanup_webui_tmux_sessions() -> int:
-    removed_count = 0
-    for session in _list_webui_tmux_sessions():
-        try:
-            if _kill_tmux_session(session["name"]):
-                removed_count += 1
-        except RuntimeError as exc:
-            logger.warning("failed to remove tmux session %s: %s", session["name"], exc)
-    return removed_count
-
-
-def _cleanup_stale_native_tmux_sessions() -> int:
-    removed_count = 0
-    for session in _list_native_tmux_sessions():
-        if session.get("attached"):
-            continue
-        name = str(session.get("name") or "")
-        if not name:
-            continue
-        proc = _run_tmux_command(["kill-session", "-t", name], check=False)
-        if proc.returncode == 0:
-            removed_count += 1
-            continue
-        message = (proc.stderr or proc.stdout or "").lower()
-        if "can't find session" in message:
-            continue
-        logger.warning("failed to remove stale native tmux session %s: %s", name, (proc.stderr or proc.stdout or "").strip())
-    return removed_count
-
-
-def _open_native_terminal_for_tmux(session_name: str) -> Dict[str, Any]:
-    safe_session = _validate_tmux_session_name_any(session_name)
-    if sys.platform == "darwin":
-        script_cmd = f"tmux attach -t {safe_session}"
-        escaped_script_cmd = script_cmd.replace("\\", "\\\\").replace('"', '\\"')
-        apple_script = f'tell application "Terminal" to do script "{escaped_script_cmd}"'
-        try:
-            subprocess.Popen(
-                ["osascript", "-e", apple_script, "-e", 'tell application "Terminal" to activate'],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                env=safe_env(),
-            )
-            return {"opened": True, "method": "osascript-terminal", "session": safe_session}
-        except Exception as exc:
-            return {"opened": False, "method": "osascript-terminal", "error": str(exc), "session": safe_session}
-
-    candidates: List[List[str]] = []
-    if shutil.which("x-terminal-emulator"):
-        candidates.append(["x-terminal-emulator", "-e", "tmux", "attach", "-t", safe_session])
-    if shutil.which("gnome-terminal"):
-        candidates.append(["gnome-terminal", "--", "tmux", "attach", "-t", safe_session])
-    if shutil.which("konsole"):
-        candidates.append(["konsole", "-e", "tmux", "attach", "-t", safe_session])
-    if shutil.which("xfce4-terminal"):
-        candidates.append(["xfce4-terminal", "-x", "tmux", "attach", "-t", safe_session])
-    if shutil.which("xterm"):
-        candidates.append(["xterm", "-e", "tmux", "attach", "-t", safe_session])
-
-    if not candidates:
-        return {
-            "opened": False,
-            "error": "No supported native terminal launcher found (x-terminal-emulator/gnome-terminal/konsole/xfce4-terminal/xterm).",
-            "session": safe_session,
-        }
-
-    for cmd in candidates:
-        try:
-            subprocess.Popen(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                env=safe_env(),
-                start_new_session=True,
-            )
-            return {"opened": True, "method": cmd[0], "session": safe_session}
-        except Exception:
-            continue
-
-    return {"opened": False, "error": "Failed to launch native terminal", "session": safe_session}
-
-
-def _set_pty_size(fd: int, cols: int, rows: int) -> None:
-    cols = max(20, min(int(cols or 80), 500))
-    rows = max(5, min(int(rows or 24), 200))
-    winsize = struct.pack("HHHH", rows, cols, 0, 0)
-    fcntl.ioctl(fd, termios.TIOCSWINSZ, winsize)
-
-
-def _notify_sigwinch(master_fd: int, proc: subprocess.Popen[Any] | None) -> None:
-    # Signal the current foreground job first; ncurses apps (e.g. htop) react immediately.
-    try:
-        fg_pgrp = os.tcgetpgrp(master_fd)
-        if fg_pgrp > 0:
-            os.killpg(fg_pgrp, signal.SIGWINCH)
-            return
-    except (OSError, ProcessLookupError):
-        pass
-
-    # Fallback to the spawned process group.
-    if proc is not None and proc.poll() is None:
-        try:
-            os.killpg(proc.pid, signal.SIGWINCH)
-        except (OSError, ProcessLookupError):
-            try:
-                os.kill(proc.pid, signal.SIGWINCH)
-            except (OSError, ProcessLookupError):
-                pass
-
-
-async def _terminate_process(proc: subprocess.Popen[Any]) -> None:
-    if proc.poll() is not None:
-        return
-    try:
-        os.killpg(proc.pid, signal.SIGTERM)
-    except ProcessLookupError:
-        return
-    except PermissionError:
-        try:
-            proc.terminate()
-        except (ProcessLookupError, PermissionError, OSError):
-            return
-    except OSError:
-        try:
-            proc.terminate()
-        except (ProcessLookupError, PermissionError, OSError):
-            return
-    try:
-        await asyncio.to_thread(proc.wait, 1.5)
-    except subprocess.TimeoutExpired:
-        try:
-            os.killpg(proc.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            return
-        except PermissionError:
-            try:
-                proc.kill()
-            except (ProcessLookupError, PermissionError, OSError):
-                return
-        except OSError:
-            try:
-                proc.kill()
-            except (ProcessLookupError, PermissionError, OSError):
-                return
-
-
-def _execute_workflow_in_terminal_thread(
-    *,
-    workflow_file: Path,
-    workflow_prompt: str,
-    session_name: str,
-    run_token: str,
-    resume: bool,
-    sandbox: Any,
-    auto: Any,
-    network: Any,
-    next_node_trigger: str = "auto_continue",
-) -> None:
-    started_at = time.time()
-    graph = None
-    output_root: Path | None = None
-
-    def thread_is_current() -> bool:
-        with _WORKFLOW_EXECUTE_LOCK:
-            return _WORKFLOW_EXECUTE_STATE.get("thread") is threading.current_thread()
-
-    def run_is_current() -> bool:
-        with _WORKFLOW_EXECUTE_LOCK:
-            return (
-                _WORKFLOW_EXECUTE_STATE.get("thread") is threading.current_thread()
-                and _WORKFLOW_EXECUTE_STATE.get("token") == run_token
-            )
-
-    try:
-        graph = load_workflow_graph(workflow_file, WORKFLOWS_DIR)
-        instruction_file_path = parse_instruction_file_path(workflow_prompt)
-        reference_file_paths = parse_reference_file_paths(workflow_prompt)
-        if instruction_file_path:
-            workflow_project_path = f"core/workflows/{graph.workflow_relative_path}"
-            task_run_id, _ = workflow_task_output_dir(
-                _terminal_workflow_base_dir(),
-                instruction_file_path,
-                workflow_project_path,
-                repo_root=_REPO_ROOT,
-                reference_file_paths=reference_file_paths,
-            )
-            run_id, output_root = create_run_output_dir(
-                _terminal_workflow_base_dir(),
-                run_id=task_run_id,
-                cleanup_output_dir=not resume,
-            )
-        else:
-            run_id, output_root = create_run_output_dir(
-                _terminal_workflow_base_dir(),
-                cleanup_base_dir=True,
-            )
-        task_workspace = parse_task_workspace(workflow_prompt)
-        if run_is_current():
-            _set_workflow_execute_state(
-                status="running",
-                workflow=graph.workflow_relative_path,
-                run_id=run_id,
-                output_root=str(output_root),
-                error="",
-                started_at=started_at,
-                finished_at=0.0,
-                next_node_trigger=next_node_trigger,
-                waiting_for_continue=False,
-                current_node_id=0,
-                current_node_name="",
-                current_output_file="",
-                current_provider_id="",
-                current_provider_bin="",
-                has_remaining_nodes=False,
-            )
-        logger.info(
-            "[workflow-execute] thread_start workflow=%s workflow_name=%s session=%s run_id=%s output_root=%s",
-            graph.workflow_relative_path,
-            graph.workflow_name,
-            session_name,
-            run_id,
-            output_root,
-        )
-
-        node_status: Dict[int, str] = {node_id: "pending" for node_id in graph.upstream_agents}
-        pending_upstream_count: Dict[int, int] = {
-            node_id: len(up_ids) for node_id, up_ids in graph.upstream_agents.items()
-        }
-        has_failed_upstream: Dict[int, bool] = {node_id: False for node_id in graph.upstream_agents}
-        ready: List[int] = [node_id for node_id, count in pending_upstream_count.items() if count == 0]
-        previous_provider: Dict[str, Any] | None = None
-
-        while ready:
-            if not run_is_current():
-                raise RuntimeError("workflow execution superseded by a newer run")
-            if _WORKFLOW_EXECUTE_STOP.is_set():
-                raise RuntimeError("workflow execution stopped by user")
-            if not _tmux_session_exists(session_name):
-                raise RuntimeError(f"workflow tmux session was terminated: {session_name}")
-            ready.sort()
-            node_id = ready.pop(0)
-            if has_failed_upstream.get(node_id):
-                node_status[node_id] = "blocked"
-                continue
-
-            node = graph.id_to_node[node_id]
-            data = node.get("data") if isinstance(node.get("data"), dict) else {}
-            provider_id = str(data.get("provider_id") or "").strip()
-            upstream_node_ids = list(graph.upstream_agents[node_id])
-            output_file = node_output_path(output_root, node_id, node_name(node))
-            if resume and output_file.exists():
-                logger.info(
-                    "[workflow-execute] node_resume_skip node_id=%s node_name=%s output_file=%s",
-                    node_id,
-                    node_name(node),
-                    output_file,
-                )
-                node_status[node_id] = "done"
-                for downstream_id in graph.downstream_agents.get(node_id, []):
-                    pending_upstream_count[downstream_id] = max(0, pending_upstream_count[downstream_id] - 1)
-                    if pending_upstream_count[downstream_id] == 0:
-                        if has_failed_upstream[downstream_id]:
-                            node_status[downstream_id] = "blocked"
-                        else:
-                            ready.append(downstream_id)
-                continue
-            prompt = build_node_prompt(
-                graph=graph,
-                current_node=node,
-                workflow_prompt=workflow_prompt,
-                output_root=output_root,
-                upstream_node_ids=upstream_node_ids,
-                task_workspace=task_workspace,
-                start_by_prompt_mode=(next_node_trigger == "start_by_prompt"),
-            )
-            if output_file.exists():
-                try:
-                    output_file.unlink()
-                except OSError:
-                    pass
-
-            node_status[node_id] = "running"
-            if run_is_current():
-                _set_workflow_execute_state(
-                    status="running",
-                    waiting_for_continue=False,
-                    current_node_id=node_id,
-                    current_node_name=node_name(node),
-                    current_output_file=str(output_file),
-                    current_provider_id=provider_id,
-                    has_remaining_nodes=False,
-                )
-            logger.info(
-                "[workflow-execute] node_start node_id=%s node_name=%s provider_id=%s upstream_ids=%s output_file=%s",
-                node_id,
-                node_name(node),
-                provider_id,
-                upstream_node_ids,
-                output_file,
-            )
-            logger.info("[workflow-execute] node_prompt node_id=%s\n%s", node_id, prompt)
-            try:
-                previous_provider, _ = _start_workflow_agent_in_session(
-                    session_name=session_name,
-                    prompt=prompt,
-                    provider_id=provider_id,
-                    sandbox=sandbox,
-                    auto=auto,
-                    network=network,
-                    previous_provider=previous_provider,
-                )
-                if run_is_current():
-                    _set_workflow_execute_state(
-                        current_provider_id=str(previous_provider.get("id") or ""),
-                        current_provider_bin=str(previous_provider.get("bin") or ""),
-                    )
-
-                wait_started = time.time()
-                while True:
-                    if output_file.exists():
-                        break
-                    if not run_is_current():
-                        raise RuntimeError("workflow execution superseded by a newer run")
-                    if not _tmux_session_exists(session_name):
-                        raise RuntimeError(f"workflow tmux session was terminated during node {node_id}")
-                    if time.time() - wait_started > 3600:
-                        raise TimeoutError(f"timed out waiting for node output file: {output_file}")
-                    if _WORKFLOW_EXECUTE_STOP.is_set():
-                        raise RuntimeError("workflow execution stopped by user")
-                    _WORKFLOW_EXECUTE_STOP.wait(1.0)
-
-                output_text = output_file.read_text(encoding="utf-8", errors="replace")
-                logger.info("[workflow-execute] node_output node_id=%s output_file=%s\n%s", node_id, output_file, output_text)
-                node_status[node_id] = "done"
-            except (RuntimeError, TimeoutError):
-                raise  # session killed or timeout — abort workflow
-            except Exception as exc:  # noqa: BLE001
-                node_status[node_id] = "failed"
-                logger.error("[workflow-execute] node_failed node_id=%s error=%s", node_id, exc)
-                for downstream_id in graph.downstream_agents.get(node_id, []):
-                    has_failed_upstream[downstream_id] = True
-
-            for downstream_id in graph.downstream_agents.get(node_id, []):
-                pending_upstream_count[downstream_id] = max(0, pending_upstream_count[downstream_id] - 1)
-                if node_status[node_id] != "done":
-                    has_failed_upstream[downstream_id] = True
-                if pending_upstream_count[downstream_id] == 0:
-                    if has_failed_upstream[downstream_id]:
-                        node_status[downstream_id] = "blocked"
-                    else:
-                        ready.append(downstream_id)
-
-            has_remaining_nodes = len(ready) > 0
-            if node_status[node_id] == "done" and next_node_trigger == "start_by_prompt":
-                if has_remaining_nodes:
-                    if run_is_current():
-                        _set_workflow_execute_state(
-                            status="waiting_for_continue",
-                            waiting_for_continue=True,
-                            current_node_id=node_id,
-                            current_node_name=node_name(node),
-                            current_output_file=str(output_file),
-                            has_remaining_nodes=has_remaining_nodes,
-                        )
-                    while True:
-                        if not run_is_current():
-                            raise RuntimeError("workflow execution superseded by a newer run")
-                        if _WORKFLOW_EXECUTE_STOP.is_set():
-                            raise RuntimeError("workflow execution stopped by user")
-                        if not _tmux_session_exists(session_name):
-                            raise RuntimeError(f"workflow tmux session was terminated during node {node_id}")
-                        if _WORKFLOW_EXECUTE_CONTINUE.wait(1.0):
-                            _WORKFLOW_EXECUTE_CONTINUE.clear()
-                            break
-
-                    if previous_provider is not None:
-                        _maybe_send_exit_session_shortcut_any(session_name, previous_provider)
-                        previous_provider = None
-                    if run_is_current():
-                        _set_workflow_execute_state(status="running", waiting_for_continue=False)
-                else:
-                    if previous_provider is not None:
-                        _maybe_send_exit_session_shortcut_any(session_name, previous_provider)
-                        previous_provider = None
-                    _send_tmux_command_literal(session_name, "echo 'The workflow has completed.'")
-                    if run_is_current():
-                        _set_workflow_execute_state(
-                            status="running",
-                            waiting_for_continue=False,
-                            has_remaining_nodes=False,
-                        )
-
-        failed_nodes = [node_id for node_id, status in node_status.items() if status != "done"]
-        if failed_nodes:
-            raise RuntimeError(f"workflow finished with incomplete nodes: {failed_nodes}")
-
-        finished_at = time.time()
-        if run_is_current():
-            _set_workflow_execute_state(
-                status="finished",
-                finished_at=finished_at,
-                waiting_for_continue=False,
-                current_node_id=0,
-                current_node_name="",
-                current_output_file="",
-                current_provider_id="",
-                current_provider_bin="",
-                has_remaining_nodes=False,
-            )
-        logger.info(
-            "[workflow-execute] thread_finish workflow=%s session=%s run_id=%s duration_sec=%.3f",
-            graph.workflow_relative_path,
-            session_name,
-            run_id,
-            finished_at - started_at,
-        )
-    except Exception as exc:  # noqa: BLE001
-        finished_at = time.time()
-        if run_is_current():
-            _set_workflow_execute_state(
-                status="error",
-                error=str(exc),
-                finished_at=finished_at,
-                waiting_for_continue=False,
-            )
-        logger.exception("[workflow-execute] thread_error session=%s error=%s", session_name, exc)
-    finally:
-        with _WORKFLOW_EXECUTE_LOCK:
-            if (
-                _WORKFLOW_EXECUTE_STATE.get("thread") is threading.current_thread()
-                and _WORKFLOW_EXECUTE_STATE.get("token") == run_token
-            ):
-                _WORKFLOW_EXECUTE_STATE["thread"] = None
-
-
-def _stop_existing_workflow_execute_thread() -> None:
-    status = _workflow_execute_status()
-    thread = None
-    with _WORKFLOW_EXECUTE_LOCK:
-        thread = _WORKFLOW_EXECUTE_STATE.get("thread")
-    if thread and thread.is_alive():
-        logger.info("[workflow-execute] stopping_existing_thread status=%s", status.get("status"))
-    _WORKFLOW_EXECUTE_STOP.set()
-    _WORKFLOW_EXECUTE_CONTINUE.set()
-    try:
-        _kill_tmux_session_any(WORKFLOW_EXECUTE_SESSION_NAME)
-    except RuntimeError as exc:
-        logger.warning("[workflow-execute] failed_to_kill_existing_session session=%s error=%s", WORKFLOW_EXECUTE_SESSION_NAME, exc)
-    if thread and thread.is_alive():
-        thread.join(timeout=5.0)
-    _reset_workflow_execute_state(status="terminated")
-    _WORKFLOW_EXECUTE_CONTINUE.clear()
-
-
-def cleanup_stale_workflow_session() -> None:
-    """Kill any leftover sp-workflow-execute tmux session on engine startup."""
-    try:
-        if _tmux_session_exists(WORKFLOW_EXECUTE_SESSION_NAME):
-            _kill_tmux_session_any(WORKFLOW_EXECUTE_SESSION_NAME)
-            logger.info("[workflow-execute] cleanup_stale_session session=%s", WORKFLOW_EXECUTE_SESSION_NAME)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("[workflow-execute] cleanup_stale_session_failed session=%s error=%s", WORKFLOW_EXECUTE_SESSION_NAME, exc)
-    _reset_workflow_execute_state(status="idle")
-    _WORKFLOW_EXECUTE_CONTINUE.clear()
+_REPO_ROOT_RESOLVED = _REPO_ROOT.resolve()
+_DEV_WEBUI_SESSION_NAME = "sp-webui-dev"
+_DEV_ENGINE_SESSION_NAME = "sp-engine-dev"
+_EXPLORE_DEV_START_GRACE_SECONDS = 20.0
 
 
 @router.get("/api/health")
@@ -1592,6 +81,29 @@ def terminal_tmux_external_sessions():
     return {"sessions": sessions}
 
 
+@router.get("/api/session-roots")
+def session_roots():
+    try:
+        roots = routes_file_manager._discover_file_manager_roots()
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc), "roots": [], "has_worktrees": False})
+
+    has_worktrees = any(str(root.get("kind") or "") == "worktree" for root in roots)
+    project_root = next((root for root in roots if str(root.get("kind") or "") == "project"), None)
+    return {
+        "has_worktrees": has_worktrees,
+        "default_path": str(project_root.get("path") if project_root else _REPO_ROOT),
+        "roots": [
+            {
+                "value": str(root["path"]),
+                "label": f"Main project: {root['label']}" if str(root.get("kind") or "") == "project" else f"Worktree: {root['label']}",
+                "kind": str(root["kind"]),
+            }
+            for root in roots
+        ],
+    }
+
+
 @router.post("/api/terminal/tmux/create")
 def terminal_tmux_create(payload: Dict[str, Any]):
     prompt = (str(payload.get("prompt") or "")).strip()
@@ -1602,9 +114,16 @@ def terminal_tmux_create(payload: Dict[str, Any]):
     launch_command = ""
     start_dir: Path | None = None
     start_shell = ""
+    shell_session_name = ""
     sandbox = payload.get("sandbox")
     auto = payload.get("auto")
     network = payload.get("network")
+    requested_start_path = payload.get("path")
+
+    try:
+        start_dir = _resolve_terminal_start_dir(requested_start_path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
 
     if prompt:
         provider, launch_command, command = _build_provider_command(
@@ -1617,11 +136,13 @@ def terminal_tmux_create(payload: Dict[str, Any]):
         logger.info("[tmux-create] provider=%s command=%s", provider.get("id"), command)
     else:
         if session_type == "shell":
-            try:
-                start_dir = _resolve_terminal_start_dir(payload.get("path"))
-            except ValueError as exc:
-                return JSONResponse(status_code=400, content={"error": str(exc)})
             start_shell = _resolve_system_shell()
+            requested_shell_session = str(payload.get("session_name") or "").strip()
+            if requested_shell_session:
+                try:
+                    shell_session_name = _validate_tmux_session_name_any(requested_shell_session)
+                except ValueError as exc:
+                    return JSONResponse(status_code=400, content={"error": str(exc)})
             launch_command = ""
             command = start_shell
             logger.info("[tmux-create] shell cwd=%s shell=%s", start_dir, start_shell)
@@ -1632,15 +153,19 @@ def terminal_tmux_create(payload: Dict[str, Any]):
 
     try:
         if session_type == "shell":
-            session_name = _create_web_shell_tmux_session(start_dir or _REPO_ROOT, shell_path=start_shell or None)
+            session_name = _create_or_get_web_shell_tmux_session(
+                start_dir or _REPO_ROOT,
+                shell_path=start_shell or None,
+                session_name=shell_session_name or None,
+            )
             native_status = {"requested": False, "opened": False}
-            attach_command = _build_tmux_attach_command(session_name)
+            attach_command = _build_tmux_attach_command_any(session_name)
         elif native_terminal:
-            session_name = _create_native_tmux_session(launch_command)
+            session_name = _create_native_tmux_session(launch_command, start_dir=start_dir)
             native_status = _open_native_terminal_for_tmux(session_name)
             attach_command = _build_tmux_attach_command_any(session_name)
         else:
-            session_name = _create_webui_tmux_session(launch_command)
+            session_name = _create_webui_tmux_session(launch_command, start_dir=start_dir)
             native_status = {"requested": False, "opened": False}
             attach_command = _build_tmux_attach_command(session_name)
     except RuntimeError as exc:
@@ -1659,7 +184,7 @@ def terminal_tmux_create(payload: Dict[str, Any]):
             "name": session_name,
             "command": command,
             "attach_command": attach_command,
-            "cwd": str(start_dir or _REPO_ROOT) if session_type == "shell" else None,
+            "cwd": str(start_dir or _REPO_ROOT),
             "shell": start_shell or None,
         },
         "native_terminal": native_status,
@@ -1735,24 +260,31 @@ def heartbeat():
     return {"status": "ok", "timestamp": _last_heartbeat_time}
 
 
+def _verify_active_workflow_session() -> None:
+    workflow_status = _workflow_execute_status()
+    if not workflow_status.get("thread_alive"):
+        return
+
+    session_name = str(workflow_status.get("session_name") or WORKFLOW_EXECUTE_SESSION_NAME).strip() or WORKFLOW_EXECUTE_SESSION_NAME
+    try:
+        session_exists = _tmux_session_exists(session_name)
+    except RuntimeError as exc:
+        logger.warning("[workflow-execute] session_check_failed session=%s error=%s", session_name, exc)
+        return
+    if not session_exists:
+        logger.warning(
+            "[workflow-execute] session_missing session=%s status=%s",
+            session_name,
+            workflow_status.get("status"),
+        )
+        _reset_workflow_execute_state(status="terminated", error="workflow tmux session was terminated")
+
+
 async def _heartbeat_watcher() -> None:
     global _last_heartbeat_time, _last_native_cleanup_time
     while True:
         await asyncio.sleep(5)
-        workflow_status = _workflow_execute_status()
-        if workflow_status.get("thread_alive"):
-            try:
-                session_exists = _tmux_session_exists(WORKFLOW_EXECUTE_SESSION_NAME)
-            except RuntimeError as exc:
-                logger.warning("[workflow-execute] session_check_failed session=%s error=%s", WORKFLOW_EXECUTE_SESSION_NAME, exc)
-                session_exists = True
-            if not session_exists:
-                logger.warning(
-                    "[workflow-execute] session_missing session=%s status=%s",
-                    WORKFLOW_EXECUTE_SESSION_NAME,
-                    workflow_status.get("status"),
-                )
-                _reset_workflow_execute_state(status="terminated", error="workflow tmux session was terminated")
+        _verify_active_workflow_session()
         elapsed = time.time() - _last_heartbeat_time
         if elapsed > _HEARTBEAT_TIMEOUT_SECONDS:
             sessions = _list_webui_tmux_sessions()
@@ -1776,687 +308,6 @@ def start_heartbeat_watcher() -> None:
     if not _heartbeat_watcher_started:
         _heartbeat_watcher_started = True
         asyncio.create_task(_heartbeat_watcher())
-
-
-@router.get("/api/config/settings")
-def config_settings_get():
-    try:
-        return _read_settings()
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={"error": str(exc)})
-
-
-@router.get("/api/config/env-safeguard-status")
-def config_env_safeguard_status():
-    try:
-        exists = _CONFIG_ENV_PATH.is_file()
-        if not exists:
-            return {
-                "enabled": False,
-                "exists": False,
-                "reason": "config/.env not found",
-                "repo_root": str(_REPO_ROOT),
-            }
-
-        stat_result = _CONFIG_ENV_PATH.stat()
-        mode = stat_result.st_mode & 0o777
-        owner_is_root = stat_result.st_uid == 0
-        readable = os.access(_CONFIG_ENV_PATH, os.R_OK)
-        enabled = owner_is_root and mode == 0o600 and not readable
-        if enabled:
-            reason = "Safe guard is enabled."
-        else:
-            reason = "Safe guard is not enabled."
-
-        return {
-            "enabled": enabled,
-            "exists": True,
-            "reason": reason,
-            "owner_uid": stat_result.st_uid,
-            "mode": f"{mode:o}",
-            "readable_by_process": readable,
-            "repo_root": str(_REPO_ROOT),
-        }
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={"error": str(exc)})
-
-
-@router.post("/api/config/settings")
-async def config_settings_save(request: Request):
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
-    try:
-        _write_settings(body)
-    except OSError as exc:
-        return JSONResponse(status_code=500, content={"error": str(exc)})
-    return {"status": "ok"}
-
-
-_DEFAULT_LLM_RE = re.compile(
-    r"""("default"\s*:\s*\{[^}]*?"llm"\s*:\s*)"([^"]*)" """.strip(),
-    re.DOTALL,
-)
-_DEFAULT_LLM_RE_JSON5 = re.compile(
-    r"""(default\s*:\s*\{[^}]*?llm\s*:\s*)'([^']*)' """.strip(),
-    re.DOTALL,
-)
-_DEFAULT_DOCTOR_RE = re.compile(
-    r"""("default"\s*:\s*\{[^}]*?"doctor"\s*:\s*)"([^"]*)" """.strip(),
-    re.DOTALL,
-)
-_DEFAULT_DOCTOR_RE_JSON5 = re.compile(
-    r"""(default\s*:\s*\{[^}]*?doctor\s*:\s*)'([^']*)' """.strip(),
-    re.DOTALL,
-)
-
-
-@router.post("/api/config/default-provider")
-async def config_default_provider(request: Request):
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
-    provider_id = (str(body.get("provider") or "")).strip()
-    if not provider_id:
-        return JSONResponse(status_code=400, content={"error": "provider is required"})
-    target = (str(body.get("target") or "llm")).strip().lower()
-    if target not in {"llm", "doctor"}:
-        return JSONResponse(status_code=400, content={"error": "target must be llm or doctor"})
-    try:
-        text = _AI_PROVIDERS_PATH.read_text(encoding="utf-8")
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={"error": f"Failed to read ai_providers: {exc}"})
-    if target == "llm":
-        new_text, count = _DEFAULT_LLM_RE.subn(rf'\g<1>"{provider_id}"', text, count=1)
-        if count == 0:
-            new_text, count = _DEFAULT_LLM_RE_JSON5.subn(rf"\g<1>'{provider_id}'", text, count=1)
-        if count == 0:
-            return JSONResponse(status_code=500, content={"error": "Could not find default.llm in ai_providers config"})
-    else:
-        new_text, count = _DEFAULT_DOCTOR_RE.subn(rf'\g<1>"{provider_id}"', text, count=1)
-        if count == 0:
-            new_text, count = _DEFAULT_DOCTOR_RE_JSON5.subn(rf"\g<1>'{provider_id}'", text, count=1)
-        if count == 0:
-            return JSONResponse(status_code=500, content={"error": "Could not find default.doctor in ai_providers config"})
-    try:
-        _AI_PROVIDERS_PATH.write_text(new_text, encoding="utf-8")
-    except OSError as exc:
-        return JSONResponse(status_code=500, content={"error": str(exc)})
-    return {"status": "ok", "provider": provider_id, "target": target}
-
-
-_PROFILE_PATH = _REPO_ROOT / "config" / "profile.json5"
-
-
-@router.get("/api/config/profile")
-def config_profile_get():
-    data: Dict[str, Any] = {}
-    if _PROFILE_PATH.is_file():
-        try:
-            loaded = json5.loads(_PROFILE_PATH.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                data = loaded
-        except Exception as exc:
-            logger.warning("Failed to read profile: %s", exc)
-    return data
-
-
-@router.post("/api/config/profile")
-async def config_profile_save(request: Request):
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
-    if not isinstance(body, dict):
-        return JSONResponse(status_code=400, content={"error": "Profile must be a JSON object"})
-    tz_value = (str(body.get("timezone") or "")).strip()
-    if tz_value:
-        import pytz
-        try:
-            pytz.timezone(tz_value)
-        except pytz.exceptions.UnknownTimeZoneError:
-            return JSONResponse(status_code=400, content={"error": f"Invalid timezone: {tz_value}"})
-    _PROFILE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        _PROFILE_PATH.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
-    except OSError as exc:
-        return JSONResponse(status_code=500, content={"error": str(exc)})
-    return {"status": "ok"}
-
-
-@router.get("/api/config/timezones")
-def config_timezones():
-    import pytz
-    return {"timezones": pytz.common_timezones}
-
-
-def _read_mcp_config() -> Dict[str, Any]:
-    if not _MCP_CONFIG_PATH.is_file():
-        return {"mcpServers": {}}
-    return json5.loads(_MCP_CONFIG_PATH.read_text(encoding="utf-8"))
-
-
-def _write_mcp_config(data: Dict[str, Any]) -> None:
-    _MCP_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _MCP_CONFIG_PATH.write_text(json5.dumps(data, indent=2) + "\n", encoding="utf-8")
-
-
-def _infer_mcp_server_type(config: Dict[str, Any]) -> str:
-    raw_type = config.get("type", "")
-    if raw_type == "http":
-        return "streamable-http"
-    if raw_type == "sse":
-        return "sse"
-    return "stdio"
-
-
-def _parse_bool_value(value: Any) -> bool:
-    """Parse a potentially string-typed bool field from env expansion."""
-    if isinstance(value, str):
-        return value.strip().lower() in ("1", "true", "yes")
-    return bool(value)
-
-
-@router.get("/api/config/mcp-servers")
-def config_mcp_servers_list():
-    try:
-        data = _read_mcp_config()
-    except (ValueError, OSError) as exc:
-        return JSONResponse(status_code=500, content={"error": str(exc), "servers": []})
-    from mcp_servers.mcp_to_skills.sync import expand_env_placeholders
-    expansion_env = dict(os.environ)
-    servers_dict = data.get("mcpServers", {})
-    servers = []
-    for name, cfg in servers_dict.items():
-        missing: set = set()
-        expanded = expand_env_placeholders(cfg, expansion_env, missing)
-        entry: Dict[str, Any] = {"name": name, "type": _infer_mcp_server_type(expanded)}
-        if expanded.get("system"):
-            entry["system"] = True
-        enabled_raw = expanded.get("enabled")
-        disabled_raw = expanded.get("disabled", False)
-        if enabled_raw is not None:
-            is_disabled = not _parse_bool_value(enabled_raw)
-        else:
-            is_disabled = _parse_bool_value(disabled_raw)
-        if is_disabled:
-            entry["disabled"] = True
-        for field in ("command", "args", "env", "url", "headers"):
-            if field in expanded:
-                entry[field] = expanded[field]
-        servers.append(entry)
-    return {"servers": servers}
-
-
-@router.post("/api/config/mcp-servers")
-async def config_mcp_servers_save(request: Request):
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
-
-    name = (str(body.get("name") or "")).strip()
-    if not name or not _MCP_SERVER_NAME_RE.fullmatch(name):
-        return JSONResponse(status_code=400, content={"error": "Invalid server name. Use only letters, digits, hyphens, and underscores."})
-
-    server_type = str(body.get("type") or "stdio").strip()
-    if server_type not in ("stdio", "streamable-http", "sse"):
-        return JSONResponse(status_code=400, content={"error": f"Invalid type: {server_type}"})
-
-    try:
-        data = _read_mcp_config()
-    except (json.JSONDecodeError, OSError) as exc:
-        return JSONResponse(status_code=500, content={"error": str(exc)})
-
-    servers = data.get("mcpServers", {})
-    existing = servers.get(name)
-    if existing and existing.get("system"):
-        return JSONResponse(status_code=403, content={"error": f"Cannot modify system server: {name}"})
-
-    entry: Dict[str, Any] = {}
-    if server_type == "stdio":
-        command = (str(body.get("command") or "")).strip()
-        if not command:
-            return JSONResponse(status_code=400, content={"error": "command is required for stdio type"})
-        entry["command"] = command
-        args = body.get("args")
-        if isinstance(args, list) and args:
-            entry["args"] = [str(a) for a in args]
-        env = body.get("env")
-        if isinstance(env, dict) and env:
-            entry["env"] = {str(k): str(v) for k, v in env.items()}
-    else:
-        url = (str(body.get("url") or "")).strip()
-        if not url:
-            return JSONResponse(status_code=400, content={"error": "url is required for http/sse type"})
-        entry["type"] = "http" if server_type == "streamable-http" else "sse"
-        entry["url"] = url
-        headers = body.get("headers")
-        if isinstance(headers, dict) and headers:
-            entry["headers"] = {str(k): str(v) for k, v in headers.items()}
-
-    disabled = body.get("disabled")
-    if disabled is True or disabled is False:
-        entry["disabled"] = disabled
-
-    servers[name] = entry
-    data["mcpServers"] = servers
-    try:
-        _write_mcp_config(data)
-    except OSError as exc:
-        return JSONResponse(status_code=500, content={"error": str(exc)})
-
-    # Auto-install requirements.txt if enabling a stdio server that has one
-    enabling = disabled is False or (disabled is None and not entry.get("disabled", False))
-    if enabling and server_type == "stdio":
-        req_path = _REPO_ROOT / "core" / "engine" / "mcp_servers" / name / "requirements.txt"
-        if req_path.exists():
-            engine_dir = str(_REPO_ROOT / "core" / "engine")
-            req_rel = str(req_path.relative_to(_REPO_ROOT / "core" / "engine"))
-            try:
-                subprocess.run(
-                    ["uv", "add", "-r", req_rel],
-                    cwd=engine_dir,
-                    capture_output=True,
-                    text=True,
-                    timeout=120,
-                )
-            except Exception as exc:
-                logger.warning("Failed to install requirements for %s: %s", name, exc)
-
-    return {"status": "ok", "name": name}
-
-
-@router.delete("/api/config/mcp-servers/{name}")
-def config_mcp_servers_delete(name: str):
-    name = name.strip()
-    if not name or not _MCP_SERVER_NAME_RE.fullmatch(name):
-        return JSONResponse(status_code=400, content={"error": "Invalid server name"})
-
-    try:
-        data = _read_mcp_config()
-    except (json.JSONDecodeError, OSError) as exc:
-        return JSONResponse(status_code=500, content={"error": str(exc)})
-
-    servers = data.get("mcpServers", {})
-    existing = servers.get(name)
-    if not existing:
-        return JSONResponse(status_code=404, content={"error": f"Server not found: {name}"})
-    if existing.get("system"):
-        return JSONResponse(status_code=403, content={"error": f"Cannot delete system server: {name}"})
-
-    del servers[name]
-    data["mcpServers"] = servers
-    try:
-        _write_mcp_config(data)
-    except OSError as exc:
-        return JSONResponse(status_code=500, content={"error": str(exc)})
-    return {"status": "ok", "name": name}
-
-
-def _parse_skill_frontmatter(skill_md_path: Path) -> Dict[str, str]:
-    text = skill_md_path.read_text(encoding="utf-8", errors="replace")
-    if not text.startswith("---"):
-        return {}
-    end = text.find("---", 3)
-    if end == -1:
-        return {}
-    block = text[3:end]
-    result: Dict[str, str] = {}
-    for line in block.splitlines():
-        if ":" in line:
-            key, _, value = line.partition(":")
-            result[key.strip()] = value.strip()
-    return result
-
-
-def _read_disabled_skills() -> List[str]:
-    if not _DISABLED_SKILLS_PATH.is_file():
-        return []
-    try:
-        data = json5.loads(_DISABLED_SKILLS_PATH.read_text(encoding="utf-8"))
-        if isinstance(data, list):
-            return [str(s) for s in data]
-    except (ValueError, OSError):
-        pass
-    return []
-
-
-@router.get("/api/config/skills")
-def config_skills_list():
-    disabled_set = set(_read_disabled_skills())
-    categories = []
-    for cat_id, cat_label, cat_dir in _SKILL_CATEGORIES:
-        skills = []
-        if cat_dir.is_dir():
-            for child in sorted(cat_dir.iterdir()):
-                skill_md = child / "SKILL.md"
-                if child.is_dir() and skill_md.exists():
-                    meta = _parse_skill_frontmatter(skill_md)
-                    skills.append({
-                        "name": meta.get("name", child.name),
-                        "description": meta.get("description", ""),
-                        "disabled": child.name in disabled_set,
-                    })
-        categories.append({"id": cat_id, "label": cat_label, "skills": skills})
-    return {"categories": categories}
-
-
-@router.post("/api/config/skills/update")
-async def config_skills_update(request: Request):
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
-
-    disabled = body.get("disabled", [])
-    if not isinstance(disabled, list):
-        return JSONResponse(status_code=400, content={"error": "disabled must be an array"})
-
-    _DISABLED_SKILLS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _DISABLED_SKILLS_PATH.write_text(
-        json5.dumps(disabled, indent=2) + "\n", encoding="utf-8"
-    )
-
-    bin_dir = _REPO_ROOT / "core" / "bin"
-    skill_verify_paths: List[str] = []
-    for _, _, cat_dir in _SKILL_CATEGORIES:
-        if cat_dir.is_dir():
-            for child in sorted(cat_dir.iterdir()):
-                if child.is_dir() and (child / "SKILL.md").exists():
-                    skill_verify_paths.append(str(child))
-
-    commands: List[tuple[str, List[str]]] = [
-        ("skill-verify", [str(bin_dir / "skill-verify")] + skill_verify_paths),
-        ("skill-install", [str(bin_dir / "skill-install")]),
-    ]
-
-    results: List[Dict[str, Any]] = []
-    for cmd_name, cmd_args in commands:
-        if cmd_name == "skill-verify" and not skill_verify_paths:
-            results.append({"command": cmd_name, "exit_code": 0, "output": "No skills to verify (skipped)"})
-            continue
-        try:
-            proc = await asyncio.to_thread(
-                subprocess.run,
-                cmd_args,
-                capture_output=True,
-                text=True,
-                cwd=str(_REPO_ROOT),
-                timeout=120,
-                shell=False,
-                env=safe_env(),
-            )
-            results.append({
-                "command": cmd_name,
-                "exit_code": proc.returncode,
-                "output": (proc.stdout or "") + (proc.stderr or ""),
-            })
-        except subprocess.TimeoutExpired:
-            results.append({"command": cmd_name, "exit_code": -1, "output": "Timed out after 120s"})
-        except Exception as exc:
-            results.append({"command": cmd_name, "exit_code": -1, "output": str(exc)})
-
-    return {"status": "ok", "results": results}
-
-
-def _find_skill_category_dir(category: str) -> Path | None:
-    for cat_id, _, cat_dir in _SKILL_CATEGORIES:
-        if cat_id == category:
-            return cat_dir
-    return None
-
-
-@router.get("/api/config/skills/{category}/{name}/content")
-def config_skill_content_read(category: str, name: str):
-    cat_dir = _find_skill_category_dir(category)
-    if cat_dir is None:
-        return JSONResponse(status_code=404, content={"error": f"Unknown category: {category}"})
-    skill_md = cat_dir / name / "SKILL.md"
-    if not skill_md.is_file():
-        return JSONResponse(status_code=404, content={"error": f"Skill not found: {category}/{name}"})
-    content = skill_md.read_text(encoding="utf-8", errors="replace")
-    return {"content": content}
-
-
-@router.post("/api/config/skills/{category}/{name}/content")
-async def config_skill_content_write(category: str, name: str, request: Request):
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
-
-    content = body.get("content")
-    if content is None:
-        return JSONResponse(status_code=400, content={"error": "content is required"})
-
-    cat_dir = _find_skill_category_dir(category)
-    if cat_dir is None:
-        return JSONResponse(status_code=404, content={"error": f"Unknown category: {category}"})
-    skill_dir = cat_dir / name
-    skill_md = skill_dir / "SKILL.md"
-    if not skill_dir.is_dir():
-        return JSONResponse(status_code=404, content={"error": f"Skill not found: {category}/{name}"})
-
-    skill_md.write_text(content, encoding="utf-8")
-
-    bin_dir = _REPO_ROOT / "core" / "bin"
-    results: List[Dict[str, Any]] = []
-    try:
-        proc = await asyncio.to_thread(
-            subprocess.run,
-            [str(bin_dir / "skill-verify"), str(skill_dir)],
-            capture_output=True,
-            text=True,
-            cwd=str(_REPO_ROOT),
-            timeout=120,
-            shell=False,
-            env=safe_env(),
-        )
-        results.append({
-            "command": "skill-verify",
-            "exit_code": proc.returncode,
-            "output": (proc.stdout or "") + (proc.stderr or ""),
-        })
-    except subprocess.TimeoutExpired:
-        results.append({"command": "skill-verify", "exit_code": -1, "output": "Timed out after 120s"})
-    except Exception as exc:
-        results.append({"command": "skill-verify", "exit_code": -1, "output": str(exc)})
-
-    return {"status": "ok", "results": results}
-
-
-@router.post("/api/config/mcp-servers/sync")
-async def config_mcp_servers_sync():
-    bin_dir = _REPO_ROOT / "core" / "bin"
-    skill_verify_paths: List[str] = []
-    for skills_dir in (_MCP_SKILLS_DIR, _SYSTEM_SKILLS_DIR):
-        if skills_dir.is_dir():
-            for child in sorted(skills_dir.iterdir()):
-                if child.is_dir() and (child / "SKILL.md").exists():
-                    skill_verify_paths.append(str(child))
-
-    results: List[Dict[str, Any]] = []
-
-    # 1) Sync MCP in-process (do not shell out to core/bin/sync-mcp).
-    try:
-        from mcp_servers.mcp_to_skills.sync import sync_mcp_tools
-
-        summary = await asyncio.to_thread(sync_mcp_tools, repo_root=_REPO_ROOT)
-        output_lines: list[str] = []
-        output_lines.append(f"Synced {summary.get('total_tools', 0)} tools.")
-        synced = summary.get("synced_servers") or []
-        skipped = summary.get("skipped_servers") or []
-        if synced:
-            output_lines.append("Servers synced:")
-            for line in synced:
-                output_lines.append(f"  - {line}")
-        if skipped:
-            output_lines.append("Skipped:")
-            for line in skipped:
-                output_lines.append(f"  - {line}")
-        results.append({"command": "sync-mcp (in-process)", "exit_code": 0, "output": "\n".join(output_lines) + "\n"})
-    except Exception as exc:
-        results.append({"command": "sync-mcp (in-process)", "exit_code": -1, "output": str(exc)})
-        return JSONResponse(status_code=500, content={"error": str(exc), "results": results})
-
-    # 2) Verify generated skills (still uses core/bin scripts).
-    if not skill_verify_paths:
-        results.append({"command": "skill-verify", "exit_code": 0, "output": "No skills to verify (skipped)"})
-    else:
-        try:
-            proc = await asyncio.to_thread(
-                subprocess.run,
-                [str(bin_dir / "skill-verify"), *skill_verify_paths],
-                capture_output=True,
-                text=True,
-                cwd=str(_REPO_ROOT),
-                timeout=120,
-                shell=False,
-                env=safe_env(),
-            )
-            results.append({
-                "command": "skill-verify",
-                "exit_code": proc.returncode,
-                "output": (proc.stdout or "") + (proc.stderr or ""),
-            })
-            if proc.returncode != 0:
-                return JSONResponse(status_code=500, content={
-                    "error": f"skill-verify failed with exit code {proc.returncode}",
-                    "results": results,
-                })
-        except subprocess.TimeoutExpired:
-            results.append({"command": "skill-verify", "exit_code": -1, "output": "Timed out after 120s"})
-            return JSONResponse(status_code=500, content={"error": "skill-verify timed out", "results": results})
-        except Exception as exc:
-            results.append({"command": "skill-verify", "exit_code": -1, "output": str(exc)})
-            return JSONResponse(status_code=500, content={"error": str(exc), "results": results})
-
-    # 3) Install skills.
-    try:
-        proc = await asyncio.to_thread(
-            subprocess.run,
-            [str(bin_dir / "skill-install")],
-            capture_output=True,
-            text=True,
-            cwd=str(_REPO_ROOT),
-            timeout=120,
-            shell=False,
-            env=safe_env(),
-        )
-        results.append({
-            "command": "skill-install",
-            "exit_code": proc.returncode,
-            "output": (proc.stdout or "") + (proc.stderr or ""),
-        })
-        if proc.returncode != 0:
-            return JSONResponse(status_code=500, content={
-                "error": f"skill-install failed with exit code {proc.returncode}",
-                "results": results,
-            })
-    except subprocess.TimeoutExpired:
-        results.append({"command": "skill-install", "exit_code": -1, "output": "Timed out after 120s"})
-        return JSONResponse(status_code=500, content={"error": "skill-install timed out", "results": results})
-    except Exception as exc:
-        results.append({"command": "skill-install", "exit_code": -1, "output": str(exc)})
-        return JSONResponse(status_code=500, content={"error": str(exc), "results": results})
-
-    return {"status": "ok", "results": results}
-
-
-@router.get("/api/config/schedules")
-def config_schedules_list():
-    from scheduler import load_schedules
-    try:
-        schedules = load_schedules()
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={"error": str(exc), "schedules": []})
-    return {"schedules": schedules}
-
-
-@router.post("/api/config/schedules")
-async def config_schedules_save(request: Request):
-    from scheduler import load_schedules, save_schedules, reload_scheduler
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
-
-    schedule_id = (str(body.get("id") or "")).strip()
-    name = (str(body.get("name") or "")).strip()
-    skill = (str(body.get("skill") or "")).strip()
-    cron = (str(body.get("cron") or "")).strip()
-    provider = (str(body.get("provider") or "")).strip()
-    enabled = body.get("enabled", True)
-
-    if not name:
-        return JSONResponse(status_code=400, content={"error": "name is required"})
-    if not skill:
-        return JSONResponse(status_code=400, content={"error": "skill is required"})
-    if not cron:
-        return JSONResponse(status_code=400, content={"error": "cron is required"})
-
-    try:
-        CronTrigger.from_crontab(cron)
-    except (ValueError, KeyError) as exc:
-        return JSONResponse(status_code=400, content={"error": f"Invalid cron expression: {exc}"})
-
-    schedules = load_schedules()
-
-    entry = {
-        "id": schedule_id or secrets.token_hex(4),
-        "name": name,
-        "skill": skill,
-        "cron": cron,
-        "provider": provider,
-        "enabled": bool(enabled),
-    }
-
-    if schedule_id:
-        found = False
-        for i, existing in enumerate(schedules):
-            if existing.get("id") == schedule_id:
-                schedules[i] = entry
-                found = True
-                break
-        if not found:
-            schedules.append(entry)
-    else:
-        schedules.append(entry)
-
-    try:
-        save_schedules(schedules)
-        reload_scheduler()
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={"error": str(exc)})
-
-    return {"status": "ok", "schedule": entry}
-
-
-@router.delete("/api/config/schedules/{schedule_id}")
-def config_schedules_delete(schedule_id: str):
-    from scheduler import load_schedules, save_schedules, reload_scheduler
-
-    schedule_id = schedule_id.strip()
-    if not schedule_id:
-        return JSONResponse(status_code=400, content={"error": "Schedule ID is required"})
-
-    schedules = load_schedules()
-    original_len = len(schedules)
-    schedules = [s for s in schedules if s.get("id") != schedule_id]
-
-    if len(schedules) == original_len:
-        return JSONResponse(status_code=404, content={"error": f"Schedule not found: {schedule_id}"})
-
-    try:
-        save_schedules(schedules)
-        reload_scheduler()
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={"error": str(exc)})
-
-    return {"status": "ok"}
 
 
 @router.websocket("/api/terminal/ws")
@@ -2703,10 +554,6 @@ def _normalize_task_file_name(value: str) -> str:
     return f"{safe_stem}{safe_suffix}"
 
 
-def _terminal_workflow_base_dir() -> Path:
-    return _REPO_ROOT / ".skillpilot" / "temp" / "terminal-workflow"
-
-
 def _task_instruction_project_path(task_path: str) -> str:
     trimmed = str(task_path or "").strip().replace("\\", "/").lstrip("/")
     return f"workspace/tasks/{trimmed}" if trimmed else "workspace/tasks"
@@ -2898,21 +745,766 @@ def _extract_task_create_parts(payload: Dict[str, Any]) -> tuple[str, str]:
     return parts[0], parts[1]
 
 
-def _is_text_bytes(data: bytes) -> bool:
-    return b"\x00" not in data
+def _is_http_url(value: str) -> bool:
+    lower = value.lower()
+    return lower.startswith("http://") or lower.startswith("https://")
 
 
-def _task_type_from_path(path: str) -> str:
-    lower = path.lower()
-    if lower.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg")):
-        return "image"
-    if lower.endswith((".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac")):
-        return "audio"
-    if lower.endswith((".mp4", ".mov", ".webm", ".m4v", ".avi", ".mkv")):
-        return "video"
-    if lower.endswith((".md", ".markdown")):
-        return "markdown"
-    return "text"
+def _normalize_repo_relative_path(raw_path: Any) -> str:
+    value = str(raw_path or "").strip().replace("\\", "/")
+    value = value.lstrip("/")
+    if not value:
+        raise ValueError("Path cannot be empty")
+    candidate = (_REPO_ROOT / value).resolve()
+    if candidate != _REPO_ROOT and _REPO_ROOT not in candidate.parents:
+        raise ValueError("Path must stay within the repository")
+    return value
+
+
+def _download_url_for_repo_path(raw_path: str) -> str:
+    normalized = _normalize_repo_relative_path(raw_path)
+    return f"/api/files/download?path={quote('/' + normalized)}"
+
+
+def _normalize_showcase_media(value: Any) -> Dict[str, Any]:
+    raw = str(value or "").strip()
+    if not raw:
+        return {"value": None, "url": None, "is_external": False, "is_media": False}
+    is_external = _is_http_url(raw)
+    url = raw if is_external else _download_url_for_repo_path(raw)
+    kind = _task_type_from_path(raw if is_external else "/" + raw)
+    return {
+        "value": raw,
+        "url": url,
+        "is_external": is_external,
+        "is_media": kind in {"image", "audio", "video"},
+    }
+
+
+def _normalize_showcase_link(item: Any) -> Dict[str, str]:
+    if not isinstance(item, dict):
+        raise ValueError("Showcase link entries must be objects")
+    name = str(item.get("name") or "").strip()
+    url = str(item.get("url") or "").strip()
+    if not name or not url:
+        raise ValueError("Showcase links require name and url")
+    return {"name": name, "url": url}
+
+
+def _normalize_showcase_repo_paths(items: Any) -> List[str]:
+    if items in (None, ""):
+        return []
+    if not isinstance(items, list):
+        raise ValueError("Showcase path lists must be arrays")
+    values: List[str] = []
+    for item in items:
+        values.append(_normalize_repo_relative_path(item))
+    return values
+
+
+def _normalize_showcase_extensions(items: Any) -> List[str]:
+    if items in (None, ""):
+        return []
+    if not isinstance(items, list):
+        raise ValueError("Showcase extensions must be arrays")
+    values: List[str] = []
+    for item in items:
+        name = str(item).strip()
+        if name:
+            values.append(name)
+    return values
+
+
+def _normalize_showcase_in_mode(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized == "dev":
+        return "dev"
+    return "prod"
+
+
+def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any]:
+    if not isinstance(sample, dict):
+        raise ValueError(f"Sample entries for category '{category_name}' must be objects")
+
+    sample_id = str(sample.get("id") or "").strip()
+    title = str(sample.get("title") or "").strip()
+    description = str(sample.get("description") or "").strip()
+    prompt = str(sample.get("prompt") or "")
+    if not sample_id or not title or not description or not prompt:
+        raise ValueError(f"Showcase sample in '{category_name}' is missing id/title/description/prompt")
+
+    thumbnail = _normalize_showcase_media(sample.get("thumbnail"))
+    video = _normalize_showcase_media(sample.get("video"))
+    tutorial = _normalize_showcase_media(sample.get("tutorial"))
+    request = _normalize_showcase_media(sample.get("request"))
+    git_tag = sample.get("git_tag")
+    if git_tag is not None:
+        git_tag = str(git_tag).strip() or None
+    in_mode = _normalize_showcase_in_mode(sample.get("in_mode"))
+    workflow = str(sample.get("workflow") or "").strip() or None
+    directory = str(sample.get("directory") or "").strip() or None
+    use_worktree = _bool_with_default(sample.get("use_worktree"), False)
+
+    skills = _normalize_showcase_repo_paths(sample.get("skills"))
+    tools = _normalize_showcase_repo_paths(sample.get("tools"))
+    files = _normalize_showcase_repo_paths(sample.get("files"))
+    extensions = _normalize_showcase_extensions(sample.get("extensions"))
+    links = [_normalize_showcase_link(item) for item in (sample.get("links") or [])]
+
+    try:
+        popularity = int(sample.get("popularity", 0))
+        level = int(sample.get("level", 1))
+        rate = float(sample.get("rate", 0))
+    except Exception as exc:
+        raise ValueError(f"Invalid numeric showcase fields for sample '{sample_id}'") from exc
+
+    if git_tag and not use_worktree:
+        raise ValueError(f"Showcase sample '{sample_id}' must use use_worktree=true when git_tag is set")
+    if git_tag and in_mode != "dev":
+        raise ValueError(f"Showcase sample '{sample_id}' must use in_mode=dev when git_tag is set")
+    if use_worktree and in_mode != "dev":
+        raise ValueError(f"Showcase sample '{sample_id}' must use in_mode=dev when use_worktree is true")
+
+    return {
+        "id": sample_id,
+        "title": title,
+        "description": description,
+        "thumbnail": thumbnail["value"],
+        "thumbnail_url": thumbnail["url"],
+        "video": video["value"],
+        "video_url": video["url"],
+        "tutorial": tutorial["value"],
+        "tutorial_url": tutorial["url"],
+        "tutorial_is_external": tutorial["is_external"],
+        "tutorial_is_media": tutorial["is_media"],
+        "request": request["value"],
+        "request_url": request["url"],
+        "request_is_media": request["is_media"],
+        "prompt": prompt,
+        "workflow": workflow,
+        "directory": directory,
+        "in_mode": in_mode,
+        "git_tag": git_tag,
+        "use_worktree": use_worktree,
+        "skills": skills,
+        "extensions": extensions,
+        "tools": tools,
+        "files": files,
+        "links": links,
+        "popularity": popularity,
+        "level": level,
+        "rate": rate,
+    }
+
+
+def _normalize_showcase_category(raw_category: Any) -> Dict[str, Any]:
+    if not isinstance(raw_category, dict):
+        raise ValueError("Showcase categories must be objects")
+    category_id = str(raw_category.get("id") or "").strip()
+    category_name = str(raw_category.get("category") or "").strip()
+    description = str(raw_category.get("description") or "").strip()
+    if not category_name or not description:
+        raise ValueError("Showcase categories require category and description")
+    thumbnail = _normalize_showcase_media(raw_category.get("thumbnail"))
+    
+    samples = []
+    samples_raw = raw_category.get("samples")
+    if samples_raw is not None:
+        if not isinstance(samples_raw, list):
+            raise ValueError(f"Category '{category_name}' samples must be an array")
+        samples = [_normalize_showcase_sample(sample, category_name) for sample in samples_raw]
+        
+    subcategories = []
+    subcategories_raw = raw_category.get("subcategories")
+    if subcategories_raw is not None:
+        if not isinstance(subcategories_raw, list):
+            raise ValueError(f"Category '{category_name}' subcategories must be an array")
+        subcategories = [_normalize_showcase_category(sub) for sub in subcategories_raw]
+        
+    return {
+        "id": category_id,
+        "category": category_name,
+        "description": description,
+        "thumbnail": thumbnail["value"],
+        "thumbnail_url": thumbnail["url"],
+        "samples": samples,
+        "subcategories": subcategories,
+    }
+
+def _load_showcases() -> List[Dict[str, Any]]:
+    if not _SHOWCASES_PATH.is_file():
+        raise FileNotFoundError(f"Showcases file not found: {_SHOWCASES_PATH}")
+    raw = json5.loads(_SHOWCASES_PATH.read_text(encoding="utf-8"))
+    if not isinstance(raw, list):
+        raise ValueError("Showcases data must be an array of categories")
+        
+    import yaml
+    def populate_samples(categories, parent_dir):
+        for cat in categories:
+            cat_id = cat.get("id")
+            if not cat_id:
+                continue
+            cat_dir = parent_dir / str(cat_id)
+            samples = []
+            if cat_dir.is_dir():
+                files = [p for p in cat_dir.iterdir() if p.is_file() and p.name.endswith(".yaml")]
+                files.sort(key=lambda x: x.name)
+                for fpath in files:
+                    try:
+                        with open(fpath, "r", encoding="utf-8") as f:
+                            sample = yaml.safe_load(f)
+                            if isinstance(sample, dict):
+                                samples.append(sample)
+                    except Exception as e:
+                        logger.warning(f"Failed to load showcase sample {fpath}: {e}")
+            cat["samples"] = samples
+            
+            if cat.get("subcategories") and isinstance(cat["subcategories"], list):
+                populate_samples(cat["subcategories"], cat_dir)
+                
+    populate_samples(raw, _SHOWCASES_PATH.parent / "showcases")
+
+    return [_normalize_showcase_category(cat) for cat in raw]
+
+
+def _find_showcase_sample(categories: List[Dict[str, Any]], sample_id: str) -> Dict[str, Any]:
+    target = str(sample_id or "").strip()
+    if not target:
+        raise ValueError("sample_id is required")
+
+    def _search_categories(cats: List[Dict[str, Any]]) -> Dict[str, Any] | None:
+        for category in cats:
+            for sample in category.get("samples", []):
+                if sample.get("id") == target:
+                    return sample
+            if category.get("subcategories"):
+                found = _search_categories(category["subcategories"])
+                if found:
+                    return found
+        return None
+
+    found = _search_categories(categories)
+    if found:
+        return found
+    raise FileNotFoundError(f"Showcase sample not found: {target}")
+
+
+def _sanitize_worktree_suffix(value: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9_-]+", "_", value or "").strip("_")
+    return cleaned or "sample"
+
+
+def _explore_worktree_path(sample_id: str) -> Path:
+    suffix = _sanitize_worktree_suffix(sample_id)
+    return _REPO_ROOT.parent / f"{_REPO_ROOT.name}_{suffix}"
+
+
+def _git_command(args: List[str], *, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
+    proc = subprocess.run(
+        ["git", *args],
+        cwd=str(cwd) if cwd else None,
+        capture_output=True,
+        text=True,
+        shell=False,
+        env=safe_env(),
+    )
+    if check and proc.returncode != 0:
+        message = (proc.stderr or proc.stdout or "").strip()
+        raise RuntimeError(message or f"git command failed: {' '.join(args)}")
+    return proc
+
+
+def _explore_tmux_session_exists() -> bool:
+    return _tmux_session_exists(_DEV_WEBUI_SESSION_NAME) and _tmux_session_exists(_DEV_ENGINE_SESSION_NAME)
+
+
+def _managed_explore_dev_snapshot() -> Dict[str, Any]:
+    with _EXPLORE_TEMPLATE_LOCK:
+        return dict(_EXPLORE_MANAGED_DEV)
+
+
+def _set_managed_explore_dev(*, worktree_path: str, launch_id: str, started_at: float) -> None:
+    with _EXPLORE_TEMPLATE_LOCK:
+        _EXPLORE_MANAGED_DEV.update(
+            {
+                "session_name": _DEV_ENGINE_SESSION_NAME,
+                "worktree_path": worktree_path,
+                "launch_id": launch_id,
+                "started_at": started_at,
+            }
+        )
+
+
+def _clear_managed_explore_dev() -> None:
+    with _EXPLORE_TEMPLATE_LOCK:
+        _EXPLORE_MANAGED_DEV.update(
+            {
+                "session_name": _DEV_ENGINE_SESSION_NAME,
+                "worktree_path": "",
+                "launch_id": "",
+                "started_at": 0.0,
+            }
+        )
+
+
+def _store_explore_launch(launch_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    with _EXPLORE_TEMPLATE_LOCK:
+        _EXPLORE_TEMPLATE_LAUNCHES[launch_id] = payload
+        return dict(payload)
+
+
+def _update_explore_launch(launch_id: str, **updates: Any) -> Dict[str, Any] | None:
+    with _EXPLORE_TEMPLATE_LOCK:
+        launch = _EXPLORE_TEMPLATE_LAUNCHES.get(launch_id)
+        if not launch:
+            return None
+        launch.update(updates)
+        return dict(launch)
+
+
+def _get_explore_launch(launch_id: str) -> Dict[str, Any] | None:
+    with _EXPLORE_TEMPLATE_LOCK:
+        launch = _EXPLORE_TEMPLATE_LAUNCHES.get(launch_id)
+        return dict(launch) if launch else None
+
+
+def _build_explore_launch_payload(
+    *,
+    launch_id: str,
+    sample_id: str,
+    use_worktree: bool,
+    worktree_path: Path,
+    target_url: str,
+) -> Dict[str, Any]:
+    return {
+        "status": "pending",
+        "launch_id": launch_id,
+        "sample_id": sample_id,
+        "use_worktree": use_worktree,
+        "worktree_path": str(worktree_path),
+        "target_url": target_url,
+        "monitor_url": _explore_dev_base_url(),
+        "session_name": _DEV_ENGINE_SESSION_NAME,
+        "created_at": time.time(),
+        "startup_log_path": str(worktree_path / ".skillpilot" / "temp" / "explore-dev-start.log"),
+        "error": "",
+    }
+
+
+def _explore_dev_base_url() -> str:
+    host, port = get_service_host_port("webui", mode="development", default_host="127.0.0.1", default_port=3003)
+    return f"http://{host}:{port}"
+
+
+def _explore_dev_health_url() -> str:
+    return f"{_explore_dev_base_url()}/api/health"
+
+
+def _probe_explore_dev_ready() -> bool:
+    req = urllib.request.Request(_explore_dev_health_url(), headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=1.5) as response:
+            if response.status != 200:
+                return False
+            payload = json.loads(response.read().decode("utf-8"))
+            return not payload or payload.get("status") == "ok"
+    except Exception:
+        return False
+
+
+def _run_skillpilot_command(args: List[str], *, cwd: Path, timeout: float = 120.0) -> subprocess.CompletedProcess[str]:
+    proc = subprocess.run(
+        ["./skillpilot.sh", *args],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        shell=False,
+        env=safe_env(),
+        timeout=timeout,
+    )
+    if proc.returncode != 0:
+        message = (proc.stderr or proc.stdout or "").strip()
+        raise RuntimeError(message or f"skillpilot command failed: {' '.join(args)}")
+    return proc
+
+
+def _git_common_repo_root(repo_path: Path) -> Path:
+    try:
+        proc = _git_command(["rev-parse", "--git-common-dir"], cwd=repo_path)
+    except Exception:
+        return repo_path.resolve()
+    raw = proc.stdout.strip()
+    if not raw:
+        return repo_path.resolve()
+    candidate = Path(raw)
+    if not candidate.is_absolute():
+        candidate = (repo_path / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
+    if candidate.name == ".git" and candidate.parent.is_dir():
+        return candidate.parent.resolve()
+    return repo_path.resolve()
+
+
+def _spawn_skillpilot_dev_start(target_root: Path) -> None:
+    log_dir = target_root / ".skillpilot" / "temp"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "explore-dev-start.log"
+    with log_path.open("ab") as log_file:
+        subprocess.Popen(
+            ["./skillpilot.sh", "start", "--dev", "--source", "webui"],
+            cwd=str(target_root),
+            shell=False,
+            stdin=subprocess.DEVNULL,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            env=safe_env(),
+            start_new_session=True,
+            close_fds=True,
+        )
+
+
+def _remove_explore_worktree(path: Path) -> None:
+    if not path.exists():
+        return
+    proc = _git_command(["-C", str(_REPO_ROOT), "worktree", "remove", "--force", str(path)], check=False)
+    if proc.returncode == 0:
+        return
+    shutil.rmtree(path)
+
+
+def _explore_branch_name(sample_suffix: str) -> str:
+    timestamp = int(time.time())
+    return f"codex/explore-{sample_suffix}-{timestamp}"
+
+
+def _repo_has_local_changes(repo_path: Path) -> bool:
+    proc = _git_command(["status", "--porcelain", "--untracked-files=all"], cwd=repo_path)
+    return bool(proc.stdout.strip())
+
+
+def _push_worktree_stash(repo_path: Path, message: str) -> str | None:
+    if not _repo_has_local_changes(repo_path):
+        return None
+    before = _git_command(["rev-parse", "-q", "--verify", "refs/stash"], cwd=repo_path, check=False).stdout.strip()
+    proc = _git_command(["stash", "push", "-u", "-m", message], cwd=repo_path, check=False)
+    if proc.returncode != 0:
+        message_out = (proc.stderr or proc.stdout or "").strip()
+        raise RuntimeError(message_out or "Failed to stash local changes before creating worktree")
+    after = _git_command(["rev-parse", "-q", "--verify", "refs/stash"], cwd=repo_path, check=False).stdout.strip()
+    if not after or after == before:
+        return None
+    return "stash@{0}"
+
+
+def _apply_and_drop_stash_for_worktree(repo_path: Path, worktree_path: Path, stash_ref: str) -> None:
+    _git_command(["stash", "apply", stash_ref], cwd=worktree_path)
+    _git_command(["stash", "apply", stash_ref], cwd=repo_path)
+    _git_command(["stash", "drop", stash_ref], cwd=repo_path)
+
+
+def _restore_stash_to_repo(repo_path: Path, stash_ref: str) -> None:
+    try:
+        _git_command(["stash", "apply", stash_ref], cwd=repo_path)
+    finally:
+        _git_command(["stash", "drop", stash_ref], cwd=repo_path, check=False)
+
+
+def _ensure_worktree_env_symlink(worktree_path: Path) -> None:
+    source = _CONFIG_ENV_PATH
+    target = worktree_path / "config" / ".env"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.is_symlink():
+        if os.path.realpath(target) == str(source):
+            return
+        target.unlink()
+    elif target.exists():
+        if target.is_dir():
+            raise RuntimeError(f"Cannot replace directory with env symlink: {target}")
+        target.unlink()
+    rel_source = os.path.relpath(source, start=target.parent)
+    target.symlink_to(rel_source)
+
+
+def _create_explore_worktree(path: Path, *, sample_id: str, base_ref: str | None = None) -> None:
+    sample_suffix = _sanitize_worktree_suffix(sample_id)
+    branch_name = _explore_branch_name(sample_suffix)
+    stash_ref: str | None = None
+    try:
+        stash_ref = _push_worktree_stash(_REPO_ROOT, "save local changes")
+        args = ["worktree", "add", "-b", branch_name, str(path)]
+        if base_ref:
+            args.append(base_ref)
+        _git_command(args, cwd=_REPO_ROOT)
+        if stash_ref:
+            _apply_and_drop_stash_for_worktree(_REPO_ROOT, path, stash_ref)
+            stash_ref = None
+        _ensure_worktree_env_symlink(path)
+    except Exception:
+        if stash_ref:
+            _restore_stash_to_repo(_REPO_ROOT, stash_ref)
+        raise
+
+
+def _ensure_explore_worktree(path: Path, *, sample_id: str, existing_action: str | None, base_ref: str | None = None) -> Dict[str, Any] | None:
+    if path.exists():
+        if existing_action not in {"continue", "remove"}:
+            return {
+                "status": "needs_existing_worktree_action",
+                "worktree_path": str(path),
+            }
+        if existing_action == "remove":
+            _remove_explore_worktree(path)
+            _create_explore_worktree(path, sample_id=sample_id, base_ref=base_ref)
+        return None
+    _create_explore_worktree(path, sample_id=sample_id, base_ref=base_ref)
+    return None
+
+
+def _build_prompt_target_url(base_url: str, prompt: str, path: str | None = None) -> str:
+    encoded_prompt = quote(prompt, safe="")
+    if path:
+        encoded_path = quote(path, safe="")
+        return f"{base_url}/?new_session=true&prompt={encoded_prompt}&path={encoded_path}"
+    return f"{base_url}/?new_session=true&prompt={encoded_prompt}"
+
+
+def _stop_managed_explore_dev_if_running() -> None:
+    snapshot = _managed_explore_dev_snapshot()
+    if snapshot.get("worktree_path"):
+        worktree_path = Path(str(snapshot["worktree_path"]))
+        if worktree_path.is_dir():
+            try:
+                _run_skillpilot_command(["stop", "--dev"], cwd=worktree_path, timeout=90.0)
+            except Exception:
+                pass
+    _clear_managed_explore_dev()
+
+
+def _start_explore_dev_session(worktree_path: Path) -> None:
+    _spawn_skillpilot_dev_start(worktree_path)
+
+
+@router.get("/api/explore/showcases")
+def explore_showcases():
+    try:
+        categories = _load_showcases()
+        return {
+            "categories": categories,
+            "runtime_mode": get_runtime_mode(),
+            "can_use_template": True,
+            "managed_dev": _managed_explore_dev_snapshot(),
+        }
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc), "categories": []})
+
+
+@router.post("/api/explore/template/start")
+def explore_template_start(payload: Dict[str, Any]):
+    sample_id = str(payload.get("sample_id") or "").strip()
+    use_worktree = _bool_with_default(payload.get("use_worktree"), False)
+    checkout_tag = _bool_with_default(payload.get("checkout_tag"), True)
+    start_in_dev_mode = _bool_with_default(payload.get("start_in_dev_mode"), False)
+    existing_worktree_action = str(payload.get("existing_worktree_action") or "").strip().lower() or None
+    running_dev_action = str(payload.get("running_dev_action") or "").strip().lower() or None
+
+    try:
+        categories = _load_showcases()
+        sample = _find_showcase_sample(categories, sample_id)
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"status": "error", "error": str(exc)})
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"status": "error", "error": str(exc)})
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"status": "error", "error": str(exc)})
+
+    prompt = str(sample.get("prompt") or "")
+    sample_in_mode = _normalize_showcase_in_mode(sample.get("in_mode"))
+    runtime_mode = get_runtime_mode()
+    current_runtime_root = _REPO_ROOT.resolve()
+    dev_runtime_target_root = current_runtime_root
+    if runtime_mode == "development":
+        use_worktree = False
+        checkout_tag = False
+        dev_runtime_target_root = _git_common_repo_root(current_runtime_root)
+    should_use_dev_instance = sample_in_mode == "dev" or use_worktree
+    start_in_dev_mode = True if should_use_dev_instance else start_in_dev_mode
+
+    if sample_in_mode == "dev" and not start_in_dev_mode:
+        return JSONResponse(status_code=400, content={"status": "error", "error": "Dev-mode samples cannot be started in prod mode"})
+
+    if runtime_mode == "development":
+        if dev_runtime_target_root != current_runtime_root:
+            try:
+                _spawn_skillpilot_dev_start(dev_runtime_target_root)
+            except Exception as exc:
+                return JSONResponse(status_code=500, content={"status": "error", "error": str(exc)})
+            return {
+                "status": "relaunching_current_dev",
+                "target_url": _build_prompt_target_url("", prompt),
+                "sample_id": sample_id,
+                "use_worktree": False,
+            }
+        return {
+            "status": "launched",
+            "target_url": _build_prompt_target_url("", prompt),
+            "sample_id": sample_id,
+            "use_worktree": False,
+        }
+
+    if not use_worktree and sample_in_mode != "dev":
+        return {
+            "status": "launched",
+            "target_url": _build_prompt_target_url("", prompt),
+            "sample_id": sample_id,
+            "use_worktree": False,
+        }
+
+    git_tag = sample.get("git_tag")
+    worktree_path = _explore_worktree_path(sample_id) if use_worktree else _REPO_ROOT
+    current_instance_target_url = _build_prompt_target_url("", prompt, str(worktree_path) if use_worktree else None)
+    base_ref = str(git_tag) if (checkout_tag and git_tag) else None
+    snapshot = _managed_explore_dev_snapshot()
+    same_managed_worktree = str(snapshot.get("worktree_path") or "") == str(worktree_path)
+    needs_prod_dev_monitor_step = runtime_mode == "production" and should_use_dev_instance
+
+    if use_worktree and worktree_path.exists() and existing_worktree_action not in {"continue", "remove"}:
+        return {
+            "status": "needs_existing_worktree_action",
+            "sample_id": sample_id,
+            "worktree_path": str(worktree_path),
+        }
+
+    if _explore_tmux_session_exists() and not same_managed_worktree:
+        _stop_managed_explore_dev_if_running()
+
+    if same_managed_worktree and _explore_tmux_session_exists():
+        if _probe_explore_dev_ready():
+            return {
+                "status": "monitor_dev_and_continue" if needs_prod_dev_monitor_step else "launched",
+                "target_url": current_instance_target_url,
+                "monitor_url": _explore_dev_base_url(),
+                "sample_id": sample_id,
+                "use_worktree": use_worktree,
+                "worktree_path": str(worktree_path),
+                "reused_running_dev": True,
+            }
+        if needs_prod_dev_monitor_step:
+            existing_launch_id = str(snapshot.get("launch_id") or "").strip()
+            if existing_launch_id and _get_explore_launch(existing_launch_id) is None:
+                _store_explore_launch(
+                    existing_launch_id,
+                    _build_explore_launch_payload(
+                        launch_id=existing_launch_id,
+                        sample_id=sample_id,
+                        use_worktree=use_worktree,
+                        worktree_path=worktree_path,
+                        target_url=current_instance_target_url,
+                    ),
+                )
+            response: Dict[str, Any] = {
+                "status": "monitor_dev_and_continue",
+                "target_url": current_instance_target_url,
+                "monitor_url": _explore_dev_base_url(),
+                "sample_id": sample_id,
+                "use_worktree": use_worktree,
+                "worktree_path": str(worktree_path),
+                "reused_running_dev": False,
+            }
+            if existing_launch_id:
+                response["launch_id"] = existing_launch_id
+            return response
+
+    try:
+        if use_worktree and existing_worktree_action == "remove" and same_managed_worktree and _explore_tmux_session_exists():
+            _stop_managed_explore_dev_if_running()
+        if use_worktree:
+            result = _ensure_explore_worktree(
+                worktree_path,
+                sample_id=sample_id,
+                existing_action=existing_worktree_action,
+                base_ref=base_ref,
+            )
+            if result is not None:
+                result.update({"sample_id": sample_id})
+                return result
+
+        try:
+            _run_skillpilot_command(["stop", "--dev"], cwd=worktree_path, timeout=90.0)
+        except Exception:
+            pass
+
+        _start_explore_dev_session(worktree_path)
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"status": "error", "error": str(exc)})
+
+    launch_id = uuid4().hex
+    if needs_prod_dev_monitor_step:
+        _store_explore_launch(
+            launch_id,
+            _build_explore_launch_payload(
+                launch_id=launch_id,
+                sample_id=sample_id,
+                use_worktree=use_worktree,
+                worktree_path=worktree_path,
+                target_url=current_instance_target_url,
+            ),
+        )
+        _set_managed_explore_dev(worktree_path=str(worktree_path), launch_id=launch_id, started_at=time.time())
+        return {
+            "status": "monitor_dev_and_continue",
+            "launch_id": launch_id,
+            "target_url": current_instance_target_url,
+            "monitor_url": _explore_dev_base_url(),
+            "sample_id": sample_id,
+            "use_worktree": use_worktree,
+            "worktree_path": str(worktree_path),
+        }
+
+    target_url = current_instance_target_url
+    launch = _store_explore_launch(
+        launch_id,
+        _build_explore_launch_payload(
+            launch_id=launch_id,
+            sample_id=sample_id,
+            use_worktree=use_worktree,
+            worktree_path=worktree_path,
+            target_url=target_url,
+        ),
+    )
+    _set_managed_explore_dev(worktree_path=str(worktree_path), launch_id=launch_id, started_at=time.time())
+    return launch
+
+
+@router.get("/api/explore/template/status")
+def explore_template_status(launch_id: str):
+    launch = _get_explore_launch(launch_id)
+    if not launch:
+        return JSONResponse(status_code=404, content={"status": "error", "error": f"Unknown launch id: {launch_id}"})
+
+    if launch.get("status") == "pending":
+        if _probe_explore_dev_ready():
+            updated = _update_explore_launch(launch_id, status="launched")
+            if updated is not None:
+                launch = updated
+        elif not _explore_tmux_session_exists():
+            created_at = float(launch.get("created_at") or 0.0)
+            if time.time() - created_at < _EXPLORE_DEV_START_GRACE_SECONDS:
+                return launch
+            startup_log_path = str(launch.get("startup_log_path") or "").strip()
+            error_message = "The managed dev session exited before the worktree WebUI became ready."
+            if startup_log_path:
+                error_message = f"{error_message} Check {startup_log_path} for startup logs."
+            updated = _update_explore_launch(
+                launch_id,
+                status="error",
+                error=error_message,
+            )
+            if updated is not None:
+                launch = updated
+                _clear_managed_explore_dev()
+
+    return launch
 
 
 @router.get("/api/tasks/tree")
@@ -3663,6 +2255,7 @@ def workflows_execute(payload: Dict[str, Any]):
     auto = payload.get("auto")
     network = payload.get("network")
     next_node_trigger = str(payload.get("next_node_trigger") or "auto_continue").strip().lower()
+    requested_start_path = payload.get("path")
 
     if not workflow:
         return JSONResponse(status_code=400, content={"error": "workflow is required"})
@@ -3679,11 +2272,15 @@ def workflows_execute(payload: Dict[str, Any]):
         detail = getattr(exc, "detail", str(exc))
         status_code = int(getattr(exc, "status_code", 400))
         return JSONResponse(status_code=status_code, content={"error": str(detail)})
+    try:
+        start_dir = _resolve_terminal_start_dir(requested_start_path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
 
     _stop_existing_workflow_execute_thread()
 
     try:
-        session_name = _create_named_tmux_session(WORKFLOW_EXECUTE_SESSION_NAME)
+        session_name = _create_named_tmux_session(WORKFLOW_EXECUTE_SESSION_NAME, start_dir=start_dir)
         attach_command = _build_tmux_attach_command_any(session_name)
         native_status = _open_native_terminal_for_tmux(session_name) if native_terminal else {"requested": False, "opened": False}
     except RuntimeError as exc:
@@ -3692,48 +2289,6 @@ def workflows_execute(payload: Dict[str, Any]):
     if native_terminal and "requested" not in native_status:
         native_status["requested"] = True
 
-    _WORKFLOW_EXECUTE_STOP.clear()
-    _WORKFLOW_EXECUTE_CONTINUE.clear()
-    run_token = uuid4().hex
-    thread = threading.Thread(
-        target=_execute_workflow_in_terminal_thread,
-        kwargs={
-            "workflow_file": workflow_file,
-            "workflow_prompt": workflow_prompt,
-            "session_name": session_name,
-            "run_token": run_token,
-            "resume": resume,
-            "sandbox": sandbox,
-            "auto": auto,
-            "network": network,
-            "next_node_trigger": next_node_trigger,
-        },
-        daemon=True,
-        name="workflow-execute",
-    )
-    with _WORKFLOW_EXECUTE_LOCK:
-        _WORKFLOW_EXECUTE_STATE.update(
-            {
-                "thread": thread,
-                "token": run_token,
-                "status": "starting",
-                "session_name": session_name,
-                "workflow": workflow,
-                "run_id": "",
-                "output_root": "",
-                "error": "",
-                "started_at": time.time(),
-                "finished_at": 0.0,
-                "next_node_trigger": next_node_trigger,
-                "waiting_for_continue": False,
-                "current_node_id": 0,
-                "current_node_name": "",
-                "current_output_file": "",
-                "current_provider_id": "",
-                "current_provider_bin": "",
-                "has_remaining_nodes": False,
-            }
-        )
     logger.info(
         "[workflow-execute] request workflow=%s session=%s native_terminal=%s sandbox=%s auto=%s network=%s next_node_trigger=%s",
         workflow,
@@ -3744,16 +2299,85 @@ def workflows_execute(payload: Dict[str, Any]):
         network,
         next_node_trigger,
     )
-    thread.start()
+    start_result = _start_workflow_execute_thread(
+        workflow_file=workflow_file,
+        workflow_prompt=workflow_prompt,
+        session_name=session_name,
+        resume=resume,
+        sandbox=sandbox,
+        auto=auto,
+        network=network,
+        next_node_trigger=next_node_trigger,
+        session_managed=True,
+    )
 
     return {
         "session": {
             "name": session_name,
             "attach_command": attach_command,
+            "cwd": str(start_dir),
         },
-        "workflow_thread": _workflow_execute_status(),
+        "workflow_thread": start_result["workflow_thread"],
         "native_terminal": native_status,
     }
+
+
+def start_workflow_execute_in_session(
+    *,
+    workflow: str,
+    workflow_prompt: str,
+    session_name: str,
+    resume: bool = False,
+    sandbox: Any = None,
+    auto: Any = None,
+    network: Any = None,
+    next_node_trigger: str = "start_by_prompt",
+) -> Dict[str, Any]:
+    workflow_name = str(workflow or "").strip()
+    prompt_text = str(workflow_prompt or "").strip()
+    requested_session = str(session_name or "").strip()
+    trigger = str(next_node_trigger or "start_by_prompt").strip().lower()
+
+    if not workflow_name:
+        raise ValueError("workflow is required")
+    if not prompt_text:
+        raise ValueError("prompt is required")
+    if not requested_session:
+        raise ValueError("tmux session name is required")
+    if trigger not in {"auto_continue", "start_by_prompt"}:
+        raise ValueError("next_node_trigger must be auto_continue or start_by_prompt")
+
+    if workflow_name.startswith("core/workflows/"):
+        workflow_name = workflow_name[len("core/workflows/") :]
+
+    workflow_file = safe_workflow_path(WORKFLOWS_DIR, workflow_name)
+    safe_session = _validate_tmux_session_name_any(requested_session)
+    if not _tmux_session_exists(safe_session):
+        raise RuntimeError(f"tmux session not found: {safe_session}")
+
+    _stop_existing_workflow_execute_thread()
+    logger.info(
+        "[workflow-execute] external-session request workflow=%s session=%s resume=%s sandbox=%s auto=%s network=%s next_node_trigger=%s",
+        workflow_name,
+        safe_session,
+        resume,
+        sandbox,
+        auto,
+        network,
+        trigger,
+    )
+    return _start_workflow_execute_thread(
+        workflow_file=workflow_file,
+        workflow_prompt=prompt_text,
+        session_name=safe_session,
+        resume=resume,
+        sandbox=sandbox,
+        auto=auto,
+        network=network,
+        next_node_trigger=trigger,
+        session_managed=False,
+        external_first_node=True,
+    )
 
 
 @router.post("/api/workflows/execute/continue")
@@ -3872,693 +2496,3 @@ def workflows_delete(payload: Dict[str, Any]):
     file_path = safe_workflow_path(WORKFLOWS_DIR, workflow)
     file_path.unlink()
     return {"status": "ok"}
-
-
-@router.get("/api/llm/providers")
-def llm_providers():
-    providers = load_llm_providers()
-    return {
-        "providers": [{"id": p.get("id"), "name": p.get("name")} for p in providers],
-        "default": get_default_llm_provider_id(),
-        "doctor_default": get_default_doctor_provider_id(),
-    }
-
-
-@router.post("/api/llm/stop")
-def llm_stop(payload: Dict[str, Any]):
-    return {"status": stop_client(payload.get("client_id"))}
-
-
-@router.post("/rest/assignment-last-step")
-def assignment_last_step(payload: Dict[str, Any]):
-    course = payload.get("assignment_token")
-    last_step = payload.get("last_step")
-    if course is None:
-        return {"payload": None, "error": "The task does not exist!"}
-    file_path = safe_course_path(course)
-    text = file_path.read_text(encoding="utf-8", errors="replace")
-    updated = write_course_meta(text, {"last_step": int(last_step or 0)})
-    file_path.write_text(updated, encoding="utf-8")
-    return {"payload": "OK", "error": None}
-
-
-@router.post("/rest/assignment-web-url")
-def assignment_web_url(payload: Dict[str, Any]):
-    course = payload.get("assignment_token")
-    web_url = payload.get("web_url")
-    if course is None:
-        return {"payload": None, "error": "The task does not exist!"}
-    file_path = safe_course_path(course)
-    text = file_path.read_text(encoding="utf-8", errors="replace")
-    updated = write_course_meta(text, {"web_url": web_url})
-    file_path.write_text(updated, encoding="utf-8")
-    return {"payload": "OK", "error": None}
-
-
-@router.post("/rest/assignment-activity")
-def assignment_activity(payload: Dict[str, Any]):
-    course = payload.get("assignment_token")
-    if course is None:
-        return {"payload": None, "error": "The task does not exist!"}
-    file_path = safe_course_path(course)
-    text = file_path.read_text(encoding="utf-8", errors="replace")
-    updates = {"last_activity": payload, "last_step": payload.get("currentStep")}
-    updated = write_course_meta(text, updates)
-    file_path.write_text(updated, encoding="utf-8")
-    return {"payload": "OK", "error": None}
-
-
-@router.post("/rest/submit-assignment")
-def submit_assignment(payload: Dict[str, Any]):
-    course = payload.get("assignment_token")
-    if course is None:
-        return {"payload": None, "error": "The task does not exist!"}
-    updates = {
-        "result": payload.get("content"),
-        "status": payload.get("status"),
-        "feedback": payload.get("feedback"),
-        "testResults": payload.get("testResults"),
-        "submit_time": datetime.utcnow().isoformat(),
-        "last_step": payload.get("currentStep"),
-    }
-    file_path = safe_course_path(course)
-    text = file_path.read_text(encoding="utf-8", errors="replace")
-    updated = write_course_meta(text, updates)
-    file_path.write_text(updated, encoding="utf-8")
-    return {"payload": "OK", "error": None}
-
-
-@router.post("/rest/tikzjax")
-def tikzjax(_: Dict[str, Any]):
-    return JSONResponse(status_code=501, content={"payload": None, "error": "tikzjax not configured"})
-
-
-@router.post("/rest/code_v1")
-async def rest_code_v1(request: Request):
-    data = await request.json()
-    message = data.get("message", "")
-    lang = data.get("lang")
-    extra = data.get("extraInfo")
-    provider_id = data.get("provider")
-    client_id = data.get("client_id") or request.headers.get("x-client-id") or request.client.host
-    auto_allow = _bool_with_default(data.get("auto_allow"), False)
-    network_allow = _bool_with_default(data.get("network_allow"), False)
-    sandbox_mode = _bool_with_default(data.get("sandbox_mode"), True)
-    system_message = build_code_system_message(message, lang or "any")
-    prompt = f"{system_message}\n\nUser:\n{message}"
-    if extra:
-        prompt = f"{prompt}\n\nExtra Info:\n{extra}"
-    if lang:
-        prompt = f"Language: {lang}\n{prompt}"
-    return StreamingResponse(
-        llm_stream(
-            prompt,
-            provider_id,
-            client_id,
-            auto_allow=auto_allow,
-            network_allow=network_allow,
-            sandbox_mode=sandbox_mode,
-        ),
-        media_type="text/plain",
-    )
-
-
-@router.post("/rest/chat")
-async def rest_chat(request: Request):
-    data = await request.json()
-    message = data.get("message", "")
-    extra = data.get("extraInfo")
-    to_lang = data.get("toLang")
-    lang = data.get("lang") or "any"
-    provider_id = data.get("provider")
-    client_id = data.get("client_id") or request.headers.get("x-client-id") or request.client.host
-    auto_allow = _bool_with_default(data.get("auto_allow"), False)
-    network_allow = _bool_with_default(data.get("network_allow"), False)
-    sandbox_mode = _bool_with_default(data.get("sandbox_mode"), True)
-
-    if to_lang:
-        system_message = build_translate_system_message(lang, to_lang)
-    else:
-        system_message = build_chat_system_message()
-
-    prompt = f"{system_message}\n\nUser:\n{message}"
-    if extra:
-        prompt = f"{prompt}\n\nExtra Info:\n{extra}"
-
-    return StreamingResponse(
-        llm_stream(
-            prompt,
-            provider_id,
-            client_id,
-            auto_allow=auto_allow,
-            network_allow=network_allow,
-            sandbox_mode=sandbox_mode,
-        ),
-        media_type="text/plain",
-    )
-
-
-@router.post("/rest/audio")
-async def rest_audio(
-    file: UploadFile = File(None),
-    action: str = Form(None),
-    provider: str = Form(None),
-    client_id: str = Form(None),
-):
-    _ = file
-    _ = action
-    _ = provider
-    _ = client_id
-    return StreamingResponse(iter([b"[-ERROR-]"]), media_type="text/plain")
-
-
-@router.post("/api/execute_code")
-async def execute_code(request: Request):
-    data = await request.json()
-    lang = data.get("lang")
-    meta = data.get("meta")
-    source = data.get("source")
-    client_ip = request.client.host if request.client else "local"
-
-    result = execute_code_impl(lang, meta, source, client_ip)
-    return {"data": {"execute_code": result}}
-
-
-@router.post("/api/vscode/event")
-async def vscode_event(payload: Dict[str, Any]):
-    local_dev_token = str(payload.get("local_dev_token") or LOCAL_DEV_TOKEN or "").strip()
-    event_payload = payload.get("payload")
-
-    if not local_dev_token:
-        return JSONResponse(
-            status_code=400,
-            content={"payload": None, "error": "local_dev_token is required"},
-        )
-    if not isinstance(event_payload, dict):
-        return JSONResponse(
-            status_code=400,
-            content={"payload": None, "error": "payload must be a JSON object"},
-        )
-
-    sent_count = await emit_to_vscode_clients(local_dev_token, event_payload)
-    if sent_count <= 0:
-        return JSONResponse(
-            status_code=404,
-            content={"payload": None, "error": "No VS Code extension clients connected for this local_dev_token"},
-        )
-
-    return {"payload": {"sent": sent_count}, "error": None}
-
-
-@router.get("/api/auth/status")
-def auth_status(request: Request):
-    return {"authenticated": _is_authorized_request(request)}
-
-
-@router.post("/api/auth/session")
-async def auth_session(request: Request):
-    data = await request.json()
-    provided = _sanitize_single_line_secret(str(data.get("auth_token") or ""))
-    expected = _sanitize_single_line_secret(get_auth_token())
-    if not provided:
-        return JSONResponse(status_code=400, content={"error": "auth_token is required"})
-    if not expected or not secrets.compare_digest(provided, expected):
-        return JSONResponse(status_code=401, content={"error": "invalid auth token"})
-
-    response = JSONResponse(content={"status": "ok", "message": "Authenticated"})
-    response.set_cookie(
-        key=_AUTH_COOKIE_NAME,
-        value=expected,
-        httponly=True,
-        secure=get_only_allow_https(),
-        samesite="lax",
-        path="/",
-        max_age=_AUTH_COOKIE_MAX_AGE,
-    )
-    return response
-
-
-@router.post("/api/discord/broadcast")
-async def discord_broadcast(request: Request):
-    if not _is_authorized_request(request):
-        return _auth_required_response()
-    data = await request.json()
-    message_text = (str(data.get("message") or "")).strip()
-    if not message_text:
-        return JSONResponse(status_code=400, content={"error": "message is required"})
-    from discord_bot import send_dm_to_all
-    count = await send_dm_to_all(message_text)
-    return {"status": "ok", "sent_count": count}
-
-
-@router.get("/api/discord/status")
-def discord_status(request: Request):
-    if not _is_authorized_request(request):
-        return _auth_required_response()
-    has_token = bool(get_discord_bot_token())
-    connected = False
-    bot_name = None
-    guild_count = 0
-    if has_token:
-        try:
-            from discord_bot import bot
-            connected = bot.is_ready()
-            if connected and bot.user:
-                bot_name = str(bot.user)
-                guild_count = len(bot.guilds)
-        except Exception:
-            pass
-    keys_safe_guard_enabled = os.getenv("IN_KEYS_SAFE_GUARD", "").strip() == "1"
-    return {
-        "has_token": has_token,
-        "connected": connected,
-        "bot_name": bot_name,
-        "guild_count": guild_count,
-        "keys_safe_guard_enabled": keys_safe_guard_enabled,
-    }
-
-
-@router.get("/api/discord/sessions")
-def discord_sessions_list(request: Request):
-    if not _is_authorized_request(request):
-        return _auth_required_response()
-    from discord_session import SessionManager
-    mgr = SessionManager()
-    return {"sessions": mgr.list_sessions()}
-
-
-@router.get("/api/discord/sessions/{channel_id}")
-def discord_session_history(channel_id: str, request: Request):
-    if not _is_authorized_request(request):
-        return _auth_required_response()
-    from discord_session import ChatSession
-    session = ChatSession(channel_id)
-    history = session.get_full_history()
-    return {"channel_id": channel_id, "messages": history}
-
-
-@router.get("/api/live-avatar/config")
-def live_avatar_config(request: Request):
-    if not _is_authorized_request(request):
-        return _auth_required_response()
-    return JSONResponse({
-        "live_avatar_ws_url": get_live_avatar_server_url(),
-        "turn_server_urls": get_turn_server_urls(),
-        "turn_server_username": get_turn_server_username(),
-        "turn_server_password": get_turn_server_password(),
-    })
-
-
-@router.get("/api/cameras/config")
-def cameras_config(request: Request):
-    if not _is_authorized_request(request):
-        return _auth_required_response()
-    return JSONResponse({
-        "turn_server_urls": get_turn_server_urls(),
-        "turn_server_username": get_turn_server_username(),
-        "turn_server_password": get_turn_server_password(),
-    })
-
-
-# ── Cameras MCP client (lazy singleton) ──────────────────────────────────────
-_cameras_mcp_client = None
-_cameras_mcp_lock = asyncio.Lock()
-_cameras_signal_tool_lock = asyncio.Lock()
-
-
-async def _get_cameras_client():
-    """Return a live StdioClient for the cameras MCP server, creating it on first call."""
-    global _cameras_mcp_client
-    async with _cameras_mcp_lock:
-        if _cameras_mcp_client is not None:
-            # Check if the subprocess is still alive
-            proc = getattr(_cameras_mcp_client, "_process", None)
-            if proc is not None and proc.poll() is None:
-                return _cameras_mcp_client
-        # (Re)create the client
-        from mcp_servers.mcp_to_skills.sync import create_client, load_mcp_configs, is_server_enabled
-        configs, _ = await asyncio.to_thread(load_mcp_configs, _MCP_CONFIG_PATH)
-        cam_cfg = configs.get("cameras")
-        if cam_cfg is None:
-            raise RuntimeError("cameras MCP server not found in config/mcp.json5")
-        if not is_server_enabled(cam_cfg):
-            raise RuntimeError("cameras MCP server is disabled — enable it in MCP settings first")
-        _cameras_mcp_client = await asyncio.to_thread(create_client, cam_cfg)
-        return _cameras_mcp_client
-
-
-async def _reset_cameras_client() -> None:
-    global _cameras_mcp_client
-    async with _cameras_mcp_lock:
-        client = _cameras_mcp_client
-        _cameras_mcp_client = None
-    if client is not None:
-        try:
-            await asyncio.to_thread(client.close)
-        except Exception:
-            pass
-
-
-async def _call_cameras_tool(
-    tool_name: str,
-    arguments: dict[str, Any],
-    *,
-    timeout_seconds: float = 20.0,
-    retry_timeouts: tuple[float, float] | None = None,
-) -> Any:
-    """Call a cameras MCP tool with timeout and one automatic client-reset retry."""
-    async with _cameras_signal_tool_lock:
-        last_exc: Exception | None = None
-        for _attempt in (1, 2):
-            current_timeout = (
-                retry_timeouts[_attempt - 1]
-                if retry_timeouts is not None
-                else timeout_seconds
-            )
-            started = time.monotonic()
-            try:
-                client = await _get_cameras_client()
-                result = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        client.request,
-                        "tools/call",
-                        {"name": tool_name, "arguments": arguments},
-                    ),
-                    timeout=current_timeout,
-                )
-                elapsed_ms = int((time.monotonic() - started) * 1000)
-                logger.info(
-                    "[cameras.signal] tool=%s attempt=%d ok elapsed_ms=%d timeout_ms=%d",
-                    tool_name,
-                    _attempt,
-                    elapsed_ms,
-                    int(current_timeout * 1000),
-                )
-                return result
-            except Exception as exc:
-                last_exc = exc
-                elapsed_ms = int((time.monotonic() - started) * 1000)
-                logger.warning(
-                    "[cameras.signal] tool=%s attempt=%d failed elapsed_ms=%d timeout_ms=%d error=%s",
-                    tool_name,
-                    _attempt,
-                    elapsed_ms,
-                    int(current_timeout * 1000),
-                    exc,
-                )
-                await _reset_cameras_client()
-        if last_exc is None:
-            raise RuntimeError("Unknown cameras MCP call error")
-        raise last_exc
-
-
-@router.post("/api/cameras/signal")
-async def cameras_signal(request: Request):
-    if not _is_authorized_request(request):
-        return _auth_required_response()
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
-
-    signal_type = body.get("type", "")
-    req_started = time.monotonic()
-    logger.info("[cameras.signal] recv type=%s", signal_type)
-    try:
-        client = await _get_cameras_client()
-    except RuntimeError as exc:
-        return JSONResponse(status_code=503, content={"error": str(exc)})
-
-    if signal_type == "offer":
-        def _normalize_sdp_answer(payload: Any) -> dict[str, Any] | Any:
-            if not isinstance(payload, dict):
-                return payload
-            # Some MCP tool wrappers return {"result":"{...json...}"} (or nested dict).
-            # Unwrap that shape first so WebUI always receives top-level sdp/type.
-            if "result" in payload and ("sdp" not in payload and "type" not in payload and "sdpType" not in payload):
-                result_payload = payload.get("result")
-                if isinstance(result_payload, str):
-                    try:
-                        decoded = json.loads(result_payload)
-                        if isinstance(decoded, dict):
-                            payload = decoded
-                    except json.JSONDecodeError:
-                        pass
-                elif isinstance(result_payload, dict):
-                    payload = result_payload
-            answer_type = payload.get("type")
-            if not isinstance(answer_type, str) or not answer_type:
-                if isinstance(payload.get("sdpType"), str) and payload.get("sdpType"):
-                    payload["type"] = payload["sdpType"]
-                elif isinstance(payload.get("sdp_type"), str) and payload.get("sdp_type"):
-                    payload["type"] = payload["sdp_type"]
-            if isinstance(payload.get("type"), str) and payload.get("type") and "sdpType" not in payload:
-                payload["sdpType"] = payload["type"]
-            return payload
-
-        sdp = body.get("sdp", "")
-        sdp_type = body.get("sdpType", "offer")
-        is_ice_restart = bool(body.get("iceRestart", False))
-        candidates = body.get("candidates", [])
-        if not isinstance(candidates, list):
-            candidates = []
-        if not sdp:
-            return JSONResponse(status_code=400, content={"error": "sdp is required"})
-        try:
-            result_raw = await _call_cameras_tool(
-                "webrtc_offer",
-                {
-                    "sdp": sdp,
-                    "sdp_type": sdp_type,
-                    "candidates": candidates,
-                },
-                timeout_seconds=6.0,
-                retry_timeouts=(2.5, 6.0) if is_ice_restart else None,
-            )
-        except Exception as exc:
-            logger.warning("[cameras.signal] offer failed error=%s", exc)
-            return JSONResponse(status_code=502, content={"error": f"cameras MCP webrtc_offer failed: {exc}"})
-        # Accept both structuredContent and text content from MCP responses.
-        if not isinstance(result_raw, dict):
-            return JSONResponse(status_code=502, content={"error": "Invalid cameras MCP response"})
-        if isinstance(result_raw.get("structuredContent"), dict):
-            return JSONResponse(_normalize_sdp_answer(result_raw["structuredContent"]))
-        if isinstance(result_raw.get("sdp"), str) and isinstance(result_raw.get("type"), str):
-            return JSONResponse({"sdp": result_raw["sdp"], "type": result_raw["type"]})
-
-        content = result_raw.get("content")
-        text = ""
-        if isinstance(content, list):
-            for item in content:
-                if isinstance(item, dict):
-                    candidate = item.get("text")
-                    if isinstance(candidate, str) and candidate.strip():
-                        text = candidate
-                        break
-        if bool(result_raw.get("isError")):
-            detail = text or "Unknown cameras MCP tool error"
-            return JSONResponse(status_code=502, content={"error": detail})
-        if not text:
-            return JSONResponse(
-                status_code=502,
-                content={"error": "Empty cameras MCP response for webrtc_offer"},
-            )
-        try:
-            parsed = json.loads(text)
-        except json.JSONDecodeError:
-            return JSONResponse(
-                status_code=502,
-                content={"error": "Invalid JSON from cameras MCP webrtc_offer", "raw": text[:300]},
-            )
-        if not isinstance(parsed, dict):
-            return JSONResponse(status_code=502, content={"error": "Unexpected webrtc_offer response shape"})
-        normalized = _normalize_sdp_answer(parsed)
-        elapsed_ms = int((time.monotonic() - req_started) * 1000)
-        cand_count = len(normalized.get("candidates", [])) if isinstance(normalized, dict) and isinstance(normalized.get("candidates"), list) else 0
-        logger.info("[cameras.signal] offer ok elapsed_ms=%d answer_candidates=%d", elapsed_ms, cand_count)
-        return JSONResponse(normalized)
-
-    elif signal_type == "ice_candidate":
-        candidate = body.get("candidate", {})
-        if not candidate:
-            return JSONResponse(status_code=400, content={"error": "candidate is required"})
-        try:
-            ice_result = await _call_cameras_tool(
-                "webrtc_ice_candidate",
-                {
-                    "candidate": candidate.get("candidate", ""),
-                    "sdp_mid": candidate.get("sdpMid", ""),
-                    "sdp_mline_index": int(candidate.get("sdpMLineIndex", 0)),
-                },
-                timeout_seconds=4.0,
-            )
-        except Exception as exc:
-            logger.warning("[cameras.signal] ice_candidate failed error=%s", exc)
-            return JSONResponse(status_code=502, content={"error": f"cameras MCP webrtc_ice_candidate failed: {exc}"})
-        if isinstance(ice_result, dict) and bool(ice_result.get("isError")):
-            content = ice_result.get("content")
-            detail = "Unknown cameras MCP tool error"
-            if isinstance(content, list):
-                for item in content:
-                    if isinstance(item, dict):
-                        text = item.get("text")
-                        if isinstance(text, str) and text.strip():
-                            detail = text
-                            break
-            return JSONResponse(status_code=502, content={"error": detail})
-        elapsed_ms = int((time.monotonic() - req_started) * 1000)
-        logger.info("[cameras.signal] ice_candidate ok elapsed_ms=%d", elapsed_ms)
-        return JSONResponse({"status": "ok"})
-
-    else:
-        return JSONResponse(status_code=400, content={"error": f"Unknown signal type: {signal_type}"})
-
-
-@router.post("/api/webui/log")
-async def webui_log(request: Request):
-    if not _is_authorized_request(request):
-        return _auth_required_response()
-    try:
-        payload = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
-    if not isinstance(payload, dict):
-        return JSONResponse(status_code=400, content={"error": "payload must be an object"})
-
-    tag = str(payload.get("tag") or "webui").replace("\n", " ").replace("\r", " ").strip()
-    level = str(payload.get("level") or "info").lower()
-    message = str(payload.get("message") or "").replace("\n", " ").replace("\r", " ").strip()
-    data = payload.get("data")
-
-    if not message:
-        return JSONResponse(status_code=400, content={"error": "message is required"})
-
-    line = f"[{tag}] {message}"
-    if data is not None:
-        line = f"{line} data={data!r}"
-
-    if level in {"error"}:
-        logger.error(line)
-    elif level in {"warn", "warning"}:
-        logger.warning(line)
-    elif level in {"debug"}:
-        logger.debug(line)
-    else:
-        logger.info(line)
-    return JSONResponse({"status": "ok"})
-
-
-@router.post("/api/internal/discord/notify")
-async def internal_discord_notify(request: Request):
-    """Internal endpoint for cameras MCP server to send Discord DMs with detection images."""
-    # Only allow requests from localhost
-    client_host = request.client.host if request.client else ""
-    if client_host not in ("127.0.0.1", "::1", "localhost"):
-        return JSONResponse(status_code=403, content={"error": "Forbidden"})
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
-    message = str(body.get("message", ""))
-    image_path = str(body.get("image_path", ""))
-    if not message:
-        return JSONResponse(status_code=400, content={"error": "message is required"})
-    try:
-        from discord_bot import bot, send_dm_to_all
-        if bot.is_ready():
-            sent = await send_dm_to_all(message, image_path=image_path or None)
-            return JSONResponse({"status": "ok", "sent": sent})
-        else:
-            return JSONResponse({"status": "skipped", "reason": "Discord bot not ready"})
-    except Exception as exc:
-        logger.warning("Discord notify error: %s", exc)
-        return JSONResponse(status_code=500, content={"error": str(exc)})
-
-
-@router.post("/api/discord/token")
-async def discord_token_save(request: Request):
-    if not _is_authorized_request(request):
-        return _auth_required_response()
-    data = await request.json()
-    token = _sanitize_single_line_secret(str(data.get("token") or ""))
-    if not token:
-        return JSONResponse(status_code=400, content={"error": "token is required"})
-
-    keys_safe_guard = str(PROJECT_DIR / "core" / "bin" / "keys-safe-guard")
-    cmd = [keys_safe_guard]
-    if os.getenv("IN_KEYS_SAFE_GUARD", "").strip() == "1":
-        # config/.env is root-owned — request GUI elevation dialog.
-        cmd.append("--gui")
-    cmd += ["put_key_values", f"DISCORD_BOT_TOKEN={token}"]
-
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        logger.error("keys-safe-guard failed: %s", result.stderr)
-        detail = (result.stderr or result.stdout or "").strip()
-        if detail:
-            detail = f"\n\nDetails:\n{detail}"
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": (
-                    "Could not save token with keys-safe-guard. "
-                    "If safe guard is enabled, this request needs either a GUI permission dialog or passwordless sudo. "
-                    "Otherwise disable safe guard and retry.\n"
-                    "To set the token manually, run as root:\n"
-                    "  sudo nano config/.env\n"
-                    "then add or update the line:\n"
-                    "  DISCORD_BOT_TOKEN=<your-token>"
-                    f"{detail}"
-                )
-            },
-        )
-    # Keep the running engine environment in sync for callers that still rely on this route.
-    os.environ["DISCORD_BOT_TOKEN"] = token
-
-    return {"status": "ok", "message": "Token saved and applied to the running engine."}
-
-
-@router.post("/api/create_course_plan")
-@router.post("/create_course_plan")
-def create_course_plan(payload: Dict[str, Any]):
-    requirement = str(payload.get("requirement") or "").strip()
-    language = str(payload.get("language") or "English").strip() or "English"
-    if not requirement:
-        return JSONResponse(status_code=400, content={"error": "requirement is required"})
-
-    course_details = COURSE_PLANNER.create_course_plan(requirement=requirement, language=language)
-    return {"course_details": course_details}
-
-
-@router.post("/api/create_multiple_scene_video")
-@router.post("/create_multiple_scene_video")
-def create_multiple_scene_video(payload: Dict[str, Any]):
-    requirement = str(payload.get("requirement") or "").strip()
-    if not requirement:
-        return JSONResponse(status_code=400, content={"error": "requirement is required"})
-
-    try:
-        target_duration = int(payload.get("target_duration") or 60)
-    except (TypeError, ValueError):
-        target_duration = 60
-    resolution = str(payload.get("resolution") or "1080x1920")
-    output_path = str(payload.get("output_path") or "/tmp").strip() or "/tmp"
-    voice_name = str(payload.get("voice_name") or "").strip() or None
-    theme = str(payload.get("theme") or "").strip() or None
-    result = VIDEO_CREATOR.create_multiple_scene_video(
-        requirement=requirement,
-        target_duration=target_duration,
-        resolution=resolution,
-        output_path=output_path,
-        voice_name=voice_name,
-        theme=theme,
-    )
-    return result
-
-
-@router.post("/api/resume_multiple_scene_video")
-@router.post("/resume_multiple_scene_video")
-def resume_multiple_scene_video(payload: Dict[str, Any]):
-    output_path = str(payload.get("output_path") or "/tmp").strip() or "/tmp"
-    result = VIDEO_CREATOR.resume_multiple_scene_video(output_path=output_path)
-    return result

@@ -1,4 +1,9 @@
 {
+  // Env placeholder rules used in this file:
+  // - `${VAR}`: required. The MCP loader marks the server as missing env when VAR is unset.
+  // - `${VAR:-}`: optional. Missing VAR resolves to an empty string.
+  // - `${VAR:-default}`: optional with fallback. Missing VAR resolves to `default`.
+  // - `${VAR-default}`: fallback only when VAR is unset; an explicit empty value is preserved.
   mcpServers: {
     terminal: {
       system: true,
@@ -22,6 +27,7 @@
       env: {
         COMFYUI_SERVER_ADDRESS: "${COMFYUI_SERVER_ADDRESS}",
         COMFYUI_INSTALL_PATH: "/home/ubuntu/workspace/ComfyUI",
+        // "/home/ubuntu/workspace/OmniVoice/omnivoice-tts.py"
         GPU_WORKER_TTS_CREATOR: "/home/ubuntu/workspace/index-tts/index-tts.py",
         GPU_WORKER_SONG_CREATOR: "/home/ubuntu/workspace/SongBloom/songbloom_creator.py",
         GPU_WORKER_LLM_VISION_INFER: "/tmp/llm_vision_infer.py",
@@ -41,6 +47,26 @@
         "run",
         "mcp_servers/live_tts/main.py",
       ],
+      env: {
+        TTS_PROVIDER: "qwen3-tts",
+        QWEN3_TTS_API_URL: "ws://192.168.1.222:8081",
+        QWEN3_TTS_VOICE: "angelina-speech-en-9s",
+        OPENAI_API_KEY: "${OPENAI_API_KEY:-}",
+        OPENAI_LIVE_CHAT_MODEL: "${OPENAI_LIVE_CHAT_MODEL:-}",
+        OPENAI_VOICE: "${OPENAI_VOICE:-}",
+        AZURE_OPENAI_API_KEY: "${AZURE_OPENAI_API_KEY:-}",
+        AZURE_OPENAI_ENDPOINT: "${AZURE_OPENAI_ENDPOINT:-}",
+        AZURE_OPENAI_MODEL: "${AZURE_OPENAI_MODEL:-}",
+        AZURE_OPENAI_API_VERSION: "${AZURE_OPENAI_API_VERSION:-}",
+        GEMINI_API_KEY: "${GEMINI_API_KEY:-}",
+        GEMINI_LIVE_CHAT_MODEL: "${GEMINI_LIVE_CHAT_MODEL:-}",
+        GEMINI_VOICE: "${GEMINI_VOICE:-}",
+        LANGUAGE: "${LANGUAGE:-}",
+        LIVE_TTS_LOG_AUDIO_STATS: "${LIVE_TTS_LOG_AUDIO_STATS:-}",
+        LIVE_TTS_OUTPUT_DEVICE_NAME: "${LIVE_TTS_OUTPUT_DEVICE_NAME:-}",
+        LIVE_TTS_OUTPUT_DEVICE_INDEX: "${LIVE_TTS_OUTPUT_DEVICE_INDEX:-}",
+        MCP_TOOL_TIMEOUT:60000
+      },
     },
     cameras: {
       system: true,

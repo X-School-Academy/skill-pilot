@@ -1,5 +1,6 @@
 import "../styles/globals.css";
 import "@xterm/xterm/css/xterm.css";
+import "@svar-ui/react-filemanager/all.css";
 import type { AppProps } from "next/app";
 import type { NextComponentType, NextPage } from "next";
 import { ReactElement, ReactNode, useEffect, useState } from "react";

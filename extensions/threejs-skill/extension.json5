@@ -1,0 +1,8 @@
+{
+  name: 'Three.js Skill Extension',
+  description: 'Installs Three.js user skills from the X-School-Academy extension-threejs-skills repository.',
+  version: '0.1.0',
+  license: 'MIT',
+  type: 'script',
+  installed: false,
+}

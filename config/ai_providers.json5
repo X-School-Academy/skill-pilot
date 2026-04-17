@@ -24,6 +24,7 @@
   // Default provider selection used when no explicit provider is requested.
   default: {
     llm: 'claude',
+    doctor: 'opencode',
     tts: 'media-mcp',
     image: 'media-mcp',
   },
@@ -250,13 +251,18 @@
       id: 'media-mcp',
       name: 'Media MCP Server - TTS',
       voices: {
-        'voice_name': 
-          {
+        'angelina-en': {
             "emotion": "calm",
             "emotion_sample": "This is a calm and steady narration voice.",
-            "ref_voice": "assets/custom-voices/frank-en-ai.wav",
-            "ref_emotion_voice": "assets/custom-voices/frank-en-ai.wav",
-          }
+            "ref_voice": "assets/custom-voices/angelina-speech-en-9s.mp3",
+            "ref_emotion_voice": "assets/custom-voices/angelina-speech-en-9s.mp3",
+        },
+        'frank-cn': {
+            "emotion": "calm",
+            "emotion_sample": "This is a calm and steady narration voice.",
+            "ref_voice": "assets/custom-voices/frank-cn-9s.mp3",
+            "ref_emotion_voice": "assets/custom-voices/frank-cn-9s.mp3",
+        }
       },
     },
   ],

@@ -21,6 +21,7 @@ import {
 import {
   IconTerminal2,
   IconPlus,
+  IconSparkles,
   IconSchool,
   IconBriefcase,
   IconSearch,
@@ -34,6 +35,7 @@ import {
   IconPuzzle,
   IconUser,
   IconVectorBezier2,
+  IconFolderOpen,
 } from '@tabler/icons-react';
 import { apiUrl } from '../../libs/api-base';
 import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
@@ -63,6 +65,7 @@ interface NavItem {
 export default function TerminalsPage() {
   const router = useRouter();
   const theme = useMantineTheme();
+  const isDevMode = process.env.NODE_ENV === 'development';
   const [opened, setOpened] = useState(false);
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
   const [llmProvider, setLlmProvider] = useState<string | null>(null);
@@ -167,7 +170,8 @@ export default function TerminalsPage() {
   }, [createTmuxSession, router.isReady, router.query.command]);
 
   const navItems: NavItem[] = [
-    { label: 'New Session', icon: <IconPlus size="1rem" />, action: () => { void router.push('/'); } },
+    { label: 'Explore', icon: <IconSparkles size="1rem" />, action: () => { void router.push('/?view=explore'); } },
+    { dividerBefore: '', label: 'New Session', icon: <IconPlus size="1rem" />, action: () => { void router.push('/'); } },
     {
       label: 'Live Sessions',
       icon: <IconTerminal2 size="1rem" />,
@@ -182,6 +186,7 @@ export default function TerminalsPage() {
     { label: 'Vibe Coding', icon: <IconBriefcase size="1rem" />, action: () => { void router.push('/vibe-coding'); } },
     { label: 'Research', icon: <IconSearch size="1rem" />, action: () => { void router.push('/research'); } },
     { label: 'Tasks', icon: <IconChecklist size="1rem" />, action: () => { void router.push('/tasks'); } },
+    { label: 'File Manager', icon: <IconFolderOpen size="1rem" />, action: () => { void router.push('/file-manager'); } },
     { dividerBefore: 'System', label: 'Development', icon: <IconCode size="1rem" />, action: () => { void router.push('/skill-pilot-development'); } },
     { dividerBefore: 'Commercial Project', label: 'Dev Swarm', icon: <IconRocket size="1rem" />, action: () => { void router.push('/dev-swarm'); } },
     { dividerBefore: '', label: 'Processes', icon: <IconProgress size="1rem" />, action: () => { void router.push('/?view=processes'); } },
@@ -246,7 +251,13 @@ export default function TerminalsPage() {
         </Navbar>
       }
       header={
-        <Header height={{ base: 60 }} p="md">
+        <Header
+          height={{ base: 60 }}
+          p="md"
+          styles={{
+            root: isDevMode ? { borderBottom: '2px solid #228be6' } : undefined,
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', height: '100%', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <MediaQuery largerThan="sm" styles={{ display: 'none' }}>

@@ -1,0 +1,18 @@
+id: game-space-runner
+title: Space Runner Game
+description: Build a small browser game prototype from a gameplay prompt.
+thumbnail: null
+video: null
+tutorial: null
+prompt: Create a simple endless runner space game with score, restart, and mobile-friendly
+  controls.
+git_tag: null
+in_mode: dev
+use_worktree: true
+skills: []
+tools: []
+files: []
+links: []
+popularity: 84
+level: 4
+rate: 4.6

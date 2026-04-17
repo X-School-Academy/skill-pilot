@@ -1,0 +1,18 @@
+id: skill-release-helper
+title: Release Helper Skill
+description: Create a reusable skill for release checklists and publishing steps.
+thumbnail: null
+video: null
+tutorial: null
+prompt: Create an agent skill that guides release prep, changelog review, versioning,
+  and publish steps.
+git_tag: null
+in_mode: dev
+use_worktree: true
+skills: []
+tools: []
+files: []
+links: []
+popularity: 71
+level: 5
+rate: 4.3

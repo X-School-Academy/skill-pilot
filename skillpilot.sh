@@ -28,35 +28,23 @@ reload_shell_env
 [ -f "$HOME/.skillpilot/.profile" ] && source "$HOME/.skillpilot/.profile" || true
 reload_shell_env
 
-if ! command -v tmux >/dev/null 2>&1; then
-  printf '\n\033[1m============================================================\033[0m\n'
-  printf '\033[1m  Error: tmux is required but not found\033[0m\n'
-  printf '\033[1m============================================================\033[0m\n\n'
-  printf 'tmux is essential for Skill Pilot to run background\n'
-  printf 'sessions and let you share the terminal with AI.\n\n'
-  printf 'To fix this, re-run the installer:\n'
-  printf '  bash install.sh\n\n'
-  printf '  or\n\n'
-  printf '  brew install tmux   # then re-run ./skillpilot.sh\n\n'
-  printf 'Or raise an issue at:\n'
-  printf '  https://github.com/x-school-academy/skill-pilot\n\n'
-  exit 1
-fi
-
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENGINE_ENV_FILE="${ROOT_DIR}/config/.env"
 ACTION="start"
 ACTION_TARGET=""
 TEST_FILES=()
+DOCTOR_QUESTION=""
 IS_DEV=0
+SOURCE="manual"
 AVAILABLE_PROVIDERS=()
 HUMAN_DETECTION_REQUIREMENTS="${ROOT_DIR}/core/engine/mcp_servers/cameras/requirements-human-detection.txt"
 LIVE_TTS_REQUIREMENTS="${ROOT_DIR}/core/engine/mcp_servers/live_tts/requirements-live-tts.txt"
 
 print_help() {
   cat <<'EOF_HELP'
-Usage: ./skillpilot.sh [help|build|start|stop|test] [--dev]
+Usage: ./skillpilot.sh [help|build|start|stop|test|doctor] [--dev]
        ./skillpilot.sh <enable|disable> <human-detection|live-tts>
+       ./skillpilot.sh doctor [question]
        ./skillpilot.sh test '[test_file[func1,func2]' | test_file:func1,func2 | test_file::func1 ...]
 
 Commands:
@@ -65,6 +53,7 @@ Commands:
   start   Start services. Default command.
   stop    Stop running tmux sessions. Use `--dev` to stop only development sessions.
   test    Run engine pytest suite, or only the named files under core/engine/tests.
+  doctor  Open the configured doctor AI agent for troubleshooting and guided help.
   enable human-detection    Install optional human detection dependencies.
   disable human-detection   Uninstall optional human detection dependencies.
   enable live-tts           Install optional live-tts dependencies.
@@ -72,6 +61,8 @@ Commands:
 
 Options:
   --dev   Use development mode for `start`, or stop only development sessions for `stop`.
+  --source <manual|webui>
+          Identify the caller. `webui` restarts dev sessions and uses GUI auth for protected env reads when possible.
 
 Defaults:
   - Command defaults to: start
@@ -80,6 +71,7 @@ Defaults:
   - Test selectors support file-scoped function filters: "media_mcp[text_to_image,text_to_song]"
   - zsh-safe alternatives are also supported: "media_mcp:text_to_image,text_to_song" or "media_mcp::text_to_image"
   - Empty brackets mean all tests in the file: "media_mcp[]"
+  - Doctor questions may be passed inline: "./skillpilot.sh doctor why does install.sh fail on Linux?"
 EOF_HELP
 }
 
@@ -126,10 +118,22 @@ parse_args() {
   local expect_test_files=0
   while (($# > 0)); do
     case "$1" in
+      --source)
+        shift
+        if (($# == 0)); then
+          echo "Error: --source requires a value."
+          print_help
+          exit 1
+        fi
+        SOURCE="$1"
+        ;;
+      --source=*)
+        SOURCE="${1#*=}"
+        ;;
       --dev)
         IS_DEV=1
         ;;
-      help|-h|--help|build|start|stop|test|enable|disable)
+      help|-h|--help|build|start|stop|test|doctor|enable|disable)
         if ((action_set == 1)); then
           echo "Error: multiple commands provided."
           print_help
@@ -162,6 +166,14 @@ parse_args() {
           shift
           continue
         fi
+        if [[ "${ACTION}" == "doctor" ]]; then
+          if [[ -n "${DOCTOR_QUESTION}" ]]; then
+            DOCTOR_QUESTION+=" "
+          fi
+          DOCTOR_QUESTION+="$1"
+          shift
+          continue
+        fi
         echo "Error: unknown argument '$1'."
         print_help
         exit 1
@@ -172,6 +184,12 @@ parse_args() {
 
   if ((IS_DEV == 1)) && [[ "${ACTION}" != "start" && "${ACTION}" != "stop" ]]; then
     echo "Error: --dev is only supported with 'start' or 'stop'."
+    print_help
+    exit 1
+  fi
+
+  if [[ "${SOURCE}" != "manual" && "${SOURCE}" != "webui" ]]; then
+    echo "Error: unsupported source '${SOURCE}'. Supported: manual, webui."
     print_help
     exit 1
   fi
@@ -200,6 +218,25 @@ require_cmd() {
     echo "Error: ${cmd} is required."
     exit 1
   fi
+}
+
+require_tmux() {
+  if command -v tmux >/dev/null 2>&1; then
+    return 0
+  fi
+
+  printf '\n\033[1m============================================================\033[0m\n'
+  printf '\033[1m  Error: tmux is required but not found\033[0m\n'
+  printf '\033[1m============================================================\033[0m\n\n'
+  printf 'tmux is essential for Skill Pilot to run background\n'
+  printf 'sessions and let you share the terminal with AI.\n\n'
+  printf 'To fix this, re-run the installer:\n'
+  printf '  bash install.sh\n\n'
+  printf '  or\n\n'
+  printf '  brew install tmux   # then re-run ./skillpilot.sh\n\n'
+  printf 'Or raise an issue at:\n'
+  printf '  https://github.com/x-school-academy/skill-pilot\n\n'
+  exit 1
 }
 
 ensure_webui_deps() {
@@ -463,6 +500,320 @@ choose_provider() {
   done
 }
 
+extract_default_provider_value() {
+  local key="$1"
+  local config_path="${ROOT_DIR}/config/ai_providers.json5"
+
+  if [[ ! -f "${config_path}" ]]; then
+    return
+  fi
+
+  sed -n "/default[[:space:]]*:[[:space:]]*{/,/}/{s/.*${key}[[:space:]]*:[[:space:]]*'\\([^']*\\)'.*/\\1/p; s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p;}" "${config_path}" | head -n 1
+}
+
+doctor_default_provider() {
+  local provider_id=""
+  provider_id="$(extract_default_provider_value "doctor")"
+  if [[ -z "${provider_id}" ]]; then
+    provider_id="$(extract_default_provider_value "llm")"
+  fi
+  if [[ -z "${provider_id}" ]]; then
+    provider_id="opencode"
+  fi
+  echo "${provider_id}"
+}
+
+doctor_provider_block() {
+  local provider_id="$1"
+  local config_path="${ROOT_DIR}/config/ai_providers.json5"
+
+  awk -v provider="${provider_id}" '
+    BEGIN { capture = 0 }
+    {
+      if (capture == 0) {
+        if ($0 ~ ("id[[:space:]]*:[[:space:]]*'\''" provider "'\''") || $0 ~ ("\"id\"[[:space:]]*:[[:space:]]*\"" provider "\"")) {
+          capture = 1
+        }
+        next
+      }
+
+      if ($0 ~ /^[[:space:]][[:space:]][[:space:]][[:space:]]\}[,]?[[:space:]]*$/) {
+        exit
+      }
+
+      print
+    }
+  ' "${config_path}"
+}
+
+doctor_provider_field() {
+  local provider_id="$1"
+  local field_name="$2"
+  local block=""
+
+  block="$(doctor_provider_block "${provider_id}")"
+  if [[ -z "${block}" ]]; then
+    return
+  fi
+
+  printf '%s\n' "${block}" | sed -n "s/.*${field_name}[[:space:]]*:[[:space:]]*'\\([^']*\\)'.*/\\1/p; s/.*\"${field_name}\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" | head -n 1
+}
+
+doctor_provider_terminal_args_line() {
+  local provider_id="$1"
+  local block=""
+
+  block="$(doctor_provider_block "${provider_id}")"
+  if [[ -z "${block}" ]]; then
+    return
+  fi
+
+  printf '%s\n' "${block}" | sed -n "s/.*terminal-args[[:space:]]*:[[:space:]]*\\(\\[[^]]*\\]\\).*/\\1/p; s/.*\"terminal-args\"[[:space:]]*:[[:space:]]*\\(\\[[^]]*\\]\\).*/\\1/p; s/.*'terminal-args'[[:space:]]*:[[:space:]]*\\(\\[[^]]*\\]\\).*/\\1/p" | head -n 1
+}
+
+doctor_append_args_from_line() {
+  local raw="$1"
+  local prompt="$2"
+  local rest="${raw}"
+  local token=""
+
+  while [[ "${rest}" =~ \'([^\']*)\' ]]; do
+    token="${BASH_REMATCH[1]}"
+    if [[ "${token}" == "{{prompt}}" ]]; then
+      DOCTOR_CMD+=("${prompt}")
+    else
+      DOCTOR_CMD+=("${token}")
+    fi
+    rest="${rest#*"'"${token}"'"}"
+  done
+
+  if ((${#DOCTOR_CMD[@]} > 1)); then
+    return
+  fi
+
+  rest="${raw}"
+  while [[ "${rest}" =~ \"([^\"]*)\" ]]; do
+    token="${BASH_REMATCH[1]}"
+    if [[ "${token}" == "{{prompt}}" ]]; then
+      DOCTOR_CMD+=("${prompt}")
+    else
+      DOCTOR_CMD+=("${token}")
+    fi
+    rest="${rest#*"\"${token}\""}"
+  done
+}
+
+doctor_build_command() {
+  local provider_id="$1"
+  local prompt="$2"
+  local bin_name=""
+  local terminal_args_line=""
+  local model_name=""
+
+  DOCTOR_CMD=()
+  bin_name="$(doctor_provider_field "${provider_id}" "bin")"
+  if [[ -z "${bin_name}" ]]; then
+    return 1
+  fi
+
+  DOCTOR_CMD=("${bin_name}")
+  if [[ "${provider_id}" != "opencode" ]]; then
+    model_name="$(doctor_provider_field "${provider_id}" "model")"
+    if [[ -n "${model_name}" ]]; then
+      DOCTOR_CMD+=("--model" "${model_name}")
+    fi
+  fi
+
+  terminal_args_line="$(doctor_provider_terminal_args_line "${provider_id}")"
+  if [[ -n "${terminal_args_line}" ]]; then
+    doctor_append_args_from_line "${terminal_args_line}" "${prompt}"
+  else
+    DOCTOR_CMD+=("${prompt}")
+  fi
+
+  if ((${#DOCTOR_CMD[@]} == 0)); then
+    return 1
+  fi
+  return 0
+}
+
+ensure_opencode_installed() {
+  if command -v opencode >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "OpenCode is not installed. Trying to install it now..."
+
+  if command -v pnpm >/dev/null 2>&1; then
+    echo "Trying: pnpm install -g opencode-ai"
+    if pnpm install -g opencode-ai; then
+      reload_shell_env
+    fi
+  fi
+  if command -v opencode >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if command -v curl >/dev/null 2>&1; then
+    echo "Trying: curl -fsSL https://opencode.ai/install | bash"
+    if curl -fsSL https://opencode.ai/install | bash; then
+      reload_shell_env
+    fi
+  fi
+  if command -v opencode >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if command -v brew >/dev/null 2>&1; then
+    echo "Trying: brew install anomalyco/tap/opencode"
+    if brew install anomalyco/tap/opencode; then
+      reload_shell_env
+    fi
+  fi
+  if command -v opencode >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if command -v bun >/dev/null 2>&1; then
+    echo "Trying: bun add -g opencode-ai"
+    if bun add -g opencode-ai; then
+      reload_shell_env
+    fi
+  fi
+  if command -v opencode >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if command -v paru >/dev/null 2>&1; then
+    echo "Trying: paru -S opencode"
+    if paru -S opencode; then
+      reload_shell_env
+    fi
+  fi
+
+  if command -v opencode >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "Error: failed to install opencode automatically."
+  echo "Please install it manually with one of these commands:"
+  echo "  pnpm install -g opencode-ai"
+  echo "  curl -fsSL https://opencode.ai/install | bash"
+  echo "  brew install anomalyco/tap/opencode"
+  echo "  bun add -g opencode-ai"
+  echo "  paru -S opencode"
+  return 1
+}
+
+resolve_doctor_question() {
+  local input_fd="/dev/tty"
+  local output_fd="/dev/tty"
+  local first_line=""
+  local line=""
+
+  if [[ -n "${DOCTOR_QUESTION}" ]]; then
+    echo "${DOCTOR_QUESTION}"
+    return
+  fi
+
+  { true </dev/tty; } 2>/dev/null || {
+    input_fd="/dev/stdin"
+    output_fd="/dev/stderr"
+  }
+  printf '%s\n' "Please describe any problem I can help you, for example:" >"${output_fd}"
+  printf '%s\n' "  install.sh failed while installing a dependency" >"${output_fd}"
+  printf '%s\n' "  skillpilot.sh start does not open the WebUI" >"${output_fd}"
+  printf '%s\n' "  I do not understand a technical term or error message" >"${output_fd}"
+  printf '%s\n' "  Skill Pilot code has a bug and I want help fixing it" >"${output_fd}"
+  printf '%s\n' 'Use """ to begin a multi-line message, and end with """' >"${output_fd}"
+  printf '%s' "Question: " >"${output_fd}"
+
+  read -r first_line <"${input_fd}" || true
+  if [[ "${first_line}" == '"""' ]]; then
+    DOCTOR_QUESTION=""
+    while true; do
+      read -r line <"${input_fd}" || break
+      if [[ "${line}" == '"""' ]]; then
+        break
+      fi
+      if [[ -n "${DOCTOR_QUESTION}" ]]; then
+        DOCTOR_QUESTION+=$'\n'
+      fi
+      DOCTOR_QUESTION+="${line}"
+    done
+  else
+    DOCTOR_QUESTION="${first_line}"
+  fi
+
+  echo "${DOCTOR_QUESTION}"
+}
+
+doctor_prompt_text() {
+  local question="$1"
+  cat <<EOF_DOCTOR
+You are helping a zero-knowledge Skill Pilot user.
+
+The user may have problems with install.sh or skillpilot.sh because each system is different, they may not understand technical terms, or the code may have bugs. Help with troubleshooting, plain-language explanations, commands to run, finding errors, and fixing Skill Pilot code when needed.
+
+Use the skill-pilot-doctor skill when needed.
+
+User question:
+${question}
+EOF_DOCTOR
+}
+
+run_doctor() {
+  local question=""
+  local provider_id=""
+  local selected_provider=""
+  local prompt_text=""
+  local provider_bin=""
+
+  question="$(resolve_doctor_question)"
+  question="${question#"${question%%[![:space:]]*}"}"
+  question="${question%"${question##*[![:space:]]}"}"
+  if [[ -z "${question}" ]]; then
+    echo "Error: doctor requires a question."
+    exit 1
+  fi
+
+  provider_id="$(doctor_default_provider)"
+  selected_provider="${provider_id}"
+
+  if ! doctor_build_command "${selected_provider}" "test"; then
+    selected_provider="opencode"
+  fi
+
+  provider_bin="$(doctor_provider_field "${selected_provider}" "bin")"
+  if [[ -z "${provider_bin}" ]]; then
+    selected_provider="opencode"
+    provider_bin="opencode"
+  fi
+
+  if ! command -v "${provider_bin}" >/dev/null 2>&1; then
+    if [[ "${selected_provider}" != "opencode" ]]; then
+      echo "Configured doctor provider '${selected_provider}' is not installed. Falling back to opencode."
+      selected_provider="opencode"
+    fi
+    ensure_opencode_installed
+  fi
+
+  prompt_text="$(doctor_prompt_text "${question}")"
+  if ! doctor_build_command "${selected_provider}" "${prompt_text}"; then
+    echo "Error: failed to build the doctor command for provider '${selected_provider}'."
+    exit 1
+  fi
+
+  if [[ "${selected_provider}" == "opencode" ]]; then
+    echo "I will send your question to opencode AI agent to help you resolve the problem, you can chat with it just as chatbot, but it can almost do any for you, troubleshooting, run command, find errors, even fix skill pilot code, once finished you can exit by slash command /exit or double ctrl-c"
+  else
+    echo "I will send your question to the '${selected_provider}' doctor agent. You can continue chatting in the agent session and exit when you are done."
+  fi
+  echo ""
+  press_any_key "Press Enter to continue."
+  "${DOCTOR_CMD[@]}"
+}
+
 update_settings_json5() {
   local host="$1"
   local prod_engine_port="$2"
@@ -555,6 +906,7 @@ if not isinstance(defaults, dict):
     defaults = {}
     data["default"] = defaults
 defaults["llm"] = default_provider
+defaults["doctor"] = default_provider
 
 llm = data.get("llm", [])
 if isinstance(llm, list):
@@ -1051,9 +1403,13 @@ load_guarded_env() {
     env_content="$(cat "${ENGINE_ENV_FILE}")"
   else
     echo "Loading protected env from ${ENGINE_ENV_FILE} (sudo required)..."
-    sudo -k
-    env_content="$(sudo cat -- "${ENGINE_ENV_FILE}")"
-    sudo -k
+    if [[ "${SOURCE}" == "webui" ]] && has_gui_env; then
+      env_content="$(read_protected_file_with_gui "${ENGINE_ENV_FILE}")"
+    else
+      sudo -k
+      env_content="$(sudo cat -- "${ENGINE_ENV_FILE}")"
+      sudo -k
+    fi
   fi
 
   local parser_python
@@ -1105,18 +1461,39 @@ get_webui_base_url() {
   fi
 }
 
+_sp_has_interactive_tty() {
+  [[ -t 0 && -t 1 && -t 2 ]]
+}
+
+_sp_is_ssh() {
+  [[ -n "${SSH_CONNECTION-}" || -n "${SSH_TTY-}" ]]
+}
+
+_sp_has_linux_gui() {
+  if [[ -n "${DISPLAY-}" || -n "${WAYLAND_DISPLAY-}" ]]; then
+    return 0
+  fi
+  if command -v loginctl >/dev/null 2>&1 && [[ -n "${XDG_SESSION_ID-}" ]]; then
+    local session_type
+    session_type="$(loginctl show-session "${XDG_SESSION_ID}" -p Type --value 2>/dev/null || true)"
+    [[ "${session_type}" == "x11" || "${session_type}" == "wayland" ]] && return 0
+  fi
+  return 1
+}
+
+_sp_has_macos_gui() {
+  local console_user
+  console_user="$(/usr/bin/stat -f%Su /dev/console 2>/dev/null || true)"
+  [[ -n "${console_user}" && "${console_user}" != "root" && "${console_user}" != "loginwindow" ]] && ! _sp_is_ssh
+}
+
 has_gui_env() {
   local os_type
-  os_type="$(uname -s 2>/dev/null)"
+  os_type="$(uname -s 2>/dev/null || true)"
   if [[ "${os_type}" == "Darwin" ]]; then
-    # macOS: no GUI only when inside an SSH session without X11 forwarding
-    if [[ -n "${SSH_TTY:-}" || -n "${SSH_CLIENT:-}" ]] && [[ -z "${DISPLAY:-}" ]]; then
-      return 1
-    fi
-    return 0
+    _sp_has_macos_gui
   else
-    # Linux/other: GUI requires DISPLAY or WAYLAND_DISPLAY
-    [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]
+    _sp_has_linux_gui && ! _sp_is_ssh
   fi
 }
 
@@ -1127,6 +1504,74 @@ open_in_browser() {
   else
     xdg-open "${url}" 2>/dev/null || true
   fi
+}
+
+read_protected_file_with_gui() {
+  local file_path="$1"
+  local os_type rc tmp_script
+  os_type="$(uname -s 2>/dev/null || true)"
+
+  if ! has_gui_env; then
+    echo "Error: GUI auth requested but no GUI session detected (SSH session or no display)." >&2
+    return 1
+  fi
+
+  tmp_script="$(mktemp /tmp/skillpilot-read-env.XXXXXX.sh)"
+  cat > "${tmp_script}" <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+cat -- "$1"
+SCRIPT
+  chmod +x "${tmp_script}"
+
+  if [[ "${os_type}" == "Darwin" ]]; then
+    local cmd esc
+    cmd="bash $(printf '%q' "${tmp_script}") $(printf '%q' "${file_path}")"
+    esc="${cmd//\\/\\\\}"
+    esc="${esc//\"/\\\"}"
+    if /usr/bin/osascript -e "do shell script \"${esc}\" with administrator privileges" 2>/dev/null; then
+      rm -f "${tmp_script}"
+      return 0
+    fi
+    rm -f "${tmp_script}"
+    echo "Error: macOS GUI auth dialog failed or was cancelled." >&2
+    return 1
+  fi
+
+  if command -v pkexec >/dev/null 2>&1; then
+    if pkexec bash "${tmp_script}" "${file_path}"; then
+      rm -f "${tmp_script}"
+      return 0
+    fi
+    rc=$?
+    echo "Warning: pkexec failed (exit ${rc}); trying askpass fallback." >&2
+  fi
+
+  local askpass_tmp=""
+  if command -v zenity >/dev/null 2>&1; then
+    askpass_tmp="$(mktemp /tmp/askpass.XXXXXX.sh)"
+    printf '#!/bin/sh\nexec zenity --password --title="sudo password"\n' > "${askpass_tmp}"
+    chmod +x "${askpass_tmp}"
+  elif command -v kdialog >/dev/null 2>&1; then
+    askpass_tmp="$(mktemp /tmp/askpass.XXXXXX.sh)"
+    printf '#!/bin/sh\nexec kdialog --password "sudo password"\n' > "${askpass_tmp}"
+    chmod +x "${askpass_tmp}"
+  fi
+
+  if [[ -n "${askpass_tmp}" ]]; then
+    sudo -k
+    if SUDO_ASKPASS="${askpass_tmp}" sudo -A bash "${tmp_script}" "${file_path}"; then
+      rc=0
+    else
+      rc=$?
+    fi
+    rm -f "${askpass_tmp}" "${tmp_script}"
+    return ${rc}
+  fi
+
+  rm -f "${tmp_script}"
+  echo "Error: No GUI askpass helper found (zenity/kdialog) and pkexec is unavailable." >&2
+  return 1
 }
 
 wait_for_http_ready() {
@@ -1184,6 +1629,50 @@ PY
     return 0
   fi
   return 1
+}
+
+engine_socket_path() {
+  local mode="$1"
+  if [[ "${mode}" == "dev" ]]; then
+    echo "${ROOT_DIR}/.skillpilot/temp/engine-dev.sock"
+  else
+    echo "${ROOT_DIR}/.skillpilot/temp/engine.sock"
+  fi
+}
+
+engine_socket_running() {
+  local mode="$1"
+  local socket_path py
+  socket_path="$(engine_socket_path "${mode}")"
+  if [[ ! -S "${socket_path}" ]]; then
+    return 1
+  fi
+
+  py="$(engine_python)"
+  "${py}" - "${socket_path}" <<'PY'
+import socket
+import sys
+
+socket_path = sys.argv[1]
+client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+client.settimeout(1.0)
+try:
+    client.connect(socket_path)
+except OSError:
+    raise SystemExit(1)
+finally:
+    client.close()
+raise SystemExit(0)
+PY
+}
+
+get_running_webui_url() {
+  local mode="$1"
+  if [[ "${mode}" == "dev" ]]; then
+    core/bin/tool-cli get_webui_url --dev 2>/dev/null
+  else
+    core/bin/tool-cli get_webui_url 2>/dev/null
+  fi
 }
 
 session_exists() {
@@ -1257,32 +1746,58 @@ open_or_print_webui_url() {
   fi
 
   echo ""
-  if has_gui_env; then
+  if [[ "${SOURCE}" == "webui" ]]; then
     echo "Waiting for Skill Pilot to become reachable: ${ready_url}"
     if wait_for_service_ready_or_session_exit "${mode}" "${ready_url}"; then
       echo "Skill Pilot is reachable."
+      echo "Monitoring URL:"
+      echo "  ${url}"
     else
       print_startup_troubleshooting "${mode}"
       return 1
     fi
-    echo "Opening WebUI in browser: ${url}"
-    open_in_browser "${url}"
+    return 0
+  fi
+
+  if has_gui_env; then
+    echo "Waiting for Skill Pilot to become reachable: ${ready_url}"
+    if wait_for_service_ready_or_session_exit "${mode}" "${ready_url}"; then
+      echo "Skill Pilot is reachable."
+      echo "Opening WebUI in browser: ${url}"
+      open_in_browser "${url}"
+    else
+      print_startup_troubleshooting "${mode}"
+      return 1
+    fi
   else
-    echo "WebUI ready. Open this URL in your browser:"
-    echo "  ${url}"
+    echo "Waiting for Skill Pilot to become reachable: ${ready_url}"
+    if wait_for_service_ready_or_session_exit "${mode}" "${ready_url}"; then
+      echo "Skill Pilot is reachable."
+      echo "Open this URL in your browser:"
+      echo "  ${url}"
+    else
+      print_startup_troubleshooting "${mode}"
+      return 1
+    fi
   fi
 }
 
 start_session() {
   local session_name="$1"
   local command="$2"
+  local replace_existing="${3:-0}"
 
   if tmux has-session -t "${session_name}" 2>/dev/null; then
-    echo "Session '${session_name}' already exists. Skipping."
-    return
+    if [[ "${replace_existing}" == "1" ]]; then
+      tmux kill-session -t "${session_name}"
+      echo "Stopped existing session '${session_name}'."
+    else
+      echo "Session '${session_name}' already exists. Skipping."
+      return
+    fi
   fi
 
-  tmux new-session -d -s "${session_name}" "cd '${ROOT_DIR}' && ${command}"
+  tmux new-session -d -s "${session_name}" "cd '${ROOT_DIR}' && ${command}" \; set -g status off
   echo "Started session '${session_name}'."
 }
 
@@ -1311,8 +1826,31 @@ case "${ACTION}" in
   test)
     run_engine_tests
     ;;
+  doctor)
+    run_doctor
+    ;;
   start)
+    require_tmux
     ensure_engine_venv
+    if ((IS_DEV == 1)); then
+      if [[ "${SOURCE}" != "webui" ]] && engine_socket_running "dev"; then
+        _running_url="$(get_running_webui_url "dev")"
+        echo "Skill Pilot is already running in development mode."
+        if [[ -n "${_running_url}" ]]; then
+          echo "Access it at:"
+          echo "  ${_running_url}"
+        fi
+        exit 0
+      fi
+    elif engine_socket_running "prod"; then
+      _running_url="$(get_running_webui_url "prod")"
+      echo "Skill Pilot is already running in production mode."
+      if [[ -n "${_running_url}" ]]; then
+        echo "Access it at:"
+        echo "  ${_running_url}"
+      fi
+      exit 0
+    fi
     run_init_wizard_if_needed
     load_guarded_env
     # Wizard Screen 8 — Starting services
@@ -1320,11 +1858,15 @@ case "${ACTION}" in
     echo "Launching services in tmux background sessions..."
     echo ""
     if ((IS_DEV == 1)); then
+      _replace_existing_dev_sessions=0
       ensure_webui_deps
       _dev_webui_host="$(get_service_host "webui" "development")"
       _dev_webui_port="$(get_service_port "webui" "development")"
-      start_session "sp-webui-dev" "cd core/webui && SKILL_PILOT_RUNTIME_MODE=development HOSTNAME=${_dev_webui_host} PORT=${_dev_webui_port} node scripts/with-timestamp-logs.js dev --webpack --hostname ${_dev_webui_host} --port ${_dev_webui_port}"
-      start_session "sp-engine-dev" "SKILL_PILOT_RUNTIME_MODE=development uv --project core/engine run core/engine/main.py --reload --reload-dir core/engine --reload-exclude core/engine/tests"
+      if [[ "${SOURCE}" == "webui" ]]; then
+        _replace_existing_dev_sessions=1
+      fi
+      start_session "sp-webui-dev" "cd core/webui && SKILL_PILOT_RUNTIME_MODE=development HOSTNAME=${_dev_webui_host} PORT=${_dev_webui_port} node scripts/with-timestamp-logs.js dev --webpack --hostname ${_dev_webui_host} --port ${_dev_webui_port}" "${_replace_existing_dev_sessions}"
+      start_session "sp-engine-dev" "SKILL_PILOT_RUNTIME_MODE=development uv --project core/engine run core/engine/main.py --reload --reload-dir core/engine --reload-exclude core/engine/tests" "${_replace_existing_dev_sessions}"
       _dev_engine_url="$(get_service_base_url "engine" "development")"
       _webui_url="$(get_webui_base_url "dev")"
       echo "  Dev engine   ->  ${_dev_engine_url%/}"
@@ -1353,6 +1895,7 @@ case "${ACTION}" in
     fi
     ;;
   stop)
+    require_tmux
     if ((IS_DEV == 1)); then
       stop_session "sp-webui-dev"
       stop_session "sp-engine-dev"

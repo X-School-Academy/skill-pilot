@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { GetStaticPropsContext } from 'next';
@@ -16,7 +16,6 @@ import {
   LoadingOverlay,
   MediaQuery,
   Modal,
-  Navbar,
   NavLink,
   ScrollArea,
   Select,
@@ -37,9 +36,13 @@ import {
   IconPlus,
   IconRefresh,
   IconSortAscending,
+  IconGripHorizontal,
+  IconX,
 } from '@tabler/icons-react';
 import { apiUrl } from '../../libs/api-base';
+import { AUTO_EXECUTE_OPTION, buildExecuteSelectOptions, isAutoExecuteTarget } from '../../libs/execute-targets';
 import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
+import { useSessionRoots } from '../../libs/session-roots';
 
 const API_BASE_URL = apiUrl('/api');
 axios.defaults.withCredentials = true;
@@ -67,6 +70,13 @@ interface SaveTaskResult {
 type ExecuteMode = 'skill' | 'workflow';
 type NextNodeTrigger = 'auto_continue' | 'start_by_prompt';
 
+interface WorkflowExecuteStatus {
+  status: string;
+  error?: string;
+  next_node_trigger?: NextNodeTrigger;
+  waiting_for_continue?: boolean;
+}
+
 const detectTaskKind = (path: string): TaskKind => {
   const lower = (path || '').toLowerCase();
   if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'markdown';
@@ -87,6 +97,18 @@ const taskProjectPath = (path: string): string => {
 };
 
 const workflowProjectPath = (name: string): string => `core/workflows/${name}.json`;
+const TASK_EDITOR_BG = '#0f172a';
+const TASK_EDITOR_FG = '#e2e8f0';
+const TASK_EDITOR_FONT = "'JetBrains Mono', 'Fira Mono', 'Cascadia Code', 'Consolas', monospace";
+const TASK_ACTION_BAR_STYLE: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'flex-end',
+  gap: 8,
+  padding: '8px 16px',
+  borderTop: '1px solid #eef2f7',
+  background: '#f8fafc',
+  flexShrink: 0,
+};
 
 const getAncestorDirectoryPaths = (path: string): string[] => {
   const segments = path.split('/').filter(Boolean);
@@ -129,6 +151,7 @@ export default function TasksPage() {
   const router = useRouter();
   const { task } = router.query;
   const theme = useMantineTheme();
+  const isDevMode = process.env.NODE_ENV === 'development';
   const [opened, setOpened] = useState(false);
   const [treeData, setTreeData] = useState<FileItem[]>([]);
   const [selectedKind, setSelectedKind] = useState<TaskKind>('text');
@@ -153,12 +176,35 @@ export default function TasksPage() {
   const [executeMode, setExecuteMode] = useState<ExecuteMode>('skill');
   const [skillOptions, setSkillOptions] = useState<string[]>([]);
   const [workflowOptions, setWorkflowOptions] = useState<string[]>([]);
-  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
-  const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(AUTO_EXECUTE_OPTION);
+  const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(AUTO_EXECUTE_OPTION);
   const [executeNextNodeTrigger, setExecuteNextNodeTrigger] = useState<NextNodeTrigger>('auto_continue');
   const [selectedReferenceFiles, setSelectedReferenceFiles] = useState<string[]>([]);
   const [navbarWidth, setNavbarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
+  const [sessionPanelOpen, setSessionPanelOpen] = useState(false);
+  const [sessionPanelHeight, setSessionPanelHeight] = useState(50);
+  const [isSessionPanelResizing, setIsSessionPanelResizing] = useState(false);
+  const [sessionPromptText, setSessionPromptText] = useState('');
+  const [newSessionWorkflow, setNewSessionWorkflow] = useState<string | null>(null);
+  const [newSessionSandbox, setNewSessionSandbox] = useState(false);
+  const [newSessionAuto, setNewSessionAuto] = useState(false);
+  const [newSessionNetwork, setNewSessionNetwork] = useState(true);
+  const [newSessionNextNodeTrigger, setNewSessionNextNodeTrigger] = useState<NextNodeTrigger>('auto_continue');
+  const [newSessionWorkflowResumeAvailable, setNewSessionWorkflowResumeAvailable] = useState(false);
+  const [newSessionWorkflowResume, setNewSessionWorkflowResume] = useState(false);
+  const [startingSession, setStartingSession] = useState(false);
+  const [liveSessionName, setLiveSessionName] = useState<string | null>(null);
+  const [workflowSessionActive, setWorkflowSessionActive] = useState(false);
+  const [workflowExecuteStatus, setWorkflowExecuteStatus] = useState<WorkflowExecuteStatus | null>(null);
+  const [continuingWorkflow, setContinuingWorkflow] = useState(false);
+  const rightPaneRef = useRef<HTMLDivElement | null>(null);
+  const {
+    sessionRootOptions,
+    hasSessionWorktrees,
+    selectedSessionPath,
+    setSelectedSessionPath,
+  } = useSessionRoots();
 
   const currentTask = typeof task === 'string' ? task : '';
   const currentTaskFolder = currentTask.includes('/') ? currentTask.split('/')[0] : '';
@@ -167,6 +213,9 @@ export default function TasksPage() {
     () => listFilesInDirectory(treeData, currentDirectory).filter((item) => item.path !== currentTask),
     [treeData, currentDirectory, currentTask],
   );
+  const skillSelectOptions = useMemo(() => buildExecuteSelectOptions(skillOptions), [skillOptions]);
+  const workflowSelectOptions = useMemo(() => buildExecuteSelectOptions(workflowOptions), [workflowOptions]);
+  const workflowSelectsAuto = isAutoExecuteTarget(selectedWorkflow);
   const taskFolderOptions = useMemo(
     () => treeData
       .filter((item) => item.type === 'dir' && !item.path.includes('/'))
@@ -198,6 +247,31 @@ export default function TasksPage() {
       window.removeEventListener('mouseup', stopResizing);
     };
   }, [isResizing]);
+
+  useEffect(() => {
+    if (!isSessionPanelResizing) return undefined;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!rightPaneRef.current) return;
+      const bounds = rightPaneRef.current.getBoundingClientRect();
+      if (bounds.height <= 0) return;
+      const offsetY = event.clientY - bounds.top;
+      const nextTopPercent = (offsetY / bounds.height) * 100;
+      const nextBottomPercent = Math.max(28, Math.min(72, 100 - nextTopPercent));
+      setSessionPanelHeight(nextBottomPercent);
+    };
+
+    const handleMouseUp = () => {
+      setIsSessionPanelResizing(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isSessionPanelResizing]);
 
   useEffect(() => {
     if (!currentTask) return;
@@ -391,6 +465,15 @@ export default function TasksPage() {
     fetchTree();
     fetchLlmProviders();
     fetchExecuteOptions();
+    void axios.get(`${API_BASE_URL}/config/settings`).then((res) => {
+      const security = res.data?.security?.newSession;
+      if (!security) return;
+      setNewSessionSandbox(Boolean(security.sandbox));
+      setNewSessionAuto(Boolean(security.auto));
+      setNewSessionNetwork(security.network !== false);
+    }).catch((err) => {
+      console.error('Failed to fetch task session settings:', err);
+    });
   }, []);
 
   useEffect(() => {
@@ -404,6 +487,33 @@ export default function TasksPage() {
   useEffect(() => {
     setSelectedReferenceFiles((prev) => prev.filter((path) => currentDirectoryFiles.some((item) => item.path === path)));
   }, [currentDirectoryFiles]);
+
+  useEffect(() => {
+    if (!workflowSessionActive) return undefined;
+
+    const poll = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/workflows/execute/status`, { withCredentials: true });
+        const status = res.data as WorkflowExecuteStatus;
+        setWorkflowExecuteStatus(status);
+        if (status.status === 'finished' || status.status === 'error' || status.status === 'terminated') {
+          setWorkflowSessionActive(false);
+        }
+      } catch {
+        // Ignore transient polling failures while the session is running.
+      }
+    };
+
+    void poll();
+    const intervalId = window.setInterval(() => void poll(), 3000);
+    return () => window.clearInterval(intervalId);
+  }, [workflowSessionActive]);
+
+  useEffect(() => {
+    if (executeMode !== 'workflow' || workflowSelectsAuto) {
+      setExecuteNextNodeTrigger('auto_continue');
+    }
+  }, [executeMode, workflowSelectsAuto]);
 
   const sortItems = (items: FileItem[]): FileItem[] => {
     const sorted = [...items].sort((a, b) => {
@@ -461,13 +571,25 @@ export default function TasksPage() {
 
   const openExecuteScreen = () => {
     setExecuteMode('skill');
-    setSelectedSkill(null);
-    setSelectedWorkflow(null);
+    setSelectedSkill(AUTO_EXECUTE_OPTION);
+    setSelectedWorkflow(AUTO_EXECUTE_OPTION);
     setExecuteNextNodeTrigger('auto_continue');
     setSelectedReferenceFiles([]);
     setExecuteOpened(true);
     setNotice('');
     setEditorError('');
+  };
+
+  const closeSessionPanel = () => {
+    setSessionPanelOpen(false);
+    setIsSessionPanelResizing(false);
+    setLiveSessionName(null);
+    setWorkflowSessionActive(false);
+    setWorkflowExecuteStatus(null);
+    setStartingSession(false);
+    setNewSessionWorkflow(null);
+    setNewSessionWorkflowResumeAvailable(false);
+    setNewSessionWorkflowResume(false);
   };
 
   const toggleReferenceFile = (path: string, checked: boolean) => {
@@ -482,31 +604,291 @@ export default function TasksPage() {
     if (!currentTask) return;
     const target = executeMode === 'skill' ? selectedSkill : selectedWorkflow;
     if (!target) return;
+    const shouldRunWorkflow = executeMode === 'workflow' && !isAutoExecuteTarget(target);
     const saveResult = await saveCurrentTaskContent({
-      checkWorkflowResume: executeMode === 'workflow',
-      workflowPath: executeMode === 'workflow' && target ? workflowProjectPath(target) : undefined,
+      checkWorkflowResume: shouldRunWorkflow,
+      workflowPath: shouldRunWorkflow ? workflowProjectPath(target) : undefined,
     });
     if (!saveResult.saved) return;
 
     const instructionPath = taskProjectPath(currentTask);
-    const workspacePath = currentDirectory ? taskProjectPath(currentDirectory) : 'workspace/tasks';
     const projectReferenceFiles = Array.from(new Set(selectedReferenceFiles.map((path) => taskProjectPath(path))))
       .sort((a, b) => a.localeCompare(b));
-    const referenceSection = selectedReferenceFiles.length > 0
-      ? `\n\nReference files:\n- ${projectReferenceFiles.join('\n- ')}`
-      : '';
+    const referenceSentence = selectedReferenceFiles.length > 0 ? ` Reference files: ${projectReferenceFiles.join(', ')}.` : '';
     const prompt = executeMode === 'skill'
-      ? `Use Agent skill ${target}, follow the instructions defined at ${instructionPath}${selectedReferenceFiles.length > 0 ? `, and refer to files: ${projectReferenceFiles.join(', ')}` : ''}.`
-      : `Execute workflow ${workflowProjectPath(target)}.\n\nFollow the instructions defined at ${instructionPath}.\n\nWorkspace path: ${workspacePath}\n\nIf you create any intermediate files, save them inside the task workspace above.${referenceSection}`;
+      ? (isAutoExecuteTarget(target)
+          ? `Find and use the correct agent skill for the instructions defined at ${instructionPath}.${referenceSentence}`
+          : `Use agent skill ${target} for the instructions defined at ${instructionPath}.${referenceSentence}`)
+      : (shouldRunWorkflow
+          ? `Execute workflow ${workflowProjectPath(target)}.\n\nFollow the instructions defined at ${instructionPath}.\n\nWorkspace path: ${currentDirectory ? taskProjectPath(currentDirectory) : 'workspace/tasks'}\n\nIf you create any intermediate files, save them inside the task workspace above.${selectedReferenceFiles.length > 0 ? `\n\nReference files:\n- ${projectReferenceFiles.join('\n- ')}` : ''}`
+          : `Find and use the correct workflow for the instructions defined at ${instructionPath}.${referenceSentence}`);
 
     setExecuteOpened(false);
-    if (executeMode === 'workflow') {
-      void router.push(
-        `/?new_session=true&prompt=${encodeURIComponent(prompt)}&workflow=${encodeURIComponent(`${target}.json`)}&next_node_trigger=${encodeURIComponent(executeNextNodeTrigger)}&resume=false&resume_available=${saveResult.workflowResumeAvailable ? 'true' : 'false'}`,
-      );
-      return;
+    setSessionPromptText(prompt);
+    setNewSessionWorkflow(shouldRunWorkflow ? `${target}.json` : null);
+    setNewSessionNextNodeTrigger(shouldRunWorkflow ? executeNextNodeTrigger : 'auto_continue');
+    setNewSessionWorkflowResumeAvailable(shouldRunWorkflow ? saveResult.workflowResumeAvailable : false);
+    setNewSessionWorkflowResume(false);
+    setLiveSessionName(null);
+    setWorkflowSessionActive(false);
+    setWorkflowExecuteStatus(null);
+    setSessionPanelHeight(50);
+    setSessionPanelOpen(true);
+  };
+
+  const handleStartSession = async (path?: string) => {
+    const trimmedPrompt = sessionPromptText.trim();
+    if (!trimmedPrompt || startingSession) return;
+    const provider = llmProvider || 'gemini';
+    setStartingSession(true);
+    try {
+      const endpoint = newSessionWorkflow ? `${API_BASE_URL}/workflows/execute` : `${API_BASE_URL}/terminal/tmux/create`;
+      const payload = newSessionWorkflow
+        ? {
+            workflow: newSessionWorkflow,
+            prompt: trimmedPrompt,
+            path: path || undefined,
+            sandbox: newSessionSandbox,
+            auto: newSessionAuto,
+            network: newSessionNetwork,
+            next_node_trigger: newSessionNextNodeTrigger,
+            resume: newSessionWorkflowResume,
+          }
+        : {
+            provider_id: provider,
+            prompt: trimmedPrompt,
+            path: path || undefined,
+            sandbox: newSessionSandbox,
+            auto: newSessionAuto,
+            network: newSessionNetwork,
+          };
+      const res = await axios.post(endpoint, payload);
+      const sessionName: string | undefined = res.data?.session?.name;
+      if (sessionName) {
+        setLiveSessionName(sessionName);
+        if (newSessionWorkflow) {
+          setWorkflowSessionActive(true);
+          setWorkflowExecuteStatus(null);
+        } else {
+          setWorkflowSessionActive(false);
+          setWorkflowExecuteStatus(null);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to start task session:', err);
+    } finally {
+      setStartingSession(false);
     }
-    void router.push(`/?new_session=true&prompt=${encodeURIComponent(prompt)}`);
+  };
+
+  const handleWorkflowContinue = async () => {
+    if (continuingWorkflow) return;
+    setContinuingWorkflow(true);
+    try {
+      await axios.post(`${API_BASE_URL}/workflows/execute/continue`, {}, { withCredentials: true });
+      const res = await axios.get(`${API_BASE_URL}/workflows/execute/status`, { withCredentials: true });
+      setWorkflowExecuteStatus(res.data as WorkflowExecuteStatus);
+    } catch (err) {
+      console.error('Failed to continue workflow:', err);
+    } finally {
+      setContinuingWorkflow(false);
+    }
+  };
+
+  const handleSessionPromptKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+      void handleStartSession();
+    }
+  };
+
+  const renderSessionPanel = () => {
+    const panelBorder = theme.colorScheme === 'dark' ? theme.colors.dark[4] : '#cfdaf6';
+    const panelBackground = theme.colorScheme === 'dark' ? theme.colors.dark[7] : '#ffffff';
+
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          minHeight: 0,
+          borderRadius: liveSessionName ? 0 : 10,
+          border: `1px solid ${panelBorder}`,
+          background: panelBackground,
+          boxShadow: theme.colorScheme === 'dark'
+            ? '0 20px 40px rgba(0, 0, 0, 0.24)'
+            : '0 20px 40px rgba(60, 91, 173, 0.12)',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '10px 14px',
+            borderBottom: `1px solid ${panelBorder}`,
+            background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#f7f9ff',
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <Text size="sm" weight={700}>
+              {liveSessionName ? 'Session Terminal' : 'New Session'}
+            </Text>
+            <Text size="xs" color="dimmed" truncate>
+              {liveSessionName ? liveSessionName : currentTask || 'Task execution'}
+            </Text>
+          </div>
+          <ActionIcon variant="subtle" onClick={closeSessionPanel} aria-label="Close session panel">
+            <IconX size="1rem" />
+          </ActionIcon>
+        </div>
+
+        {liveSessionName ? (
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            {workflowExecuteStatus && (workflowExecuteStatus.status === 'error' || workflowExecuteStatus.status === 'terminated') && (
+              <div style={{ padding: '8px 12px', borderBottom: `1px solid ${panelBorder}`, background: '#fde8e8', color: '#c0392b', fontSize: 13 }}>
+                Workflow execution failed{workflowExecuteStatus.error ? `: ${workflowExecuteStatus.error}` : ''}
+              </div>
+            )}
+            {workflowExecuteStatus && workflowExecuteStatus.status === 'finished' && (
+              <div style={{ padding: '8px 12px', borderBottom: `1px solid ${panelBorder}`, background: '#e8fde8', color: '#1f8a4c', fontSize: 13 }}>
+                Workflow completed
+              </div>
+            )}
+            {workflowExecuteStatus && workflowSessionActive && workflowExecuteStatus.status !== 'finished' && workflowExecuteStatus.status !== 'error' && workflowExecuteStatus.status !== 'terminated' && (
+              <div style={{ padding: '8px 12px', borderBottom: `1px solid ${panelBorder}`, background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#f7f9ff', fontSize: 13 }}>
+                Workflow status: {workflowExecuteStatus.status}
+                {workflowExecuteStatus.error ? ` - ${workflowExecuteStatus.error}` : ''}
+              </div>
+            )}
+            <div style={{ flex: 1, minHeight: 0, background: '#0b1220' }}>
+              <iframe
+                key={liveSessionName}
+                src={`/terminal?session=${encodeURIComponent(liveSessionName)}&compact=1`}
+                style={{ width: '100%', height: '100%', border: 'none' }}
+              />
+            </div>
+            {workflowSessionActive && workflowExecuteStatus?.waiting_for_continue && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  padding: '10px 14px',
+                  borderTop: `1px solid ${panelBorder}`,
+                  background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#f7f9ff',
+                }}
+              >
+                <Button size="xs" variant="light" onClick={() => void handleWorkflowContinue()} loading={continuingWorkflow}>
+                  Continue Next Node
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            <div style={{ padding: '10px 14px 0 14px' }}>
+              {newSessionWorkflow && (
+                <Text size="xs" color="dimmed" mb={8}>
+                  Workflow mode: {`core/workflows/${newSessionWorkflow}`}
+                </Text>
+              )}
+              {hasSessionWorktrees && (
+                <Select
+                  label="Worktree"
+                  placeholder="Choose where to start"
+                  value={selectedSessionPath || null}
+                  onChange={(value) => setSelectedSessionPath(value || '')}
+                  data={sessionRootOptions.map((root) => ({ value: root.value, label: root.label }))}
+                  size="xs"
+                  mb={8}
+                />
+              )}
+            </div>
+            <div style={{ flex: 1, minHeight: 0, padding: '0 14px 14px 14px' }}>
+              <Textarea
+                placeholder="What would you like to do?"
+                value={sessionPromptText}
+                onChange={(event) => setSessionPromptText(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                    event.preventDefault();
+                    void handleStartSession(selectedSessionPath || undefined);
+                    return;
+                  }
+                  handleSessionPromptKeyDown(event);
+                }}
+                autosize={false}
+                minRows={1}
+                styles={{
+                  root: { height: '100%' },
+                  wrapper: { height: '100%' },
+                  input: {
+                    height: '100%',
+                    minHeight: '100%',
+                    resize: 'none',
+                    border: 'none',
+                    padding: 0,
+                    background: 'transparent',
+                    fontSize: 14,
+                    lineHeight: 1.6,
+                  },
+                }}
+              />
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                padding: '10px 14px',
+                borderTop: `1px solid ${panelBorder}`,
+                background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#f7f9ff',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={newSessionSandbox} onChange={(event) => setNewSessionSandbox(event.currentTarget.checked)} />
+                  <span>Sandbox</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={newSessionAuto} onChange={(event) => setNewSessionAuto(event.currentTarget.checked)} />
+                  <span>Auto Run (Yolo)</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={newSessionNetwork} onChange={(event) => setNewSessionNetwork(event.currentTarget.checked)} />
+                  <span>Network Access</span>
+                </label>
+                {newSessionWorkflow && (
+                  <>
+                    <Select
+                      value={newSessionNextNodeTrigger}
+                      onChange={(value) => setNewSessionNextNodeTrigger((value as NextNodeTrigger) || 'auto_continue')}
+                      data={[
+                        { value: 'auto_continue', label: 'Auto continue' },
+                        { value: 'start_by_prompt', label: 'Start by prompt' },
+                      ]}
+                      size="xs"
+                      style={{ width: 160 }}
+                    />
+                    {newSessionWorkflowResumeAvailable && (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={newSessionWorkflowResume} onChange={(event) => setNewSessionWorkflowResume(event.currentTarget.checked)} />
+                        <span>Resume Workflow</span>
+                      </label>
+                    )}
+                  </>
+                )}
+              </div>
+              <Button onClick={() => void handleStartSession(selectedSessionPath || undefined)} disabled={!sessionPromptText.trim() || startingSession} loading={startingSession}>
+                Start
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    );
   };
 
   const renderMainContent = () => {
@@ -516,10 +898,11 @@ export default function TasksPage() {
         return (
           <div
             style={{
-              minHeight: '60vh',
+              flex: 1,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              padding: 24,
             }}
           >
             <div
@@ -567,73 +950,61 @@ export default function TasksPage() {
           </div>
         );
       }
-      return <Text align="center" py="xl" color="dimmed">Select a task file from the sidebar to begin.</Text>;
+      return (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 14 }}>
+          Select a task file from the sidebar to begin.
+        </div>
+      );
     }
 
     if (selectedKind === 'image' && currentTask) {
       return (
-        <>
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 480 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 16, overflow: 'auto' }}>
             <img src={mediaUrl} alt={taskTitle} style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 8 }} />
           </div>
-          <Group position="right" mt="md">
-            <Button color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
-          </Group>
-        </>
+          <div style={TASK_ACTION_BAR_STYLE}>
+            <Button size="xs" color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
+          </div>
+        </div>
       );
     }
 
     if (selectedKind === 'audio' && currentTask) {
       return (
-        <>
-          <div style={{ paddingTop: 40 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, padding: 24 }}>
             <audio controls src={mediaUrl} style={{ width: '100%' }}>
               Your browser does not support audio playback.
             </audio>
           </div>
-          <Group position="right" mt="md">
-            <Button color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
-          </Group>
-        </>
+          <div style={TASK_ACTION_BAR_STYLE}>
+            <Button size="xs" color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
+          </div>
+        </div>
       );
     }
 
     if (selectedKind === 'video' && currentTask) {
       return (
-        <>
-          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', justifyContent: 'center', padding: 16, background: '#0f172a' }}>
             <video controls src={mediaUrl} style={{ width: '100%', maxHeight: '70vh', borderRadius: 8 }}>
               Your browser does not support video playback.
             </video>
           </div>
-          <Group position="right" mt="md">
-            <Button color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
-          </Group>
-        </>
+          <div style={{ ...TASK_ACTION_BAR_STYLE, borderTop: '1px solid #20324d', background: '#111827' }}>
+            <Button size="xs" color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
+          </div>
+        </div>
       );
     }
 
     if (isMarkdownEditor) {
       return (
-        <div>
-          <Group spacing="xs" mb="md">
-            <Button size="xs" variant={markdownView === 'editor' ? 'filled' : 'default'} onClick={() => setMarkdownView('editor')}>
-              Edit
-            </Button>
-            <Button size="xs" variant={markdownView === 'preview' ? 'filled' : 'default'} onClick={() => setMarkdownView('preview')}>
-              Preview
-            </Button>
-            <Button
-              size="xs"
-              variant="default"
-              leftIcon={<IconPlayerPlay size="1rem" />}
-              onClick={openExecuteScreen}
-            >
-              Execute
-            </Button>
-          </Group>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           {markdownView === 'editor' ? (
-            <>
+            <div style={{ flex: 1, minHeight: 0, background: TASK_EDITOR_BG }}>
               <Textarea
                 value={editorContent}
                 onChange={(e) => {
@@ -641,52 +1012,101 @@ export default function TasksPage() {
                   if (editorError) setEditorError('');
                   if (notice) setNotice('');
                 }}
-                minRows={24}
-                autosize
-                styles={{ input: { fontFamily: 'Menlo, Monaco, Consolas, monospace' } }}
+                autosize={false}
+                minRows={1}
+                styles={{
+                  root: { height: '100%' },
+                  wrapper: { height: '100%', background: TASK_EDITOR_BG },
+                  input: {
+                    height: '100%',
+                    minHeight: '100%',
+                    resize: 'none',
+                    border: 'none',
+                    borderRadius: 0,
+                    padding: '18px 20px',
+                    fontFamily: TASK_EDITOR_FONT,
+                    fontSize: 13,
+                    lineHeight: 1.65,
+                    background: TASK_EDITOR_BG,
+                    color: TASK_EDITOR_FG,
+                    caretColor: '#f8fafc',
+                  },
+                }}
               />
-              <Group position="right" mt="md">
-                <Button onClick={() => void saveContent()} loading={editorSaving}>Save</Button>
-                <Button color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
-              </Group>
-            </>
+            </div>
           ) : (
-            <>
-              <div className="doc-markdown">
+            <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '20px 24px', background: '#ffffff' }}>
+              <div
+                className="doc-markdown"
+                style={{
+                  maxWidth: 'none',
+                  margin: 0,
+                  minHeight: '100%',
+                  padding: '18px 20px 24px',
+                  border: 'none',
+                  borderRadius: 0,
+                  boxShadow: 'none',
+                  background: '#ffffff',
+                }}
+              >
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
               </div>
-              <Group position="right" mt="md">
-                <Button color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
-              </Group>
-            </>
+            </div>
           )}
+          <div style={TASK_ACTION_BAR_STYLE}>
+            <Button size="xs" onClick={() => void saveContent()} loading={editorSaving}>Save</Button>
+            <Button size="xs" color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
+          </div>
         </div>
       );
     }
 
     if (isTextEditor) {
       return (
-        <>
-          <Textarea
-            value={editorContent}
-            onChange={(e) => {
-              setEditorContent(e.currentTarget.value);
-              if (editorError) setEditorError('');
-              if (notice) setNotice('');
-            }}
-            minRows={24}
-            autosize
-            styles={{ input: { fontFamily: 'Menlo, Monaco, Consolas, monospace' } }}
-          />
-          <Group position="right" mt="md">
-            <Button onClick={() => void saveContent()} loading={editorSaving}>Save</Button>
-            <Button color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
-          </Group>
-        </>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, background: TASK_EDITOR_BG }}>
+            <Textarea
+              value={editorContent}
+              onChange={(e) => {
+                setEditorContent(e.currentTarget.value);
+                if (editorError) setEditorError('');
+                if (notice) setNotice('');
+              }}
+              autosize={false}
+              minRows={1}
+              styles={{
+                root: { height: '100%' },
+                wrapper: { height: '100%', background: TASK_EDITOR_BG },
+                input: {
+                  height: '100%',
+                  minHeight: '100%',
+                  resize: 'none',
+                  border: 'none',
+                  borderRadius: 0,
+                  padding: '18px 20px',
+                  fontFamily: TASK_EDITOR_FONT,
+                  fontSize: 13,
+                  lineHeight: 1.65,
+                  background: TASK_EDITOR_BG,
+                  color: TASK_EDITOR_FG,
+                  caretColor: '#f8fafc',
+                },
+              }}
+            />
+          </div>
+          <div style={TASK_ACTION_BAR_STYLE}>
+            <Button size="xs" onClick={() => void saveContent()} loading={editorSaving}>Save</Button>
+            <Button size="xs" color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
+          </div>
+        </div>
       );
     }
 
-    return !loading ? <Text align="center" py="xl" color="dimmed">Select a task file from the sidebar to begin.</Text> : null;
+    return !loading ? (
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 14 }}>
+        Select a task file from the sidebar to begin.
+      </div>
+    ) : null;
   };
 
   return (
@@ -699,12 +1119,19 @@ export default function TasksPage() {
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          height: '100vh',
+          height: 'calc(100vh - 60px)',
+          minHeight: 0,
         },
       }}
       navbarOffsetBreakpoint="sm"
       header={
-        <Header height={{ base: 60 }} p="md">
+        <Header
+          height={{ base: 60 }}
+          p="md"
+          styles={{
+            root: isDevMode ? { borderBottom: '2px solid #228be6' } : undefined,
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', height: '100%', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <MediaQuery largerThan="sm" styles={{ display: 'none' }}>
@@ -801,9 +1228,9 @@ export default function TasksPage() {
               placeholder="Select a skill"
               value={selectedSkill}
               onChange={setSelectedSkill}
-              data={skillOptions.map((item) => ({ value: item, label: item }))}
+              data={skillSelectOptions}
               searchable
-              clearable
+              clearable={false}
             />
           ) : (
             <>
@@ -812,9 +1239,9 @@ export default function TasksPage() {
                 placeholder="Select a workflow"
                 value={selectedWorkflow}
                 onChange={setSelectedWorkflow}
-                data={workflowOptions.map((item) => ({ value: item, label: item }))}
+                data={workflowSelectOptions}
                 searchable
-                clearable
+                clearable={false}
               />
               <Select
                 label="Next Node Trigger"
@@ -824,6 +1251,8 @@ export default function TasksPage() {
                   { value: 'auto_continue', label: 'Auto continue' },
                   { value: 'start_by_prompt', label: 'Start by prompt' },
                 ]}
+                disabled={workflowSelectsAuto}
+                description={workflowSelectsAuto ? 'Disabled for Auto because the session will choose a workflow from the prompt.' : undefined}
               />
             </>
           )}
@@ -875,32 +1304,43 @@ export default function TasksPage() {
         </Stack>
       </Modal>
 
-      <div className="shrink-0 border-b border-[#d6def8] bg-white/60 px-6 py-2">
-        <button
-          type="button"
-          onClick={() => { void router.push('/'); }}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-[#5e6b9d] hover:bg-[#eef2ff] hover:text-[#1a2455] transition"
-          title="Back to Home"
-        >
-          <IconArrowLeft size="1rem" />
-          <span>Back to Home</span>
-        </button>
-      </div>
-
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <Navbar
-          p="md"
-          hiddenBreakpoint="sm"
-          hidden={!opened}
-          width={{ sm: navbarWidth }}
-          style={{
-            position: 'relative',
-            transition: isResizing ? 'none' : 'width 200ms ease',
-            height: '100%',
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
+        <MediaQuery
+          smallerThan="sm"
+          styles={{
+            display: opened ? 'flex' : 'none',
+            position: 'absolute',
+            inset: '0 auto 0 0',
+            zIndex: 30,
           }}
         >
-          <Navbar.Section mb="md">
-            <Group position="apart" align="center">
+          <aside
+            style={{
+              width: navbarWidth,
+              flexShrink: 0,
+              minHeight: 0,
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              background: '#ffffff',
+              borderRight: '1px solid #e9ecef',
+              position: 'relative',
+              transition: isResizing ? 'none' : 'width 200ms ease',
+            }}
+          >
+            <div style={{ padding: '12px 14px', minHeight: 46, borderBottom: '1px solid #eef2f7', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => { void router.push('/'); }}
+                className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-[#5e6b9d] hover:bg-[#eef2ff] hover:text-[#1a2455] transition"
+                title="Back to Home"
+              >
+                <IconArrowLeft size="1rem" />
+                <span>Back to Home</span>
+              </button>
+            </div>
+            <div style={{ padding: '12px 14px', minHeight: 46, borderBottom: '1px solid #eef2f7', flexShrink: 0 }}>
+              <Group position="apart" align="center">
               <Text weight={700} size="lg">Tasks</Text>
               <Group spacing={4}>
                 <Tooltip label="Add Task">
@@ -926,17 +1366,17 @@ export default function TasksPage() {
                   </ActionIcon>
                 </Tooltip>
               </Group>
-            </Group>
-          </Navbar.Section>
-          <Navbar.Section grow component={ScrollArea} mx="-md" px="md">
-            {treeLoading && treeData.length === 0 ? (
-              <Box py="xl" sx={{ textAlign: 'center' }}><Text size="sm" color="dimmed">Loading...</Text></Box>
-            ) : (
-              renderTree(sortedTreeData)
-            )}
-          </Navbar.Section>
-
-          <MediaQuery smallerThan="sm" styles={{ display: 'none' }}>
+              </Group>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <ScrollArea style={{ height: '100%' }} px="md" py="sm">
+                {treeLoading && treeData.length === 0 ? (
+                  <Box py="xl" sx={{ textAlign: 'center' }}><Text size="sm" color="dimmed">Loading...</Text></Box>
+                ) : (
+                  renderTree(sortedTreeData)
+                )}
+              </ScrollArea>
+            </div>
             <div
               onMouseDown={startResizing}
               style={{
@@ -957,25 +1397,104 @@ export default function TasksPage() {
                 if (!isResizing) e.currentTarget.style.backgroundColor = 'transparent';
               }}
             />
-          </MediaQuery>
-        </Navbar>
+          </aside>
+        </MediaQuery>
 
         <main
+          ref={rightPaneRef}
           style={{
             flex: 1,
-            display: 'flex',
-            justifyContent: 'center',
-            overflowY: 'auto',
-            padding: '20px',
+            minWidth: 0,
+            display: 'grid',
+            gridTemplateRows: sessionPanelOpen ? `${100 - sessionPanelHeight}fr 12px ${sessionPanelHeight}fr` : '1fr',
+            overflow: 'hidden',
+            padding: 0,
+            background: '#ffffff',
+            minHeight: 0,
+            height: '100%',
           }}
         >
-          <div className="w-full max-w-4xl bg-white p-6 rounded-lg shadow-sm relative" style={{ height: 'fit-content', minHeight: '100%', marginTop: 24 }}>
-            <LoadingOverlay visible={loading} overlayBlur={2} />
-            {taskTitle ? <h1 className="mb-4">{taskTitle}</h1> : null}
-            {editorError && <Text color="red" size="sm" mb="sm">{editorError}</Text>}
-            {notice && !editorError && <Text color="green" size="sm" mb="sm">{notice}</Text>}
-            {renderMainContent()}
+          <div style={{ minHeight: 0, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', borderBottom: sessionPanelOpen ? 'none' : '1px solid #e9ecef', background: '#ffffff' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                padding: '8px 18px',
+                borderBottom: '1px solid #eef2f7',
+                background: '#ffffff',
+                flexShrink: 0,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ fontSize: 12, color: '#64748b', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 240px' }}>
+                {currentTask || 'Select a task file from the sidebar'}
+              </div>
+              {currentTask ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flex: '0 0 auto', flexWrap: 'wrap' }}>
+                  {selectedKind === 'markdown' && (
+                    <>
+                      <Button size="xs" variant={markdownView === 'editor' ? 'filled' : 'default'} onClick={() => setMarkdownView('editor')}>
+                        Edit
+                      </Button>
+                      <Button size="xs" variant={markdownView === 'preview' ? 'filled' : 'default'} onClick={() => setMarkdownView('preview')}>
+                        Preview
+                      </Button>
+                    </>
+                  )}
+                  {(selectedKind === 'markdown' || selectedKind === 'text') && (
+                    <Button
+                      size="xs"
+                      variant="default"
+                      leftIcon={<IconPlayerPlay size="1rem" />}
+                      onClick={openExecuteScreen}
+                    >
+                      Execute
+                    </Button>
+                  )}
+                  </div>
+              ) : null}
+            </div>
+
+            {(editorError || notice) && (
+              <div style={{ flexShrink: 0 }}>
+                {editorError && <Text color="red" size="sm" px={18} py={10}>{editorError}</Text>}
+                {!editorError && notice && <Text color="green" size="sm" px={18} py={10}>{notice}</Text>}
+              </div>
+            )}
+
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+              <LoadingOverlay visible={loading} overlayBlur={2} />
+              {renderMainContent()}
+            </div>
           </div>
+
+          {sessionPanelOpen && (
+            <>
+              <div
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  setIsSessionPanelResizing(true);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'row-resize',
+                  color: theme.colorScheme === 'dark' ? theme.colors.gray[5] : '#93a4cc',
+                }}
+                aria-label="Resize session panel"
+              >
+                <IconGripHorizontal size="1rem" />
+              </div>
+              <div style={{ minHeight: 0, overflow: 'hidden', borderLeft: '1px solid #e9ecef', borderTop: '1px solid #e9ecef', background: '#ffffff' }}>
+                <div style={{ width: '100%', height: '100%' }}>
+                  {renderSessionPanel()}
+                </div>
+              </div>
+            </>
+          )}
         </main>
       </div>
     </AppShell>

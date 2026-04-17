@@ -1,0 +1,8 @@
+{
+  name: 'Skill Pilot Chrome Extension',
+  description: 'Browser extension for integrating Skill Pilot with Chrome.',
+  version: '0.1.0',
+  license: 'MIT',
+  type: 'prompt',
+  prompt: 'Build and install this extension. Before proceeding, verify the environment has the required tools installed (e.g. browser availability and build dependencies). If any prerequisites are missing or need user action, prompt the user to confirm or assist.',
+}

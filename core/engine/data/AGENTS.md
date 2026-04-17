@@ -1,0 +1,83 @@
+# Showcase Data Maintenance Rules
+
+This folder contains the Explore showcase index and the sample YAML files it references.
+
+## Files
+
+- `showcases.json5`: clean category index only. Do not keep schema/docstring comments here.
+- `showcases/**/*.yaml`: one sample per file. Keep fields explicit and easy to scan.
+
+## Category Index Rules
+
+- The top-level value in `showcases.json5` must be an array of category objects.
+- Category fields:
+  - `id`: stable folder id
+  - `category`: display label
+  - `description`: short user-facing summary
+  - `thumbnail`: optional image path/url or `null`
+  - `subcategories`: optional nested category array
+- Samples are discovered from matching folders under `showcases/`.
+- Keep category ids aligned with the directory structure.
+
+## Sample YAML Rules
+
+Supported sample fields:
+
+- `id`: stable unique sample id
+- `title`: display name
+- `description`: short summary shown in Explore
+- `thumbnail`: optional image path/url or `null`
+- `video`: optional video path/url or `null`
+- `tutorial`: optional media path/url or webpage url
+- `request`: optional requirement/reference media or webpage url
+- `prompt`: starter prompt text
+- `workflow`: optional workflow path
+- `directory`: optional directory path
+- `git_tag`: git tag string or `null`
+- `use_worktree`: boolean
+- `in_mode`: `dev` or `prod`
+- `skills`: array
+- `extensions`: optional array
+- `tools`: array
+- `files`: array
+- `links`: array of `{ name, url }`
+- `popularity`: numeric score
+- `level`: numeric difficulty
+- `rate`: numeric rating
+
+## Runtime Mode Rules
+
+- `in_mode` controls which instance should be used for the sample.
+- Allowed values are `dev` and `prod`.
+- If `in_mode` is missing or empty, treat it as `prod`.
+- If `in_mode=prod`, execute in the current instance.
+- If `in_mode=dev` and the current instance is `dev`, execute and monitor in the current instance.
+- If `in_mode=dev` and the current instance is `prod`, execute in the prod web terminal and monitor the result in the dev instance.
+- `prod` is the stable working terminal.
+- `dev` is the live preview and monitoring instance for `core/webui` and `core/engine` changes.
+
+## Constraints
+
+- If `git_tag` is set, `use_worktree` must be `true`.
+- If `use_worktree` is `true`, `in_mode` must be `dev`.
+- Do not add samples that violate those constraints.
+- When updating an existing sample to use `git_tag`, also set `use_worktree: true`.
+- When updating an existing sample to use `use_worktree`, also set `in_mode: dev`.
+
+## Editing Guidance
+
+- Keep YAML field names consistent across samples.
+- Prefer `null` over empty strings for optional scalar fields unless the loader requires otherwise.
+- Keep prompts concise but runnable.
+- Use repo-relative paths for `workflow`, `directory`, and `files`.
+- Keep `extensions` values as extension names or `extensions/...` paths.
+- Preserve stable ids; do not rename ids casually because UI routes and references may depend on them.
+- When adding a new category or subcategory, create the matching folder path under `showcases/`.
+- When removing or renaming folders, update `showcases.json5` in the same change.
+
+## Validation Expectations
+
+- Before finishing edits, check that every category id maps to the expected folder.
+- Check that every sample YAML parses cleanly.
+- Check that `git_tag` and `use_worktree` samples are marked `in_mode: dev`.
+- Keep `showcases.json5` free of explanatory comments; this file is the source of maintenance guidance.

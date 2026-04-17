@@ -3,11 +3,14 @@ import argparse
 import json
 import sys
 import os
+import platform
+import shlex
+import subprocess
 import tempfile
 import uuid
 import time
 import base64
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Tuple
 
 import pyautogui
 import screeninfo
@@ -18,6 +21,181 @@ from PIL import Image, ImageDraw
 # or keep it enabled if safety is a priority. For an autonomous agent, maybe keep it?
 # Let's keep it enabled but handle the FailSafeException if it happens.
 # pyautogui.FAILSAFE = True
+
+DEFAULT_MAC_TERMINAL_WIDTH = 1920
+DEFAULT_MAC_TERMINAL_HEIGHT = 1080
+
+
+def run_osascript(script: str) -> str:
+    result = subprocess.run(
+        ["osascript", "-e", script],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+def apple_script_string(value: str) -> str:
+    return json.dumps(value)
+
+
+def ensure_macos() -> Optional[Dict[str, str]]:
+    if platform.system() != "Darwin":
+        return {"error": "This action is only supported on macOS"}
+    return None
+
+
+def get_primary_screen_bounds() -> Tuple[int, int, int, int]:
+    monitors = screeninfo.get_monitors()
+    primary = next((m for m in monitors if m.is_primary), None)
+    if primary:
+        return primary.x, primary.y, primary.width, primary.height
+
+    width, height = pyautogui.size()
+    return 0, 0, width, height
+
+
+def get_mac_terminal_window_bounds(window_id: int) -> Tuple[int, int, int, int]:
+    script = f'''
+    tell application "Terminal"
+        if not (exists (first window whose id is {window_id})) then
+            error "Terminal window {window_id} does not exist"
+        end if
+        set theWindow to first window whose id is {window_id}
+        set index of theWindow to 1
+        set b to bounds of theWindow
+        set windowWidth to (item 3 of b) - (item 1 of b)
+        set windowHeight to (item 4 of b) - (item 2 of b)
+        return (item 1 of b as text) & "," & (item 2 of b as text) & "," & (windowWidth as text) & "," & (windowHeight as text)
+    end tell
+    '''
+    out = run_osascript(script)
+    return tuple(map(int, out.split(",")))
+
+
+def wait_for_mac_terminal_window(window_id: int, timeout: float = 10.0) -> None:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            out = run_osascript(f'''
+            tell application "Terminal"
+                if exists (first window whose id is {window_id}) then
+                    return "ok"
+                end if
+            end tell
+            ''')
+            if out == "ok":
+                return
+        except subprocess.CalledProcessError:
+            pass
+        time.sleep(0.2)
+    raise TimeoutError(f"Terminal window {window_id} did not appear.")
+
+
+def mac_open_native_terminal(params: Dict[str, Any]) -> Dict[str, Any]:
+    mac_error = ensure_macos()
+    if mac_error:
+        return mac_error
+
+    if "tmux_session_id" in params:
+        tmux_session_id = params.get("tmux_session_id")
+    else:
+        tmux_session_id = params.get("session_id")
+    if tmux_session_id is None:
+        tmux_session_id = f"use_computer_{uuid.uuid4().hex[:8]}"
+    if not isinstance(tmux_session_id, str) or not tmux_session_id.strip():
+        return {"error": "tmux_session_id must be a non-empty string"}
+    tmux_session_id = tmux_session_id.strip()
+
+    width = int(params.get("width", DEFAULT_MAC_TERMINAL_WIDTH))
+    height = int(params.get("height", DEFAULT_MAC_TERMINAL_HEIGHT))
+    timeout = float(params.get("timeout", 10.0))
+
+    screen_x, screen_y, screen_w, screen_h = get_primary_screen_bounds()
+    window_w = min(width, screen_w)
+    window_h = min(height, screen_h)
+    x = screen_x + max(0, int((screen_w - window_w) / 2))
+    y = screen_y + max(0, int((screen_h - window_h) / 2))
+
+    unique_title = f"USE_COMPUTER_TERM_{uuid.uuid4().hex[:8]}"
+    tmux_command = "printf '\\033]0;{}\\007'; exec tmux new-session -A -s {}".format(
+        unique_title,
+        shlex.quote(tmux_session_id),
+    )
+    script = f'''
+    tell application "Terminal"
+        activate
+        do script {apple_script_string(tmux_command)}
+        delay 0.5
+        set theWindow to front window
+        return (id of theWindow as text)
+    end tell
+    '''
+
+    try:
+        window_id = int(run_osascript(script))
+        wait_for_mac_terminal_window(window_id, timeout=timeout)
+
+        resize_script = f'''
+        tell application "Terminal" to activate
+        delay 0.2
+        tell application "Terminal"
+            set theWindow to first window whose id is {window_id}
+            set index of theWindow to 1
+            set bounds of theWindow to {{{x}, {y}, {x + window_w}, {y + window_h}}}
+        end tell
+        '''
+        run_osascript(resize_script)
+        time.sleep(0.5)
+
+        bounds = get_mac_terminal_window_bounds(window_id)
+        return {
+            "window_id": window_id,
+            "tmux_session_id": tmux_session_id,
+            "bbox": list(bounds),
+            "window_bounds": {
+                "x": bounds[0],
+                "y": bounds[1],
+                "width": bounds[2],
+                "height": bounds[3],
+            },
+        }
+    except subprocess.CalledProcessError as e:
+        return {"error": e.stderr.strip() or str(e)}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def mac_close_native_terminal(params: Dict[str, Any]) -> Dict[str, Any]:
+    mac_error = ensure_macos()
+    if mac_error:
+        return mac_error
+
+    window_id = params.get("window_id")
+    if window_id is None:
+        return {"error": "window_id is required"}
+
+    try:
+        window_id = int(window_id)
+    except (TypeError, ValueError):
+        return {"error": "window_id must be an integer"}
+
+    script = f'''
+    tell application "Terminal"
+        if exists (first window whose id is {window_id}) then
+            close (first window whose id is {window_id}) saving no
+            return "closed"
+        end if
+        return "not_found"
+    end tell
+    '''
+    try:
+        status = run_osascript(script)
+        return {"window_id": window_id, "status": status}
+    except subprocess.CalledProcessError as e:
+        return {"window_id": window_id, "status": "error", "error": e.stderr.strip() or str(e)}
+
 
 def get_screen_info() -> Dict[str, Any]:
     monitors = screeninfo.get_monitors()
@@ -198,6 +376,10 @@ def main():
             result = get_screenshot(input_data)
         elif action == "input":
             result = perform_actions(input_data)
+        elif action == "mac_open_native_terminal":
+            result = mac_open_native_terminal(input_data)
+        elif action == "mac_close_native_terminal":
+            result = mac_close_native_terminal(input_data)
         else:
             result = {"error": f"Unknown action: {action}"}
             

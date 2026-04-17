@@ -140,7 +140,7 @@ def test_video2talking_video():
     _assert_media_response_has_output(response, (".mp4", "video"))
 
 # 1280x720   1:50 mins - 23 mins
-# 960x528    5:49 mins - 34 mis 
+# 960x528    5:49 mins - 34 mins 
 def test_video_lipsync():
     response = _run_media_tool(
         "video_lipsync",

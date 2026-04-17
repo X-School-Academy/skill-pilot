@@ -39,6 +39,7 @@ dependencies = [
     "aiortc>=1.14.0",
     "av>=16.1.0",
     "onvif-python>=0.2.10",
+    "markitdown[docx,pdf,pptx,xls,xlsx,youtube-transcription]>=0.1.5",
 ]
 
 [dependency-groups]

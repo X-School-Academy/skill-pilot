@@ -1,0 +1,20 @@
+id: video-promo-clip
+title: Product Promo Clip
+description: Generate a short promotional video workflow from a simple prompt.
+thumbnail: null
+video: null
+tutorial: null
+prompt: Create a 30-second product promo video with scenes, narration, and captions
+  for a new AI tool.
+workflow: core/workflows/multiple-scene-video.json
+directory: core/workflows
+git_tag: null
+in_mode: dev
+use_worktree: true
+skills: []
+tools: []
+files: []
+links: []
+popularity: 89
+level: 3
+rate: 4.7

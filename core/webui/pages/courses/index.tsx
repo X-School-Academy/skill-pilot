@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { GetStaticPropsContext } from 'next';
@@ -40,6 +40,7 @@ import {
   IconPlus,
 } from '@tabler/icons-react';
 import CourseBlock from '../../components/blocks/course.block';
+import EmbeddedSessionPanel from '../../components/EmbeddedSessionPanel';
 import { apiUrl } from '../../libs/api-base';
 import { dispatchLlmStatus, getClientId, resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
 
@@ -111,6 +112,30 @@ const validateEditorContent = (content: string, type: FileType): string | null =
   }
 };
 
+const PAGE_HEADER_BAR_STYLE: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+  padding: '8px 18px',
+  borderBottom: '1px solid #eef2f7',
+  background: '#ffffff',
+  flexShrink: 0,
+  flexWrap: 'wrap',
+};
+
+const PAGE_ACTION_BAR_STYLE: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'flex-end',
+  gap: 8,
+  padding: '8px 16px',
+  borderTop: '1px solid #eef2f7',
+  background: '#f8fafc',
+  flexShrink: 0,
+};
+
+const PAGE_EDITOR_FONT = "'JetBrains Mono', 'Fira Mono', 'Cascadia Code', 'Consolas', monospace";
+
 const buildCourseCreatorPrompt = (requestText: string): string => `Use agent skill \`course-creator\` to create a tutorial based on the learner requirement below.
 
 Learner requirement:
@@ -122,6 +147,7 @@ export default function CoursesPage() {
   const router = useRouter();
   const { course } = router.query;
   const theme = useMantineTheme();
+  const isDevMode = process.env.NODE_ENV === 'development';
   const [opened, setOpened] = useState(false);
   const [treeData, setTreeData] = useState<FileItem[]>([]);
   const [courseContent, setCourseContent] = useState<string>('');
@@ -142,9 +168,26 @@ export default function CoursesPage() {
 
   const [addSessionOpened, setAddSessionOpened] = useState(false);
   const [sessionPrompt, setSessionPrompt] = useState('');
+  const [sessionPanelOpen, setSessionPanelOpen] = useState(false);
+  const [sessionPanelHeight, setSessionPanelHeight] = useState(50);
+  const [isSessionPanelResizing, setIsSessionPanelResizing] = useState(false);
+  const [sessionPromptText, setSessionPromptText] = useState('');
+  const [newSessionWorkflow, setNewSessionWorkflow] = useState<string | null>(null);
+  const [newSessionSandbox, setNewSessionSandbox] = useState(false);
+  const [newSessionAuto, setNewSessionAuto] = useState(false);
+  const [newSessionNetwork, setNewSessionNetwork] = useState(true);
+  const [newSessionNextNodeTrigger, setNewSessionNextNodeTrigger] = useState<'auto_continue' | 'start_by_prompt'>('auto_continue');
+  const [newSessionWorkflowResumeAvailable, setNewSessionWorkflowResumeAvailable] = useState(false);
+  const [newSessionWorkflowResume, setNewSessionWorkflowResume] = useState(false);
+  const [startingSession, setStartingSession] = useState(false);
+  const [liveSessionName, setLiveSessionName] = useState<string | null>(null);
+  const [workflowSessionActive, setWorkflowSessionActive] = useState(false);
+  const [workflowExecuteStatus, setWorkflowExecuteStatus] = useState<any>(null);
+  const [continuingWorkflow, setContinuingWorkflow] = useState(false);
 
   const [navbarWidth, setNavbarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
+  const rightPaneRef = useRef<HTMLDivElement | null>(null);
 
   const startResizing = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -172,6 +215,26 @@ export default function CoursesPage() {
       window.removeEventListener('mouseup', stopResizing);
     };
   }, [isResizing]);
+
+  useEffect(() => {
+    if (!isSessionPanelResizing) return undefined;
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!rightPaneRef.current) return;
+      const bounds = rightPaneRef.current.getBoundingClientRect();
+      if (bounds.height <= 0) return;
+      const offsetY = event.clientY - bounds.top;
+      const nextTopPercent = (offsetY / bounds.height) * 100;
+      const nextBottomPercent = Math.max(28, Math.min(72, 100 - nextTopPercent));
+      setSessionPanelHeight(nextBottomPercent);
+    };
+    const handleMouseUp = () => setIsSessionPanelResizing(false);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isSessionPanelResizing]);
 
   const fetchTree = async () => {
     setTreeLoading(true);
@@ -306,12 +369,64 @@ export default function CoursesPage() {
     const prompt = buildCourseCreatorPrompt(request);
     setAddSessionOpened(false);
     setSessionPrompt('');
-    void router.push(`/?new_session=true&prompt=${encodeURIComponent(prompt)}`);
+    setSessionPromptText(prompt);
+    setNewSessionWorkflow(null);
+    setNewSessionWorkflowResumeAvailable(false);
+    setNewSessionWorkflowResume(false);
+    setLiveSessionName(null);
+    setWorkflowSessionActive(false);
+    setWorkflowExecuteStatus(null);
+    setSessionPanelHeight(50);
+    setSessionPanelOpen(true);
+  };
+
+  const closeSessionPanel = () => {
+    setSessionPanelOpen(false);
+    setIsSessionPanelResizing(false);
+    setLiveSessionName(null);
+    setWorkflowSessionActive(false);
+    setWorkflowExecuteStatus(null);
+    setStartingSession(false);
+    setNewSessionWorkflow(null);
+    setNewSessionWorkflowResumeAvailable(false);
+    setNewSessionWorkflowResume(false);
+  };
+
+  const handleStartSession = async (path?: string) => {
+    const trimmedPrompt = sessionPromptText.trim();
+    if (!trimmedPrompt || startingSession) return;
+    const provider = llmProvider || 'gemini';
+    setStartingSession(true);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/terminal/tmux/create`, {
+        provider_id: provider,
+        prompt: trimmedPrompt,
+        path: path || undefined,
+        sandbox: newSessionSandbox,
+        auto: newSessionAuto,
+        network: newSessionNetwork,
+      });
+      const sessionName: string | undefined = res.data?.session?.name;
+      if (sessionName) setLiveSessionName(sessionName);
+    } catch (err) {
+      console.error('Failed to start learning session:', err);
+    } finally {
+      setStartingSession(false);
+    }
   };
 
   useEffect(() => {
     fetchTree();
     fetchLlmProviders();
+    void axios.get(`${API_BASE_URL}/config/settings`).then((res) => {
+      const security = res.data?.security?.newSession;
+      if (!security) return;
+      setNewSessionSandbox(Boolean(security.sandbox));
+      setNewSessionAuto(Boolean(security.auto));
+      setNewSessionNetwork(security.network !== false);
+    }).catch((err) => {
+      console.error('Failed to fetch learning session settings:', err);
+    });
   }, []);
 
   useEffect(() => {
@@ -376,6 +491,22 @@ export default function CoursesPage() {
 
   const isMarkdownEditor = fileType === 'markdown' && !isCourseTutorial;
   const isDataEditor = fileType === 'yaml' || fileType === 'json' || fileType === 'json5';
+  const renderHeaderActions = () => {
+    if (!courseContent) return null;
+    if (isMarkdownEditor) {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flex: '0 0 auto', flexWrap: 'wrap' }}>
+          <Button size="xs" variant={markdownView === 'editor' ? 'filled' : 'default'} onClick={() => setMarkdownView('editor')}>
+            Edit
+          </Button>
+          <Button size="xs" variant={markdownView === 'preview' ? 'filled' : 'default'} onClick={() => setMarkdownView('preview')}>
+            Preview
+          </Button>
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <AppShell
@@ -387,12 +518,19 @@ export default function CoursesPage() {
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          height: '100vh',
+          height: 'calc(100vh - 60px)',
+          minHeight: 0,
         },
       }}
       navbarOffsetBreakpoint="sm"
       header={
-        <Header height={{ base: 60 }} p="md">
+        <Header
+          height={{ base: 60 }}
+          p="md"
+          styles={{
+            root: isDevMode ? { borderBottom: '2px solid #228be6' } : undefined,
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', height: '100%', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <MediaQuery largerThan="sm" styles={{ display: 'none' }}>
@@ -469,61 +607,71 @@ export default function CoursesPage() {
         </Group>
       </Modal>
 
-      <div className="shrink-0 border-b border-[#d6def8] bg-white/60 px-6 py-2">
-        <button
-          type="button"
-          onClick={() => { void router.push('/'); }}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-[#5e6b9d] hover:bg-[#eef2ff] hover:text-[#1a2455] transition"
-          title="Back to Home"
-        >
-          <IconArrowLeft size="1rem" />
-          <span>Back to Home</span>
-        </button>
-      </div>
-
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <Navbar
-          p="md"
-          hiddenBreakpoint="sm"
-          hidden={!opened}
-          width={{ sm: navbarWidth }}
-          style={{
-            position: 'relative',
-            transition: isResizing ? 'none' : 'width 200ms ease',
-            height: '100%',
+        <MediaQuery
+          smallerThan="sm"
+          styles={{
+            display: opened ? 'flex' : 'none',
+            position: 'absolute',
+            inset: '0 auto 0 0',
+            zIndex: 30,
           }}
         >
-          <Navbar.Section mb="md">
-            <Group position="apart" align="center">
-              <Text weight={700} size="lg">Learning</Text>
-              <Group spacing={4}>
-                <Tooltip label="Add Session">
-                  <ActionIcon variant="subtle" onClick={() => setAddSessionOpened(true)}>
-                    <IconPlus size="1.1rem" />
+          <aside
+            style={{
+              width: navbarWidth,
+              flexShrink: 0,
+              minHeight: 0,
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              background: '#ffffff',
+              borderRight: '1px solid #e9ecef',
+              position: 'relative',
+              transition: isResizing ? 'none' : 'width 200ms ease',
+            }}
+          >
+            <div style={{ padding: '12px 14px', minHeight: 46, borderBottom: '1px solid #eef2f7', flexShrink: 0 }}>
+              <Group position="apart" align="center">
+                <Group spacing={6} align="center">
+                  <ActionIcon
+                    variant="subtle"
+                    onClick={() => { void router.push('/'); }}
+                    title="Back to Home"
+                  >
+                    <IconArrowLeft size="1rem" />
                   </ActionIcon>
-                </Tooltip>
-                <Tooltip label="Refresh">
-                  <ActionIcon variant="subtle" onClick={() => void fetchTree()}>
-                    <IconRefresh size="1.1rem" />
-                  </ActionIcon>
-                </Tooltip>
-                <Tooltip label={sortByTime ? 'Sorted by Time' : 'Sorted Alpha'}>
-                  <ActionIcon variant="subtle" onClick={() => setSortByTime(!sortByTime)}>
-                    {sortByTime ? <IconClock size="1.1rem" /> : <IconSortAscending size="1.1rem" />}
-                  </ActionIcon>
-                </Tooltip>
+                  <Text weight={700} size="lg">Learning</Text>
+                </Group>
+                <Group spacing={4}>
+                  <Tooltip label="Add Session">
+                    <ActionIcon variant="subtle" onClick={() => setAddSessionOpened(true)}>
+                      <IconPlus size="1.1rem" />
+                    </ActionIcon>
+                  </Tooltip>
+                  <Tooltip label="Refresh">
+                    <ActionIcon variant="subtle" onClick={() => void fetchTree()}>
+                      <IconRefresh size="1.1rem" />
+                    </ActionIcon>
+                  </Tooltip>
+                  <Tooltip label={sortByTime ? 'Sorted by Time' : 'Sorted Alpha'}>
+                    <ActionIcon variant="subtle" onClick={() => setSortByTime(!sortByTime)}>
+                      {sortByTime ? <IconClock size="1.1rem" /> : <IconSortAscending size="1.1rem" />}
+                    </ActionIcon>
+                  </Tooltip>
+                </Group>
               </Group>
-            </Group>
-          </Navbar.Section>
-          <Navbar.Section grow component={ScrollArea} mx="-md" px="md">
-            {treeLoading && treeData.length === 0 ? (
-              <Box py="xl" sx={{ textAlign: 'center' }}><Text size="sm" color="dimmed">Loading...</Text></Box>
-            ) : (
-              renderTree(sortedTreeData)
-            )}
-          </Navbar.Section>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <ScrollArea style={{ height: '100%' }} px="md" py="sm">
+                {treeLoading && treeData.length === 0 ? (
+                  <Box py="xl" sx={{ textAlign: 'center' }}><Text size="sm" color="dimmed">Loading...</Text></Box>
+                ) : (
+                  renderTree(sortedTreeData)
+                )}
+              </ScrollArea>
+            </div>
 
-          <MediaQuery smallerThan="sm" styles={{ display: 'none' }}>
             <div
               onMouseDown={startResizing}
               style={{
@@ -544,107 +692,172 @@ export default function CoursesPage() {
                 if (!isResizing) e.currentTarget.style.backgroundColor = 'transparent';
               }}
             />
-          </MediaQuery>
-        </Navbar>
+          </aside>
+        </MediaQuery>
 
         <main
+          ref={rightPaneRef}
           style={{
             flex: 1,
-            display: 'flex',
-            justifyContent: 'center',
-            overflowY: 'auto',
-            padding: '20px',
+            minWidth: 0,
+            display: 'grid',
+            gridTemplateRows: sessionPanelOpen ? `${100 - sessionPanelHeight}fr 12px ${sessionPanelHeight}fr` : '1fr',
+            overflow: 'hidden',
           }}
         >
-          <div className="w-full max-w-4xl bg-white p-6 rounded-lg shadow-sm relative" style={{ height: 'fit-content', minHeight: '100%', marginTop: 24 }}>
-            <LoadingOverlay visible={loading} overlayBlur={2} />
-            {courseContent ? (
-              <>
-                {assignment?.title ? <h1 className="mb-4">{assignment.title}</h1> : null}
-                {isCourseTutorial ? (
-                  <CourseBlock
-                    key={`${course as string}-${assignment?.last_step ?? 0}`}
-                    courseData={courseContent}
-                    token={course as string}
-                    lastStep={assignment?.last_step ?? 0}
-                    fromIndex={0}
-                  />
-                ) : isMarkdownEditor ? (
-                  <div>
-                    <Group spacing="xs" mb="md">
-                      <Button
-                        size="xs"
-                        variant={markdownView === 'editor' ? 'filled' : 'default'}
-                        onClick={() => setMarkdownView('editor')}
-                      >
-                        Editor
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant={markdownView === 'preview' ? 'filled' : 'default'}
-                        onClick={() => setMarkdownView('preview')}
-                      >
-                        Preview
-                      </Button>
-                    </Group>
-                    {markdownView === 'editor' ? (
-                      <>
-                        <Textarea
-                          value={editorContent}
-                          onChange={(e) => {
-                            setEditorContent(e.currentTarget.value);
-                            if (editorError) setEditorError('');
-                          }}
-                          minRows={24}
-                          autosize
-                          styles={{ input: { fontFamily: 'Menlo, Monaco, Consolas, monospace' } }}
+          <div style={{ minHeight: 0, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#ffffff', borderLeft: '1px solid #d6def8' }}>
+              <div style={PAGE_HEADER_BAR_STYLE}>
+                <div style={{ fontSize: 12, color: '#64748b', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 240px' }}>
+                  {typeof course === 'string' && course ? course : 'Select a learning file from the sidebar'}
+                </div>
+                {renderHeaderActions()}
+              </div>
+              {editorError && (
+                <div style={{ flexShrink: 0 }}>
+                  <Text color="red" size="sm" px={18} py={10}>{editorError}</Text>
+                </div>
+              )}
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                <LoadingOverlay visible={loading} overlayBlur={2} />
+                {courseContent ? (
+                  <>
+                    {isCourseTutorial ? (
+                      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '16px' }}>
+                        <CourseBlock
+                          key={`${course as string}-${assignment?.last_step ?? 0}`}
+                          courseData={courseContent}
+                          token={course as string}
+                          lastStep={assignment?.last_step ?? 0}
+                          fromIndex={0}
                         />
-                        {editorError && (
-                          <Text color="red" size="sm" mt="xs">
-                            {editorError}
-                          </Text>
+                      </div>
+                    ) : isMarkdownEditor ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                        {markdownView === 'editor' ? (
+                          <>
+                            <div style={{ flex: 1, minHeight: 0 }}>
+                              <Textarea
+                                value={editorContent}
+                                onChange={(e) => {
+                                  setEditorContent(e.currentTarget.value);
+                                  if (editorError) setEditorError('');
+                                }}
+                                autosize={false}
+                                minRows={1}
+                                styles={{
+                                  root: { height: '100%' },
+                                  wrapper: { height: '100%' },
+                                  input: {
+                                    height: '100%',
+                                    minHeight: '100%',
+                                    resize: 'none',
+                                    border: 'none',
+                                    borderRadius: 0,
+                                    padding: '18px 20px',
+                                    fontFamily: PAGE_EDITOR_FONT,
+                                    fontSize: 13,
+                                    lineHeight: 1.65,
+                                  },
+                                }}
+                              />
+                            </div>
+                            <div style={PAGE_ACTION_BAR_STYLE}>
+                              <Button size="xs" onClick={() => void saveContent()} loading={editorSaving}>
+                                Save
+                              </Button>
+                            </div>
+                          </>
+                        ) : (
+                          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '20px 24px' }}>
+                            <div className="doc-markdown" style={{ maxWidth: 'none', margin: 0, minHeight: '100%', padding: '18px 20px 24px', border: 'none', borderRadius: 0, boxShadow: 'none', background: '#ffffff' }}>
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+                            </div>
+                          </div>
                         )}
-                        <Group position="right" mt="md">
-                          <Button onClick={() => void saveContent()} loading={editorSaving}>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                        <div style={{ flex: 1, minHeight: 0 }}>
+                          <Textarea
+                            value={editorContent}
+                            onChange={(e) => {
+                              setEditorContent(e.currentTarget.value);
+                              if (editorError) setEditorError('');
+                            }}
+                            autosize={false}
+                            minRows={1}
+                            styles={{
+                              root: { height: '100%' },
+                              wrapper: { height: '100%' },
+                              input: {
+                                height: '100%',
+                                minHeight: '100%',
+                                resize: 'none',
+                                border: 'none',
+                                borderRadius: 0,
+                                padding: '18px 20px',
+                                fontFamily: PAGE_EDITOR_FONT,
+                                fontSize: 13,
+                                lineHeight: 1.65,
+                              },
+                            }}
+                          />
+                        </div>
+                        <div style={PAGE_ACTION_BAR_STYLE}>
+                          <Button size="xs" onClick={() => void saveContent()} loading={editorSaving}>
                             Save
                           </Button>
-                        </Group>
-                      </>
-                    ) : (
-                      <div className="doc-markdown">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+                        </div>
                       </div>
                     )}
-                  </div>
-                ) : (
-                  <>
-                    <Textarea
-                      value={editorContent}
-                      onChange={(e) => {
-                        setEditorContent(e.currentTarget.value);
-                        if (editorError) setEditorError('');
-                      }}
-                      minRows={24}
-                      autosize
-                      styles={{ input: { fontFamily: 'Menlo, Monaco, Consolas, monospace' } }}
-                    />
-                    {editorError && (
-                      <Text color="red" size="sm" mt="xs">
-                        {editorError}
-                      </Text>
-                    )}
-                    <Group position="right" mt="md">
-                      <Button onClick={() => void saveContent()} loading={editorSaving}>
-                        Save
-                      </Button>
-                    </Group>
                   </>
+                ) : (
+                  !loading && <Text align="center" py="xl" color="dimmed">Select a learning file from the sidebar to begin.</Text>
                 )}
-              </>
-            ) : (
-              !loading && <Text align="center" py="xl" color="dimmed">Select a learning file from the sidebar to begin.</Text>
-            )}
+              </div>
+            </div>
           </div>
+          {sessionPanelOpen && (
+            <>
+              <div
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  setIsSessionPanelResizing(true);
+                }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'row-resize', color: '#93a4cc' }}
+              >
+                <span style={{ fontSize: 16, lineHeight: 1 }}>⋯</span>
+              </div>
+              <div style={{ minHeight: 0, overflow: 'hidden' }}>
+                <EmbeddedSessionPanel
+                  currentLabel={course?.toString() || 'Learning session'}
+                  liveSessionName={liveSessionName}
+                  sessionPromptText={sessionPromptText}
+                  setSessionPromptText={setSessionPromptText}
+                  newSessionWorkflow={newSessionWorkflow}
+                  newSessionSandbox={newSessionSandbox}
+                  setNewSessionSandbox={setNewSessionSandbox}
+                  newSessionAuto={newSessionAuto}
+                  setNewSessionAuto={setNewSessionAuto}
+                  newSessionNetwork={newSessionNetwork}
+                  setNewSessionNetwork={setNewSessionNetwork}
+                  newSessionNextNodeTrigger={newSessionNextNodeTrigger}
+                  setNewSessionNextNodeTrigger={setNewSessionNextNodeTrigger}
+                  newSessionWorkflowResumeAvailable={newSessionWorkflowResumeAvailable}
+                  newSessionWorkflowResume={newSessionWorkflowResume}
+                  setNewSessionWorkflowResume={setNewSessionWorkflowResume}
+                  startingSession={startingSession}
+                  onStart={(path) => void handleStartSession(path)}
+                  onClose={closeSessionPanel}
+                  workflowExecuteStatus={workflowExecuteStatus}
+                  workflowSessionActive={workflowSessionActive}
+                  continuingWorkflow={continuingWorkflow}
+                  onContinueWorkflow={() => {}}
+                />
+              </div>
+            </>
+          )}
         </main>
       </div>
     </AppShell>

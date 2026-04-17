@@ -46,30 +46,7 @@ Use this to understand the monitor setup and primary screen resolution.
 ```
 
 ### 2. Take a Screenshot
-Capture a region of the screen with optional scaling and optional pointer marker for coordinate correction.
-
-**Command:**
-```json
-{
-  "action": "screenshot",
-  "bbox": [x, y, width, height],
-  "scale": 1.0,
-  "draw_pointer": true,
-  "pointer_style": "contrast",
-  "pointer_radius": 64
-}
-```
-- `bbox`: (Optional) [left, top, width, height]. If omitted, captures the entire primary screen.
-- `scale`: (Optional) Scale factor for the output image (e.g., 0.5 for half size).
-- `draw_pointer`: (Optional) Draw a circular marker where the mouse pointer is.
-- `pointer_style`: (Optional) Marker style. `contrast` (white border + black dot) or `alert` (red border + yellow dot).
-- `pointer_radius`: (Optional) Marker radius in pixels (before scaling).
-
-**Returns:**
-Path to the saved image file (usually in the system temp directory), plus `mouse_position` with current cursor coordinates.
-
-**Coordinate Correction (Visual Check):**
-When `draw_pointer` is enabled, visually verify that the marker in the screenshot matches the returned `mouse_position`. If they do not align (e.g., due to scaling or bbox offsets), adjust your coordinate mapping before issuing the next `input` action.
+For screenshot payloads, return fields, scaling, pointer markers, and coordinate correction, refer to `references/screenshot.md`.
 
 ### 3. Find Coordinates for Actions (Required)
 Before any `mouse_move` or `click`, use agent skill `find-ui-element` to locate the target UI element and derive coordinates.
@@ -81,30 +58,10 @@ Recommended flow:
 - Use those coordinates in `input` actions.
 
 ### 4. Perform Actions
-Execute a sequence of mouse and keyboard events.
+For mouse, keyboard, hotkey, typing, and wait action payloads, refer to `references/input-actions.md`.
 
-**Command:**
-```json
-{
-  "action": "input",
-  "actions": [
-    { "type": "mouse_move", "x": 100, "y": 200, "duration": 0.5 },
-    { "type": "click", "button": "left", "clicks": 1, "x": 100, "y": 200 },
-    { "type": "type", "text": "Hello, world!", "interval": 0.1 },
-    { "type": "key", "keys": ["enter"] },
-    { "type": "hotkey", "keys": ["command", "space"] },
-    { "type": "wait", "duration": 1.0 }
-  ]
-}
-```
-
-#### Action Types:
-- `mouse_move`: Move the cursor to `(x, y)` over `duration` seconds.
-- `click`: Click at `(x, y)` (optional) with `button` ('left', 'middle', 'right'), `clicks` count, and `interval` between clicks.
-- `type`: Type the specified `text` with `interval` between characters.
-- `key`: Press a single key or a list of keys sequentially (e.g., `["enter"]`, `["a", "b", "c"]`).
-- `hotkey`: Press a combination of keys simultaneously (e.g., `["command", "v"]`).
-- `wait`: Pause execution for `duration` seconds.
+### 5. macOS Native Terminal
+If the task needs a visible macOS Terminal window backed by tmux, refer to `references/macos-terminal.md`.
 
 ## Usage Notes
 
