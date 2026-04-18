@@ -971,9 +971,31 @@ detect_available_providers() {
   fi
 }
 
+kill_all_sp_sessions() {
+  local sessions=("sp-engine-prod" "sp-engine-dev" "sp-webui-dev")
+  local killed=0
+  for s in "${sessions[@]}"; do
+    if tmux has-session -t "${s}" 2>/dev/null; then
+      tmux kill-session -t "${s}"
+      echo "Stopped existing tmux session '${s}'."
+      killed=1
+    fi
+  done
+  if ((killed)); then
+    echo "Cleared old sessions to free ports for this installation."
+    echo ""
+  fi
+}
+
 run_init_wizard_if_needed() {
   if [[ -f "${ENGINE_ENV_FILE}" ]]; then
     return
+  fi
+
+  # Kill any leftover sessions from a previous install in a different directory
+  # to avoid port conflicts on first-time setup.
+  if command -v tmux >/dev/null 2>&1; then
+    kill_all_sp_sessions
   fi
 
   # Wizard Screen 2 — Intro
