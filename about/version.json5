@@ -1,0 +1,13 @@
+{
+    // Current Skill Pilot agent version.
+    // This is independent of `workspace/config/version.json5`, which versions
+    // the workspace structure and config format.
+    //
+    // `version` matches the newest tag in `about/changelog/` that has been
+    // fully applied to this checkout (including any workspace migrations).
+    // `build` is the applied build number within that version. One version
+    // can have multiple builds; builds are listed as sections inside the
+    // version's changelog file, newest build on top.
+    version: '1_00_00',
+    build: 1,
+}
