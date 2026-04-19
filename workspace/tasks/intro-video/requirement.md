@@ -1,1 +1,0 @@
-Create slideshow videos in mp4 and webp format with images at `workspace/tasks/intro-video/images` and audio at `assets/skillpilot-song.mp3` for product demo. 
