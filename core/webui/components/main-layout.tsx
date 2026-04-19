@@ -7,7 +7,7 @@ import {
 } from '@mantine/core';
 import {
   IconTerminal2, IconPlus, IconSparkles, IconSchool, IconBriefcase, IconSearch,
-  IconChecklist, IconCode, IconRocket, IconProgress, IconWand,
+  IconChecklist, IconCode, IconHammer, IconRocket, IconProgress, IconWand,
   IconServer, IconCalendar, IconPuzzle, IconUser, IconShieldLock,
   IconBrandDiscord, IconVectorBezier2, IconVideo, IconCamera, IconFolderOpen,
 } from '@tabler/icons-react';
@@ -35,6 +35,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { label: 'Tasks',            href: '/tasks',                                    icon: <IconChecklist size="1rem" /> },
   { label: 'File Manager',    href: '/file-manager',                             icon: <IconFolderOpen size="1rem" /> },
   { dividerBefore: 'Skill Pilot', label: 'Development', href: '/skill-pilot-development', icon: <IconCode size="1rem" /> },
+  { label: 'Coreware',         href: '/coreware',                                  icon: <IconHammer size="1rem" /> },
   { dividerBefore: 'Commercial Project', label: 'Dev Swarm', href: '/dev-swarm',    icon: <IconRocket size="1rem" /> },
   { dividerBefore: '', label: 'Processes',     href: '/?view=processes',    view: 'processes',    icon: <IconProgress size="1rem" /> },
   { label: 'Discord Bot',      href: '/?view=discord-bot',  view: 'discord-bot',  icon: <IconBrandDiscord size="1rem" /> },

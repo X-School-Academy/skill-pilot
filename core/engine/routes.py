@@ -1,6 +1,7 @@
 from routes_shared import *
 
 import routes_config  # noqa: F401
+import routes_coreware  # noqa: F401
 import routes_integrations  # noqa: F401
 import routes_file_manager  # noqa: F401
 from routes_file_manager import (
@@ -989,29 +990,17 @@ def _find_showcase_sample(categories: List[Dict[str, Any]], sample_id: str) -> D
     raise FileNotFoundError(f"Showcase sample not found: {target}")
 
 
-def _sanitize_worktree_suffix(value: str) -> str:
-    cleaned = re.sub(r"[^a-zA-Z0-9_-]+", "_", value or "").strip("_")
-    return cleaned or "sample"
+from worktree_utils import (
+    create_worktree as _wt_create_worktree,
+    git_command as _git_command,
+    remove_worktree as _wt_remove_worktree,
+    sanitize_worktree_suffix as _sanitize_worktree_suffix,
+    worktree_path_for_suffix as _wt_path_for_suffix,
+)
 
 
 def _explore_worktree_path(sample_id: str) -> Path:
-    suffix = _sanitize_worktree_suffix(sample_id)
-    return _REPO_ROOT.parent / f"{_REPO_ROOT.name}_{suffix}"
-
-
-def _git_command(args: List[str], *, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
-    proc = subprocess.run(
-        ["git", *args],
-        cwd=str(cwd) if cwd else None,
-        capture_output=True,
-        text=True,
-        shell=False,
-        env=safe_env(),
-    )
-    if check and proc.returncode != 0:
-        message = (proc.stderr or proc.stdout or "").strip()
-        raise RuntimeError(message or f"git command failed: {' '.join(args)}")
-    return proc
+    return _wt_path_for_suffix(_sanitize_worktree_suffix(sample_id))
 
 
 def _explore_tmux_session_exists() -> bool:
@@ -1165,12 +1154,7 @@ def _spawn_skillpilot_dev_start(target_root: Path) -> None:
 
 
 def _remove_explore_worktree(path: Path) -> None:
-    if not path.exists():
-        return
-    proc = _git_command(["-C", str(_REPO_ROOT), "worktree", "remove", "--force", str(path)], check=False)
-    if proc.returncode == 0:
-        return
-    shutil.rmtree(path)
+    _wt_remove_worktree(path)
 
 
 def _explore_branch_name(sample_suffix: str) -> str:
@@ -1178,69 +1162,10 @@ def _explore_branch_name(sample_suffix: str) -> str:
     return f"codex/explore-{sample_suffix}-{timestamp}"
 
 
-def _repo_has_local_changes(repo_path: Path) -> bool:
-    proc = _git_command(["status", "--porcelain", "--untracked-files=all"], cwd=repo_path)
-    return bool(proc.stdout.strip())
-
-
-def _push_worktree_stash(repo_path: Path, message: str) -> str | None:
-    if not _repo_has_local_changes(repo_path):
-        return None
-    before = _git_command(["rev-parse", "-q", "--verify", "refs/stash"], cwd=repo_path, check=False).stdout.strip()
-    proc = _git_command(["stash", "push", "-u", "-m", message], cwd=repo_path, check=False)
-    if proc.returncode != 0:
-        message_out = (proc.stderr or proc.stdout or "").strip()
-        raise RuntimeError(message_out or "Failed to stash local changes before creating worktree")
-    after = _git_command(["rev-parse", "-q", "--verify", "refs/stash"], cwd=repo_path, check=False).stdout.strip()
-    if not after or after == before:
-        return None
-    return "stash@{0}"
-
-
-def _apply_and_drop_stash_for_worktree(repo_path: Path, worktree_path: Path, stash_ref: str) -> None:
-    _git_command(["stash", "apply", stash_ref], cwd=worktree_path)
-    _git_command(["stash", "apply", stash_ref], cwd=repo_path)
-    _git_command(["stash", "drop", stash_ref], cwd=repo_path)
-
-
-def _restore_stash_to_repo(repo_path: Path, stash_ref: str) -> None:
-    try:
-        _git_command(["stash", "apply", stash_ref], cwd=repo_path)
-    finally:
-        _git_command(["stash", "drop", stash_ref], cwd=repo_path, check=False)
-
-
-def _ensure_worktree_config_symlink(worktree_path: Path) -> None:
-    source = _CONFIG_ENV_PATH.parent
-    target = worktree_path / "config"
-    if target.is_symlink():
-        if os.path.realpath(target) == str(source):
-            return
-        target.unlink()
-    elif target.exists():
-        raise RuntimeError(f"Refusing to replace non-symlink config at: {target}")
-    rel_source = os.path.relpath(source, start=target.parent)
-    target.symlink_to(rel_source, target_is_directory=True)
-
-
 def _create_explore_worktree(path: Path, *, sample_id: str, base_ref: str | None = None) -> None:
     sample_suffix = _sanitize_worktree_suffix(sample_id)
     branch_name = _explore_branch_name(sample_suffix)
-    stash_ref: str | None = None
-    try:
-        stash_ref = _push_worktree_stash(_REPO_ROOT, "save local changes")
-        args = ["worktree", "add", "-b", branch_name, str(path)]
-        if base_ref:
-            args.append(base_ref)
-        _git_command(args, cwd=_REPO_ROOT)
-        if stash_ref:
-            _apply_and_drop_stash_for_worktree(_REPO_ROOT, path, stash_ref)
-            stash_ref = None
-        _ensure_worktree_config_symlink(path)
-    except Exception:
-        if stash_ref:
-            _restore_stash_to_repo(_REPO_ROOT, stash_ref)
-        raise
+    _wt_create_worktree(path, branch_name=branch_name, base_ref=base_ref)
 
 
 def _ensure_explore_worktree(path: Path, *, sample_id: str, existing_action: str | None, base_ref: str | None = None) -> Dict[str, Any] | None:

@@ -377,7 +377,9 @@ def load_mcp_configs(path: Path) -> tuple[dict[str, ServerConfig], dict[str, set
         raise MCPError("mcpServers missing or invalid in config file")
 
     # Use repo root as subprocess cwd so relative paths in mcp.json5 stay stable.
-    default_workdir = str(path.resolve().parent.parent)
+    # Use absolute() (not resolve()) so a symlinked config/ dir doesn't redirect
+    # the workdir into the symlink target (e.g. workspace/).
+    default_workdir = str(path.absolute().parent.parent)
     expansion_env = load_expansion_env(path)
     servers: dict[str, ServerConfig] = {}
     missing_env: dict[str, set[str]] = {}

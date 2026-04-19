@@ -13,6 +13,7 @@ Handle the official Skill Pilot branch workflow around `codeware`, `user`, perso
 - The user wants to restore a broken `user` branch from the official repo
 - The user wants to add or fix their personal Git remote for backup or contribution
 - The user wants to create a clean contribution branch and open a pull request
+- The user wants to replace the sample `workspace/` submodule with a new private GitHub repo of their own
 
 ## Your Roles in This Skill
 
@@ -42,6 +43,7 @@ Map the request to one of these operations:
 - `restore`: back up the current `user` branch, then force realign it to `upstream/codeware` before fixing remaining errors
 - `add remote`: connect the user's fork as `origin`, using a provided Git URL or browser-assisted fork flow
 - `contribute`: create a clean feature branch from `upstream/contrib`, push it to the user's fork, and open a pull request
+- `create private workspace repo`: guide the user through replacing the sample `workspace/` submodule with a new empty private GitHub repo of their own, following `workspace/README.md`
 
 Always use the official repo URL as the upstream source:
 
@@ -62,6 +64,7 @@ For concrete Git command sequences and decision rules, refer to `references/git-
 
 - For `update` or `restore`, follow `references/git-workflows.md`
 - For `add remote` or `contribute`, use `references/github-contribution.md`
+- For `create private workspace repo`, follow `references/private-workspace-setup.md`, which mirrors the steps documented in `workspace/README.md`
 
 ### Step 3.5: Apply pending upgrade notices (update and restore only)
 
