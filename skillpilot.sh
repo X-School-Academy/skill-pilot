@@ -988,6 +988,12 @@ kill_all_sp_sessions() {
 }
 
 run_init_wizard_if_needed() {
+  local workspace_config="${ROOT_DIR}/workspace/config/ai_providers.json5"
+  if [[ ! -f "${workspace_config}" ]]; then
+    echo "workspace/config/ai_providers.json5 not found — initialising workspace submodule..."
+    git -C "${ROOT_DIR}" submodule update --init --recursive workspace
+  fi
+
   if [[ -f "${ENGINE_ENV_FILE}" ]]; then
     return
   fi
