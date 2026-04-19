@@ -1210,20 +1210,17 @@ def _restore_stash_to_repo(repo_path: Path, stash_ref: str) -> None:
         _git_command(["stash", "drop", stash_ref], cwd=repo_path, check=False)
 
 
-def _ensure_worktree_env_symlink(worktree_path: Path) -> None:
-    source = _CONFIG_ENV_PATH
-    target = worktree_path / "config" / ".env"
-    target.parent.mkdir(parents=True, exist_ok=True)
+def _ensure_worktree_config_symlink(worktree_path: Path) -> None:
+    source = _CONFIG_ENV_PATH.parent
+    target = worktree_path / "config"
     if target.is_symlink():
         if os.path.realpath(target) == str(source):
             return
         target.unlink()
     elif target.exists():
-        if target.is_dir():
-            raise RuntimeError(f"Cannot replace directory with env symlink: {target}")
-        target.unlink()
+        raise RuntimeError(f"Refusing to replace non-symlink config at: {target}")
     rel_source = os.path.relpath(source, start=target.parent)
-    target.symlink_to(rel_source)
+    target.symlink_to(rel_source, target_is_directory=True)
 
 
 def _create_explore_worktree(path: Path, *, sample_id: str, base_ref: str | None = None) -> None:
@@ -1239,7 +1236,7 @@ def _create_explore_worktree(path: Path, *, sample_id: str, base_ref: str | None
         if stash_ref:
             _apply_and_drop_stash_for_worktree(_REPO_ROOT, path, stash_ref)
             stash_ref = None
-        _ensure_worktree_env_symlink(path)
+        _ensure_worktree_config_symlink(path)
     except Exception:
         if stash_ref:
             _restore_stash_to_repo(_REPO_ROOT, stash_ref)
