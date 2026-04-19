@@ -63,7 +63,7 @@ Options:
   -h, --help    Show this help message and exit
 
 Steps performed:
-  1. Install Homebrew, Git, curl, wget, uv, pnpm, Node.js, Python 3, tmux, ffmpeg
+  1. Install Homebrew, Git, curl, wget, uv, pnpm, Node.js, Python 3, tmux, ffmpeg, Git LFS
   2. Clone the Skill Pilot repository when needed
   3. Install supported AI code agent CLIs
 EOF
@@ -219,6 +219,7 @@ install_curl()  { pkg_install curl; }
 install_wget()  { pkg_install wget; }
 install_tmux()  { pkg_install tmux; }
 install_ffmpeg() { pkg_install ffmpeg; }
+install_git_lfs() { pkg_install git-lfs && git lfs install; }
 
 install_gxmessage_linux() {
   if command -v gxmessage >/dev/null 2>&1; then
@@ -1066,6 +1067,27 @@ main() {
         "GUI dependencies for headless or mixed environments.")" \
       "gxmessage" \
       "install_gxmessage_linux"
+  fi
+
+  # Screen 13 — Git LFS
+  install_step \
+    "Git LFS — Large File Storage" \
+    "$(printf '%s\n%s\n%s\n\n%s\n%s\n%s\n\n%s\n%s\n%s' \
+      "Git is designed for source code — small text files that" \
+      "change often. But AI projects also include large binary" \
+      "files: model weights, audio samples, video clips, datasets." \
+      "Git LFS (Large File Storage) is an extension that keeps" \
+      "large files out of the main git history. It stores them on" \
+      "a dedicated server and replaces them with lightweight pointers." \
+      "Skill Pilot uses Git LFS for media assets and model files." \
+      "Without it, cloning or updating the repository would be" \
+      "much slower and bloat your disk with binary history.")" \
+    "git-lfs" \
+    "install_git_lfs"
+
+  # Ensure LFS hooks are configured even if git-lfs was already installed
+  if command -v git-lfs >/dev/null 2>&1; then
+    git lfs install >/dev/null 2>&1 || true
   fi
 
   local workspace_dir=""
