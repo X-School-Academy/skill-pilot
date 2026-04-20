@@ -1887,7 +1887,9 @@ case "${ACTION}" in
     echo ""
     if ((IS_DEV == 1)); then
       _replace_existing_dev_sessions=0
-      ensure_webui_deps
+      require_cmd pnpm
+      echo "Running pnpm install for core/webui..."
+      pnpm -C "${ROOT_DIR}/core/webui" install
       _dev_webui_host="$(get_service_host "webui" "development")"
       _dev_webui_port="$(get_service_port "webui" "development")"
       if [[ "${SOURCE}" == "webui" ]]; then
