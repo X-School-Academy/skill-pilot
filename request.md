@@ -1,4 +1,4 @@
-# Coreware page — Original request summary
+# Codeware page — Original request summary
 
 This document captures what the user asked for so that future work, reviews, or handoffs can reference the exact scope.
 
@@ -10,7 +10,7 @@ This document captures what the user asked for so that future work, reviews, or 
 
 ## New page
 
-Create a new page **`/coreware`** in `core/webui`, placed **under the Skill Pilot section** of the sidebar (next to the existing `Development` entry).
+Create a new page **`/codeware`** in `core/webui`, placed **under the Skill Pilot section** of the sidebar (next to the existing `Development` entry).
 
 The page uses a **tab menu** with four tabs: **About**, **Codeware**, **Workspace**, **Worktree**.
 
@@ -51,7 +51,7 @@ Then, on the Workspace tab:
 ### Follow the existing Explore worktree logic
 
 - Reuse the same folder-location convention already used by Explore: worktrees live at `../{current_folder_name}_{worktree_name}` (sibling to the main repo).
-- **Refactor and share the worktree code** between Explore and Coreware so both paths call the same helpers. Keep the code clean rather than duplicating it.
+- **Refactor and share the worktree code** between Explore and Codeware so both paths call the same helpers. Keep the code clean rather than duplicating it.
 
 ## Delivery constraints
 

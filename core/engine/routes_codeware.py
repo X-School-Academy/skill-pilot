@@ -15,13 +15,13 @@ _WORKSPACE_PATH = _REPO_ROOT / "workspace"
 _SAMPLE_WORKSPACE_REMOTE = "https://github.com/X-School-Academy/skill-pilot_workspace.git"
 
 
-def _coreware_branch_name(suffix: str) -> str:
+def _codeware_branch_name(suffix: str) -> str:
     timestamp = int(time.time())
-    return f"coreware/{suffix}-{timestamp}"
+    return f"codeware/{suffix}-{timestamp}"
 
 
-@router.get("/api/coreware/about")
-def coreware_about():
+@router.get("/api/codeware/about")
+def codeware_about():
     try:
         raw = _ABOUT_VERSION_PATH.read_text(encoding="utf-8")
         data = json5.loads(raw)
@@ -37,8 +37,8 @@ def coreware_about():
         return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
-@router.post("/api/coreware/dev/start")
-def coreware_dev_start(payload: Dict[str, Any] | None = None):
+@router.post("/api/codeware/dev/start")
+def codeware_dev_start(payload: Dict[str, Any] | None = None):
     if get_runtime_mode() == "development":
         return JSONResponse(
             status_code=400,
@@ -52,8 +52,8 @@ def coreware_dev_start(payload: Dict[str, Any] | None = None):
         return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
-@router.get("/api/coreware/dev/status")
-def coreware_dev_status():
+@router.get("/api/codeware/dev/status")
+def codeware_dev_status():
     try:
         import routes as routes_root
         dev_url = routes_root._explore_dev_base_url()
@@ -63,8 +63,8 @@ def coreware_dev_status():
         return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
-@router.get("/api/coreware/workspace/remote")
-def coreware_workspace_remote():
+@router.get("/api/codeware/workspace/remote")
+def codeware_workspace_remote():
     try:
         if not _WORKSPACE_PATH.is_dir():
             return JSONResponse(status_code=404, content={"error": "workspace folder not found"})
@@ -98,8 +98,8 @@ def _worktree_entry_for_response(entry: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-@router.get("/api/coreware/worktrees")
-def coreware_worktrees_list():
+@router.get("/api/codeware/worktrees")
+def codeware_worktrees_list():
     try:
         entries = list_worktrees()
         return {"items": [_worktree_entry_for_response(item) for item in entries]}
@@ -107,8 +107,8 @@ def coreware_worktrees_list():
         return JSONResponse(status_code=500, content={"error": str(exc), "items": []})
 
 
-@router.post("/api/coreware/worktrees/create")
-def coreware_worktrees_create(payload: Dict[str, Any]):
+@router.post("/api/codeware/worktrees/create")
+def codeware_worktrees_create(payload: Dict[str, Any]):
     raw_name = str(payload.get("name") or "").strip()
     if not raw_name:
         return JSONResponse(status_code=400, content={"error": "Worktree name is required"})
@@ -122,15 +122,15 @@ def coreware_worktrees_create(payload: Dict[str, Any]):
         )
 
     try:
-        create_worktree(target_path, branch_name=_coreware_branch_name(suffix))
+        create_worktree(target_path, branch_name=_codeware_branch_name(suffix))
     except Exception as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})
 
     return {"status": "ok", "path": str(target_path), "name": suffix}
 
 
-@router.post("/api/coreware/worktrees/remove")
-def coreware_worktrees_remove(payload: Dict[str, Any]):
+@router.post("/api/codeware/worktrees/remove")
+def codeware_worktrees_remove(payload: Dict[str, Any]):
     raw_path = str(payload.get("path") or "").strip()
     if not raw_path:
         return JSONResponse(status_code=400, content={"error": "Worktree path is required"})

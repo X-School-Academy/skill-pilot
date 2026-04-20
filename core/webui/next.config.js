@@ -2,7 +2,6 @@
  * @type {import('next').NextConfig}
  */
 const { PHASE_DEVELOPMENT_SERVER } = require('next/constants')
-const { i18n } = require('./next-i18next.config.js')
 const fs = require('fs')
 const path = require('path')
 const JSON5 = require('json5')
@@ -52,7 +51,7 @@ module.exports = (phase) => {
     devIndicators: false,
     reactStrictMode: true,
     ...(isStaticExport ? { output: 'export', distDir: 'www'} : {}),
-    ...(isStaticExport ? {} : { i18n }),
+    // Temporarily disable locale-prefixed routing until the WebUI i18n paths are fully supported.
     allowedDevOrigins: [
       'localhost',
       '*.localhost',

@@ -1,7 +1,7 @@
 from routes_shared import *
 
 import routes_config  # noqa: F401
-import routes_coreware  # noqa: F401
+import routes_codeware  # noqa: F401
 import routes_integrations  # noqa: F401
 import routes_file_manager  # noqa: F401
 from routes_file_manager import (

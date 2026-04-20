@@ -1,4 +1,4 @@
-"""Shared git worktree helpers used by Explore (showcase templates) and Coreware."""
+"""Shared git worktree helpers used by Explore (showcase templates) and Codeware."""
 
 import os
 import re

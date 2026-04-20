@@ -106,7 +106,7 @@ const CODEWARE_PROMPTS: Record<CodewareAction['key'], string> = {
     'Use the codeware-management agent skill to create a clean contribution branch from upstream/contrib, push it to my fork, and open a pull request. Ask me which feature or fix I want to contribute and include a brief description in the PR.',
 };
 
-export default function CorewarePage() {
+export default function CodewarePage() {
   const theme = useMantineTheme();
   const [activeTab, setActiveTab] = useState<CoreTab>('codeware');
 
@@ -139,7 +139,7 @@ export default function CorewarePage() {
   const [sessionPanelHeight, setSessionPanelHeight] = useState(50);
   const [isSessionPanelResizing, setIsSessionPanelResizing] = useState(false);
   const [sessionPromptText, setSessionPromptText] = useState('');
-  const [sessionLabel, setSessionLabel] = useState('Coreware action');
+  const [sessionLabel, setSessionLabel] = useState('Codeware action');
   const [newSessionSandbox, setNewSessionSandbox] = useState(false);
   const [newSessionAuto, setNewSessionAuto] = useState(false);
   const [newSessionNetwork, setNewSessionNetwork] = useState(true);
@@ -158,7 +158,7 @@ export default function CorewarePage() {
     setAboutLoading(true);
     setAboutError('');
     try {
-      const res = await axios.get(`${API_BASE_URL}/coreware/about`);
+      const res = await axios.get(`${API_BASE_URL}/codeware/about`);
       const data = res.data as AboutInfo;
       setAboutInfo(data);
       if (data.runtime_mode) setRuntimeMode(String(data.runtime_mode));
@@ -174,7 +174,7 @@ export default function CorewarePage() {
     setWorkspaceLoading(true);
     setWorkspaceError('');
     try {
-      const res = await axios.get(`${API_BASE_URL}/coreware/workspace/remote`);
+      const res = await axios.get(`${API_BASE_URL}/codeware/workspace/remote`);
       setWorkspaceRemote(res.data as WorkspaceRemote);
     } catch (err: any) {
       console.error('Failed to fetch workspace remote:', err);
@@ -188,7 +188,7 @@ export default function CorewarePage() {
     setWorktreesLoading(true);
     setWorktreesError('');
     try {
-      const res = await axios.get(`${API_BASE_URL}/coreware/worktrees`);
+      const res = await axios.get(`${API_BASE_URL}/codeware/worktrees`);
       setWorktrees((res.data.items || []) as WorktreeEntry[]);
     } catch (err: any) {
       console.error('Failed to fetch worktrees:', err);
@@ -268,7 +268,7 @@ export default function CorewarePage() {
       const sessionName: string | undefined = res.data?.session?.name;
       if (sessionName) setLiveSessionName(sessionName);
     } catch (err) {
-      console.error('Failed to start coreware session:', err);
+      console.error('Failed to start codeware session:', err);
     } finally {
       setStartingSession(false);
     }
@@ -297,7 +297,7 @@ export default function CorewarePage() {
     setCreatingWorktree(true);
     setWorktreesError('');
     try {
-      await axios.post(`${API_BASE_URL}/coreware/worktrees/create`, { name: raw });
+      await axios.post(`${API_BASE_URL}/codeware/worktrees/create`, { name: raw });
       setNewWorktreeName('');
       await fetchWorktrees();
     } catch (err: any) {
@@ -313,7 +313,7 @@ export default function CorewarePage() {
     setRemovingPath(path);
     setWorktreesError('');
     try {
-      await axios.post(`${API_BASE_URL}/coreware/worktrees/remove`, { path });
+      await axios.post(`${API_BASE_URL}/codeware/worktrees/remove`, { path });
       await fetchWorktrees();
     } catch (err: any) {
       console.error('Failed to remove worktree:', err);
@@ -332,7 +332,7 @@ export default function CorewarePage() {
         await new Promise((resolve) => window.setTimeout(resolve, 1500));
         if (devPollCancelRef.current) return;
         try {
-          const res = await axios.get(`${API_BASE_URL}/coreware/dev/status`);
+          const res = await axios.get(`${API_BASE_URL}/codeware/dev/status`);
           if (res.data?.ready) {
             setDevReady(true);
             setDevUrl(String(res.data.dev_url || baseUrl));
@@ -359,7 +359,7 @@ export default function CorewarePage() {
     setDevUrl('');
     setDevStatus('Starting Skill Pilot in development mode...');
     try {
-      const res = await axios.post(`${API_BASE_URL}/coreware/dev/start`, {});
+      const res = await axios.post(`${API_BASE_URL}/codeware/dev/start`, {});
       const url = String(res.data?.dev_url || '');
       setDevUrl(url);
       setDevStatus('Waiting for the dev instance to come online...');
@@ -611,7 +611,7 @@ export default function CorewarePage() {
   );
 
   return (
-    <MainLayout title="Coreware">
+    <MainLayout title="Codeware">
       <div
         ref={rightPaneRef}
         style={{
