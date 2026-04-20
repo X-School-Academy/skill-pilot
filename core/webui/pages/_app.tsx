@@ -54,6 +54,24 @@ function App({ Component, pageProps }: AppPropsWithLayout) {
       if (cancelled) return;
 
       if (result.ready) {
+        if (typeof window !== "undefined") {
+          const url = new URL(window.location.href);
+          const urlToken = (url.searchParams.get("token") || "").trim();
+          if (urlToken) {
+            try {
+              await fetch(`${getApiBase()}/api/auth/session`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ auth_token: urlToken }),
+              });
+            } finally {
+              // Remove the token from the URL even if auth fails so it is not left in browser history.
+              url.searchParams.delete("token");
+              window.history.replaceState({}, "", url.toString());
+            }
+          }
+        }
         setBootState("ready");
         return;
       }

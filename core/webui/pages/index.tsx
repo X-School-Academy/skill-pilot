@@ -312,7 +312,6 @@ export default function HomePage() {
   const [profileError, setProfileError] = useState('');
   const [timezoneList, setTimezoneList] = useState<string[]>([]);
   const [timezoneFocused, setTimezoneFocused] = useState(false);
-  const initBootstrapRef = useRef(false);
   const {
     sessionRootOptions,
     hasSessionWorktrees,
@@ -527,34 +526,13 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    if (initBootstrapRef.current) return;
-    initBootstrapRef.current = true;
-
     const runBootstrap = async () => {
-      if (typeof window !== 'undefined') {
-        const url = new URL(window.location.href);
-        const urlToken = (url.searchParams.get('token') || '').trim();
-        if (urlToken) {
-          try {
-            await axios.post(
-              `${API_BASE_URL}/auth/session`,
-              { auth_token: urlToken },
-              { withCredentials: true },
-            );
-            // Remove token from URL without a full page reload.
-            url.searchParams.delete('token');
-            window.history.replaceState({}, '', url.toString());
-          } catch {
-            // Keep current screen; unauth failures are surfaced by API responses.
-          }
-        }
-      }
       await fetchLlmProviders();
       await fetchSecuritySettings();
     };
 
     void runBootstrap();
-  }, []);
+  }, [fetchLlmProviders, fetchSecuritySettings]);
 
   useEffect(() => {
     if (activeView !== 'processes') return;
