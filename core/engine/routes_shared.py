@@ -486,6 +486,29 @@ def _resolve_terminal_start_dir(raw_path: Any) -> Path:
     if value == "/":
         return _REPO_ROOT
 
+    # Session root selectors send absolute filesystem paths. Resolve those
+    # directly instead of feeding them through the file-manager virtual-path
+    # parser, which interprets "/Users/..." as repo-relative.
+    expanded_candidate = Path(os.path.expanduser(value))
+    if expanded_candidate.is_absolute():
+        candidate = expanded_candidate.resolve()
+        if not candidate.exists():
+            raise ValueError(f"terminal path does not exist: {candidate}")
+        if not candidate.is_dir():
+            raise ValueError(f"terminal path is not a directory: {candidate}")
+        try:
+            from routes_file_manager import _file_manager_root_for_absolute_path as _terminal_root_for_absolute_path
+        except Exception:
+            _terminal_root_for_absolute_path = None
+        if _terminal_root_for_absolute_path is not None:
+            if _terminal_root_for_absolute_path(candidate) is None:
+                raise ValueError(f"terminal path must be inside the project or one of its worktrees: {candidate}")
+        else:
+            repo_root = _REPO_ROOT.resolve()
+            if candidate != repo_root and repo_root not in candidate.parents:
+                raise ValueError(f"terminal path must be inside the project root: {candidate}")
+        return candidate
+
     try:
         from routes_file_manager import _safe_files_path as _safe_terminal_files_path
         from routes_file_manager import _file_manager_root_for_absolute_path as _terminal_root_for_absolute_path
@@ -780,6 +803,7 @@ def _create_webui_tmux_session(command: str, start_dir: Path | None = None) -> s
         ["new-session", "-d", "-s", session_name, *(["-c", str(start_dir)] if start_dir is not None else []), "/bin/bash"],
         check=True,
     )
+    _run_tmux_command(["set-option", "-t", session_name, "remain-on-exit", "on"], check=True)
     _initialize_tmux_session_env(session_name)
     _send_tmux_command_literal(session_name, command)
     return session_name
@@ -791,6 +815,7 @@ def _create_native_tmux_session(command: str, start_dir: Path | None = None) -> 
         ["new-session", "-d", "-s", session_name, *(["-c", str(start_dir)] if start_dir is not None else []), "/bin/bash"],
         check=True,
     )
+    _run_tmux_command(["set-option", "-t", session_name, "remain-on-exit", "on"], check=True)
     _initialize_tmux_session_env(session_name)
     _send_tmux_command_literal(session_name, command)
     return session_name
