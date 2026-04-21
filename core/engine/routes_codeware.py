@@ -13,6 +13,7 @@ from worktree_utils import (
 _ABOUT_VERSION_PATH = _REPO_ROOT / "about" / "version.json5"
 _WORKSPACE_PATH = _REPO_ROOT / "workspace"
 _SAMPLE_WORKSPACE_REMOTE = "https://github.com/X-School-Academy/skill-pilot_workspace.git"
+_WEBUI_BUILD_COMMIT_MESSAGE = "rebuild webui - by webui action"
 
 
 def _run_codeware_command(args: List[str], *, cwd: Path, timeout: float = 120.0) -> subprocess.CompletedProcess[str]:
@@ -48,6 +49,22 @@ def _spawn_codeware_prod_restart(target_root: Path) -> Path:
             close_fds=True,
         )
     return log_path
+
+
+def _commit_rebuilt_webui_assets() -> Dict[str, Any]:
+    webui_www_rel = "core/webui/www"
+    git_command(["add", webui_www_rel], cwd=_REPO_ROOT)
+    diff_proc = git_command(["diff", "--cached", "--quiet", "--", webui_www_rel], cwd=_REPO_ROOT, check=False)
+    if diff_proc.returncode == 0:
+        return {
+            "committed": False,
+            "message": "WebUI build completed. No changes in core/webui/www to commit.",
+        }
+    git_command(["commit", "-m", _WEBUI_BUILD_COMMIT_MESSAGE, "--", webui_www_rel], cwd=_REPO_ROOT)
+    return {
+        "committed": True,
+        "message": _WEBUI_BUILD_COMMIT_MESSAGE,
+    }
 
 
 def _codeware_branch_name(suffix: str) -> str:
@@ -108,8 +125,10 @@ def codeware_prod_restart(payload: Dict[str, Any] | None = None):
 
     rebuild_webui = bool((payload or {}).get("rebuild_webui"))
     try:
+        build_commit: Dict[str, Any] | None = None
         if rebuild_webui:
             _run_codeware_command(["build"], cwd=_REPO_ROOT, timeout=1800.0)
+            build_commit = _commit_rebuilt_webui_assets()
         log_path = _spawn_codeware_prod_restart(_REPO_ROOT)
         host, port = get_service_host_port("engine", mode="production", default_host="127.0.0.1", default_port=8001)
         return {
@@ -117,6 +136,7 @@ def codeware_prod_restart(payload: Dict[str, Any] | None = None):
             "rebuild_webui": rebuild_webui,
             "target_url": f"http://{host}:{port}",
             "log_path": str(log_path),
+            "build_commit": build_commit,
         }
     except Exception as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})

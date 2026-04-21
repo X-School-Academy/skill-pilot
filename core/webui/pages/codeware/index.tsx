@@ -387,10 +387,12 @@ export default function CodewarePage() {
         : 'Restarting Skill Pilot...',
     );
     try {
-      await axios.post(`${API_BASE_URL}/codeware/prod/restart`, {
+      const res = await axios.post(`${API_BASE_URL}/codeware/prod/restart`, {
         rebuild_webui: restartRebuildWebui,
       });
-      setRestartStatus('Restart requested. This instance will stop and the new WebUI will open when it is ready.');
+      const buildCommitMessage = String(res.data?.build_commit?.message || '').trim();
+      const baseMessage = 'Restart requested. This instance will stop and the new WebUI will open when it is ready.';
+      setRestartStatus(buildCommitMessage ? `${buildCommitMessage} ${baseMessage}` : baseMessage);
     } catch (err: any) {
       setRestartError(err?.response?.data?.error || 'Failed to restart Skill Pilot.');
       setRestartStatus('');
@@ -492,15 +494,6 @@ export default function CodewarePage() {
               >
                 Development
               </Button>
-              <Button
-                variant="default"
-                leftIcon={<IconRefresh size="0.95rem" />}
-                onClick={() => void handleRestartProd()}
-                loading={restartStarting}
-                disabled={devStarting || devPolling}
-              >
-                Restart Skill Pilot
-              </Button>
               {devPolling && (
                 <Group spacing="xs">
                   <Loader size="xs" />
@@ -511,12 +504,31 @@ export default function CodewarePage() {
                 <Text size="xs" color="dimmed">{devStatus}</Text>
               )}
             </Group>
-            <Checkbox
-              label="Rebuild WebUI before restart"
-              checked={restartRebuildWebui}
-              onChange={(event) => setRestartRebuildWebui(event.currentTarget.checked)}
-              disabled={restartStarting || devStarting || devPolling}
-            />
+            <Stack spacing={6} pt={4}>
+              <Group spacing="md" align="center">
+                <Button
+                  variant="default"
+                  leftIcon={<IconRefresh size="0.95rem" />}
+                  onClick={() => void handleRestartProd()}
+                  loading={restartStarting}
+                  disabled={devStarting || devPolling}
+                >
+                  Restart Skill Pilot
+                </Button>
+                <Checkbox
+                  label="Rebuild WebUI before restart"
+                  checked={restartRebuildWebui}
+                  onChange={(event) => setRestartRebuildWebui(event.currentTarget.checked)}
+                  disabled={restartStarting || devStarting || devPolling}
+                />
+              </Group>
+              <Text size="sm" color="dimmed">
+                Restart Skill Pilot only after you update <Code>core/engine</Code> Python code and verify the change in
+                development mode. Turn on <Code>Rebuild WebUI before restart</Code> only when you changed Next.js frontend
+                code in <Code>core/webui</Code>. If restart fails, run <Code>./skillpilot.sh doctor</Code> for guided
+                troubleshooting when you are unsure how to debug the issue.
+              </Text>
+            </Stack>
             {devReady && devUrl && (
               <Button
                 component="a"
