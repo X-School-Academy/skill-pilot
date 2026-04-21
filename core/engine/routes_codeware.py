@@ -15,6 +15,41 @@ _WORKSPACE_PATH = _REPO_ROOT / "workspace"
 _SAMPLE_WORKSPACE_REMOTE = "https://github.com/X-School-Academy/skill-pilot_workspace.git"
 
 
+def _run_codeware_command(args: List[str], *, cwd: Path, timeout: float = 120.0) -> subprocess.CompletedProcess[str]:
+    proc = subprocess.run(
+        ["./skillpilot.sh", *args],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        shell=False,
+        env=safe_env(),
+        timeout=timeout,
+    )
+    if proc.returncode != 0:
+        message = (proc.stderr or proc.stdout or "").strip()
+        raise RuntimeError(message or f"skillpilot command failed: {' '.join(args)}")
+    return proc
+
+
+def _spawn_codeware_prod_restart(target_root: Path) -> Path:
+    log_dir = target_root / ".skillpilot" / "temp"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "codeware-prod-restart.log"
+    with log_path.open("ab") as log_file:
+        subprocess.Popen(
+            ["bash", "-lc", "sleep 1 && exec ./skillpilot.sh start --source webui"],
+            cwd=str(target_root),
+            shell=False,
+            stdin=subprocess.DEVNULL,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            env=safe_env(),
+            start_new_session=True,
+            close_fds=True,
+        )
+    return log_path
+
+
 def _codeware_branch_name(suffix: str) -> str:
     timestamp = int(time.time())
     return f"codeware/{suffix}-{timestamp}"
@@ -59,6 +94,30 @@ def codeware_dev_status():
         dev_url = routes_root._explore_dev_base_url()
         ready = bool(routes_root._probe_explore_dev_ready())
         return {"ready": ready, "dev_url": dev_url}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc)})
+
+
+@router.post("/api/codeware/prod/restart")
+def codeware_prod_restart(payload: Dict[str, Any] | None = None):
+    if get_runtime_mode() != "production":
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Restart Skill Pilot is only available from production mode"},
+        )
+
+    rebuild_webui = bool((payload or {}).get("rebuild_webui"))
+    try:
+        if rebuild_webui:
+            _run_codeware_command(["build"], cwd=_REPO_ROOT, timeout=1800.0)
+        log_path = _spawn_codeware_prod_restart(_REPO_ROOT)
+        host, port = get_service_host_port("engine", mode="production", default_host="127.0.0.1", default_port=8001)
+        return {
+            "status": "restarting",
+            "rebuild_webui": rebuild_webui,
+            "target_url": f"http://{host}:{port}",
+            "log_path": str(log_path),
+        }
     except Exception as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})
 

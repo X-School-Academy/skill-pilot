@@ -6,6 +6,7 @@ import {
   Anchor,
   Box,
   Button,
+  Checkbox,
   Code,
   Divider,
   Group,
@@ -134,6 +135,10 @@ export default function CodewarePage() {
   const [devReady, setDevReady] = useState(false);
   const [devPolling, setDevPolling] = useState(false);
   const devPollCancelRef = useRef<boolean>(false);
+  const [restartRebuildWebui, setRestartRebuildWebui] = useState(false);
+  const [restartStarting, setRestartStarting] = useState(false);
+  const [restartStatus, setRestartStatus] = useState('');
+  const [restartError, setRestartError] = useState('');
 
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false);
   const [sessionPanelHeight, setSessionPanelHeight] = useState(50);
@@ -372,6 +377,28 @@ export default function CodewarePage() {
     }
   };
 
+  const handleRestartProd = async () => {
+    if (restartStarting || devStarting || devPolling) return;
+    setRestartStarting(true);
+    setRestartError('');
+    setRestartStatus(
+      restartRebuildWebui
+        ? 'Rebuilding WebUI, then restarting Skill Pilot...'
+        : 'Restarting Skill Pilot...',
+    );
+    try {
+      await axios.post(`${API_BASE_URL}/codeware/prod/restart`, {
+        rebuild_webui: restartRebuildWebui,
+      });
+      setRestartStatus('Restart requested. This instance will stop and the new WebUI will open when it is ready.');
+    } catch (err: any) {
+      setRestartError(err?.response?.data?.error || 'Failed to restart Skill Pilot.');
+      setRestartStatus('');
+    } finally {
+      setRestartStarting(false);
+    }
+  };
+
   const renderAbout = () => (
     <Box style={{ padding: '24px 28px', position: 'relative' }}>
       <LoadingOverlay visible={aboutLoading} overlayBlur={2} />
@@ -461,9 +488,18 @@ export default function CodewarePage() {
                 leftIcon={<IconPlayerPlay size="0.95rem" />}
                 onClick={() => void handleStartDev()}
                 loading={devStarting}
-                disabled={devPolling}
+                disabled={devPolling || restartStarting}
               >
                 Development
+              </Button>
+              <Button
+                variant="default"
+                leftIcon={<IconRefresh size="0.95rem" />}
+                onClick={() => void handleRestartProd()}
+                loading={restartStarting}
+                disabled={devStarting || devPolling}
+              >
+                Restart Skill Pilot
               </Button>
               {devPolling && (
                 <Group spacing="xs">
@@ -475,6 +511,12 @@ export default function CodewarePage() {
                 <Text size="xs" color="dimmed">{devStatus}</Text>
               )}
             </Group>
+            <Checkbox
+              label="Rebuild WebUI before restart"
+              checked={restartRebuildWebui}
+              onChange={(event) => setRestartRebuildWebui(event.currentTarget.checked)}
+              disabled={restartStarting || devStarting || devPolling}
+            />
             {devReady && devUrl && (
               <Button
                 component="a"
@@ -489,6 +531,12 @@ export default function CodewarePage() {
               </Button>
             )}
             {devError && <Text size="sm" color="red">{devError}</Text>}
+            {restartStatus && <Text size="sm" color="dimmed">{restartStatus}</Text>}
+            {restartError && (
+              <Text size="sm" color="red" style={{ whiteSpace: 'pre-wrap' }}>
+                {restartError}
+              </Text>
+            )}
           </Stack>
         </>
       )}

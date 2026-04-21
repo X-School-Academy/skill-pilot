@@ -1778,8 +1778,8 @@ open_or_print_webui_url() {
     echo "Waiting for Skill Pilot to become reachable: ${ready_url}"
     if wait_for_service_ready_or_session_exit "${mode}" "${ready_url}"; then
       echo "Skill Pilot is reachable."
-      echo "Monitoring URL:"
-      echo "  ${url}"
+      echo "Opening WebUI in browser: ${url}"
+      open_in_browser "${url}"
     else
       print_startup_troubleshooting "${mode}"
       return 1
@@ -1870,12 +1870,12 @@ case "${ACTION}" in
         fi
         exit 0
       fi
-    elif engine_socket_running "prod"; then
+    elif [[ "${SOURCE}" != "webui" ]] && engine_socket_running "prod"; then
       _running_url="$(get_running_webui_url "prod")"
       echo "Skill Pilot is already running in production mode."
       if [[ -n "${_running_url}" ]]; then
         echo "Access it at:"
-        echo "  ${_running_url}"
+          echo "  ${_running_url}"
       fi
       exit 0
     fi
@@ -1905,7 +1905,11 @@ case "${ACTION}" in
       echo "Use 'tmux attach -t sp-webui-dev -r' or 'tmux attach -t sp-engine-dev -r' to view logs."
     else
       ensure_webui_release_assets
-      start_session "sp-engine-prod" "SKILL_PILOT_RUNTIME_MODE=production uv --project core/engine run core/engine/main.py"
+      _replace_existing_prod_sessions=0
+      if [[ "${SOURCE}" == "webui" ]]; then
+        _replace_existing_prod_sessions=1
+      fi
+      start_session "sp-engine-prod" "SKILL_PILOT_RUNTIME_MODE=production uv --project core/engine run core/engine/main.py" "${_replace_existing_prod_sessions}"
       _engine_url="$(get_webui_base_url "prod")"
       echo "  Engine + WebUI  ->  ${_engine_url%/}  (production mode)"
       echo ""
