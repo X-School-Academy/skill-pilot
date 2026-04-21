@@ -3,6 +3,7 @@ import { GetStaticPropsContext } from 'next';
 import axios from 'axios';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import {
+  Alert,
   Anchor,
   Box,
   Button,
@@ -28,6 +29,7 @@ import {
   IconPlayerPlay,
   IconRefresh,
   IconTrash,
+  IconBolt,
 } from '@tabler/icons-react';
 import MainLayout from '../../components/main-layout';
 import EmbeddedSessionPanel, { WorkflowExecuteStatus } from '../../components/EmbeddedSessionPanel';
@@ -505,6 +507,12 @@ export default function CodewarePage() {
               )}
             </Group>
             <Stack spacing={6} pt={4}>
+              <Text size="sm" color="dimmed">
+                Restart Skill Pilot only after you update <Code>core/engine</Code> Python code and verify the change in
+                development mode. Turn on <Code>Rebuild WebUI before restart</Code> only when you changed Next.js frontend
+                code in <Code>core/webui</Code>. If restart fails, run <Code>./skillpilot.sh doctor</Code> for guided
+                troubleshooting when you are unsure how to debug the issue.
+              </Text>
               <Group spacing="md" align="center">
                 <Button
                   variant="default"
@@ -522,12 +530,6 @@ export default function CodewarePage() {
                   disabled={restartStarting || devStarting || devPolling}
                 />
               </Group>
-              <Text size="sm" color="dimmed">
-                Restart Skill Pilot only after you update <Code>core/engine</Code> Python code and verify the change in
-                development mode. Turn on <Code>Rebuild WebUI before restart</Code> only when you changed Next.js frontend
-                code in <Code>core/webui</Code>. If restart fails, run <Code>./skillpilot.sh doctor</Code> for guided
-                troubleshooting when you are unsure how to debug the issue.
-              </Text>
             </Stack>
             {devReady && devUrl && (
               <Button
@@ -543,7 +545,16 @@ export default function CodewarePage() {
               </Button>
             )}
             {devError && <Text size="sm" color="red">{devError}</Text>}
-            {restartStatus && <Text size="sm" color="dimmed">{restartStatus}</Text>}
+            {restartStatus && (
+              <Alert
+                icon={<IconBolt size="1rem" />}
+                color="blue"
+                variant="light"
+                style={{ width: 'fit-content', maxWidth: 720 }}
+              >
+                {restartStatus}
+              </Alert>
+            )}
             {restartError && (
               <Text size="sm" color="red" style={{ whiteSpace: 'pre-wrap' }}>
                 {restartError}
