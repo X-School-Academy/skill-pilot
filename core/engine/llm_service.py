@@ -146,15 +146,18 @@ def _string_list(provider: Dict[str, Any], key: str) -> List[str]:
 
 
 _CONFIG_DIR = str(PROJECT_DIR / "config")
+_ENV_VAR_PATTERN = re.compile(r"\$\{([A-Za-z0-9_]+)\}")
 
 
 def _resolve_arg(arg: str) -> str:
     """Resolve placeholders and bare filenames in provider args.
 
     - ``{{config_dir}}`` is replaced with the absolute path to the config/ dir.
+    - ``${ENV_VAR}`` placeholders are expanded from the current environment.
     - Bare filenames (no path separator, .json/.json5 extension) are resolved
       relative to config/ by default (e.g. ``claude-sandbox-settings.json``).
     """
+    arg = _ENV_VAR_PATTERN.sub(lambda m: os.environ.get(m.group(1), m.group(0)), arg)
     if "{{config_dir}}" in arg:
         return arg.replace("{{config_dir}}", _CONFIG_DIR)
     if (
@@ -164,6 +167,20 @@ def _resolve_arg(arg: str) -> str:
     ):
         return os.path.join(_CONFIG_DIR, arg)
     return arg
+
+
+def _build_codex_terminal_args(provider: Dict[str, Any], prompt: str) -> List[str]:
+    """Reuse Codex provider config for terminal mode without non-interactive flags."""
+    derived_args: List[str] = []
+    for raw_arg in _string_list(provider, "args"):
+        arg = _resolve_arg(raw_arg)
+        if arg in {"exec", "--json"}:
+            continue
+        if "{{prompt}}" in arg:
+            continue
+        derived_args.append(arg)
+    derived_args.append(prompt)
+    return derived_args
 
 
 def build_llm_command(
@@ -256,6 +273,8 @@ def build_terminal_command(
                 args.append(arg.replace("{{prompt}}", prompt))
             else:
                 args.append(arg)
+    elif str(provider.get("bin") or "").strip().lower() == "codex":
+        args.extend(_build_codex_terminal_args(provider, prompt))
     else:
         args.append(prompt)
     return [provider.get("bin", ""), *args]
@@ -270,11 +289,10 @@ def _resolve_provider_env(provider: Dict[str, Any]) -> Dict[str, str]:
     raw_env = provider.get("env") or {}
     if not isinstance(raw_env, dict):
         return {}
-    pattern = re.compile(r"\$\{([A-Za-z0-9_]+)\}")
     resolved: Dict[str, str] = {}
     for key, val in raw_env.items():
         if isinstance(val, str):
-            resolved[key] = pattern.sub(lambda m: os.environ.get(m.group(1), m.group(0)), val)
+            resolved[key] = _ENV_VAR_PATTERN.sub(lambda m: os.environ.get(m.group(1), m.group(0)), val)
         else:
             resolved[key] = str(val)
     return resolved

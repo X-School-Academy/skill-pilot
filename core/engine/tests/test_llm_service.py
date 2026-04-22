@@ -102,3 +102,44 @@ def test_parse_stream_json_text_claude_assistant_message():
 
     assert parsed == '{"scenes":[{"scene_type":"text_only","text":"hello","voice_over":"hi"}]}'
     assert llm_service._extract_json_payload(parsed)["scenes"][0]["scene_type"] == "text_only"
+
+
+def test_resolve_arg_expands_env_placeholders(monkeypatch):
+    monkeypatch.setenv("OPENAI_COMPAT_BASE_URL", "https://example.test/v1")
+
+    resolved = llm_service._resolve_arg('model_providers.skill_pilot.base_url="${OPENAI_COMPAT_BASE_URL}"')
+
+    assert resolved == 'model_providers.skill_pilot.base_url="https://example.test/v1"'
+
+
+def test_build_terminal_command_reuses_codex_provider_args():
+    provider = {
+        "bin": "codex",
+        "model": "model-name",
+        "args": [
+            "exec",
+            "-c",
+            'model_providers.skill_pilot.name="skill_pilot"',
+            "-c",
+            'model_providers.skill_pilot.base_url="https://example.test/v1"',
+            "-c",
+            'model_provider="skill_pilot"',
+            "--json",
+            "{{prompt}}",
+        ],
+    }
+
+    command = llm_service.build_terminal_command(provider, "interactive prompt")
+
+    assert command == [
+        "codex",
+        "--model",
+        "model-name",
+        "-c",
+        'model_providers.skill_pilot.name="skill_pilot"',
+        "-c",
+        'model_providers.skill_pilot.base_url="https://example.test/v1"',
+        "-c",
+        'model_provider="skill_pilot"',
+        "interactive prompt",
+    ]
