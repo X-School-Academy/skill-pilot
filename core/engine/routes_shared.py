@@ -118,8 +118,6 @@ WORKFLOW_EXECUTE_SESSION_NAME = "sp-workflow-execute"
 PROTECTED_TMUX_SESSION_PREFIXES = ("sp-engine-", "sp-webui-")
 TMUX_SESSION_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 _last_heartbeat_time: float = time.time()
-_tmux_session_heartbeat_times: Dict[str, float] = {}
-_tmux_session_heartbeat_lock = threading.Lock()
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _MCP_CONFIG_PATH = _REPO_ROOT / "config" / "mcp.json5"
 _MCP_SERVER_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
@@ -135,7 +133,6 @@ _SKILL_CATEGORIES: List[tuple[str, str, Path]] = [
     ("third-party", "Third Party", _REPO_ROOT / "core" / "skills" / "third-party"),
     ("user", "User", _REPO_ROOT / "core" / "skills" / "user"),
 ]
-_HEARTBEAT_TIMEOUT_SECONDS = 30.0
 _heartbeat_watcher_started = False
 _last_native_cleanup_time: float = 0.0
 _NATIVE_STALE_CLEANUP_INTERVAL_SECONDS = 60.0
@@ -771,23 +768,6 @@ def _build_tmux_attach_command_any(session_name: str, readonly: bool = False) ->
     return f"tmux attach -t {shlex.quote(safe_name)}{readonly_flag}"
 
 
-def _record_tmux_session_heartbeat(session_name: str) -> str:
-    safe_name = _validate_tmux_session_name(session_name)
-    now = time.time()
-    with _tmux_session_heartbeat_lock:
-        _tmux_session_heartbeat_times[safe_name] = now
-    return safe_name
-
-
-def _forget_tmux_session_heartbeat(session_name: str) -> None:
-    try:
-        safe_name = _validate_tmux_session_name(session_name)
-    except ValueError:
-        return
-    with _tmux_session_heartbeat_lock:
-        _tmux_session_heartbeat_times.pop(safe_name, None)
-
-
 def _create_named_tmux_session(session_name: str, start_dir: Path | None = None) -> str:
     safe_name = _validate_tmux_session_name_any(session_name)
     _run_tmux_command(
@@ -822,7 +802,6 @@ def _create_webui_tmux_session(command: str, start_dir: Path | None = None) -> s
         ["new-session", "-d", "-s", session_name, *(["-c", str(start_dir)] if start_dir is not None else []), "/bin/bash"],
         check=True,
     )
-    _record_tmux_session_heartbeat(session_name)
     _run_tmux_command(["set-option", "-t", session_name, "remain-on-exit", "on"], check=True)
     _initialize_tmux_session_env(session_name)
     _send_tmux_command_literal(session_name, command)
@@ -848,7 +827,6 @@ def _create_web_shell_tmux_session(start_dir: Path, shell_path: str | None = Non
         ["new-session", "-d", "-s", session_name, "-c", str(start_dir), resolved_shell, "-l"],
         check=True,
     )
-    _record_tmux_session_heartbeat(session_name)
     _initialize_tmux_session_env(session_name)
     return session_name
 
@@ -862,14 +840,11 @@ def _create_or_get_web_shell_tmux_session(
     if session_name:
         safe_name = _validate_tmux_session_name_any(session_name)
         if _tmux_session_exists(safe_name):
-            if safe_name.startswith(TMUX_SESSION_PREFIX):
-                _record_tmux_session_heartbeat(safe_name)
             return safe_name
         _run_tmux_command(
             ["new-session", "-d", "-s", safe_name, "-c", str(start_dir), resolved_shell, "-l"],
             check=True,
         )
-        _record_tmux_session_heartbeat(safe_name)
         _initialize_tmux_session_env(safe_name)
         return safe_name
     return _create_web_shell_tmux_session(start_dir, shell_path=resolved_shell)
@@ -1319,50 +1294,19 @@ def _validate_writable_session_name(session_name: str) -> str:
     return _validate_tmux_session_name(value)
 
 
+def _cleanup_webui_tmux_session(session_name: str) -> bool:
+    safe_name = _validate_tmux_session_name(session_name)
+    return _kill_tmux_session(safe_name)
+
+
 def _cleanup_webui_tmux_sessions() -> int:
     removed_count = 0
     for session in _list_webui_tmux_sessions():
         try:
             if _kill_tmux_session(session["name"]):
                 removed_count += 1
-                _forget_tmux_session_heartbeat(session["name"])
         except RuntimeError as exc:
             logger.warning("failed to remove tmux session %s: %s", session["name"], exc)
-    return removed_count
-
-
-def _cleanup_stale_webui_tmux_sessions() -> int:
-    removed_count = 0
-    now = time.time()
-    live_session_names: set[str] = set()
-    for session in _list_webui_tmux_sessions():
-        name = str(session.get("name") or "")
-        if not name:
-            continue
-        live_session_names.add(name)
-        with _tmux_session_heartbeat_lock:
-            heartbeat_at = _tmux_session_heartbeat_times.get(name)
-        created_at = session.get("created_at")
-        if heartbeat_at is None:
-            try:
-                heartbeat_at = float(created_at or now)
-            except (TypeError, ValueError):
-                heartbeat_at = now
-        elapsed = now - heartbeat_at
-        if elapsed <= _HEARTBEAT_TIMEOUT_SECONDS:
-            continue
-        try:
-            if _kill_tmux_session(name):
-                removed_count += 1
-                _forget_tmux_session_heartbeat(name)
-                logger.info("[heartbeat] cleaned up stale tmux session %s after %.1fs without heartbeat", name, elapsed)
-        except RuntimeError as exc:
-            logger.warning("failed to remove stale tmux session %s: %s", name, exc)
-
-    with _tmux_session_heartbeat_lock:
-        for known_name in list(_tmux_session_heartbeat_times):
-            if known_name not in live_session_names:
-                _tmux_session_heartbeat_times.pop(known_name, None)
     return removed_count
 
 

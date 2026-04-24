@@ -24,9 +24,6 @@ const isProtectedSession = (session: string | null): boolean => {
   );
 };
 
-const isWebuiLiveSession = (session: string | null): boolean =>
-  Boolean(session && session.startsWith("webui-live-"));
-
 const toWsBase = (base: string): string => {
   const normalized = base.replace("://localhost:", "://127.0.0.1:");
   if (normalized.startsWith("https://")) return `wss://${normalized.slice("https://".length)}`;
@@ -135,6 +132,28 @@ const TerminalPage = () => {
   const [allowReadonlyKill, setAllowReadonlyKill] = useState(false);
   const [compactChrome, setCompactChrome] = useState(false);
 
+  const closeActiveSocket = useCallback((sessionId?: string | null) => {
+    const ws = wsRef.current;
+    if (ws) {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify({ type: "close", sessionId: sessionId || undefined }));
+        } catch {
+          // The browser may already be tearing down during beforeunload.
+        }
+      }
+      try {
+        ws.close();
+      } catch {
+        // Ignore close races during navigation/unmount.
+      }
+    }
+    wsRef.current = null;
+    pendingResizeRef.current = null;
+    lastSentResizeRef.current = null;
+    setConnected(false);
+  }, []);
+
   const fitAndReadSize = useCallback(() => {
     const fitAddon = fitAddonRef.current;
     const term = xtermRef.current;
@@ -170,17 +189,9 @@ const TerminalPage = () => {
   }, [fitAndReadSize]);
 
   const handleClose = useCallback(() => {
-    const ws = wsRef.current;
     setIsOpen(false);
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "close" }));
-      ws.close();
-    }
-    wsRef.current = null;
-    pendingResizeRef.current = null;
-    lastSentResizeRef.current = null;
-    setConnected(false);
-  }, []);
+    closeActiveSocket(sessionName);
+  }, [closeActiveSocket, sessionName]);
 
   const handleKillSession = useCallback(() => {
     const currentSession = sessionName;
@@ -205,29 +216,6 @@ const TerminalPage = () => {
     const historyUrl = `/terminal/history?session=${encodeURIComponent(sessionName)}`;
     window.open(historyUrl, "_blank", "noopener,noreferrer");
   }, [sessionName]);
-
-  useEffect(() => {
-    if (!isOpen || !isWebuiLiveSession(sessionName)) return undefined;
-    const apiBase = getApiBase();
-    const sendSessionHeartbeat = () => {
-      void fetch(`${apiBase}/api/terminal/tmux/heartbeat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session: sessionName }),
-        keepalive: true,
-      }).catch(() => {});
-    };
-    sendSessionHeartbeat();
-    const heartbeatInterval = window.setInterval(sendSessionHeartbeat, 10000);
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") sendSessionHeartbeat();
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.clearInterval(heartbeatInterval);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [isOpen, sessionName]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -350,9 +338,11 @@ const TerminalPage = () => {
       if (document.visibilityState === "visible") triggerForcedFit();
     };
     const onWindowLoad = () => triggerForcedFit();
+    const onBeforeUnload = () => closeActiveSocket(currentTarget.session);
 
     window.addEventListener("resize", triggerFit);
     window.addEventListener("load", onWindowLoad);
+    window.addEventListener("beforeunload", onBeforeUnload);
     document.addEventListener("visibilitychange", onVisibilityChange);
     const resizeObserver = new ResizeObserver(() => {
       triggerFit();
@@ -514,6 +504,7 @@ const TerminalPage = () => {
       disposed = true;
       window.removeEventListener("resize", triggerFit);
       window.removeEventListener("load", onWindowLoad);
+      window.removeEventListener("beforeunload", onBeforeUnload);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       resizeObserver.disconnect();
       if (connectRaf1) cancelAnimationFrame(connectRaf1);
@@ -528,18 +519,13 @@ const TerminalPage = () => {
       resizeDispose.dispose();
       projectLinkDispose.dispose();
 
-      const ws = wsRef.current;
-      ws?.close();
-      wsRef.current = null;
-      pendingResizeRef.current = null;
-      lastSentResizeRef.current = null;
-      setConnected(false);
+      closeActiveSocket(currentTarget.session);
       term?.dispose();
       term = null;
       xtermRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [fitAndReadSize, isOpen, sendResize]);
+  }, [closeActiveSocket, fitAndReadSize, isOpen, sendResize]);
 
   if (!isOpen) {
     return (

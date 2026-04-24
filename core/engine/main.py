@@ -32,7 +32,6 @@ class _HeartbeatFilter(logging.Filter):
             "/api/heartbeat",
             "/api/terminal/tmux/external-sessions",
             "/api/workflows/execute/status",
-            "POST /api/terminal/tmux/heartbeat ",
             "GET /api/llm/providers ",
             "GET /api/config/settings ",
         )

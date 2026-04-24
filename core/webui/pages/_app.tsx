@@ -95,11 +95,11 @@ function App({ Component, pageProps }: AppPropsWithLayout) {
     const currentPath = window.location.pathname;
     const isTerminalPage = currentPath === "/terminal" || currentPath.startsWith("/terminal/");
     if (window.self !== window.top && isTerminalPage) {
-      // Avoid heartbeat/cleanup from embedded terminal iframes.
+      // Embedded terminal iframes do not need the top-level app heartbeat.
       return;
     }
 
-    // Heartbeat: notify backend every 5s that the browser is alive.
+    // App heartbeat: notify backend every 5s that the browser is alive.
     const heartbeatUrl = `${getApiBase()}/api/heartbeat`;
     const sendHeartbeat = () => {
       void fetch(heartbeatUrl, {
@@ -111,10 +111,6 @@ function App({ Component, pageProps }: AppPropsWithLayout) {
     };
     sendHeartbeat();
     const heartbeatInterval = window.setInterval(sendHeartbeat, 5000);
-
-    // Session cleanup relies on the heartbeat timeout (10s) in the backend.
-    // No beforeunload cleanup — it fires on normal page navigation too,
-    // which would kill sessions prematurely.
 
     return () => {
       window.clearInterval(heartbeatInterval);

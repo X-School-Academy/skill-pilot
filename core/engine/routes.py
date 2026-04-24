@@ -254,22 +254,6 @@ def terminal_tmux_cleanup_native_stale():
     return {"status": "ok", "removed_count": removed_count}
 
 
-@router.post("/api/terminal/tmux/heartbeat")
-def terminal_tmux_heartbeat(payload: Dict[str, Any]):
-    raw_session = str(payload.get("session") or "").strip()
-    try:
-        session_name = _record_tmux_session_heartbeat(raw_session)
-    except ValueError as exc:
-        return JSONResponse(status_code=400, content={"error": str(exc)})
-    try:
-        if not _tmux_session_exists(session_name):
-            _forget_tmux_session_heartbeat(session_name)
-            return JSONResponse(status_code=404, content={"error": f"tmux session not found: {session_name}"})
-    except RuntimeError as exc:
-        return JSONResponse(status_code=500, content={"error": str(exc)})
-    return {"status": "ok", "session": session_name, "timestamp": time.time()}
-
-
 @router.post("/api/heartbeat")
 def heartbeat():
     global _last_heartbeat_time
@@ -298,14 +282,10 @@ def _verify_active_workflow_session() -> None:
 
 
 async def _heartbeat_watcher() -> None:
-    global _last_heartbeat_time, _last_native_cleanup_time
+    global _last_native_cleanup_time
     while True:
         await asyncio.sleep(5)
         _verify_active_workflow_session()
-        try:
-            _cleanup_stale_webui_tmux_sessions()
-        except Exception as exc:
-            logger.warning("failed stale webui tmux cleanup: %s", exc)
         now = time.time()
         if now - _last_native_cleanup_time >= _NATIVE_STALE_CLEANUP_INTERVAL_SECONDS:
             try:
@@ -528,6 +508,13 @@ async def terminal_ws(
             await websocket.close()
         except RuntimeError:
             pass
+        if session_name and session_name.startswith(TMUX_SESSION_PREFIX):
+            try:
+                removed = _cleanup_webui_tmux_session(session_name)
+                if removed:
+                    logger.info("[terminal-ws] cleaned up tmux session %s on websocket close", session_name)
+            except RuntimeError as exc:
+                logger.warning("[terminal-ws] failed to cleanup tmux session %s: %s", session_name, exc)
         elapsed_ms = int((time.perf_counter() - started_at) * 1000)
         logger.info(
             "[terminal-ws] closed client=%s command=%s session=%s elapsed_ms=%s",
