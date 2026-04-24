@@ -1321,6 +1321,10 @@ get_service_base_url() {
 
 build_webui_export() {
   ensure_webui_deps
+  rm -f \
+    "${ROOT_DIR}/core/webui/.next/lock" \
+    "${ROOT_DIR}/core/webui/.next/dev/lock" \
+    "${ROOT_DIR}/core/webui/www/lock"
   echo "Building static webui export..."
   pnpm -C "${ROOT_DIR}/core/webui" export
 }

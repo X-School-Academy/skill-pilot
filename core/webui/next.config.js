@@ -50,35 +50,39 @@ module.exports = (phase) => {
     },
     devIndicators: false,
     reactStrictMode: true,
-    ...(isStaticExport ? { output: 'export', distDir: 'www'} : {}),
+    outputFileTracingRoot: path.resolve(__dirname, '../..'),
+    ...(isStaticExport ? { output: 'export', distDir: 'www' } : {}),
     // Temporarily disable locale-prefixed routing until the WebUI i18n paths are fully supported.
     allowedDevOrigins: [
       'localhost',
       '*.localhost',
       '127.0.0.1',
     ],
-    async headers() {
-      return [
-        {
-          source: '/api/:path*',
-          headers: [
-            {
-              key: 'Cache-Control',
-              value: 'private, no-store, max-age=0',
-            },
-          ],
-        },
-      ]
-    },
-    async rewrites() {
-      if (isStaticExport) return []
-      return [
-        {
-          source: '/api/:path*',
-          destination: `${engineBaseUrl}/api/:path*`,
-        },
-      ]
-    },
+    ...(!isStaticExport
+      ? {
+          async headers() {
+            return [
+              {
+                source: '/api/:path*',
+                headers: [
+                  {
+                    key: 'Cache-Control',
+                    value: 'private, no-store, max-age=0',
+                  },
+                ],
+              },
+            ]
+          },
+          async rewrites() {
+            return [
+              {
+                source: '/api/:path*',
+                destination: `${engineBaseUrl}/api/:path*`,
+              },
+            ]
+          },
+        }
+      : {}),
     trailingSlash: isStaticExport ? true : false,
   }
 }
