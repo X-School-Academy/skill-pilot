@@ -1,0 +1,30 @@
+{
+  "evals": [
+    {
+      "prompt": "Write a Twitter thread about lessons learned bootstrapping a SaaS to $10k MRR.",
+      "expected_output": "A thread with a strong hook, 3+ lessons, and a CTA.",
+      "assertions": [
+        "Hook",
+        "lesson",
+        "CTA"
+      ]
+    },
+    {
+      "prompt": "Write a LinkedIn post about why AI won't replace developers.",
+      "expected_output": "A professional post with white space and a CTA.",
+      "assertions": [
+        "AI",
+        "developer",
+        "CTA"
+      ]
+    },
+    {
+      "prompt": "Write an email sequence for a new product launch.",
+      "expected_output": "Agent should refuse or defer to email-sequence skill.",
+      "assertions": [
+        "cannot",
+        "defer"
+      ]
+    }
+  ]
+}
