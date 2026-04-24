@@ -254,6 +254,22 @@ def terminal_tmux_cleanup_native_stale():
     return {"status": "ok", "removed_count": removed_count}
 
 
+@router.post("/api/terminal/tmux/heartbeat")
+def terminal_tmux_heartbeat(payload: Dict[str, Any]):
+    raw_session = str(payload.get("session") or "").strip()
+    try:
+        session_name = _record_tmux_session_heartbeat(raw_session)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    try:
+        if not _tmux_session_exists(session_name):
+            _forget_tmux_session_heartbeat(session_name)
+            return JSONResponse(status_code=404, content={"error": f"tmux session not found: {session_name}"})
+    except RuntimeError as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc)})
+    return {"status": "ok", "session": session_name, "timestamp": time.time()}
+
+
 @router.post("/api/heartbeat")
 def heartbeat():
     global _last_heartbeat_time
@@ -286,13 +302,10 @@ async def _heartbeat_watcher() -> None:
     while True:
         await asyncio.sleep(5)
         _verify_active_workflow_session()
-        elapsed = time.time() - _last_heartbeat_time
-        if elapsed > _HEARTBEAT_TIMEOUT_SECONDS:
-            sessions = _list_webui_tmux_sessions()
-            if sessions:
-                logger.info("[heartbeat] no heartbeat for %.1fs, cleaning up %d webui tmux sessions", elapsed, len(sessions))
-                _cleanup_webui_tmux_sessions()
-                _last_heartbeat_time = time.time()
+        try:
+            _cleanup_stale_webui_tmux_sessions()
+        except Exception as exc:
+            logger.warning("failed stale webui tmux cleanup: %s", exc)
         now = time.time()
         if now - _last_native_cleanup_time >= _NATIVE_STALE_CLEANUP_INTERVAL_SECONDS:
             try:

@@ -24,6 +24,9 @@ const isProtectedSession = (session: string | null): boolean => {
   );
 };
 
+const isWebuiLiveSession = (session: string | null): boolean =>
+  Boolean(session && session.startsWith("webui-live-"));
+
 const toWsBase = (base: string): string => {
   const normalized = base.replace("://localhost:", "://127.0.0.1:");
   if (normalized.startsWith("https://")) return `wss://${normalized.slice("https://".length)}`;
@@ -202,6 +205,29 @@ const TerminalPage = () => {
     const historyUrl = `/terminal/history?session=${encodeURIComponent(sessionName)}`;
     window.open(historyUrl, "_blank", "noopener,noreferrer");
   }, [sessionName]);
+
+  useEffect(() => {
+    if (!isOpen || !isWebuiLiveSession(sessionName)) return undefined;
+    const apiBase = getApiBase();
+    const sendSessionHeartbeat = () => {
+      void fetch(`${apiBase}/api/terminal/tmux/heartbeat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session: sessionName }),
+        keepalive: true,
+      }).catch(() => {});
+    };
+    sendSessionHeartbeat();
+    const heartbeatInterval = window.setInterval(sendSessionHeartbeat, 10000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") sendSessionHeartbeat();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.clearInterval(heartbeatInterval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isOpen, sessionName]);
 
   useEffect(() => {
     if (!isOpen) return;

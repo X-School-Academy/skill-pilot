@@ -92,7 +92,9 @@ function App({ Component, pageProps }: AppPropsWithLayout) {
       return;
     }
 
-    if (window.self !== window.top) {
+    const currentPath = window.location.pathname;
+    const isTerminalPage = currentPath === "/terminal" || currentPath.startsWith("/terminal/");
+    if (window.self !== window.top && isTerminalPage) {
       // Avoid heartbeat/cleanup from embedded terminal iframes.
       return;
     }
