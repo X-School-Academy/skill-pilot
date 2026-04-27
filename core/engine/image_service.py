@@ -137,6 +137,51 @@ def _extract_mcp_text_content(payload: Any) -> Optional[str]:
     return None
 
 
+def _skill_pilot_generate_image(prompt: str, provider: Dict[str, Any], size: Optional[str]) -> Path:
+    api_key = (os.getenv("SKILL_PILOT_API_KEY") or "").strip()
+    base_url = (os.getenv("SKILL_PILOT_BASE_URL") or "").strip()
+    if not api_key:
+        raise HTTPException(status_code=500, detail="SKILL_PILOT_API_KEY is not configured")
+    if not base_url:
+        raise HTTPException(status_code=500, detail="SKILL_PILOT_BASE_URL is not configured")
+
+    try:
+        from openai import OpenAI
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="openai package is not installed") from exc
+
+    model = provider.get("model", "skill-pilot-image")
+    chosen_size = size or provider.get("size", "1024x1536")
+    quality = provider.get("quality", "low")
+
+    client = OpenAI(api_key=api_key, base_url=base_url)
+    request: Dict[str, Any] = {
+        "model": model,
+        "prompt": prompt,
+    }
+    if chosen_size:
+        request["size"] = chosen_size
+    if quality:
+        request["quality"] = quality
+
+    try:
+        result = client.images.generate(**request)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Skill Pilot image generation failed: {exc}") from exc
+
+    b64 = None
+    if getattr(result, "data", None):
+        first = result.data[0]
+        b64 = getattr(first, "b64_json", None)
+
+    if not b64:
+        raise HTTPException(status_code=502, detail="Skill Pilot image generation returned no image")
+
+    out = Path(f"/tmp/webui_image_{uuid.uuid4().hex}.png")
+    out.write_bytes(base64.b64decode(b64))
+    return out
+
+
 def _openai_generate_image(prompt: str, provider: Dict[str, Any], size: Optional[str]) -> Path:
     api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     if not api_key:
@@ -289,7 +334,9 @@ def generate_image_file(prompt: str, provider_id: Optional[str] = None, size: Op
     provider_name = provider.get("id")
     resolved_size = size if _parse_image_size(size) else resolve_image_size_for_provider(provider, "portrait")
 
-    if provider_name == "openai":
+    if provider_name == "skill-pilot":
+        path = _skill_pilot_generate_image(prompt, provider, resolved_size)
+    elif provider_name == "openai":
         path = _openai_generate_image(prompt, provider, resolved_size)
     elif provider_name == "gemini":
         path = _gemini_generate_image(prompt, provider, resolved_size)
