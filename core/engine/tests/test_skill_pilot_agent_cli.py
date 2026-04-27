@@ -21,6 +21,14 @@ def test_cli_argument_defaults():
     assert args.network is False
     assert args.model is None
     assert args.agent_dir == REPO_ROOT
+    assert args.agent_file == "AGENTS.md"
+    assert args.skills is None
+
+
+def test_cli_supports_agent_file_none_and_skills_none():
+    args = build_parser().parse_args(["--agent-file", "none", "--skills", "none", "hello"])
+    assert args.agent_file == "none"
+    assert args.skills == "none"
 
 
 def test_cli_invalid_yes_no_fails():
@@ -86,3 +94,22 @@ def test_skill_loading_filters_selected_skills(tmp_path):
 
     assert "Alpha body" in instructions
     assert "Beta body" not in instructions
+
+
+def test_skill_loading_none_skips_all(tmp_path):
+    alpha = tmp_path / "alpha"
+    alpha.mkdir()
+    (alpha / "SKILL.md").write_text("---\nname: alpha\n---\nAlpha body", encoding="utf-8")
+
+    instructions = load_skill_instructions(tmp_path, "none")
+
+    assert instructions == ""
+
+
+def test_agents_md_loading_supports_custom_file(tmp_path):
+    custom = tmp_path / "CUSTOM.md"
+    custom.write_text("custom instructions", encoding="utf-8")
+
+    instructions = load_agents_md(tmp_path, "CUSTOM.md")
+
+    assert "custom instructions" in instructions

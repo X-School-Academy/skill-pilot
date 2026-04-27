@@ -5,14 +5,15 @@ import platform
 import shlex
 import shutil
 import subprocess
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 from agents import function_tool
 
+from logger import get_logger
 
-logger = logging.getLogger(__name__)
+
+logger = get_logger("skill-pilot-agent.bash")
 
 NETWORK_COMMANDS = {
     "brew",

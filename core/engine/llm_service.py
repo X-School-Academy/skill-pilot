@@ -47,6 +47,10 @@ def load_provider_config() -> Dict[str, Any]:
 _ = load_provider_config()
 
 
+def _is_background_only(provider: Dict[str, Any]) -> bool:
+    return bool(provider.get("background_only", False) or provider.get("background-only", False))
+
+
 def _load_llm_provider_entries(*, include_background_only: bool = False) -> List[Dict[str, Any]]:
     data = load_provider_config().get("llm", [])
     providers = data if isinstance(data, list) else []
@@ -54,7 +58,7 @@ def _load_llm_provider_entries(*, include_background_only: bool = False) -> List
     for provider in providers:
         if provider.get("disabled", False):
             continue
-        if provider.get("background-only", False) and not include_background_only:
+        if _is_background_only(provider) and not include_background_only:
             continue
         visible.append(provider)
     return visible
