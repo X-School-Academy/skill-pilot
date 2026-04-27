@@ -143,3 +143,93 @@ def test_build_terminal_command_reuses_codex_provider_args():
         'model_provider="skill_pilot"',
         "interactive prompt",
     ]
+
+
+def test_background_llm_selects_skill_pilot_when_configured(monkeypatch):
+    config = {
+        "default": {"llm": "claude", "background_llm": "skill-pilot"},
+        "llm": [
+            {"id": "claude", "bin": "claude", "args": ["{{prompt}}"]},
+            {
+                "id": "skill-pilot",
+                "bin": "core/bin/skill-pilot-agent",
+                "background-only": True,
+                "args": ["--model", "${SKILL_PILOT_MODEL}", "{{prompt}}"],
+            },
+        ],
+    }
+    monkeypatch.setattr(llm_service, "load_provider_config", lambda: config)
+    monkeypatch.setenv("SKILL_PILOT_MODEL", "skill-pilot-mini")
+
+    provider = llm_service.get_background_provider(None)
+    command = llm_service.build_llm_command(provider, "hello")
+
+    assert provider["id"] == "skill-pilot"
+    assert command == [
+        "core/bin/skill-pilot-agent",
+        "--model",
+        "skill-pilot-mini",
+        "hello",
+    ]
+
+
+def test_background_llm_falls_back_when_not_configured(monkeypatch):
+    config = {
+        "default": {"llm": "claude", "background_llm": ""},
+        "llm": [
+            {"id": "claude", "bin": "claude", "args": ["{{prompt}}"]},
+            {
+                "id": "skill-pilot",
+                "bin": "core/bin/skill-pilot-agent",
+                "background-only": True,
+                "args": ["{{prompt}}"],
+            },
+        ],
+    }
+    monkeypatch.setattr(llm_service, "load_provider_config", lambda: config)
+
+    provider = llm_service.get_background_provider(None)
+
+    assert provider["id"] == "claude"
+    assert [p["id"] for p in llm_service.load_llm_providers()] == ["claude"]
+
+
+def test_explicit_provider_does_not_select_background_only_provider(monkeypatch):
+    config = {
+        "default": {"llm": "claude", "background_llm": "skill-pilot"},
+        "llm": [
+            {"id": "claude", "bin": "claude", "args": ["{{prompt}}"]},
+            {
+                "id": "skill-pilot",
+                "bin": "core/bin/skill-pilot-agent",
+                "background-only": True,
+                "args": ["{{prompt}}"],
+            },
+        ],
+    }
+    monkeypatch.setattr(llm_service, "load_provider_config", lambda: config)
+
+    provider = llm_service.get_provider("skill-pilot")
+
+    assert provider["id"] == "claude"
+
+
+def test_skill_pilot_provider_env_expands(monkeypatch):
+    provider = {
+        "env": {
+            "SKILL_PILOT_BASE_URL": "${SKILL_PILOT_BASE_URL}",
+            "SKILL_PILOT_API_KEY": "${SKILL_PILOT_API_KEY}",
+            "SKILL_PILOT_MODEL": "${SKILL_PILOT_MODEL}",
+        }
+    }
+    monkeypatch.setenv("SKILL_PILOT_BASE_URL", "http://127.0.0.1:8000/v1")
+    monkeypatch.setenv("SKILL_PILOT_API_KEY", "test-key")
+    monkeypatch.setenv("SKILL_PILOT_MODEL", "skill-pilot-mini")
+
+    env = llm_service._resolve_provider_env(provider)
+
+    assert env == {
+        "SKILL_PILOT_BASE_URL": "http://127.0.0.1:8000/v1",
+        "SKILL_PILOT_API_KEY": "test-key",
+        "SKILL_PILOT_MODEL": "skill-pilot-mini",
+    }

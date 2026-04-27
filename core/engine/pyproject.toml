@@ -40,6 +40,7 @@ dependencies = [
     "av>=16.1.0",
     "onvif-python>=0.2.10",
     "markitdown[docx,pdf,pptx,xls,xlsx,youtube-transcription]>=0.1.5",
+    "openai-agents>=0.14.6",
 ]
 
 [dependency-groups]
