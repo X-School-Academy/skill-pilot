@@ -77,6 +77,54 @@ def _normalize_media_mcp_input_reference(value: str) -> str:
     return candidate
 
 
+def _skill_pilot_tts(text: str, provider: Dict[str, Any], voice: Optional[str], output_format: Optional[str]) -> Path:
+    api_key = (os.getenv("SKILL_PILOT_API_KEY") or "").strip()
+    base_url = (os.getenv("SKILL_PILOT_BASE_URL") or "").strip()
+    if not api_key:
+        raise HTTPException(status_code=500, detail="SKILL_PILOT_API_KEY is not configured")
+    if not base_url:
+        raise HTTPException(status_code=500, detail="SKILL_PILOT_BASE_URL is not configured")
+
+    try:
+        from openai import OpenAI
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="openai package is not installed") from exc
+
+    model = provider.get("model", "skill-pilot-audio")
+    selected_voice = voice or provider.get("voice", "alloy")
+    fmt = (output_format or provider.get("format", "wav")).lower()
+    if fmt not in {"mp3", "wav", "opus", "aac", "flac", "pcm"}:
+        fmt = "wav"
+
+    out = Path(f"/tmp/webui_tts_{uuid.uuid4().hex}.{fmt if fmt != 'pcm' else 'wav'}")
+    client = OpenAI(api_key=api_key, base_url=base_url)
+
+    try:
+        completion = client.chat.completions.create(
+            model=model,
+            modalities=["text", "audio"],
+            audio={"voice": selected_voice, "format": fmt},
+            messages=[{"role": "user", "content": text}],
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Skill Pilot TTS error: {exc}") from exc
+
+    try:
+        audio_data = completion.choices[0].message.audio.data
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Skill Pilot TTS returned no audio data") from exc
+
+    if not audio_data:
+        raise HTTPException(status_code=502, detail="Skill Pilot TTS returned empty audio data")
+
+    raw = base64.b64decode(audio_data)
+    if fmt == "pcm":
+        _write_wav(out, raw)
+    else:
+        out.write_bytes(raw)
+    return out
+
+
 def _openai_tts(text: str, provider: Dict[str, Any], voice: Optional[str], output_format: Optional[str]) -> Path:
     api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     if not api_key:
@@ -269,7 +317,9 @@ def text_to_speech_file(text: str, provider_id: Optional[str] = None, voice: Opt
     if not text or not text.strip():
         raise HTTPException(status_code=400, detail="text is required")
 
-    if provider_name == "openai":
+    if provider_name == "skill-pilot":
+        path = _skill_pilot_tts(text, provider, voice, output_format)
+    elif provider_name == "openai":
         path = _openai_tts(text, provider, voice, output_format)
     elif provider_name == "gemini":
         path = _gemini_tts(text, provider, voice, output_format)
