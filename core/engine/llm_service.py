@@ -47,10 +47,21 @@ def load_provider_config() -> Dict[str, Any]:
 _ = load_provider_config()
 
 
-def load_llm_providers() -> List[Dict[str, Any]]:
+def _load_llm_provider_entries(*, include_background_only: bool = False) -> List[Dict[str, Any]]:
     data = load_provider_config().get("llm", [])
     providers = data if isinstance(data, list) else []
-    return [p for p in providers if not p.get("disabled", False)]
+    visible: List[Dict[str, Any]] = []
+    for provider in providers:
+        if provider.get("disabled", False):
+            continue
+        if provider.get("background-only", False) and not include_background_only:
+            continue
+        visible.append(provider)
+    return visible
+
+
+def load_llm_providers() -> List[Dict[str, Any]]:
+    return _load_llm_provider_entries()
 
 
 def load_tts_providers() -> List[Dict[str, Any]]:
@@ -85,6 +96,18 @@ def get_default_doctor_provider_id() -> Optional[str]:
     return _default_id("doctor", load_llm_providers())
 
 
+def get_default_background_llm_provider_id() -> Optional[str]:
+    cfg = load_provider_config().get("default", {})
+    preferred = cfg.get("background_llm")
+    if preferred != "skill-pilot":
+        return get_default_llm_provider_id()
+    providers = _load_llm_provider_entries(include_background_only=True)
+    for provider in providers:
+        if provider.get("id") == preferred:
+            return preferred
+    return get_default_llm_provider_id()
+
+
 def get_provider(provider_id: Optional[str]) -> Dict[str, Any]:
     providers = load_llm_providers()
     if not providers:
@@ -94,6 +117,19 @@ def get_provider(provider_id: Optional[str]) -> Dict[str, Any]:
         if provider.get("id") == selected:
             return provider
     return providers[0]
+
+
+def get_background_provider(provider_id: Optional[str]) -> Dict[str, Any]:
+    if provider_id:
+        return get_provider(provider_id)
+    providers = _load_llm_provider_entries(include_background_only=True)
+    if not providers:
+        raise HTTPException(status_code=500, detail="No LLM providers configured")
+    selected = get_default_background_llm_provider_id()
+    for provider in providers:
+        if provider.get("id") == selected:
+            return provider
+    return get_provider(None)
 
 
 def get_tts_provider(provider_id: Optional[str]) -> Dict[str, Any]:
@@ -595,7 +631,7 @@ def llm_get_text(
     sandbox_mode: Optional[bool] = None,
 ) -> str:
     _ = client_id
-    provider = get_provider(provider_id)
+    provider = get_background_provider(provider_id)
     prompt = _messages_to_prompt(messages)
     cmd = build_llm_command(
         provider,
@@ -670,7 +706,7 @@ def llm_stream(
     network_allow: Optional[bool] = None,
     sandbox_mode: Optional[bool] = None,
 ) -> Iterable[bytes]:
-    provider = get_provider(provider_id)
+    provider = get_background_provider(provider_id)
     cmd = build_llm_command(
         provider,
         prompt,
