@@ -25,10 +25,16 @@ def _skill_name(path: Path, content: str) -> str:
     return path.parent.name
 
 
-def _selected_names(raw: str | None) -> set[str] | None:
+_NONE_SENTINEL = object()
+
+
+def _selected_names(raw: str | None):
     if raw is None or not raw.strip():
         return None
-    names = {item.strip() for item in raw.split(",") if item.strip()}
+    items = [item.strip() for item in raw.split(",") if item.strip()]
+    if any(item.lower() == "none" for item in items):
+        return _NONE_SENTINEL
+    names = set(items)
     return names or None
 
 
@@ -64,8 +70,10 @@ def discover_skills(skills_dir: Path) -> list[SkillDocument]:
 
 def load_skill_instructions(skills_dir: Path, skills: str | None = None) -> str:
     selected = _selected_names(skills)
+    if selected is _NONE_SENTINEL:
+        return ""
     documents = discover_skills(skills_dir)
-    if selected is not None:
+    if isinstance(selected, set):
         documents = [
             doc
             for doc in documents

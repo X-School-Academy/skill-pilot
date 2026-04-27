@@ -153,7 +153,7 @@ def test_background_llm_selects_skill_pilot_when_configured(monkeypatch):
             {
                 "id": "skill-pilot",
                 "bin": "core/bin/skill-pilot-agent",
-                "background-only": True,
+                "background_only": True,
                 "args": ["--model", "${SKILL_PILOT_MODEL}", "{{prompt}}"],
             },
         ],

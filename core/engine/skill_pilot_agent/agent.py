@@ -8,15 +8,21 @@ from pathlib import Path
 from agents import Agent, OpenAIChatCompletionsModel, Runner, set_tracing_disabled
 from openai import AsyncOpenAI
 
+from logger import get_logger
+
 from .agents_md import load_agents_md
 from .bash_tool import BashToolConfig, build_bash_tool, parse_command_allowlist
 from .skills import load_skill_instructions
+
+
+logger = get_logger("skill-pilot-agent.agent")
 
 
 @dataclass(frozen=True)
 class SkillPilotAgentConfig:
     prompt: str
     agent_dir: Path
+    agent_file: Path | None
     skills_dir: Path
     skills: str | None
     model: str
@@ -40,9 +46,10 @@ def _compose_instructions(config: SkillPilotAgentConfig) -> str:
         "Keep responses concise and return the final answer directly.",
     ]
 
-    agents_md = load_agents_md(config.agent_dir)
-    if agents_md:
-        parts.append(agents_md)
+    if config.agent_file is not None:
+        agents_md = load_agents_md(config.agent_dir, config.agent_file)
+        if agents_md:
+            parts.append(agents_md)
 
     skill_instructions = load_skill_instructions(config.skills_dir, config.skills)
     if skill_instructions:
@@ -100,7 +107,7 @@ async def run_agent_async(config: SkillPilotAgentConfig) -> str:
 
     attempts = max(1, config.max_retries + 1)
     last_exc: Exception | None = None
-    for _ in range(attempts):
+    for attempt in range(attempts):
         try:
             result = await asyncio.wait_for(
                 Runner.run(agent, config.prompt),
@@ -116,6 +123,12 @@ async def run_agent_async(config: SkillPilotAgentConfig) -> str:
             return str(result.final_output or "")
         except Exception as exc:
             last_exc = exc
+            logger.warning(
+                "skill-pilot-agent attempt %d/%d failed: %s",
+                attempt + 1,
+                attempts,
+                exc,
+            )
     assert last_exc is not None
     raise last_exc
 
@@ -128,6 +141,7 @@ def config_from_env(
     *,
     prompt: str,
     agent_dir: Path,
+    agent_file: Path | None,
     skills_dir: Path,
     skills: str | None,
     model: str | None,
@@ -141,6 +155,7 @@ def config_from_env(
     return SkillPilotAgentConfig(
         prompt=prompt,
         agent_dir=agent_dir,
+        agent_file=agent_file,
         skills_dir=skills_dir,
         skills=skills,
         model=(model or os.environ.get("SKILL_PILOT_MODEL") or "").strip(),
