@@ -88,10 +88,12 @@ def run_bash_command(command: str, config: BashToolConfig) -> str:
     if config.sandbox_enabled and not config.network_allowed:
         prefix = _network_sandbox_prefix()
         if prefix is None:
-            raise RuntimeError(
-                "Network is disabled, but strict local OS-level network enforcement is not available"
+            logger.warning(
+                "Network is disabled, but strict local OS-level network enforcement is not available. "
+                "Falling back to application-level command blocking."
             )
-        argv = [*prefix, *argv]
+        else:
+            argv = [*prefix, *argv]
 
     proc = subprocess.run(
         argv,
