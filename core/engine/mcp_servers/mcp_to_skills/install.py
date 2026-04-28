@@ -147,6 +147,22 @@ def remove_disabled_symlinks(target_root: Path, disabled_skills: set[str]) -> li
     return removed
 
 
+def read_skill_description(skill_dir: Path) -> str:
+    skill_md = skill_dir / "SKILL.md"
+    if not skill_md.exists():
+        return ""
+    text = skill_md.read_text(encoding="utf-8", errors="replace")
+    if not text.startswith("---"):
+        return ""
+    end = text.find("---", 3)
+    if end == -1:
+        return ""
+    for line in text[3:end].splitlines():
+        if line.startswith("description:"):
+            return line[len("description:"):].strip()
+    return ""
+
+
 def main() -> int:
     args = parse_args()
     repo_root = Path(__file__).resolve().parents[4]
@@ -237,6 +253,24 @@ def main() -> int:
         print(f"Failed link for {len(failed_link)} skill(s):")
         for skill_name, detail in failed_link:
             print(f"  - {skill_name}: {detail}")
+
+    # Description stats for installed skills
+    desc_entries: list[tuple[str, str]] = []
+    for skill_name in installed:
+        skill_dir = seen.get(skill_name)
+        if skill_dir is None:
+            continue
+        desc = read_skill_description(skill_dir)
+        if desc:
+            desc_entries.append((skill_name, desc))
+
+    total_chars = sum(len(d) for _, d in desc_entries)
+    print(f"\nDescription stats: {len(desc_entries)} skill(s) with descriptions, {total_chars} total characters.")
+    top3 = sorted(desc_entries, key=lambda x: len(x[1]), reverse=True)[:3]
+    if top3:
+        print("Top 3 longest descriptions:")
+        for rank, (skill_name, desc) in enumerate(top3, 1):
+            print(f"  {rank}. {skill_name} ({len(desc)} chars)")
 
     if failed_verify or failed_link:
         return 1
