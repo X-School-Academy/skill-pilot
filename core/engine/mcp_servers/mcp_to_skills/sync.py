@@ -19,7 +19,6 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-import yaml
 from safe_dotenv import load_env_with_safeguard, safe_env
 
 logger = logging.getLogger(__name__)
@@ -43,6 +42,8 @@ class ServerConfig:
     system: bool
     workdir: str | None
     tool_timeout_ms: int | None
+    skill_name: str | None
+    skill_description: str | None
 
 
 @dataclass
@@ -406,6 +407,8 @@ def load_mcp_configs(path: Path) -> tuple[dict[str, ServerConfig], dict[str, set
             tool_timeout_ms = _coerce_timeout_ms(env_val.get("MCP_TOOL_TIMEOUT"))
         if tool_timeout_ms is None:
             tool_timeout_ms = _coerce_timeout_ms(expanded.get("toolTimeoutMs"))
+        raw_skill_name = expanded.get("skill_name")
+        raw_skill_desc = expanded.get("skill_description")
         server = ServerConfig(
             id=server_id,
             command=command,
@@ -420,6 +423,8 @@ def load_mcp_configs(path: Path) -> tuple[dict[str, ServerConfig], dict[str, set
             system=bool(expanded.get("system", False)),
             workdir=default_workdir,
             tool_timeout_ms=tool_timeout_ms,
+            skill_name=str(raw_skill_name).strip() if raw_skill_name else None,
+            skill_description=str(raw_skill_desc).strip() if raw_skill_desc else None,
         )
         servers[server_id] = server
         if missing:
@@ -483,14 +488,6 @@ def slugify(value: str) -> str:
     return value
 
 
-def skill_name(server_id: str, tool_name: str) -> str:
-    return slugify(f"{camel_to_kebab(server_id)}-{tool_name}")
-
-
-def skill_dir(base_dir: Path, server_id: str, tool_name: str) -> Path:
-    return base_dir / skill_name(server_id, tool_name)
-
-
 def normalize_description(value: str) -> str:
     text = textwrap.dedent(value).strip()
     if not text:
@@ -499,11 +496,6 @@ def normalize_description(value: str) -> str:
 
 
 def split_docstring(description: str) -> tuple[str, str]:
-    """Split a normalized docstring into (first_line, remaining_content).
-
-    For system MCP tools the first line becomes the skill description and
-    the remaining content is prepended to the skill body.
-    """
     lines = description.splitlines()
     if not lines:
         return "", ""
@@ -512,77 +504,26 @@ def split_docstring(description: str) -> tuple[str, str]:
     return first_line, remaining
 
 
-def build_short_description(full_description: str, max_chars: int = 220) -> str:
-    first_line = full_description.splitlines()[0].strip()
-    candidate = re.sub(r"\s+", " ", first_line).strip()
-    if not candidate:
-        candidate = re.sub(r"\s+", " ", full_description).strip()
-    if len(candidate) <= max_chars:
-        return candidate
-    return candidate[: max_chars - 1].rstrip() + "…"
+def get_server_skill_name(config: ServerConfig) -> str:
+    if config.skill_name:
+        return slugify(config.skill_name)
+    return slugify(camel_to_kebab(config.id))
 
 
-def load_description_overrides(path: Path) -> dict[str, str]:
-    if not path.exists():
-        return {}
-    try:
-        raw = yaml.safe_load(path.read_text()) or {}
-    except yaml.YAMLError as exc:
-        raise MCPError(f"Invalid YAML in description overrides file: {path}") from exc
-    if not isinstance(raw, dict):
-        raise MCPError(f"Description overrides file must be a mapping of skill-id to description: {path}")
-
-    overrides: dict[str, str] = {}
-    for key, value in raw.items():
-        if not isinstance(key, str) or not key.strip():
-            continue
-        if not isinstance(value, str):
-            continue
-        normalized = normalize_description(value)
-        if normalized:
-            overrides[key.strip().lower()] = normalized
-    return overrides
-
-
-def render_skill(tool: ToolDef, server_id: str, description_overrides: dict[str, str], is_system: bool = False) -> str:
-    sid = skill_name(server_id, tool.name)
-    fallback = f"Invoke MCP tool {tool.name} on server {server_id}."
-    normalized = normalize_description(tool.description or fallback) or fallback
-
-    if sid in description_overrides:
-        full_description = description_overrides[sid]
-        skill_description = build_short_description(full_description).replace('"', '\\"')
-        tool_extra = ""
-    elif is_system:
-        first_line, remaining = split_docstring(normalized)
-        skill_description = (first_line or normalized)[:1024].rstrip().replace('"', '\\"')
-        full_description = normalized
-        tool_extra = remaining
-    else:
-        full_description = normalized
-        skill_description = build_short_description(full_description).replace('"', '\\"')
-        tool_extra = ""
-
-    schema_json = json.dumps(tool.input_schema or {}, indent=2, ensure_ascii=True)
+def render_tool_reference(tool: ToolDef, server_id: str) -> str:
+    normalized = normalize_description(tool.description or f"Invoke MCP tool {tool.name} on server {server_id}.")
     request_json = json.dumps({"server_id": server_id, "tool_name": tool.name, "arguments": {}}, ensure_ascii=True)
+    schema_json = json.dumps(tool.input_schema or {}, indent=2, ensure_ascii=True)
+    return f"""# {tool.name}
 
-    extra_block = f"{tool_extra}\n\n" if tool_extra else ""
-    tool_description_section = "" if is_system and not (sid in description_overrides) else f"\n## Tool Description\n{full_description}\n"
+{normalized}
 
-    return f"""---
-name: {sid}
-description: "{skill_description}"
----
-
-{extra_block}## Usage
-Call the local MCP bridge shell wrapper:
-
+## Usage
 ```bash
 core/bin/tool-cli request '{request_json}'
 ```
 **Do not use any Python helper code to invoke the `core/bin/tool-cli` command. Run as shell command with arguments directly.**
 
-{tool_description_section}
 ## Arguments Schema
 ```json
 {schema_json}
@@ -590,31 +531,72 @@ core/bin/tool-cli request '{request_json}'
 """
 
 
-def write_skill_files(
-    output_dir: Path, tools_by_server: dict[str, list[ToolDef]], description_overrides: dict[str, str], is_system: bool = False
-) -> set[str]:
-    expected: set[str] = set()
-    for server_id in sorted(tools_by_server.keys()):
-        for tool in sorted(tools_by_server[server_id], key=lambda t: t.name):
-            path = skill_dir(output_dir, server_id, tool.name)
-            expected.add(path.name)
-            path.mkdir(parents=True, exist_ok=True)
-            (path / "SKILL.md").write_text(render_skill(tool, server_id, description_overrides, is_system=is_system))
-    return expected
+def render_server_skill(server_id: str, config: ServerConfig, tools: list[ToolDef]) -> str:
+    sname = get_server_skill_name(config)
+    fallback_desc = f"Invoke MCP tools on server {server_id}."
+    description = (config.skill_description or fallback_desc).strip()
+    desc_escaped = description[:1024].replace('"', '\\"')
+
+    tool_entries: list[str] = []
+    for tool in sorted(tools, key=lambda t: t.name):
+        normalized = normalize_description(tool.description or "")
+        first_line, _ = split_docstring(normalized)
+        short_desc = first_line or f"Invoke {tool.name} on server {server_id}."
+        tool_entries.append(f"- **{tool.name}** — {short_desc} ([details](references/{tool.name}.md))")
+
+    tools_section = "\n".join(tool_entries)
+    return f"""---
+name: {sname}
+description: "{desc_escaped}"
+---
+
+## Tools
+
+Select the tool that matches the task. Read its reference file only when you are ready to invoke it.
+
+{tools_section}
+"""
 
 
-def get_server_skill_dirs(output_dir: Path, server_id: str) -> list[Path]:
+def write_server_skill(output_dir: Path, server_id: str, config: ServerConfig, tools: list[ToolDef]) -> str:
+    """Write one skill directory for the server: SKILL.md + references/{tool}.md files.
+
+    Returns the skill directory name.
+    """
+    sname = get_server_skill_name(config)
+    skill_path = output_dir / sname
+    refs_path = skill_path / "references"
+    skill_path.mkdir(parents=True, exist_ok=True)
+    refs_path.mkdir(exist_ok=True)
+    (skill_path / "SKILL.md").write_text(render_server_skill(server_id, config, tools))
+    for tool in tools:
+        (refs_path / f"{tool.name}.md").write_text(render_tool_reference(tool, server_id))
+    expected_refs = {f"{tool.name}.md" for tool in tools}
+    for existing in list(refs_path.iterdir()):
+        if existing.name not in expected_refs:
+            existing.unlink()
+    for existing in list(skill_path.iterdir()):
+        if existing.name not in {"SKILL.md", "references"}:
+            existing.unlink() if existing.is_file() else shutil.rmtree(existing)
+    return sname
+
+
+def prune_old_tool_skills(output_dir: Path, server_id: str) -> None:
+    """Remove legacy per-tool skill directories matching {server_id}-* pattern."""
     if not output_dir.exists():
-        return []
+        return
     pattern = f"{slugify(camel_to_kebab(server_id))}-*"
-    return sorted(path for path in output_dir.glob(pattern) if path.is_dir())
+    for existing in sorted(output_dir.glob(pattern)):
+        if existing.is_dir():
+            shutil.rmtree(existing)
 
 
-def prune_server_skills(output_dir: Path, server_id: str, expected_skill_names: set[str]) -> None:
-    for existing in get_server_skill_dirs(output_dir, server_id):
-        if existing.name in expected_skill_names:
-            continue
-        shutil.rmtree(existing)
+def prune_server_skill(output_dir: Path, config: ServerConfig) -> None:
+    """Remove the server-level skill directory (used when a server is disabled or moved)."""
+    sname = get_server_skill_name(config)
+    skill_path = output_dir / sname
+    if skill_path.exists() and skill_path.is_dir():
+        shutil.rmtree(skill_path)
 
 
 def parse_args() -> argparse.Namespace:
@@ -639,11 +621,6 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Directory for generated system skill folders (default: <repo>/core/skills/system).",
     )
-    parser.add_argument(
-        "--descriptions",
-        default=None,
-        help="YAML file mapping skill-id to description override (default: <repo>/config/mcp_descriptions.yaml).",
-    )
     return parser.parse_args()
 
 
@@ -654,7 +631,6 @@ def sync_mcp_tools(
     config_path: Path | None = None,
     output_dir: Path | None = None,
     system_output_dir: Path | None = None,
-    descriptions_path: Path | None = None,
 ) -> dict[str, Any]:
     """
     In-process sync entrypoint.
@@ -663,19 +639,16 @@ def sync_mcp_tools(
     so it does not attempt to read any .env files or invoke sudo.
     """
     default_config = repo_root / "config" / "mcp.json5"
-    default_descriptions = repo_root / "config" / "mcp_descriptions.yaml"
     default_output = repo_root / "core" / "skills" / "mcp"
     default_system_output = repo_root / "core" / "skills" / "system"
 
     config_path = config_path or default_config
-    descriptions_path = descriptions_path or default_descriptions
     output_dir = output_dir or default_output
     system_output_dir = system_output_dir or default_system_output
 
     output_dir.mkdir(parents=True, exist_ok=True)
     system_output_dir.mkdir(parents=True, exist_ok=True)
 
-    description_overrides = load_description_overrides(descriptions_path)
     servers_by_id, missing_env = load_mcp_configs(config_path)
     requested = servers if servers else sorted(servers_by_id.keys())
 
@@ -693,7 +666,8 @@ def sync_mcp_tools(
         alternate_output_dirs = [path for path in all_output_dirs if path != target_output_dir]
         if not is_server_enabled(config):
             for path in all_output_dirs:
-                prune_server_skills(path, server_id, set())
+                prune_old_tool_skills(path, server_id)
+                prune_server_skill(path, config)
             skipped_servers.append(f"{server_id} (disabled)")
             continue
 
@@ -706,10 +680,11 @@ def sync_mcp_tools(
         try:
             client = create_client(config)
             tools = client.list_tools()
-            expected = write_skill_files(target_output_dir, {server_id: tools}, description_overrides, is_system=config.system)
-            prune_server_skills(target_output_dir, server_id, expected)
+            write_server_skill(target_output_dir, server_id, config, tools)
+            prune_old_tool_skills(target_output_dir, server_id)
             for path in alternate_output_dirs:
-                prune_server_skills(path, server_id, set())
+                prune_old_tool_skills(path, server_id)
+                prune_server_skill(path, config)
             total_tools += len(tools)
             synced_servers.append(f"{server_id} ({len(tools)} tools)")
         except Exception as exc:
@@ -735,12 +710,10 @@ def main() -> int:
     # CLI entrypoint: load config/.env once so later config expansion only uses os.environ.
     load_env_with_safeguard(repo_root / "config" / ".env", override=False)
     default_config = repo_root / "config" / "mcp.json5"
-    default_descriptions = repo_root / "config" / "mcp_descriptions.yaml"
     default_output = repo_root / "core" / "skills" / "mcp"
     default_system_output = repo_root / "core" / "skills" / "system"
 
     config_path = Path(args.config).expanduser().resolve() if args.config else default_config
-    descriptions_path = Path(args.descriptions).expanduser().resolve() if args.descriptions else default_descriptions
     output_dir = Path(args.output).expanduser().resolve() if args.output else default_output
     system_output_dir = (
         Path(args.system_output).expanduser().resolve() if args.system_output else default_system_output
@@ -748,7 +721,6 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     system_output_dir.mkdir(parents=True, exist_ok=True)
 
-    description_overrides = load_description_overrides(descriptions_path)
     servers_by_id, missing_env = load_mcp_configs(config_path)
     requested = args.servers if args.servers else sorted(servers_by_id.keys())
 
@@ -767,7 +739,8 @@ def main() -> int:
         alternate_output_dirs = [path for path in all_output_dirs if path != target_output_dir]
         if not is_server_enabled(config):
             for path in all_output_dirs:
-                prune_server_skills(path, server_id, set())
+                prune_old_tool_skills(path, server_id)
+                prune_server_skill(path, config)
             skipped_servers.append(f"{server_id} (disabled)")
             continue
 
@@ -780,10 +753,11 @@ def main() -> int:
         try:
             client = create_client(config)
             tools = client.list_tools()
-            expected = write_skill_files(target_output_dir, {server_id: tools}, description_overrides, is_system=config.system)
-            prune_server_skills(target_output_dir, server_id, expected)
+            write_server_skill(target_output_dir, server_id, config, tools)
+            prune_old_tool_skills(target_output_dir, server_id)
             for path in alternate_output_dirs:
-                prune_server_skills(path, server_id, set())
+                prune_old_tool_skills(path, server_id)
+                prune_server_skill(path, config)
             total_tools += len(tools)
             synced_servers.append(f"{server_id} ({len(tools)} tools)")
         except Exception as exc:
