@@ -96,6 +96,22 @@ def get_provider(provider_id: Optional[str]) -> Dict[str, Any]:
     return providers[0]
 
 
+def get_background_provider(provider_id: Optional[str]) -> Dict[str, Any]:
+    providers = load_llm_providers()
+    if not providers:
+        raise HTTPException(status_code=500, detail="No LLM providers configured")
+    if provider_id:
+        return get_provider(provider_id)
+    
+    bg_id = _default_id("background_llm", providers)
+    if bg_id:
+        for provider in providers:
+            if provider.get("id") == bg_id:
+                return provider
+                
+    return get_provider(None)
+
+
 def get_tts_provider(provider_id: Optional[str]) -> Dict[str, Any]:
     providers = load_tts_providers()
     if not providers:
@@ -595,7 +611,7 @@ def llm_get_text(
     sandbox_mode: Optional[bool] = None,
 ) -> str:
     _ = client_id
-    provider = get_provider(provider_id)
+    provider = get_background_provider(provider_id)
     prompt = _messages_to_prompt(messages)
     cmd = build_llm_command(
         provider,
@@ -670,7 +686,7 @@ def llm_stream(
     network_allow: Optional[bool] = None,
     sandbox_mode: Optional[bool] = None,
 ) -> Iterable[bytes]:
-    provider = get_provider(provider_id)
+    provider = get_background_provider(provider_id)
     cmd = build_llm_command(
         provider,
         prompt,
