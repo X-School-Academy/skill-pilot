@@ -77,6 +77,7 @@ interface ExternalTmuxSession {
 interface McpServer {
   name: string;
   type: string;
+  description?: string;
   system?: boolean;
   disabled?: boolean;
   command?: string;
@@ -88,6 +89,7 @@ interface McpServer {
 
 interface McpFormData {
   name: string;
+  description: string;
   type: string;
   command: string;
   args: string;
@@ -147,7 +149,7 @@ interface ExtensionItem {
 }
 
 const EMPTY_MCP_FORM: McpFormData = {
-  name: '', type: 'stdio', command: '', args: '', env: [['', '']],
+  name: '', description: '', type: 'stdio', command: '', args: '', env: [['', '']],
   url: '', headers: [['', '']], disabled: false,
 };
 
@@ -2497,6 +2499,7 @@ export default function HomePage() {
     if (headerPairs.length === 0) headerPairs.push(['', '']);
     setMcpForm({
       name: server.name,
+      description: server.description || '',
       type: server.type,
       command: server.command || '',
       args: (server.args || []).join('\n'),
@@ -2516,11 +2519,21 @@ export default function HomePage() {
   };
 
   const mcpSave = async () => {
-    setMcpSaving(true);
     setMcpError('');
+    const isNew = mcpEditing === '__new__';
+    const trimmedName = mcpForm.name.trim();
+    if (isNew) {
+      const allSkillNames = new Set(skillCategories.flatMap((c) => c.skills.map((s) => s.name)));
+      if (allSkillNames.has(trimmedName)) {
+        setMcpError(`The name "${trimmedName}" is already used by an existing agent skill. Each MCP server name must be unique across all agent skills.`);
+        return;
+      }
+    }
+    setMcpSaving(true);
     try {
       const body: any = {
-        name: mcpForm.name.trim(),
+        name: trimmedName,
+        description: mcpForm.description.trim(),
         type: mcpForm.type,
         disabled: mcpForm.disabled,
       };
@@ -2545,7 +2558,7 @@ export default function HomePage() {
       setMcpEditing(null);
       await fetchMcpServers();
     } catch (err: any) {
-      setMcpError(err?.response?.data?.error || 'Failed to save MCP server');
+      setMcpError((err as any)?.response?.data?.error || 'Failed to save MCP server');
     } finally {
       setMcpSaving(false);
     }
@@ -2699,6 +2712,22 @@ export default function HomePage() {
           </div>
 
           <div style={{ marginBottom: 12 }}>
+            <Text size="sm" weight={600} mb={4}>Description</Text>
+            <textarea
+              value={mcpForm.description}
+              onChange={(e) => setMcpForm((prev) => ({ ...prev, description: e.target.value }))}
+              placeholder="Describe what this MCP server provides to the agent..."
+              rows={2}
+              style={{
+                width: '100%', padding: '6px 8px', fontSize: 13, borderRadius: 6,
+                border: `1px solid ${theme.colors.gray[3]}`,
+                background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff',
+                color: 'inherit', resize: 'vertical', fontFamily: 'inherit',
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
             <Text size="sm" weight={600} mb={4}>Type</Text>
             <select
               value={mcpForm.type}
@@ -2780,6 +2809,11 @@ export default function HomePage() {
               Disabled
             </label>
           </div>
+
+          <Text size="xs" color="dimmed" mb={10}>
+            The server <strong>Name</strong> is used as the agent skill name and the <strong>Description</strong> as the agent skill description.
+            The name must be unique across all agent skills.
+          </Text>
 
           <button
             type="button"
@@ -2866,7 +2900,10 @@ export default function HomePage() {
                   </span>
                 )}
               </div>
-              <Text size="xs" color="dimmed">
+              {server.description && (
+                <Text size="xs" color="dimmed" mt={2}>{server.description}</Text>
+              )}
+              <Text size="xs" color="dimmed" mt={2}>
                 {server.type === 'stdio'
                   ? `${server.command || ''} ${(server.args || []).join(' ')}`.trim()
                   : server.url || ''}

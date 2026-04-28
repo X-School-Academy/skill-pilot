@@ -42,8 +42,7 @@ class ServerConfig:
     system: bool
     workdir: str | None
     tool_timeout_ms: int | None
-    skill_name: str | None
-    skill_description: str | None
+    description: str | None
 
 
 @dataclass
@@ -407,8 +406,7 @@ def load_mcp_configs(path: Path) -> tuple[dict[str, ServerConfig], dict[str, set
             tool_timeout_ms = _coerce_timeout_ms(env_val.get("MCP_TOOL_TIMEOUT"))
         if tool_timeout_ms is None:
             tool_timeout_ms = _coerce_timeout_ms(expanded.get("toolTimeoutMs"))
-        raw_skill_name = expanded.get("skill_name")
-        raw_skill_desc = expanded.get("skill_description")
+        raw_desc = expanded.get("description")
         server = ServerConfig(
             id=server_id,
             command=command,
@@ -423,8 +421,7 @@ def load_mcp_configs(path: Path) -> tuple[dict[str, ServerConfig], dict[str, set
             system=bool(expanded.get("system", False)),
             workdir=default_workdir,
             tool_timeout_ms=tool_timeout_ms,
-            skill_name=str(raw_skill_name).strip() if raw_skill_name else None,
-            skill_description=str(raw_skill_desc).strip() if raw_skill_desc else None,
+            description=str(raw_desc).strip() if raw_desc else None,
         )
         servers[server_id] = server
         if missing:
@@ -505,8 +502,6 @@ def split_docstring(description: str) -> tuple[str, str]:
 
 
 def get_server_skill_name(config: ServerConfig) -> str:
-    if config.skill_name:
-        return slugify(config.skill_name)
     return slugify(camel_to_kebab(config.id))
 
 
@@ -534,7 +529,7 @@ core/bin/tool-cli request '{request_json}'
 def render_server_skill(server_id: str, config: ServerConfig, tools: list[ToolDef]) -> str:
     sname = get_server_skill_name(config)
     fallback_desc = f"Invoke MCP tools on server {server_id}."
-    description = (config.skill_description or fallback_desc).strip()
+    description = (config.description or fallback_desc).strip()
     desc_escaped = description[:1024].replace('"', '\\"')
 
     tool_entries: list[str] = []

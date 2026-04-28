@@ -206,6 +206,8 @@ def config_mcp_servers_list():
             is_disabled = _parse_bool_value(disabled_raw)
         if is_disabled:
             entry["disabled"] = True
+        if cfg.get("description"):
+            entry["description"] = str(cfg["description"])
         for field in ("command", "args", "env", "url", "headers"):
             if field in expanded:
                 entry[field] = expanded[field]
@@ -239,6 +241,9 @@ async def config_mcp_servers_save(request: Request):
         return JSONResponse(status_code=403, content={"error": f"Cannot modify system server: {name}"})
 
     entry: Dict[str, Any] = {}
+    description = (str(body.get("description") or "")).strip()
+    if description:
+        entry["description"] = description
     if server_type == "stdio":
         command = (str(body.get("command") or "")).strip()
         if not command:
