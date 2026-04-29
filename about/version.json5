@@ -8,7 +8,7 @@
     // `build` is the applied build number within that version. One version
     // can have multiple builds; builds are listed as sections inside the
     // version's changelog file, newest build on top.
-    version: '1_00_01',
-    workspace_version: '1_00_02',
-    build: 26042402,
+    version: '1_00_02',
+    workspace_version: '1_00_03',
+    build: 26042901,
 }
