@@ -1,0 +1,1 @@
+ref to https://github.com/X-School-Academy/extension-seo-geo-claude-skills

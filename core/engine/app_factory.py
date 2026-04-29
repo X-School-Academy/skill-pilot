@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 import re
 import secrets
@@ -59,6 +60,7 @@ def create_app():
         authorized_by_cookie = bool(expected and cookie_token and secrets.compare_digest(cookie_token, expected))
         authorized_by_param = _matches_auth_token_request(request, expected)
         if not authorized_by_cookie and not authorized_by_param:
+            await asyncio.sleep(3)
             return JSONResponse(status_code=401, content={"error": "unauth"})
 
         return await call_next(request)

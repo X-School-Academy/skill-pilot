@@ -210,6 +210,7 @@ async def auth_session(request: Request):
     if not provided:
         return JSONResponse(status_code=400, content={"error": "auth_token is required"})
     if not expected or not secrets.compare_digest(provided, expected):
+        await asyncio.sleep(3)
         return JSONResponse(status_code=401, content={"error": "invalid auth token"})
 
     response = JSONResponse(content={"status": "ok", "message": "Authenticated"})
