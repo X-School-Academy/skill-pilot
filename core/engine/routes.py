@@ -202,6 +202,7 @@ def terminal_tmux_kill(payload: Dict[str, Any]):
                 thread = _WORKFLOW_EXECUTE_STATE.get("thread")
             _WORKFLOW_EXECUTE_STOP.set()
             _WORKFLOW_EXECUTE_CONTINUE.set()
+            _save_tmux_pane_history_before_kill(session_name)
             removed = _kill_tmux_session_any(session_name)
             if thread and thread.is_alive():
                 thread.join(timeout=5.0)
@@ -215,6 +216,7 @@ def terminal_tmux_kill(payload: Dict[str, Any]):
     if _is_protected_tmux_session(session_name):
         return JSONResponse(status_code=403, content={"error": f"tmux session '{session_name}' is protected"})
     try:
+        _save_tmux_pane_history_before_kill(session_name)
         if session_name.startswith(TMUX_SESSION_PREFIX):
             removed = _kill_tmux_session(session_name)
         else:
@@ -234,6 +236,39 @@ def terminal_tmux_history(session: str):
     except RuntimeError as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})
     return history
+
+
+@router.get("/api/terminal/tmux/saved-histories")
+def terminal_tmux_saved_histories():
+    try:
+        histories = _list_saved_terminal_histories()
+    except RuntimeError as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc), "histories": []})
+    return {"histories": histories}
+
+
+@router.get("/api/terminal/tmux/saved-history")
+def terminal_tmux_saved_history(id: str):
+    try:
+        history = _read_saved_terminal_history(id)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+    except OSError as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc)})
+    return history
+
+
+@router.delete("/api/terminal/tmux/saved-history")
+def terminal_tmux_delete_saved_history(id: str):
+    try:
+        removed = _delete_saved_terminal_history(id)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except OSError as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc)})
+    return {"status": "ok", "removed": removed, "id": id}
 
 
 @router.post("/api/terminal/tmux/cleanup")

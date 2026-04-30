@@ -45,6 +45,7 @@ import {
   IconVideo,
   IconCamera,
   IconFolderOpen,
+  IconHistory,
 } from '@tabler/icons-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -807,7 +808,9 @@ export default function HomePage() {
     },
     {
       label: 'New Session',
-      href: '/',
+      dividerBefore: '',
+      href: '/?view=home',
+      view: 'home',
       icon: <IconPlus size="1rem" />,
       action: () => {
         if (activeView === 'live-terminal') {
@@ -815,10 +818,12 @@ export default function HomePage() {
         } else if (activeView !== 'home') {
           setActiveView('home');
         }
+        void router.push('/?view=home');
       },
       disabled: activeView === 'home',
     },
-    { dividerBefore: '', label: 'Live Sessions', href: '/terminals', icon: <IconTerminal2 size="1rem" />, action: () => { void router.push('/terminals'); } },
+    { label: 'Live Sessions', href: '/terminals', icon: <IconTerminal2 size="1rem" />, action: () => { void router.push('/terminals'); } },
+    { label: 'Session Histories', href: '/terminal-histories', icon: <IconHistory size="1rem" />, action: () => { void router.push('/terminal-histories'); } },
     { dividerBefore: 'Workspace', label: 'Learning', href: '/courses', icon: <IconSchool size="1rem" />, action: () => router.push('/courses') },
     { label: 'Vibe Coding', href: '/vibe-coding', icon: <IconBriefcase size="1rem" />, action: () => router.push('/vibe-coding') },
     { label: 'Research', href: '/research', icon: <IconSearch size="1rem" />, action: () => router.push('/research') },

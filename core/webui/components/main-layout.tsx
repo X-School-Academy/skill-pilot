@@ -10,6 +10,7 @@ import {
   IconChecklist, IconCode, IconHammer, IconRocket, IconProgress, IconWand,
   IconServer, IconCalendar, IconPuzzle, IconUser, IconShieldLock,
   IconBrandDiscord, IconVectorBezier2, IconVideo, IconCamera, IconFolderOpen,
+  IconHistory,
 } from '@tabler/icons-react';
 import axios from 'axios';
 import { apiUrl } from '../libs/api-base';
@@ -27,8 +28,9 @@ interface NavItemDef {
 
 const NAV_ITEMS: NavItemDef[] = [
   { label: 'Explore',          href: '/?view=explore',                              view: 'explore',      icon: <IconSparkles size="1rem" /> },
-  { dividerBefore: '', label: 'New Session', href: '/',                             icon: <IconPlus size="1rem" /> },
+  { dividerBefore: '', label: 'New Session', href: '/?view=home',                   view: 'home',         icon: <IconPlus size="1rem" /> },
   { label: 'Live Sessions',    href: '/terminals',                                  icon: <IconTerminal2 size="1rem" /> },
+  { label: 'Session Histories', href: '/terminal-histories',                        icon: <IconHistory size="1rem" /> },
   { dividerBefore: 'Workspace', label: 'Learning', href: '/courses',                icon: <IconSchool size="1rem" /> },
   { label: 'Vibe Coding',      href: '/vibe-coding',                               icon: <IconBriefcase size="1rem" /> },
   { label: 'Research',         href: '/research',                                  icon: <IconSearch size="1rem" /> },
@@ -81,6 +83,7 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
 
   const isActive = (item: NavItemDef): boolean => {
     if (item.view) return currentView === item.view;
+    if (item.href === '/terminal-histories' && pathname === '/terminal-history') return true;
     if (item.href.includes('?')) return false;
     return pathname === item.href;
   };

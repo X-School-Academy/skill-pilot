@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import Head from "next/head";
 
+import TerminalHistoryViewer from "../../components/TerminalHistoryViewer";
 import { getApiBase } from "../../libs/api-base";
 
 type HistoryResponse = {
@@ -71,33 +71,14 @@ const TerminalHistoryPage = () => {
   }, [historyCommand, sessionName]);
 
   return (
-    <>
-      <Head>
-        <title>Terminal History</title>
-      </Head>
-      <main className="h-screen bg-[#0b0f19] text-[#d7e2ff] flex flex-col overflow-hidden">
-        <div className="h-[42px] border-b border-[#2f3645] px-4 flex items-center bg-[#121826] flex-shrink-0">
-          <div className="text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis">
-            {topBarText}
-          </div>
-        </div>
-        <div className="flex-1 min-h-0 overflow-auto bg-[#0b0f19]">
-          {loading ? (
-            <div className="h-full flex items-center justify-center text-sm text-[#9fb0d9]">
-              Loading tmux history...
-            </div>
-          ) : error ? (
-            <div className="h-full flex items-center justify-center p-6 text-sm text-[#ff9ca8]">
-              {error}
-            </div>
-          ) : (
-            <pre className="min-h-full w-full p-4 m-0 whitespace-pre-wrap break-words font-mono text-[13px] leading-5 text-[#d7e2ff] select-text">
-              {historyContent || "\n"}
-            </pre>
-          )}
-        </div>
-      </main>
-    </>
+    <TerminalHistoryViewer
+      pageTitle="Terminal History"
+      topBarText={topBarText}
+      loading={loading}
+      loadingText="Loading tmux history..."
+      error={error}
+      content={historyContent}
+    />
   );
 };
 

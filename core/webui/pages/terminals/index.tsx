@@ -37,6 +37,7 @@ import {
   IconUser,
   IconVectorBezier2,
   IconFolderOpen,
+  IconHistory,
 } from '@tabler/icons-react';
 import { apiUrl } from '../../libs/api-base';
 import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
@@ -172,7 +173,7 @@ export default function TerminalsPage() {
 
   const navItems: NavItem[] = [
     { label: 'Explore', icon: <IconSparkles size="1rem" />, action: () => { void router.push('/?view=explore'); } },
-    { dividerBefore: '', label: 'New Session', icon: <IconPlus size="1rem" />, action: () => { void router.push('/'); } },
+    { dividerBefore: '', label: 'New Session', icon: <IconPlus size="1rem" />, action: () => { void router.push('/?view=home'); } },
     {
       label: 'Live Sessions',
       icon: <IconTerminal2 size="1rem" />,
@@ -183,6 +184,7 @@ export default function TerminalsPage() {
         }
       },
     },
+    { label: 'Session Histories', icon: <IconHistory size="1rem" />, action: () => { void router.push('/terminal-histories'); } },
     { dividerBefore: 'Workspace', label: 'Learning', icon: <IconSchool size="1rem" />, action: () => { void router.push('/courses'); } },
     { label: 'Vibe Coding', icon: <IconBriefcase size="1rem" />, action: () => { void router.push('/vibe-coding'); } },
     { label: 'Research', icon: <IconSearch size="1rem" />, action: () => { void router.push('/research'); } },
