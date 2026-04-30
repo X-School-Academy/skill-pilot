@@ -202,8 +202,7 @@ def terminal_tmux_kill(payload: Dict[str, Any]):
                 thread = _WORKFLOW_EXECUTE_STATE.get("thread")
             _WORKFLOW_EXECUTE_STOP.set()
             _WORKFLOW_EXECUTE_CONTINUE.set()
-            _save_tmux_pane_history_before_kill(session_name)
-            removed = _kill_tmux_session_any(session_name)
+            removed = _kill_tmux_session_with_history(session_name)
             if thread and thread.is_alive():
                 thread.join(timeout=5.0)
             if removed:
@@ -216,11 +215,7 @@ def terminal_tmux_kill(payload: Dict[str, Any]):
     if _is_protected_tmux_session(session_name):
         return JSONResponse(status_code=403, content={"error": f"tmux session '{session_name}' is protected"})
     try:
-        _save_tmux_pane_history_before_kill(session_name)
-        if session_name.startswith(TMUX_SESSION_PREFIX):
-            removed = _kill_tmux_session(session_name)
-        else:
-            removed = _kill_tmux_session_any(session_name)
+        removed = _kill_tmux_session_with_history(session_name)
     except RuntimeError as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})
     return {"status": "ok", "removed": removed, "session": session_name}

@@ -145,6 +145,7 @@ _AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
 _WORKFLOW_EXECUTE_LOCK = threading.Lock()
 _WORKFLOW_EXECUTE_STOP = threading.Event()
 _WORKFLOW_EXECUTE_CONTINUE = threading.Event()
+_TERMINAL_HISTORY_KILL_LOCK = threading.Lock()
 _WORKFLOW_EXECUTE_STATE: Dict[str, Any] = {
     "thread": None,
     "token": "",
@@ -884,7 +885,7 @@ def _is_protected_tmux_session(session_name: str) -> bool:
 def _tmux_pane_target_any(session_name: str) -> str:
     safe_name = _validate_tmux_session_name_any(session_name)
     proc = _run_tmux_command(
-        ["display-message", "-p", "-t", safe_name, "#{session_name}:#{window_index}.#{pane_index}"],
+        ["list-panes", "-t", safe_name, "-F", "#{session_name}:#{window_index}.#{pane_index}"],
         check=False,
     )
     if proc.returncode != 0:
@@ -892,7 +893,7 @@ def _tmux_pane_target_any(session_name: str) -> str:
         if "can't find session" in message:
             raise RuntimeError(f"tmux session not found: {safe_name}")
         raise RuntimeError((proc.stderr or proc.stdout or "").strip() or "unable to resolve tmux pane target")
-    pane_target = (proc.stdout or "").strip()
+    pane_target = next((line.strip() for line in (proc.stdout or "").splitlines() if line.strip()), "")
     if not pane_target:
         raise RuntimeError("unable to resolve tmux pane target")
     return pane_target
@@ -978,6 +979,13 @@ def _save_tmux_pane_history_before_kill(session_name: str) -> Dict[str, Any] | N
     except Exception as exc:
         logger.warning("failed to save tmux history before killing %s: %s", safe_name, exc)
         return None
+
+
+def _kill_tmux_session_with_history(session_name: str) -> bool:
+    safe_name = _validate_tmux_session_name_any(session_name)
+    with _TERMINAL_HISTORY_KILL_LOCK:
+        _save_tmux_pane_history_before_kill(safe_name)
+        return _kill_tmux_session_any(safe_name)
 
 
 def _saved_terminal_history_entry(path: Path) -> Dict[str, Any] | None:
@@ -1423,17 +1431,17 @@ def _validate_writable_session_name(session_name: str) -> str:
 
 
 def _cleanup_webui_tmux_session(session_name: str) -> bool:
-    safe_name = _validate_tmux_session_name(session_name)
-    _save_tmux_pane_history_before_kill(safe_name)
-    return _kill_tmux_session(safe_name)
+    safe_name = _validate_tmux_session_name_any(session_name)
+    if not safe_name.startswith(TMUX_SESSION_PREFIX):
+        raise ValueError(f"tmux session must start with '{TMUX_SESSION_PREFIX}'")
+    return _kill_tmux_session_with_history(safe_name)
 
 
 def _cleanup_webui_tmux_sessions() -> int:
     removed_count = 0
     for session in _list_webui_tmux_sessions():
         try:
-            _save_tmux_pane_history_before_kill(session["name"])
-            if _kill_tmux_session(session["name"]):
+            if _kill_tmux_session_with_history(session["name"]):
                 removed_count += 1
         except RuntimeError as exc:
             logger.warning("failed to remove tmux session %s: %s", session["name"], exc)
@@ -1448,15 +1456,13 @@ def _cleanup_stale_native_tmux_sessions() -> int:
         name = str(session.get("name") or "")
         if not name:
             continue
-        _save_tmux_pane_history_before_kill(name)
-        proc = _run_tmux_command(["kill-session", "-t", name], check=False)
-        if proc.returncode == 0:
+        try:
+            removed = _kill_tmux_session_with_history(name)
+        except RuntimeError as exc:
+            logger.warning("failed to remove stale native tmux session %s: %s", name, exc)
+            continue
+        if removed:
             removed_count += 1
-            continue
-        message = (proc.stderr or proc.stdout or "").lower()
-        if "can't find session" in message:
-            continue
-        logger.warning("failed to remove stale native tmux session %s: %s", name, (proc.stderr or proc.stdout or "").strip())
     return removed_count
 
 

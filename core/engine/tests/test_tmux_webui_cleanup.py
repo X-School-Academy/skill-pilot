@@ -26,7 +26,7 @@ def test_cleanup_webui_tmux_session_saves_history_before_kill(monkeypatch, tmp_p
     monkeypatch.setattr(routes_shared, "_capture_tmux_pane_history_any", fake_capture)
     monkeypatch.setattr(
         routes_shared,
-        "_kill_tmux_session",
+        "_kill_tmux_session_any",
         lambda session_name: killed.append(session_name) or True,
     )
 
@@ -38,6 +38,69 @@ def test_cleanup_webui_tmux_session_saves_history_before_kill(monkeypatch, tmp_p
     saved_files = list(histories_dir.glob("*.md"))
     assert len(saved_files) == 1
     assert saved_files[0].read_text(encoding="utf-8") == "line one\nline two\n"
+
+
+def test_web_shell_tmux_session_cleanup_saves_history(monkeypatch, tmp_path):
+    histories_dir = tmp_path / "terminal-histories"
+    killed: list[str] = []
+
+    monkeypatch.setattr(routes_shared, "_terminal_histories_dir", lambda: histories_dir)
+    monkeypatch.setattr(
+        routes_shared,
+        "_capture_tmux_pane_history_any",
+        lambda session_name: {
+            "session": session_name,
+            "pane_target": f"{session_name}:0.0",
+            "command": "tmux capture-pane",
+            "content": "web shell output\n",
+        },
+    )
+    monkeypatch.setattr(
+        routes_shared,
+        "_kill_tmux_session_any",
+        lambda session_name: killed.append(session_name) or True,
+    )
+
+    removed = routes_shared._cleanup_webui_tmux_session("webui-live-sh-02007cd1")
+
+    assert removed is True
+    assert killed == ["webui-live-sh-02007cd1"]
+    saved_files = list(histories_dir.glob("*.md"))
+    assert len(saved_files) == 1
+    assert saved_files[0].read_text(encoding="utf-8") == "web shell output\n"
+
+
+def test_kill_tmux_session_with_history_does_not_save_twice_after_removed(monkeypatch, tmp_path):
+    histories_dir = tmp_path / "terminal-histories"
+    alive = {"webui-live-sh-02007cd1"}
+    captured: list[str] = []
+
+    def fake_capture(session_name: str):
+        if session_name not in alive:
+            raise RuntimeError(f"tmux session not found: {session_name}")
+        captured.append(session_name)
+        return {
+            "session": session_name,
+            "pane_target": f"{session_name}:0.0",
+            "command": "tmux capture-pane",
+            "content": "single snapshot\n",
+        }
+
+    def fake_kill(session_name: str):
+        if session_name not in alive:
+            return False
+        alive.remove(session_name)
+        return True
+
+    monkeypatch.setattr(routes_shared, "_terminal_histories_dir", lambda: histories_dir)
+    monkeypatch.setattr(routes_shared, "_capture_tmux_pane_history_any", fake_capture)
+    monkeypatch.setattr(routes_shared, "_kill_tmux_session_any", fake_kill)
+
+    assert routes_shared._kill_tmux_session_with_history("webui-live-sh-02007cd1") is True
+    assert routes_shared._kill_tmux_session_with_history("webui-live-sh-02007cd1") is False
+
+    assert captured == ["webui-live-sh-02007cd1"]
+    assert len(list(histories_dir.glob("*.md"))) == 1
 
 
 def test_cleanup_webui_tmux_session_requires_webui_live_session(monkeypatch):
