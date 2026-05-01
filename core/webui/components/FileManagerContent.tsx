@@ -523,6 +523,7 @@ export default function FileManagerContent() {
         body: JSON.stringify({
           session_type: 'shell',
           path: targetPath,
+          path_mode: 'file_manager',
           session_name: buildFileManagerTerminalSessionName(),
         }),
       });

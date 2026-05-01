@@ -120,9 +120,10 @@ def terminal_tmux_create(payload: Dict[str, Any]):
     auto = payload.get("auto")
     network = payload.get("network")
     requested_start_path = payload.get("path")
+    requested_path_mode = (str(payload.get("path_mode") or "").strip().lower() or None)
 
     try:
-        start_dir = _resolve_terminal_start_dir(requested_start_path)
+        start_dir = _resolve_terminal_start_dir(requested_start_path, path_mode=requested_path_mode)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
 

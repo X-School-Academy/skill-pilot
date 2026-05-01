@@ -484,12 +484,44 @@ def _resolve_system_shell() -> str:
     return "/bin/sh"
 
 
-def _resolve_terminal_start_dir(raw_path: Any) -> Path:
+def _resolve_terminal_start_dir(raw_path: Any, path_mode: str | None = None) -> Path:
     value = str(raw_path or "").strip()
     if not value:
         return _REPO_ROOT
     if value == "/":
         return _REPO_ROOT
+
+    try:
+        from routes_file_manager import _file_manager_roots_by_id as _terminal_file_roots_by_id
+        from routes_file_manager import _safe_files_path as _safe_terminal_files_path
+    except Exception:
+        _terminal_file_roots_by_id = None
+        _safe_terminal_files_path = None
+
+    if path_mode == "file_manager":
+        if _safe_terminal_files_path is None:
+            raise ValueError("file manager paths are not available")
+        candidate = _safe_terminal_files_path(value)
+        if not candidate.exists():
+            raise ValueError(f"terminal path does not exist: {candidate}")
+        if not candidate.is_dir():
+            raise ValueError(f"terminal path is not a directory: {candidate}")
+        return candidate
+
+    if _terminal_file_roots_by_id is not None and _safe_terminal_files_path is not None:
+        normalized = f"/{value.lstrip('/')}".rstrip("/") or "/"
+        file_roots = _terminal_file_roots_by_id()
+        # Multi-root file-manager ids are virtual paths like "/$project" or
+        # "/$worktree/name". They look absolute, but should resolve through the
+        # file-manager mapper before normal absolute filesystem handling.
+        for root_id in sorted((root_id for root_id in file_roots if root_id != "/"), key=len, reverse=True):
+            if normalized == root_id or normalized.startswith(f"{root_id}/"):
+                candidate = _safe_terminal_files_path(normalized)
+                if not candidate.exists():
+                    raise ValueError(f"terminal path does not exist: {candidate}")
+                if not candidate.is_dir():
+                    raise ValueError(f"terminal path is not a directory: {candidate}")
+                return candidate
 
     # Session root selectors send absolute filesystem paths. Resolve those
     # directly instead of feeding them through the file-manager virtual-path
@@ -515,10 +547,8 @@ def _resolve_terminal_start_dir(raw_path: Any) -> Path:
         return candidate
 
     try:
-        from routes_file_manager import _safe_files_path as _safe_terminal_files_path
         from routes_file_manager import _file_manager_root_for_absolute_path as _terminal_root_for_absolute_path
     except Exception:
-        _safe_terminal_files_path = None
         _terminal_root_for_absolute_path = None
 
     if _safe_terminal_files_path is not None:

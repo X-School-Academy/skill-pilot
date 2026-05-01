@@ -5,6 +5,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import routes
+import routes_file_manager
 import routes_shared
 import session_agent_store
 from file_realtime import FileRealtimeHub, path_within_scope
@@ -101,6 +102,42 @@ def test_workflow_execute_thread_uses_shared_terminal_base_dir(monkeypatch, tmp_
 
     assert helper is routes_shared._terminal_workflow_base_dir
     assert helper() == tmp_path / ".skillpilot" / "temp" / "terminal-workflow"
+
+
+def test_terminal_start_dir_resolves_file_manager_virtual_root(monkeypatch, tmp_path: Path):
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+
+    monkeypatch.setattr(routes_shared, "_REPO_ROOT", project_root)
+    monkeypatch.setattr(
+        routes_file_manager,
+        "_discover_file_manager_roots",
+        lambda: [
+            {
+                "id": "/workspace",
+                "label": "workspace",
+                "path": workspace_dir,
+                "kind": "project",
+            }
+        ],
+    )
+
+    resolved = routes_shared._resolve_terminal_start_dir("/workspace")
+
+    assert resolved == workspace_dir
+
+
+def test_terminal_start_dir_file_manager_mode_resolves_project_relative_absolute_path(monkeypatch, tmp_path: Path):
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+
+    _set_repo_root(monkeypatch, tmp_path)
+
+    resolved = routes_shared._resolve_terminal_start_dir("/workspace", path_mode="file_manager")
+
+    assert resolved == workspace_dir
 
 
 def test_active_session_provider_prefers_session_meta(monkeypatch):
