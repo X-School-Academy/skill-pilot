@@ -25,7 +25,8 @@ import {
 import { EditorView, lineNumbers, keymap, ViewUpdate } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
 import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
 import { json } from '@codemirror/lang-json';
@@ -203,6 +204,22 @@ const editorTheme = EditorView.theme({
   '.cm-searchMatch': { background: '#7c3aed55', outline: '1px solid #8b5cf6' },
   '.cm-searchMatch.cm-searchMatch-selected': { background: '#a855f7aa' },
 });
+
+const editorHighlightStyle = HighlightStyle.define([
+  { tag: [tags.keyword, tags.operatorKeyword], color: '#c4b5fd' },
+  { tag: [tags.name, tags.variableName, tags.deleted, tags.character, tags.macroName], color: '#e2e8f0' },
+  { tag: [tags.propertyName, tags.function(tags.variableName), tags.labelName], color: '#7dd3fc' },
+  { tag: [tags.processingInstruction, tags.string, tags.inserted, tags.special(tags.string)], color: '#86efac' },
+  { tag: [tags.number, tags.changed, tags.annotation, tags.modifier, tags.self, tags.namespace], color: '#fde68a' },
+  { tag: [tags.color, tags.constant(tags.name), tags.standard(tags.name), tags.atom, tags.bool], color: '#fca5a5' },
+  { tag: [tags.className, tags.typeName], color: '#67e8f9' },
+  { tag: [tags.url, tags.escape, tags.regexp, tags.link], color: '#38bdf8', textDecoration: 'underline' },
+  { tag: [tags.meta, tags.comment], color: '#94a3b8' },
+  { tag: tags.heading, color: '#f8fafc', fontWeight: '700' },
+  { tag: tags.strong, fontWeight: '700' },
+  { tag: tags.emphasis, fontStyle: 'italic' },
+  { tag: tags.invalid, color: '#fecaca' },
+], { all: { color: '#e2e8f0' } });
 
 const iconButtonStyle: React.CSSProperties = {
   width: 34,
@@ -1351,7 +1368,7 @@ export default function FileManagerContent() {
         extensions: [
           history(),
           lineNumbers(),
-          syntaxHighlighting(defaultHighlightStyle),
+          syntaxHighlighting(editorHighlightStyle),
           langCompartmentRef.current!.of([]),
           editorTheme,
           keymap.of([...defaultKeymap, ...historyKeymap]),
