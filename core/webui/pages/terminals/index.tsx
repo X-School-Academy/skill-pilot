@@ -324,13 +324,14 @@ export default function TerminalsPage() {
                 Back to List
               </button>
             </Group>
-            <div style={{ flex: 1, position: 'relative' }}>
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
               <iframe
                 key={activeSessionName}
                 src={`/terminal?session=${encodeURIComponent(activeSessionName)}`}
                 style={{
                   width: '100%',
                   height: '100%',
+                  display: 'block',
                   border: 'none',
                   borderRadius: 8,
                 }}
