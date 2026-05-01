@@ -190,12 +190,13 @@ const editorTheme = EditorView.theme({
     color: '#e2e8f0',
   },
   '.cm-scroller': { overflow: 'auto', height: '100%' },
-  '.cm-content': { padding: '14px 0' },
+  '.cm-content': { padding: '14px 0', caretColor: '#ffffff' },
   '.cm-line': { padding: '0 16px' },
   '.cm-gutters': { background: '#111827', borderRight: '1px solid #1f2937', color: '#64748b' },
   '.cm-activeLineGutter': { background: '#172033', color: '#cbd5e1' },
   '.cm-activeLine': { background: '#172033' },
-  '.cm-cursor': { borderLeftColor: '#f8fafc' },
+  '.cm-cursor, .cm-dropCursor': { borderLeft: '2px solid #ffffff' },
+  '&.cm-focused .cm-cursor': { borderLeftColor: '#ffffff' },
   '.cm-selectionBackground, ::selection': { background: '#1d4ed8 !important' },
   '.cm-focused .cm-selectionBackground': { background: '#2563eb !important' },
   '.cm-panels': { background: '#111827', color: '#e2e8f0' },
@@ -1085,6 +1086,10 @@ export default function FileManagerContent() {
     if (previousMtime !== null && nextMtime === previousMtime) return;
     lastOpenFileMtimeRef.current = nextMtime;
 
+    if (fileViewMode === 'edit' && editorViewRef.current?.hasFocus) {
+      return;
+    }
+
     const hasUnsavedChanges =
       lastSavedPathRef.current === activeFile.path &&
       fileContentRef.current !== lastSavedContentRef.current;
@@ -1095,7 +1100,7 @@ export default function FileManagerContent() {
 
     setRealtimeNotice('This file was updated on disk.');
     await openFileInPanel(activeFile.path, { updateUrl: false, skipClearNotice: true });
-  }, [openFileInPanel]);
+  }, [fileViewMode, openFileInPanel]);
 
   const streamUnavailableMessage = useCallback((watcher?: FileStreamStatusEvent['watcher']) => {
     const isDevWebui = typeof window !== 'undefined' && window.location.port === '3003';
@@ -1357,7 +1362,6 @@ export default function FileManagerContent() {
             if (!path) return;
             const content = update.state.doc.toString();
             setFileContent(content);
-            setOpenFile(prev => (prev ? { ...prev, content } : prev));
             scheduleAutoSave(path, content);
           }),
         ],
