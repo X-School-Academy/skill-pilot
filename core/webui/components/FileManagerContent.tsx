@@ -1575,6 +1575,26 @@ export default function FileManagerContent() {
               >
                 Preview
               </button>
+              <button
+                type="button"
+                onClick={toggleTerminalPanel}
+                title={terminalPanelOpen ? 'Hide terminal panel' : 'Show terminal panel'}
+                style={{
+                  width: 30,
+                  height: 28,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 6,
+                  border: '1px solid #d6dce5',
+                  background: terminalPanelOpen ? '#0f5cc0' : '#fff',
+                  color: terminalPanelOpen ? '#fff' : '#334155',
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+              >
+                <IconTerminal2 size={15} />
+              </button>
             </div>
             {saveText && (
               <span style={{ flexShrink: 0, fontSize: 11, color: saveColor }}>{saveText}</span>
