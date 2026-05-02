@@ -1428,7 +1428,7 @@ load_guarded_env() {
     return
   fi
 
-  unset SAFE_DOTENV_LOADED_KEYS SAFE_DOTENV_UNSET_KEYS
+  unset SAFE_DOTENV_LOADED_KEYS
 
   local env_content=""
   if [[ -r "${ENGINE_ENV_FILE}" ]]; then
@@ -1475,12 +1475,6 @@ for key, value in values.items():
   fi
 
   export IN_KEYS_SAFE_GUARD=1
-  local unset_keys=("${loaded_keys[@]}" "IN_KEYS_SAFE_GUARD")
-  if ((${#unset_keys[@]} > 0)); then
-    local key_csv
-    key_csv="$(IFS=,; echo "${unset_keys[*]}")"
-    export SAFE_DOTENV_UNSET_KEYS="${key_csv}"
-  fi
 }
 
 

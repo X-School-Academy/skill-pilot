@@ -324,7 +324,7 @@ export default function HomePage() {
     setSelectedSessionPath,
   } = useSessionRoots();
 
-  const fetchLlmProviders = async () => {
+  const fetchLlmProviders = useCallback(async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/llm/providers`);
       const providers: LlmProvider[] = res.data.providers || [];
@@ -341,7 +341,7 @@ export default function HomePage() {
     } catch (err) {
       console.error('Failed to fetch LLM providers:', err);
     }
-  };
+  }, []);
 
   const fetchExternalSessions = useCallback(async (quiet: boolean = false) => {
     if (!quiet) setLoadingExternalSessions(true);

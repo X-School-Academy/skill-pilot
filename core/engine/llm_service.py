@@ -12,12 +12,52 @@ from fastapi import HTTPException
 from json5 import loads as json5_loads
 from json_repair import repair_json
 
-from safe_dotenv import configured_unset_keys, safe_env
+from safe_dotenv import loaded_env_key_names
 from settings import LLM_PROVIDERS_FILE, PROJECT_DIR, logger
 
 RUNNING_PROCESSES: Dict[str, subprocess.Popen] = {}
 RUNNING_LOCK = threading.Lock()
 WEBUI_DIR = os.path.dirname(os.path.abspath(__file__))
+_ENV_VAR_PATTERN = re.compile(r"\$\{([A-Za-z0-9_]+)\}")
+_WARNED_CONFIG_PLACEHOLDERS: set[tuple[str, str]] = set()
+
+
+def _resolve_config_placeholders(raw: str, config_path: Path) -> str:
+    def replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key in os.environ:
+            return os.environ[key]
+        return match.group(0)
+
+    return _ENV_VAR_PATTERN.sub(replace, raw)
+
+
+def _unresolved_config_placeholders(value: Any) -> set[str]:
+    keys: set[str] = set()
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if isinstance(key, str):
+                keys.update(match.group(1) for match in _ENV_VAR_PATTERN.finditer(key))
+            keys.update(_unresolved_config_placeholders(item))
+    elif isinstance(value, list):
+        for item in value:
+            keys.update(_unresolved_config_placeholders(item))
+    elif isinstance(value, str):
+        keys.update(match.group(1) for match in _ENV_VAR_PATTERN.finditer(value))
+    return keys
+
+
+def _warn_unresolved_config_placeholders(data: Dict[str, Any], config_path: Path) -> None:
+    for key in sorted(_unresolved_config_placeholders(data)):
+        warning_key = (str(config_path), key)
+        if warning_key in _WARNED_CONFIG_PLACEHOLDERS:
+            continue
+        _WARNED_CONFIG_PLACEHOLDERS.add(warning_key)
+        logger.warning(
+            "AI provider config placeholder ${%s} was not resolved because the env var is not set: %s",
+            key,
+            config_path,
+        )
 
 
 def load_provider_config() -> Dict[str, Any]:
@@ -30,6 +70,8 @@ def load_provider_config() -> Dict[str, Any]:
     except Exception as exc:
         raise SystemExit(f"FATAL: failed to read AI provider config {config_path}: {exc}") from exc
 
+    raw = _resolve_config_placeholders(raw, config_path)
+
     try:
         try:
             data = json.loads(raw)
@@ -41,6 +83,7 @@ def load_provider_config() -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise SystemExit(f"FATAL: AI provider config root must be an object: {config_path}")
 
+    _warn_unresolved_config_placeholders(data, config_path)
     return data
 
 
@@ -186,7 +229,6 @@ def _string_list(provider: Dict[str, Any], key: str) -> List[str]:
 
 
 _CONFIG_DIR = str(PROJECT_DIR / "config")
-_ENV_VAR_PATTERN = re.compile(r"\$\{([A-Za-z0-9_]+)\}")
 
 
 def _resolve_arg(arg: str) -> str:
@@ -336,6 +378,21 @@ def _resolve_provider_env(provider: Dict[str, Any]) -> Dict[str, str]:
         else:
             resolved[key] = str(val)
     return resolved
+
+
+def _llm_subprocess_env(provider_env: Dict[str, str]) -> Dict[str, str]:
+    """Build the exact environment for LLM CLI subprocesses.
+
+    LLM CLIs receive the regular process environment except keys loaded from
+    config/.env. A provider can opt into a loaded key by declaring it in its
+    env block in ai_providers.json5.
+    """
+    env: Dict[str, str] = dict(os.environ)
+    for key in loaded_env_key_names():
+        if key not in provider_env:
+            env.pop(key, None)
+    env.update(provider_env)
+    return env
 
 
 def _provider_uses_codex_json(provider: Dict[str, Any]) -> bool:
@@ -655,7 +712,6 @@ def llm_get_text(
     )
     logger.info("[llm] prompt client_id=%s provider_id=%s\n%s", client_id, provider.get("id"), prompt)
 
-    agent_cli_unset = configured_unset_keys()
     provider_env = _resolve_provider_env(provider)
     try:
         proc = subprocess.run(
@@ -663,7 +719,7 @@ def llm_get_text(
             capture_output=True,
             text=True,
             shell=False,
-            env=safe_env(extra=provider_env, unset_keys=agent_cli_unset),
+            env=_llm_subprocess_env(provider_env),
             **_popen_kwargs(),
         )
     except FileNotFoundError as exc:
@@ -723,7 +779,6 @@ def llm_stream(
         return
 
     collected_output = bytearray()
-    agent_cli_unset = configured_unset_keys()
     provider_env = _resolve_provider_env(provider)
     logger.info(
         "[llm] stream_invoke client_id=%s provider_id=%s command=%s",
@@ -737,7 +792,7 @@ def llm_stream(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=False,
-            env=safe_env(extra=provider_env, unset_keys=agent_cli_unset),
+            env=_llm_subprocess_env(provider_env),
             **_popen_kwargs(),
         )
     except FileNotFoundError:

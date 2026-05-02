@@ -31,9 +31,7 @@ class _HeartbeatFilter(logging.Filter):
         noisy_paths = (
             "/api/heartbeat",
             "/api/terminal/tmux/external-sessions",
-            "/api/workflows/execute/status",
-            "GET /api/llm/providers ",
-            "GET /api/config/settings ",
+            "/api/workflows/execute/status"
         )
         if any(path in msg for path in noisy_paths):
             return False
