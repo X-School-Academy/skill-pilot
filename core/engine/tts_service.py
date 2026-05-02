@@ -90,8 +90,9 @@ def _skill_pilot_tts(text: str, provider: Dict[str, Any], voice: Optional[str], 
     except Exception as exc:
         raise HTTPException(status_code=500, detail="openai package is not installed") from exc
 
-    model = provider.get("model", "skill-pilot-audio")
+    model = provider.get("model", "skill-pilot-tts")
     selected_voice = voice or provider.get("voice", "alloy")
+    instructions = provider.get("instructions", "Speak in a cheerful and positive tone.")
     fmt = (output_format or provider.get("format", "wav")).lower()
     if fmt not in {"mp3", "wav", "opus", "aac", "flac", "pcm"}:
         fmt = "wav"
@@ -100,24 +101,20 @@ def _skill_pilot_tts(text: str, provider: Dict[str, Any], voice: Optional[str], 
     client = OpenAI(api_key=api_key, base_url=base_url)
 
     try:
-        completion = client.chat.completions.create(
+        response = client.audio.speech.create(
             model=model,
-            modalities=["text", "audio"],
-            audio={"voice": selected_voice, "format": fmt},
-            messages=[{"role": "user", "content": text}],
+            voice=selected_voice,
+            input=text,
+            instructions=instructions,
+            response_format=fmt,
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Skill Pilot TTS error: {exc}") from exc
 
-    try:
-        audio_data = completion.choices[0].message.audio.data
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail="Skill Pilot TTS returned no audio data") from exc
-
-    if not audio_data:
+    raw = response.read()
+    if not raw:
         raise HTTPException(status_code=502, detail="Skill Pilot TTS returned empty audio data")
 
-    raw = base64.b64decode(audio_data)
     if fmt == "pcm":
         _write_wav(out, raw)
     else:
@@ -135,8 +132,9 @@ def _openai_tts(text: str, provider: Dict[str, Any], voice: Optional[str], outpu
     except Exception as exc:
         raise HTTPException(status_code=500, detail="openai package is not installed") from exc
 
-    model = provider.get("model", "gpt-audio")
+    model = provider.get("model", "gpt-4o-mini-tts")
     selected_voice = voice or provider.get("voice", "alloy")
+    instructions = provider.get("instructions", "Speak in a cheerful and positive tone.")
     fmt = (output_format or provider.get("format", "wav")).lower()
     if fmt not in {"mp3", "wav", "opus", "aac", "flac", "pcm"}:
         fmt = "wav"
@@ -145,24 +143,20 @@ def _openai_tts(text: str, provider: Dict[str, Any], voice: Optional[str], outpu
     client = OpenAI(api_key=api_key)
 
     try:
-        completion = client.chat.completions.create(
+        response = client.audio.speech.create(
             model=model,
-            modalities=["text", "audio"],
-            audio={"voice": selected_voice, "format": fmt},
-            messages=[{"role": "user", "content": text}],
+            voice=selected_voice,
+            input=text,
+            instructions=instructions,
+            response_format=fmt,
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"OpenAI TTS error: {exc}") from exc
 
-    try:
-        audio_data = completion.choices[0].message.audio.data
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail="OpenAI TTS returned no audio data") from exc
-
-    if not audio_data:
+    raw = response.read()
+    if not raw:
         raise HTTPException(status_code=502, detail="OpenAI TTS returned empty audio data")
 
-    raw = base64.b64decode(audio_data)
     if fmt == "pcm":
         _write_wav(out, raw)
     else:
