@@ -79,6 +79,7 @@ interface McpServer {
   name: string;
   type: string;
   description?: string;
+  instructions?: string;
   system?: boolean;
   disabled?: boolean;
   command?: string;
@@ -91,6 +92,7 @@ interface McpServer {
 interface McpFormData {
   name: string;
   description: string;
+  instructions: string;
   type: string;
   command: string;
   args: string;
@@ -150,7 +152,7 @@ interface ExtensionItem {
 }
 
 const EMPTY_MCP_FORM: McpFormData = {
-  name: '', description: '', type: 'stdio', command: '', args: '', env: [['', '']],
+  name: '', description: '', instructions: '', type: 'stdio', command: '', args: '', env: [['', '']],
   url: '', headers: [['', '']], disabled: false,
 };
 
@@ -2505,6 +2507,7 @@ export default function HomePage() {
     setMcpForm({
       name: server.name,
       description: server.description || '',
+      instructions: server.instructions || '',
       type: server.type,
       command: server.command || '',
       args: (server.args || []).join('\n'),
@@ -2539,6 +2542,7 @@ export default function HomePage() {
       const body: any = {
         name: trimmedName,
         description: mcpForm.description.trim(),
+        instructions: mcpForm.instructions.trim() || undefined,
         type: mcpForm.type,
         disabled: mcpForm.disabled,
       };
@@ -2723,6 +2727,22 @@ export default function HomePage() {
               onChange={(e) => setMcpForm((prev) => ({ ...prev, description: e.target.value }))}
               placeholder="Describe what this MCP server provides to the agent..."
               rows={2}
+              style={{
+                width: '100%', padding: '6px 8px', fontSize: 13, borderRadius: 6,
+                border: `1px solid ${theme.colors.gray[3]}`,
+                background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff',
+                color: 'inherit', resize: 'vertical', fontFamily: 'inherit',
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <Text size="sm" weight={600} mb={4}>Instructions <Text span size="xs" color="dimmed">(optional — prepended to the generated SKILL.md)</Text></Text>
+            <textarea
+              value={mcpForm.instructions}
+              onChange={(e) => setMcpForm((prev) => ({ ...prev, instructions: e.target.value }))}
+              placeholder="Custom instructions for how the agent should use this MCP server and its tools..."
+              rows={3}
               style={{
                 width: '100%', padding: '6px 8px', fontSize: 13, borderRadius: 6,
                 border: `1px solid ${theme.colors.gray[3]}`,

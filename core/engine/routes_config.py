@@ -208,6 +208,8 @@ def config_mcp_servers_list():
             entry["disabled"] = True
         if cfg.get("description"):
             entry["description"] = str(cfg["description"])
+        if cfg.get("instructions"):
+            entry["instructions"] = str(cfg["instructions"])
         for field in ("command", "args", "env", "url", "headers"):
             if field in expanded:
                 entry[field] = expanded[field]
@@ -244,6 +246,9 @@ async def config_mcp_servers_save(request: Request):
     description = (str(body.get("description") or "")).strip()
     if description:
         entry["description"] = description
+    instructions = (str(body.get("instructions") or "")).strip()
+    if instructions:
+        entry["instructions"] = instructions
     if server_type == "stdio":
         command = (str(body.get("command") or "")).strip()
         if not command:

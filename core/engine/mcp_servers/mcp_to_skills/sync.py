@@ -43,6 +43,7 @@ class ServerConfig:
     workdir: str | None
     tool_timeout_ms: int | None
     description: str | None
+    instructions: str | None
 
 
 @dataclass
@@ -422,6 +423,7 @@ def load_mcp_configs(path: Path) -> tuple[dict[str, ServerConfig], dict[str, set
             workdir=default_workdir,
             tool_timeout_ms=tool_timeout_ms,
             description=str(raw_desc).strip() if raw_desc else None,
+            instructions=str(expanded["instructions"]).strip() if expanded.get("instructions") else None,
         )
         servers[server_id] = server
         if missing:
@@ -540,11 +542,14 @@ def render_server_skill(server_id: str, config: ServerConfig, tools: list[ToolDe
         tool_entries.append(f"- **{tool.name}** — {short_desc} ([details](references/{tool.name}.md))")
 
     tools_section = "\n".join(tool_entries)
+    instructions_block = ""
+    if config.instructions:
+        instructions_block = f"\n{normalize_description(config.instructions)}\n"
     return f"""---
 name: {sname}
 description: "{desc_escaped}"
 ---
-
+{instructions_block}
 ## Tools
 
 Select the tool that matches the task. Read its reference file only when you are ready to invoke it.

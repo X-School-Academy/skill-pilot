@@ -3,6 +3,8 @@ name: media
 description: "Generate and process media: text-to-image, text-to-video, text-to-speech, text-to-song, image or video animation, lipsync, vocal extraction, upscaling, and audio transcription."
 ---
 
+hi      test      end test text
+
 ## Tools
 
 Select the tool that matches the task. Read its reference file only when you are ready to invoke it.
