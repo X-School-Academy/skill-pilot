@@ -122,35 +122,29 @@ chrome_proxy: {
 
 ### Token model (v1)
 
-Simplest viable: **one session, one token**, generated at engine startup or by an authenticated API call.
+Simplest viable: **one static tunnel token**, using the same `AUTH_TOKEN` that protects the engine/WebUI.
 
 ```
-POST /api/chrome-proxy/sessions       → { "token": "...", "tunnel_url": "wss://engine/chrome-proxy?token=..." }
-GET  /api/chrome-proxy/sessions       → list of active sessions + parked tunnel counts
-DELETE /api/chrome-proxy/sessions/{token}
+wss://engine/chrome-proxy?token=<AUTH_TOKEN>
 ```
 
-These endpoints reuse the existing engine auth (whatever guards `/api/*` today). The remote operator hits this once, copies `tunnel_url`, and starts the Go proxy with `-tunnelURL=<that>`. The token is opaque and sufficiently long (`secrets.token_urlsafe(32)`).
+There are no `/api/chrome-proxy/sessions` endpoints in v1. The remote operator uses the configured `AUTH_TOKEN` in the tunnel URL and starts the Go proxy with `-tunnelURL=<that>`.
 
 For v1 the local 9223 listener does not require a token — it's bound to `127.0.0.1` only, so anything that can connect already has local access. (If we later want to bind on `0.0.0.0`, we'd add `?token=` enforcement on the 9223 side too. Out of scope for v1.)
 
 ### Multi-session
 
-The registry is `dict[token, SessionState]`, where `SessionState` holds:
-- `parked: list[WebSocket]` (idle tunnels)
-- `active: set[(local_ws, tunnel_ws)]`
-- `created_at`, `last_used_at`
+The bridge keeps one global list of idle parked tunnels.
 
 To support multiple concurrent users sharing one Chrome host, the operator just runs Go with `-tunnelPool=N`. The engine pulls the next idle parked socket on each local connect.
 
-To support multiple distinct Chrome hosts, create multiple sessions (multiple tokens). v1 routes to a single session by default; if more than one is active, the local listener picks the most recently created (or we add `?token=` to the local URL — punted to v2).
+Multiple distinct Chrome hosts require a future routing model. Out of scope for v1.
 
 ### Lifecycle / cleanup
 
 - On engine shutdown: cancel relay tasks, close all sockets cleanly.
 - On tunnel disconnect: drop from `parked`/`active`; existing local user gets close code propagated.
 - On local disconnect: close the paired tunnel (one tunnel = one session); remote Go will re-dial to re-park.
-- Idle session GC: optional, prune sessions with zero parked + zero active for > 1h.
 
 ### Why a separate aiohttp server (not FastAPI) for :9223?
 
@@ -178,7 +172,7 @@ Note: `:9223` here is on the **engine**, not the Chrome host. The engine binds i
 3. **Multi-session routing on :9223**: single active session (auto-pick), no token required as listen on 127.0.0.1
 4. **Concurrency default**: ship Go with `-tunnelPool=1` (simple) - using simple solution
 5. **TLS for self-signed engine certs**: no self-signed support, but support both `ws://` and `wss://` for the tunnel URL.
-6. **Should the `/api/chrome-proxy/sessions` endpoints be gated behind a feature flag** - add config at config/settings.json5 to control enable or disable for the bridge service
+6. **Should multi-host routing be added later** - out of scope for v1
 
 ## Out of scope for this iteration
 
@@ -191,7 +185,6 @@ Note: `:9223` here is on the **engine**, not the Chrome host. The engine binds i
 
 1. Refactor Go `proxyWS` to extract `relay()` (no behavior change). Verify forward mode still works.
 2. Add `-tunnelURL` + tunnel-client loop in Go. Test against a hand-rolled echo target.
-3. Build `core/engine/chrome_proxy.py` (registry + FastAPI WS endpoint + aiohttp `:9223` listener).
+3. Build `core/engine/chrome_proxy.py` (AUTH_TOKEN FastAPI WS endpoint + aiohttp `:9223` listener).
 4. Wire lifespan in `app_factory.py`. Add config under `services.engine.chrome_proxy`.
-5. Add session API routes (`/api/chrome-proxy/sessions`).
-6. End-to-end test: real Chrome on machine A, engine on machine B, `agent-browser` on machine C.
+5. End-to-end test: real Chrome on machine A, engine on machine B, `agent-browser` on machine C.

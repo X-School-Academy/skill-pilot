@@ -182,19 +182,28 @@ class ChromeProxyService:
             return web.Response(status=400, text="websocket upgrade required\n")
 
         path = request.rel_url.path_qs or "/"
-        local_ws = web.WebSocketResponse(max_msg_size=64 * 1024 * 1024)
-        await local_ws.prepare(request)
-
         entry = await self._acquire_tunnel()
         if entry is None:
             logger.warning("chrome-proxy: no parked tunnel available for path=%s", path)
-            await local_ws.close(code=1013, message=b"no tunnel available")
-            return local_ws
+            return web.Response(status=503, text="no tunnel available\n")
+
+        local_ws = web.WebSocketResponse(max_msg_size=64 * 1024 * 1024)
+        try:
+            await local_ws.prepare(request)
+        except Exception:
+            entry.released.set()
+            try:
+                await entry.ws.close(code=1001)
+            except Exception:
+                pass
+            raise
 
         tunnel_ws = entry.ws
         try:
             try:
-                await tunnel_ws.send_text(json.dumps({"path": path}))
+                await tunnel_ws.send_text(
+                    json.dumps({"path": path, "headers": _request_headers(request)})
+                )
             except Exception as exc:
                 logger.warning("chrome-proxy: failed to send control frame: %s", exc)
                 await local_ws.close(code=1011, message=b"tunnel send failed")
@@ -261,6 +270,11 @@ class ChromeProxyService:
                     await task
                 except (asyncio.CancelledError, Exception):
                     pass
+            for task in done:
+                try:
+                    await task
+                except Exception:
+                    pass
         finally:
             try:
                 if not local_ws.closed:
@@ -300,6 +314,13 @@ class ChromeProxyService:
 # ── module-level service + FastAPI route ──────────────────────────────────
 
 _service: Optional[ChromeProxyService] = None
+
+
+def _request_headers(request: web.Request) -> dict[str, list[str]]:
+    headers: dict[str, list[str]] = {}
+    for key in request.headers:
+        headers[key] = list(request.headers.getall(key, []))
+    return headers
 
 
 def _read_chrome_proxy_config() -> dict:

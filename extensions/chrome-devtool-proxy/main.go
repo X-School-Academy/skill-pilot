@@ -50,8 +50,8 @@ func copyHeaders(dst, src http.Header) {
 	for k, vv := range src {
 		// Skip hop-by-hop / handshake-managed headers.
 		switch http.CanonicalHeaderKey(k) {
-		case "Connection", "Upgrade", "Sec-Websocket-Key", "Sec-Websocket-Version",
-			"Sec-Websocket-Extensions", "Sec-Websocket-Accept":
+		case "Connection", "Upgrade", "Host", "Sec-Websocket-Key", "Sec-Websocket-Version",
+			"Sec-Websocket-Extensions", "Sec-Websocket-Accept", "Sec-Websocket-Protocol":
 			continue
 		}
 		for _, v := range vv {
@@ -175,7 +175,8 @@ func proxyWS(w http.ResponseWriter, r *http.Request) {
 // proxy which Chrome target path to dial. After this frame, traffic is
 // transparent CDP frames in both directions.
 type controlFrame struct {
-	Path string `json:"path"`
+	Path    string      `json:"path"`
+	Headers http.Header `json:"headers,omitempty"`
 }
 
 // runTunnelWorker maintains one parked tunnel connection forever (with backoff).
@@ -264,7 +265,10 @@ func dialAndServeTunnel(workerID int) error {
 	upstreamURL := targetBase + ctrl.Path
 	log.Printf("[tunnel-%d] session opening, upstream=%s", workerID, upstreamURL)
 
-	upstreamConn, resp, err := dialer.Dial(upstreamURL, nil)
+	reqHeader := http.Header{}
+	copyHeaders(reqHeader, ctrl.Headers)
+
+	upstreamConn, resp, err := dialer.Dial(upstreamURL, reqHeader)
 	if err != nil {
 		status := ""
 		if resp != nil {

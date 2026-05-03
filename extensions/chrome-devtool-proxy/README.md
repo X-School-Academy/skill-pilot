@@ -51,10 +51,8 @@ Forward-proxy mode is used when the machine running Chrome can accept inbound co
 Then connect a CDP client to the proxy:
 
 ```bash
-agent-browser open URL --cdp ws://<proxy-host>:9223/devtools/browser/<browser-id>
+agent-browser open URL --cdp ws://<proxy-host>:9223/devtools/browser/
 ```
-
-The `/devtools/browser/<browser-id>` or `/devtools/page/<page-id>` path is forwarded to Chrome unchanged.
 
 ## Tunnel-Client Mode
 
@@ -72,7 +70,7 @@ When a CDP client connects through the engine, the engine sends one control fram
 Example client command:
 
 ```bash
-agent-browser open URL --cdp ws://engine.example.com:9223/devtools/browser/<browser-id>
+agent-browser open URL --cdp ws://engine.example.com:9223/devtools/browser/
 ```
 
 ## Parameters
