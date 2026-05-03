@@ -38,6 +38,7 @@ _DEFAULT_WAIT_TIMEOUT_S = 10.0
 class _ParkedTunnel:
     ws: WebSocket
     claimed: asyncio.Event = field(default_factory=asyncio.Event)
+    handoff_ready: asyncio.Event = field(default_factory=asyncio.Event)
     released: asyncio.Event = field(default_factory=asyncio.Event)
 
 
@@ -137,12 +138,14 @@ class ChromeProxyService:
                     await disconnect_task
                 except (asyncio.CancelledError, Exception):
                     pass
+                entry.handoff_ready.set()
                 # Block here until relay completes; otherwise FastAPI tears
                 # down the WS as soon as this handler returns.
                 await entry.released.wait()
                 return
             # Disconnected before being claimed.
             claim_task.cancel()
+            entry.handoff_ready.set()
         finally:
             async with self._lock:
                 if entry in self._parked:
@@ -155,13 +158,24 @@ class ChromeProxyService:
         """Pop one idle parked tunnel, waiting up to ``wait_timeout``."""
         deadline = asyncio.get_event_loop().time() + self._wait_timeout
         while True:
+            entry: Optional[_ParkedTunnel] = None
             async with self._lock:
                 if self._parked:
                     entry = self._parked.pop(0)
                     if not self._parked:
                         self._tunnel_available.clear()
                     entry.claimed.set()
-                    return entry
+            if entry is not None:
+                try:
+                    await asyncio.wait_for(entry.handoff_ready.wait(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    logger.warning("chrome-proxy: timed out waiting for tunnel handoff")
+                    try:
+                        await entry.ws.close(code=1011)
+                    except Exception:
+                        pass
+                    return None
+                return entry
             remaining = deadline - asyncio.get_event_loop().time()
             if remaining <= 0:
                 return None
@@ -239,7 +253,7 @@ class ChromeProxyService:
                     elif msg.type == WSMsgType.ERROR:
                         break
             except Exception as exc:
-                logger.debug("chrome-proxy local->tunnel ended: %s", exc)
+                logger.warning("chrome-proxy local->tunnel ended unexpectedly: %s", exc)
 
         async def tunnel_to_local() -> None:
             try:
@@ -247,6 +261,11 @@ class ChromeProxyService:
                     message = await tunnel_ws.receive()
                     msg_type = message.get("type")
                     if msg_type == "websocket.disconnect":
+                        logger.info(
+                            "chrome-proxy tunnel disconnected code=%s reason=%s",
+                            message.get("code"),
+                            message.get("reason"),
+                        )
                         break
                     if "text" in message and message["text"] is not None:
                         await local_ws.send_str(message["text"])
@@ -255,7 +274,7 @@ class ChromeProxyService:
             except WebSocketDisconnect:
                 pass
             except Exception as exc:
-                logger.debug("chrome-proxy tunnel->local ended: %s", exc)
+                logger.warning("chrome-proxy tunnel->local ended unexpectedly: %s", exc)
 
         t1 = asyncio.create_task(local_to_tunnel())
         t2 = asyncio.create_task(tunnel_to_local())
