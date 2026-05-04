@@ -23,7 +23,7 @@ import urllib.parse
 import urllib.request
 from uuid import uuid4
 from urllib.parse import quote
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -117,6 +117,7 @@ NATIVE_TMUX_SESSION_PREFIX = "native-terminal-"
 WORKFLOW_EXECUTE_SESSION_NAME = "sp-workflow-execute"
 PROTECTED_TMUX_SESSION_PREFIXES = ("sp-engine-", "sp-webui-")
 TMUX_SESSION_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+SAVED_TERMINAL_HISTORY_ID_RE = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{6}-[a-zA-Z0-9_-]+\.md$")
 _last_heartbeat_time: float = time.time()
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _MCP_CONFIG_PATH = _REPO_ROOT / "config" / "mcp.json5"
@@ -144,6 +145,7 @@ _AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
 _WORKFLOW_EXECUTE_LOCK = threading.Lock()
 _WORKFLOW_EXECUTE_STOP = threading.Event()
 _WORKFLOW_EXECUTE_CONTINUE = threading.Event()
+_TERMINAL_HISTORY_KILL_LOCK = threading.Lock()
 _WORKFLOW_EXECUTE_STATE: Dict[str, Any] = {
     "thread": None,
     "token": "",
@@ -169,6 +171,10 @@ _WORKFLOW_EXECUTE_STATE: Dict[str, Any] = {
 
 def _terminal_workflow_base_dir() -> Path:
     return _REPO_ROOT / ".skillpilot" / "temp" / "terminal-workflow"
+
+
+def _terminal_histories_dir() -> Path:
+    return _REPO_ROOT / ".skillpilot" / "terminal-histories"
 _EXPLORE_TEMPLATE_LOCK = threading.Lock()
 _EXPLORE_TEMPLATE_LAUNCHES: Dict[str, Dict[str, Any]] = {}
 _EXPLORE_MANAGED_DEV: Dict[str, Any] = {
@@ -478,12 +484,44 @@ def _resolve_system_shell() -> str:
     return "/bin/sh"
 
 
-def _resolve_terminal_start_dir(raw_path: Any) -> Path:
+def _resolve_terminal_start_dir(raw_path: Any, path_mode: str | None = None) -> Path:
     value = str(raw_path or "").strip()
     if not value:
         return _REPO_ROOT
     if value == "/":
         return _REPO_ROOT
+
+    try:
+        from routes_file_manager import _file_manager_roots_by_id as _terminal_file_roots_by_id
+        from routes_file_manager import _safe_files_path as _safe_terminal_files_path
+    except Exception:
+        _terminal_file_roots_by_id = None
+        _safe_terminal_files_path = None
+
+    if path_mode == "file_manager":
+        if _safe_terminal_files_path is None:
+            raise ValueError("file manager paths are not available")
+        candidate = _safe_terminal_files_path(value)
+        if not candidate.exists():
+            raise ValueError(f"terminal path does not exist: {candidate}")
+        if not candidate.is_dir():
+            raise ValueError(f"terminal path is not a directory: {candidate}")
+        return candidate
+
+    if _terminal_file_roots_by_id is not None and _safe_terminal_files_path is not None:
+        normalized = f"/{value.lstrip('/')}".rstrip("/") or "/"
+        file_roots = _terminal_file_roots_by_id()
+        # Multi-root file-manager ids are virtual paths like "/$project" or
+        # "/$worktree/name". They look absolute, but should resolve through the
+        # file-manager mapper before normal absolute filesystem handling.
+        for root_id in sorted((root_id for root_id in file_roots if root_id != "/"), key=len, reverse=True):
+            if normalized == root_id or normalized.startswith(f"{root_id}/"):
+                candidate = _safe_terminal_files_path(normalized)
+                if not candidate.exists():
+                    raise ValueError(f"terminal path does not exist: {candidate}")
+                if not candidate.is_dir():
+                    raise ValueError(f"terminal path is not a directory: {candidate}")
+                return candidate
 
     # Session root selectors send absolute filesystem paths. Resolve those
     # directly instead of feeding them through the file-manager virtual-path
@@ -509,10 +547,8 @@ def _resolve_terminal_start_dir(raw_path: Any) -> Path:
         return candidate
 
     try:
-        from routes_file_manager import _safe_files_path as _safe_terminal_files_path
         from routes_file_manager import _file_manager_root_for_absolute_path as _terminal_root_for_absolute_path
     except Exception:
-        _safe_terminal_files_path = None
         _terminal_root_for_absolute_path = None
 
     if _safe_terminal_files_path is not None:
@@ -879,7 +915,7 @@ def _is_protected_tmux_session(session_name: str) -> bool:
 def _tmux_pane_target_any(session_name: str) -> str:
     safe_name = _validate_tmux_session_name_any(session_name)
     proc = _run_tmux_command(
-        ["display-message", "-p", "-t", safe_name, "#{session_name}:#{window_index}.#{pane_index}"],
+        ["list-panes", "-t", safe_name, "-F", "#{session_name}:#{window_index}.#{pane_index}"],
         check=False,
     )
     if proc.returncode != 0:
@@ -887,7 +923,7 @@ def _tmux_pane_target_any(session_name: str) -> str:
         if "can't find session" in message:
             raise RuntimeError(f"tmux session not found: {safe_name}")
         raise RuntimeError((proc.stderr or proc.stdout or "").strip() or "unable to resolve tmux pane target")
-    pane_target = (proc.stdout or "").strip()
+    pane_target = next((line.strip() for line in (proc.stdout or "").splitlines() if line.strip()), "")
     if not pane_target:
         raise RuntimeError("unable to resolve tmux pane target")
     return pane_target
@@ -911,6 +947,136 @@ def _capture_tmux_pane_history_any(session_name: str) -> Dict[str, str]:
         "command": command,
         "content": proc.stdout or "",
     }
+
+
+def _is_project_managed_tmux_session(session_name: str) -> bool:
+    safe_name = _validate_tmux_session_name_any(session_name)
+    return (
+        safe_name.startswith(TMUX_SESSION_PREFIX)
+        or safe_name.startswith(NATIVE_TMUX_SESSION_PREFIX)
+        or safe_name == WORKFLOW_EXECUTE_SESSION_NAME
+    )
+
+
+def _terminal_history_title(saved_at: datetime) -> str:
+    return saved_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def _safe_saved_terminal_history_id(history_id: str) -> str:
+    value = (history_id or "").strip()
+    if not value:
+        raise ValueError("saved history id is required")
+    if not SAVED_TERMINAL_HISTORY_ID_RE.fullmatch(value):
+        raise ValueError("invalid saved history id")
+    return value
+
+
+def _saved_terminal_history_path(history_id: str) -> Path:
+    safe_id = _safe_saved_terminal_history_id(history_id)
+    history_dir = _terminal_histories_dir().resolve()
+    candidate = (history_dir / safe_id).resolve()
+    if candidate.parent != history_dir:
+        raise ValueError("invalid saved history id")
+    return candidate
+
+
+def _session_from_saved_terminal_history_id(history_id: str) -> str:
+    safe_id = _safe_saved_terminal_history_id(history_id)
+    stem = Path(safe_id).stem
+    parts = stem.split("-", 2)
+    return parts[2] if len(parts) == 3 else ""
+
+
+def _save_tmux_pane_history_before_kill(session_name: str) -> Dict[str, Any] | None:
+    safe_name = _validate_tmux_session_name_any(session_name)
+    if not _is_project_managed_tmux_session(safe_name):
+        return None
+    try:
+        history = _capture_tmux_pane_history_any(safe_name)
+        saved_at = datetime.now(timezone.utc)
+        history_dir = _terminal_histories_dir()
+        history_dir.mkdir(parents=True, exist_ok=True)
+        file_name = f"{saved_at.strftime('%Y%m%dT%H%M%SZ')}-{secrets.token_hex(3)}-{safe_name}.md"
+        path = _saved_terminal_history_path(file_name)
+        path.write_text(str(history.get("content") or ""), encoding="utf-8")
+        return {
+            "id": file_name,
+            "session": safe_name,
+            "title": _terminal_history_title(saved_at),
+            "saved_at": saved_at.isoformat().replace("+00:00", "Z"),
+            "path": str(path),
+        }
+    except Exception as exc:
+        logger.warning("failed to save tmux history before killing %s: %s", safe_name, exc)
+        return None
+
+
+def _kill_tmux_session_with_history(session_name: str) -> bool:
+    safe_name = _validate_tmux_session_name_any(session_name)
+    with _TERMINAL_HISTORY_KILL_LOCK:
+        _save_tmux_pane_history_before_kill(safe_name)
+        return _kill_tmux_session_any(safe_name)
+
+
+def _saved_terminal_history_entry(path: Path) -> Dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    try:
+        history_id = _safe_saved_terminal_history_id(path.name)
+    except ValueError:
+        return None
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    saved_at = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+    return {
+        "id": history_id,
+        "session": _session_from_saved_terminal_history_id(history_id),
+        "title": _terminal_history_title(saved_at),
+        "saved_at": saved_at.isoformat().replace("+00:00", "Z"),
+        "size": stat.st_size,
+    }
+
+
+def _list_saved_terminal_histories() -> List[Dict[str, Any]]:
+    history_dir = _terminal_histories_dir()
+    if not history_dir.is_dir():
+        return []
+    entries: List[Dict[str, Any]] = []
+    for path in history_dir.iterdir():
+        entry = _saved_terminal_history_entry(path)
+        if entry is not None:
+            entries.append(entry)
+    entries.sort(key=lambda item: (str(item.get("saved_at") or ""), str(item.get("id") or "")), reverse=True)
+    return entries
+
+
+def _read_saved_terminal_history(history_id: str) -> Dict[str, str]:
+    safe_id = _safe_saved_terminal_history_id(history_id)
+    path = _saved_terminal_history_path(safe_id)
+    if not path.is_file():
+        raise FileNotFoundError("saved history not found")
+    entry = _saved_terminal_history_entry(path)
+    if entry is None:
+        raise ValueError("invalid saved history id")
+    return {
+        "id": safe_id,
+        "session": str(entry.get("session") or ""),
+        "pane_target": str(entry.get("session") or ""),
+        "command": f"saved terminal history: {safe_id}",
+        "content": path.read_text(encoding="utf-8"),
+        "title": str(entry.get("title") or ""),
+        "saved_at": str(entry.get("saved_at") or ""),
+    }
+
+
+def _delete_saved_terminal_history(history_id: str) -> bool:
+    path = _saved_terminal_history_path(history_id)
+    if not path.is_file():
+        return False
+    path.unlink()
+    return True
 
 
 def _pane_current_command_any(session_name: str) -> str:
@@ -1295,15 +1461,17 @@ def _validate_writable_session_name(session_name: str) -> str:
 
 
 def _cleanup_webui_tmux_session(session_name: str) -> bool:
-    safe_name = _validate_tmux_session_name(session_name)
-    return _kill_tmux_session(safe_name)
+    safe_name = _validate_tmux_session_name_any(session_name)
+    if not safe_name.startswith(TMUX_SESSION_PREFIX):
+        raise ValueError(f"tmux session must start with '{TMUX_SESSION_PREFIX}'")
+    return _kill_tmux_session_with_history(safe_name)
 
 
 def _cleanup_webui_tmux_sessions() -> int:
     removed_count = 0
     for session in _list_webui_tmux_sessions():
         try:
-            if _kill_tmux_session(session["name"]):
+            if _kill_tmux_session_with_history(session["name"]):
                 removed_count += 1
         except RuntimeError as exc:
             logger.warning("failed to remove tmux session %s: %s", session["name"], exc)
@@ -1318,14 +1486,13 @@ def _cleanup_stale_native_tmux_sessions() -> int:
         name = str(session.get("name") or "")
         if not name:
             continue
-        proc = _run_tmux_command(["kill-session", "-t", name], check=False)
-        if proc.returncode == 0:
+        try:
+            removed = _kill_tmux_session_with_history(name)
+        except RuntimeError as exc:
+            logger.warning("failed to remove stale native tmux session %s: %s", name, exc)
+            continue
+        if removed:
             removed_count += 1
-            continue
-        message = (proc.stderr or proc.stdout or "").lower()
-        if "can't find session" in message:
-            continue
-        logger.warning("failed to remove stale native tmux session %s: %s", name, (proc.stderr or proc.stdout or "").strip())
     return removed_count
 
 

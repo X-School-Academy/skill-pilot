@@ -13,6 +13,7 @@ from routes import router, start_heartbeat_watcher, _cleanup_webui_tmux_sessions
 from scheduler import load_schedules, start_scheduler, stop_scheduler
 from settings import ensure_auth_token, get_auth_token, get_discord_bot_token, get_runtime_mode, logger
 from socket_service import wrap_app_with_socketio
+import chrome_proxy
 
 
 _AUTH_COOKIE_NAME = "auth_token"
@@ -45,6 +46,7 @@ def create_app():
         allow_headers=["*"],
     )
     app.include_router(router)
+    app.include_router(chrome_proxy.router)
     wrap_app_with_socketio(app)
 
     @app.middleware("http")
@@ -109,9 +111,19 @@ def create_app():
             from discord_bot import start_bot
             asyncio.create_task(start_bot(discord_token))
             logger.info("Discord bot starting")
+        try:
+            svc = await chrome_proxy.start_chrome_proxy()
+            if svc is None:
+                logger.info("Chrome proxy bridge disabled (services.chrome_proxy.enabled=false)")
+        except Exception as exc:
+            logger.warning("Failed to start chrome proxy bridge: %s", exc)
 
     @app.on_event("shutdown")
     async def _shutdown_mcp_bridge() -> None:
+        try:
+            await chrome_proxy.stop_chrome_proxy()
+        except Exception as exc:
+            logger.warning("Failed to stop chrome proxy bridge: %s", exc)
         bridge_service.stop()
         logger.info("MCP bridge socket stopped")
         try:

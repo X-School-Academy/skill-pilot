@@ -37,6 +37,7 @@ DOCTOR_QUESTION=""
 IS_DEV=0
 SOURCE="manual"
 AVAILABLE_PROVIDERS=()
+LOADED_ENV_KEYS=()
 HUMAN_DETECTION_REQUIREMENTS="${ROOT_DIR}/core/engine/mcp_servers/cameras/requirements-human-detection.txt"
 LIVE_TTS_REQUIREMENTS="${ROOT_DIR}/core/engine/mcp_servers/live_tts/requirements-live-tts.txt"
 
@@ -1428,7 +1429,7 @@ load_guarded_env() {
     return
   fi
 
-  unset SAFE_DOTENV_LOADED_KEYS SAFE_DOTENV_UNSET_KEYS
+  unset SAFE_DOTENV_LOADED_KEYS
 
   local env_content=""
   if [[ -r "${ENGINE_ENV_FILE}" ]]; then
@@ -1472,15 +1473,46 @@ for key, value in values.items():
     local loaded_key_csv
     loaded_key_csv="$(IFS=,; echo "${loaded_keys[*]}")"
     export SAFE_DOTENV_LOADED_KEYS="${loaded_key_csv}"
+    LOADED_ENV_KEYS=("${loaded_keys[@]}")
   fi
 
   export IN_KEYS_SAFE_GUARD=1
-  local unset_keys=("${loaded_keys[@]}" "IN_KEYS_SAFE_GUARD")
-  if ((${#unset_keys[@]} > 0)); then
-    local key_csv
-    key_csv="$(IFS=,; echo "${unset_keys[*]}")"
-    export SAFE_DOTENV_UNSET_KEYS="${key_csv}"
+  export SKILL_PILOT_ENV_ALREADY_LOADED=1
+}
+
+sync_tmux_environment() {
+  if ((${#LOADED_ENV_KEYS[@]} == 0)); then
+    return
   fi
+
+  if ! tmux info >/dev/null 2>&1; then
+    return
+  fi
+
+  local existing_key
+  local existing_loaded_keys
+  local key
+  local -a existing_keys=()
+  local sync_keys=("${LOADED_ENV_KEYS[@]}" "SAFE_DOTENV_LOADED_KEYS" "IN_KEYS_SAFE_GUARD" "SKILL_PILOT_ENV_ALREADY_LOADED")
+
+  existing_loaded_keys="$(tmux show-environment -g SAFE_DOTENV_LOADED_KEYS 2>/dev/null || true)"
+  existing_loaded_keys="${existing_loaded_keys#SAFE_DOTENV_LOADED_KEYS=}"
+  if [[ -n "${existing_loaded_keys}" && "${existing_loaded_keys}" != -* ]]; then
+    IFS=',' read -r -a existing_keys <<< "${existing_loaded_keys}"
+    for existing_key in "${existing_keys[@]}"; do
+      [[ -n "${existing_key}" ]] || continue
+      if [[ ",${SAFE_DOTENV_LOADED_KEYS}," != *",${existing_key},"* ]]; then
+        tmux set-environment -gu "${existing_key}" >/dev/null 2>&1 || true
+      fi
+    done
+  fi
+
+  for key in "${sync_keys[@]}"; do
+    [[ -n "${key}" ]] || continue
+    if [[ "${!key+x}" == "x" ]]; then
+      tmux set-environment -g "${key}" "${!key}" >/dev/null
+    fi
+  done
 }
 
 
@@ -1829,6 +1861,7 @@ start_session() {
     fi
   fi
 
+  sync_tmux_environment
   tmux new-session -d -s "${session_name}" "cd '${ROOT_DIR}' && ${command}" \; set -g status off
   echo "Started session '${session_name}'."
 }

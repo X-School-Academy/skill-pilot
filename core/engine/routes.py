@@ -120,9 +120,10 @@ def terminal_tmux_create(payload: Dict[str, Any]):
     auto = payload.get("auto")
     network = payload.get("network")
     requested_start_path = payload.get("path")
+    requested_path_mode = (str(payload.get("path_mode") or "").strip().lower() or None)
 
     try:
-        start_dir = _resolve_terminal_start_dir(requested_start_path)
+        start_dir = _resolve_terminal_start_dir(requested_start_path, path_mode=requested_path_mode)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
 
@@ -202,7 +203,7 @@ def terminal_tmux_kill(payload: Dict[str, Any]):
                 thread = _WORKFLOW_EXECUTE_STATE.get("thread")
             _WORKFLOW_EXECUTE_STOP.set()
             _WORKFLOW_EXECUTE_CONTINUE.set()
-            removed = _kill_tmux_session_any(session_name)
+            removed = _kill_tmux_session_with_history(session_name)
             if thread and thread.is_alive():
                 thread.join(timeout=5.0)
             if removed:
@@ -215,10 +216,7 @@ def terminal_tmux_kill(payload: Dict[str, Any]):
     if _is_protected_tmux_session(session_name):
         return JSONResponse(status_code=403, content={"error": f"tmux session '{session_name}' is protected"})
     try:
-        if session_name.startswith(TMUX_SESSION_PREFIX):
-            removed = _kill_tmux_session(session_name)
-        else:
-            removed = _kill_tmux_session_any(session_name)
+        removed = _kill_tmux_session_with_history(session_name)
     except RuntimeError as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})
     return {"status": "ok", "removed": removed, "session": session_name}
@@ -234,6 +232,39 @@ def terminal_tmux_history(session: str):
     except RuntimeError as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})
     return history
+
+
+@router.get("/api/terminal/tmux/saved-histories")
+def terminal_tmux_saved_histories():
+    try:
+        histories = _list_saved_terminal_histories()
+    except RuntimeError as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc), "histories": []})
+    return {"histories": histories}
+
+
+@router.get("/api/terminal/tmux/saved-history")
+def terminal_tmux_saved_history(id: str):
+    try:
+        history = _read_saved_terminal_history(id)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+    except OSError as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc)})
+    return history
+
+
+@router.delete("/api/terminal/tmux/saved-history")
+def terminal_tmux_delete_saved_history(id: str):
+    try:
+        removed = _delete_saved_terminal_history(id)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except OSError as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc)})
+    return {"status": "ok", "removed": removed, "id": id}
 
 
 @router.post("/api/terminal/tmux/cleanup")

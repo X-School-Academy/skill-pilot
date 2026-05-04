@@ -1,3 +1,4 @@
 [submodule "workspace"]
 	path = workspace
 	url = https://github.com/X-School-Academy/skill-pilot_workspace.git
+	branch = codeware

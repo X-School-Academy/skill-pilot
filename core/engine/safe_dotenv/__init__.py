@@ -10,17 +10,7 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 _LOADED_KEYS_ENV = "SAFE_DOTENV_LOADED_KEYS"
-_TRACKING_META_KEYS = {_LOADED_KEYS_ENV, "SAFE_DOTENV_UNSET_KEYS"}
-
-
-def configured_unset_keys() -> list[str]:
-    raw = os.environ.get("SAFE_DOTENV_UNSET_KEYS", "")
-    keys: list[str] = []
-    for key in raw.split(","):
-        key = key.strip()
-        if key:
-            keys.append(key)
-    return keys
+_TRACKING_META_KEYS = {_LOADED_KEYS_ENV}
 
 
 def _normalize_key_names(keys: list[str]) -> list[str]:
@@ -68,11 +58,10 @@ def apply_env_key_values(updates: dict[str, str]) -> list[str]:
     return applied_keys
 
 
-def safe_env(*, extra: dict[str, str] | None = None, unset_keys: list[str] | None = None) -> dict[str, str]:
+def safe_env(*, extra: dict[str, str] | None = None) -> dict[str, str]:
     env = dict(os.environ)
-    to_unset: set[str] = set(unset_keys or [])
+    to_unset: set[str] = set()
     # Internal control vars should not be propagated to child processes.
-    to_unset.add("SAFE_DOTENV_UNSET_KEYS")
     to_unset.add("IN_KEYS_SAFE_GUARD")
     for key in to_unset:
         env.pop(key, None)
@@ -149,12 +138,6 @@ def read_protected_file_gui(path: str) -> str:
 
 
 def load_env_with_safeguard(path: str | Path, *, override: bool = False, require_gui_auth: bool = False) -> bool:
-    if os.getenv("IN_KEYS_SAFE_GUARD", "").strip() == "1" and configured_unset_keys():
-        if not loaded_env_key_names():
-            remember_loaded_env_key_names([key for key in configured_unset_keys() if key != "IN_KEYS_SAFE_GUARD"])
-        print("[safe_dotenv] IN_KEYS_SAFE_GUARD=1 with preloaded env detected; skip loading .env again.", file=sys.stderr)
-        return False
-
     env_path = Path(path).resolve()
     if not env_path.exists():
         print(f"[safe_dotenv] Env file not found: {env_path}", file=sys.stderr)

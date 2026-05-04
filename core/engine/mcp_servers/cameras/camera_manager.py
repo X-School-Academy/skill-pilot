@@ -15,10 +15,14 @@ from typing import Any
 
 import aiohttp
 import json5
+import sys
 
 logger = logging.getLogger(__name__)
 
 _PROJECT_DIR = Path(__file__).resolve().parents[4]
+_ENGINE_DIR = Path(__file__).resolve().parents[2]
+if str(_ENGINE_DIR) not in sys.path:
+    sys.path.insert(0, str(_ENGINE_DIR))
 _CONFIG_PATH = _PROJECT_DIR / "config" / "cameras.json5"
 
 _DEFAULT_DETECTION = {"enabled": False, "fps": 1, "model": "yolov8n"}
@@ -72,11 +76,8 @@ class CameraManager:
 
     def _save_config(self) -> None:
         try:
-            _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-            data = {"cameras": self._cameras}
-            _CONFIG_PATH.write_text(
-                json5.dumps(data, indent=2, quote_keys=True), encoding="utf-8"
-            )
+            from json5_io import write_preserving_comments
+            write_preserving_comments(_CONFIG_PATH, {"cameras": self._cameras})
         except Exception as exc:
             logger.error("Failed to save cameras config: %s", exc)
 

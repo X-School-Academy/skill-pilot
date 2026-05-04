@@ -45,6 +45,7 @@ import {
   IconVideo,
   IconCamera,
   IconFolderOpen,
+  IconHistory,
 } from '@tabler/icons-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -78,6 +79,7 @@ interface McpServer {
   name: string;
   type: string;
   description?: string;
+  instructions?: string;
   system?: boolean;
   disabled?: boolean;
   command?: string;
@@ -90,6 +92,7 @@ interface McpServer {
 interface McpFormData {
   name: string;
   description: string;
+  instructions: string;
   type: string;
   command: string;
   args: string;
@@ -149,7 +152,7 @@ interface ExtensionItem {
 }
 
 const EMPTY_MCP_FORM: McpFormData = {
-  name: '', description: '', type: 'stdio', command: '', args: '', env: [['', '']],
+  name: '', description: '', instructions: '', type: 'stdio', command: '', args: '', env: [['', '']],
   url: '', headers: [['', '']], disabled: false,
 };
 
@@ -321,7 +324,7 @@ export default function HomePage() {
     setSelectedSessionPath,
   } = useSessionRoots();
 
-  const fetchLlmProviders = async () => {
+  const fetchLlmProviders = useCallback(async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/llm/providers`);
       const providers: LlmProvider[] = res.data.providers || [];
@@ -338,7 +341,7 @@ export default function HomePage() {
     } catch (err) {
       console.error('Failed to fetch LLM providers:', err);
     }
-  };
+  }, []);
 
   const fetchExternalSessions = useCallback(async (quiet: boolean = false) => {
     if (!quiet) setLoadingExternalSessions(true);
@@ -807,7 +810,9 @@ export default function HomePage() {
     },
     {
       label: 'New Session',
-      href: '/',
+      dividerBefore: '',
+      href: '/?view=home',
+      view: 'home',
       icon: <IconPlus size="1rem" />,
       action: () => {
         if (activeView === 'live-terminal') {
@@ -815,10 +820,12 @@ export default function HomePage() {
         } else if (activeView !== 'home') {
           setActiveView('home');
         }
+        void router.push('/?view=home');
       },
       disabled: activeView === 'home',
     },
-    { dividerBefore: '', label: 'Live Sessions', href: '/terminals', icon: <IconTerminal2 size="1rem" />, action: () => { void router.push('/terminals'); } },
+    { label: 'Live Sessions', href: '/terminals', icon: <IconTerminal2 size="1rem" />, action: () => { void router.push('/terminals'); } },
+    { label: 'Session Histories', href: '/terminal-histories', icon: <IconHistory size="1rem" />, action: () => { void router.push('/terminal-histories'); } },
     { dividerBefore: 'Workspace', label: 'Learning', href: '/courses', icon: <IconSchool size="1rem" />, action: () => router.push('/courses') },
     { label: 'Vibe Coding', href: '/vibe-coding', icon: <IconBriefcase size="1rem" />, action: () => router.push('/vibe-coding') },
     { label: 'Research', href: '/research', icon: <IconSearch size="1rem" />, action: () => router.push('/research') },
@@ -2500,6 +2507,7 @@ export default function HomePage() {
     setMcpForm({
       name: server.name,
       description: server.description || '',
+      instructions: server.instructions || '',
       type: server.type,
       command: server.command || '',
       args: (server.args || []).join('\n'),
@@ -2534,6 +2542,7 @@ export default function HomePage() {
       const body: any = {
         name: trimmedName,
         description: mcpForm.description.trim(),
+        instructions: mcpForm.instructions.trim() || undefined,
         type: mcpForm.type,
         disabled: mcpForm.disabled,
       };
@@ -2718,6 +2727,22 @@ export default function HomePage() {
               onChange={(e) => setMcpForm((prev) => ({ ...prev, description: e.target.value }))}
               placeholder="Describe what this MCP server provides to the agent..."
               rows={2}
+              style={{
+                width: '100%', padding: '6px 8px', fontSize: 13, borderRadius: 6,
+                border: `1px solid ${theme.colors.gray[3]}`,
+                background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff',
+                color: 'inherit', resize: 'vertical', fontFamily: 'inherit',
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <Text size="sm" weight={600} mb={4}>Instructions <Text span size="xs" color="dimmed">(optional — prepended to the generated SKILL.md)</Text></Text>
+            <textarea
+              value={mcpForm.instructions}
+              onChange={(e) => setMcpForm((prev) => ({ ...prev, instructions: e.target.value }))}
+              placeholder="Custom instructions for how the agent should use this MCP server and its tools..."
+              rows={3}
               style={{
                 width: '100%', padding: '6px 8px', fontSize: 13, borderRadius: 6,
                 border: `1px solid ${theme.colors.gray[3]}`,

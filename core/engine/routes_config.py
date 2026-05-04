@@ -162,8 +162,8 @@ def _read_mcp_config() -> Dict[str, Any]:
 
 
 def _write_mcp_config(data: Dict[str, Any]) -> None:
-    _MCP_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _MCP_CONFIG_PATH.write_text(json5.dumps(data, indent=2) + "\n", encoding="utf-8")
+    from json5_io import write_preserving_comments
+    write_preserving_comments(_MCP_CONFIG_PATH, data)
 
 
 def _infer_mcp_server_type(config: Dict[str, Any]) -> str:
@@ -208,6 +208,8 @@ def config_mcp_servers_list():
             entry["disabled"] = True
         if cfg.get("description"):
             entry["description"] = str(cfg["description"])
+        if cfg.get("instructions"):
+            entry["instructions"] = str(cfg["instructions"])
         for field in ("command", "args", "env", "url", "headers"):
             if field in expanded:
                 entry[field] = expanded[field]
@@ -244,6 +246,9 @@ async def config_mcp_servers_save(request: Request):
     description = (str(body.get("description") or "")).strip()
     if description:
         entry["description"] = description
+    instructions = (str(body.get("instructions") or "")).strip()
+    if instructions:
+        entry["instructions"] = instructions
     if server_type == "stdio":
         command = (str(body.get("command") or "")).strip()
         if not command:
@@ -383,10 +388,8 @@ async def config_skills_update(request: Request):
     if not isinstance(disabled, list):
         return JSONResponse(status_code=400, content={"error": "disabled must be an array"})
 
-    _DISABLED_SKILLS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _DISABLED_SKILLS_PATH.write_text(
-        json5.dumps(disabled, indent=2) + "\n", encoding="utf-8"
-    )
+    from json5_io import write_preserving_comments
+    write_preserving_comments(_DISABLED_SKILLS_PATH, disabled)
 
     bin_dir = _REPO_ROOT / "core" / "bin"
     skill_verify_paths: List[str] = []
@@ -500,14 +503,11 @@ async def config_extensions_action(request: Request):
     if action in ("install", "uninstall"):
         config_path = ext_dir / "extension.json5"
         try:
-            raw_text = config_path.read_text(encoding="utf-8")
-            raw_data = json5.loads(raw_text)
+            from json5_io import write_preserving_comments
+            raw_data = json5.loads(config_path.read_text(encoding="utf-8"))
             if isinstance(raw_data, dict):
                 raw_data["installed"] = action == "install"
-                config_path.write_text(
-                    json5.dumps(raw_data, indent=2, ensure_ascii=False, trailing_commas=False) + "\n",
-                    encoding="utf-8",
-                )
+                write_preserving_comments(config_path, raw_data)
         except Exception as exc:
             logger.warning("Failed to update installed flag in %s: %s", config_path, exc)
 

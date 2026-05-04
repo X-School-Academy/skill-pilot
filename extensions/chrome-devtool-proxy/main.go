@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -9,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -20,6 +23,8 @@ var (
 	listenAddr string
 	targetBase string
 	allowIP    string
+	tunnelURL  string
+	tunnelPool int
 )
 
 var upgrader = websocket.Upgrader{
@@ -45,14 +50,80 @@ func copyHeaders(dst, src http.Header) {
 	for k, vv := range src {
 		// Skip hop-by-hop / handshake-managed headers.
 		switch http.CanonicalHeaderKey(k) {
-		case "Connection", "Upgrade", "Sec-Websocket-Key", "Sec-Websocket-Version",
-			"Sec-Websocket-Extensions", "Sec-Websocket-Accept":
+		case "Connection", "Upgrade", "Host", "Sec-Websocket-Key", "Sec-Websocket-Version",
+			"Sec-Websocket-Extensions", "Sec-Websocket-Accept", "Sec-Websocket-Protocol":
 			continue
 		}
 		for _, v := range vv {
 			dst.Add(k, v)
 		}
 	}
+}
+
+// relay runs the bidirectional pump between two already-connected websockets.
+// It is shared by forward-proxy mode (incoming local client ↔ upstream Chrome)
+// and tunnel-client mode (outbound parked tunnel ↔ upstream Chrome).
+func relay(client, upstream *websocket.Conn, label string) {
+	client.SetReadLimit(32 << 20)
+	upstream.SetReadLimit(32 << 20)
+
+	var once sync.Once
+	closeBoth := func() {
+		once.Do(func() {
+			_ = client.Close()
+			_ = upstream.Close()
+		})
+	}
+
+	pipe := func(dst, src *websocket.Conn, name string) {
+		defer closeBoth()
+		for {
+			msgType, reader, err := src.NextReader()
+			if err != nil {
+				if !websocket.IsCloseError(err,
+					websocket.CloseNormalClosure,
+					websocket.CloseGoingAway,
+					websocket.CloseNoStatusReceived) {
+					log.Printf("[%s] read error: %v", name, err)
+				}
+				return
+			}
+			writer, err := dst.NextWriter(msgType)
+			if err != nil {
+				log.Printf("[%s] write open error: %v", name, err)
+				return
+			}
+			if _, err := io.Copy(writer, reader); err != nil {
+				_ = writer.Close()
+				log.Printf("[%s] copy error: %v", name, err)
+				return
+			}
+			if err := writer.Close(); err != nil {
+				log.Printf("[%s] write close error: %v", name, err)
+				return
+			}
+		}
+	}
+
+	client.SetPingHandler(func(appData string) error {
+		deadline := time.Now().Add(5 * time.Second)
+		return upstream.WriteControl(websocket.PingMessage, []byte(appData), deadline)
+	})
+	client.SetPongHandler(func(appData string) error {
+		deadline := time.Now().Add(5 * time.Second)
+		return upstream.WriteControl(websocket.PongMessage, []byte(appData), deadline)
+	})
+	upstream.SetPingHandler(func(appData string) error {
+		deadline := time.Now().Add(5 * time.Second)
+		return client.WriteControl(websocket.PingMessage, []byte(appData), deadline)
+	})
+	upstream.SetPongHandler(func(appData string) error {
+		deadline := time.Now().Add(5 * time.Second)
+		return client.WriteControl(websocket.PongMessage, []byte(appData), deadline)
+	})
+
+	go pipe(upstream, client, label+":client->upstream")
+	pipe(client, upstream, label+":upstream->client")
 }
 
 func proxyWS(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +141,6 @@ func proxyWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer clientConn.Close()
 
-	// Dial upstream target.
 	dialer := websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 10 * time.Second,
@@ -86,8 +156,6 @@ func proxyWS(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.Printf("[upstream] dial error: %v", err)
 		}
-
-		// Tell client the upstream is unavailable.
 		_ = clientConn.WriteControl(
 			websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream unavailable"),
@@ -98,75 +166,143 @@ func proxyWS(w http.ResponseWriter, r *http.Request) {
 	defer upstreamConn.Close()
 
 	log.Printf("[proxy] connected %s -> %s", r.RemoteAddr, targetURL.String())
-
-	// Keep read limits reasonable for a debug proxy; adjust if needed.
-	clientConn.SetReadLimit(32 << 20)
-	upstreamConn.SetReadLimit(32 << 20)
-
-	var once sync.Once
-	closeBoth := func() {
-		once.Do(func() {
-			_ = clientConn.Close()
-			_ = upstreamConn.Close()
-		})
-	}
-
-	pipe := func(dst, src *websocket.Conn, name string) {
-		defer closeBoth()
-
-		for {
-			msgType, reader, err := src.NextReader()
-			if err != nil {
-				if !websocket.IsCloseError(err,
-					websocket.CloseNormalClosure,
-					websocket.CloseGoingAway,
-					websocket.CloseNoStatusReceived) {
-					log.Printf("[%s] read error: %v", name, err)
-				}
-				return
-			}
-
-			writer, err := dst.NextWriter(msgType)
-			if err != nil {
-				log.Printf("[%s] write open error: %v", name, err)
-				return
-			}
-
-			if _, err := io.Copy(writer, reader); err != nil {
-				_ = writer.Close()
-				log.Printf("[%s] copy error: %v", name, err)
-				return
-			}
-
-			if err := writer.Close(); err != nil {
-				log.Printf("[%s] write close error: %v", name, err)
-				return
-			}
-		}
-	}
-
-	// Forward pings/pongs/close cleanly enough for a simple proxy.
-	clientConn.SetPingHandler(func(appData string) error {
-		deadline := time.Now().Add(5 * time.Second)
-		return upstreamConn.WriteControl(websocket.PingMessage, []byte(appData), deadline)
-	})
-	clientConn.SetPongHandler(func(appData string) error {
-		deadline := time.Now().Add(5 * time.Second)
-		return upstreamConn.WriteControl(websocket.PongMessage, []byte(appData), deadline)
-	})
-	upstreamConn.SetPingHandler(func(appData string) error {
-		deadline := time.Now().Add(5 * time.Second)
-		return clientConn.WriteControl(websocket.PingMessage, []byte(appData), deadline)
-	})
-	upstreamConn.SetPongHandler(func(appData string) error {
-		deadline := time.Now().Add(5 * time.Second)
-		return clientConn.WriteControl(websocket.PongMessage, []byte(appData), deadline)
-	})
-
-	go pipe(upstreamConn, clientConn, "client->upstream")
-	pipe(clientConn, upstreamConn, "upstream->client")
-
+	relay(clientConn, upstreamConn, "proxy")
 	log.Printf("[proxy] disconnected %s", r.RemoteAddr)
+}
+
+// controlFrame is the single text message the engine sends on the parked
+// tunnel right after a local CDP client arrives. It tells the remote Go
+// proxy which Chrome target path to dial. After this frame, traffic is
+// transparent CDP frames in both directions.
+type controlFrame struct {
+	Path    string      `json:"path"`
+	Headers http.Header `json:"headers,omitempty"`
+}
+
+// runTunnelWorker maintains one parked tunnel connection forever (with backoff).
+// Each successful tunnel handles exactly one CDP session, then re-dials.
+func runTunnelWorker(workerID int, stop <-chan struct{}) {
+	backoff := time.Second
+	maxBackoff := 30 * time.Second
+
+	for {
+		select {
+		case <-stop:
+			return
+		default:
+		}
+
+		if err := dialAndServeTunnel(workerID); err != nil {
+			log.Printf("[tunnel-%d] %v; retrying in %s", workerID, err, backoff)
+			select {
+			case <-stop:
+				return
+			case <-time.After(backoff):
+			}
+			if backoff < maxBackoff {
+				backoff *= 2
+				if backoff > maxBackoff {
+					backoff = maxBackoff
+				}
+			}
+			continue
+		}
+		backoff = time.Second
+	}
+}
+
+func dialAndServeTunnel(workerID int) error {
+	dialer := websocket.Dialer{
+		Proxy:            http.ProxyFromEnvironment,
+		HandshakeTimeout: 15 * time.Second,
+	}
+
+	tunnelConn, resp, err := dialer.Dial(tunnelURL, nil)
+	if err != nil {
+		if resp != nil {
+			return &tunnelError{stage: "dial", err: err, status: resp.Status}
+		}
+		return &tunnelError{stage: "dial", err: err}
+	}
+	defer tunnelConn.Close()
+
+	log.Printf("[tunnel-%d] parked at %s", workerID, redactedTunnelURL())
+
+	tunnelConn.SetReadLimit(32 << 20)
+
+	// Block until the engine sends the control frame (when a local client connects).
+	msgType, msg, err := tunnelConn.ReadMessage()
+	if err != nil {
+		return &tunnelError{stage: "wait-control", err: err}
+	}
+	if msgType != websocket.TextMessage {
+		_ = tunnelConn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseProtocolError, "expected text control frame"),
+			time.Now().Add(2*time.Second),
+		)
+		return &tunnelError{stage: "wait-control", err: errStringf("non-text control frame: type=%d", msgType)}
+	}
+
+	var ctrl controlFrame
+	if err := json.Unmarshal(msg, &ctrl); err != nil {
+		_ = tunnelConn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseProtocolError, "bad control frame json"),
+			time.Now().Add(2*time.Second),
+		)
+		return &tunnelError{stage: "parse-control", err: err}
+	}
+	if ctrl.Path == "" || !strings.HasPrefix(ctrl.Path, "/") {
+		_ = tunnelConn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseProtocolError, "missing or invalid path"),
+			time.Now().Add(2*time.Second),
+		)
+		return &tunnelError{stage: "parse-control", err: errStringf("invalid path: %q", ctrl.Path)}
+	}
+
+	upstreamURL := targetBase + ctrl.Path
+	log.Printf("[tunnel-%d] session opening, upstream=%s", workerID, upstreamURL)
+
+	reqHeader := http.Header{}
+	copyHeaders(reqHeader, ctrl.Headers)
+
+	upstreamConn, resp, err := dialer.Dial(upstreamURL, reqHeader)
+	if err != nil {
+		status := ""
+		if resp != nil {
+			status = resp.Status
+		}
+		_ = tunnelConn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream unavailable"),
+			time.Now().Add(2*time.Second),
+		)
+		return &tunnelError{stage: "dial-upstream", err: err, status: status}
+	}
+	defer upstreamConn.Close()
+
+	relay(tunnelConn, upstreamConn, "tunnel")
+	log.Printf("[tunnel-%d] session closed", workerID)
+	return nil
+}
+
+type tunnelError struct {
+	stage  string
+	err    error
+	status string
+}
+
+func (e *tunnelError) Error() string {
+	if e.status != "" {
+		return e.stage + ": " + e.err.Error() + " (status=" + e.status + ")"
+	}
+	return e.stage + ": " + e.err.Error()
+}
+
+func errStringf(format string, args ...any) error {
+	return fmt.Errorf(format, args...)
 }
 
 // localIP returns the first non-loopback IPv4 address, or "localhost" as fallback.
@@ -200,12 +336,36 @@ func localIP() string {
 	return "localhost"
 }
 
+// redactedTunnelURL strips the token query value for logs.
+func redactedTunnelURL() string {
+	u, err := url.Parse(tunnelURL)
+	if err != nil {
+		return tunnelURL
+	}
+	q := u.Query()
+	if q.Get("token") != "" {
+		q.Set("token", "***")
+		u.RawQuery = q.Encode()
+	}
+	return u.String()
+}
+
 func main() {
-	flag.StringVar(&listenAddr, "listenAddr", "0.0.0.0:9223", "Address to listen on (e.g. 0.0.0.0:9223)")
+	flag.StringVar(&listenAddr, "listenAddr", "0.0.0.0:9223", "Forward-proxy mode: address to listen on (e.g. 0.0.0.0:9223). Ignored when -tunnelURL is set.")
 	flag.StringVar(&targetBase, "targetBase", "ws://127.0.0.1:9222", "Upstream WebSocket target base URL (e.g. ws://127.0.0.1:9222)")
-	flag.StringVar(&allowIP, "allowIP", "*", "Remote IP allowed to connect; '*' permits any address (e.g. 192.168.1.50)")
+	flag.StringVar(&allowIP, "allowIP", "*", "Forward-proxy mode: remote IP allowed to connect; '*' permits any address. Ignored when -tunnelURL is set.")
+	flag.StringVar(&tunnelURL, "tunnelURL", "", "Optional. If set, run in tunnel-client mode and dial out to this ws://or wss:// URL (e.g. wss://engine.example.com/chrome-proxy?token=abc).")
+	flag.IntVar(&tunnelPool, "tunnelPool", 1, "Tunnel-client mode: number of concurrent parked tunnels.")
 	flag.Parse()
 
+	if tunnelURL != "" {
+		runTunnelMode()
+		return
+	}
+	runForwardMode()
+}
+
+func runForwardMode() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if !isAllowed(r) {
@@ -239,8 +399,6 @@ func main() {
 		} else {
 			log.Printf("[proxy] allow-ip: %s only", allowIP)
 		}
-
-		// Print remote connection hint.
 		_, port, _ := net.SplitHostPort(listenAddr)
 		ip := localIP()
 		log.Printf("[proxy] connect from remote: agent-browser open URL --cdp ws://%s:%s/devtools/browser/", ip, port)
@@ -249,13 +407,46 @@ func main() {
 		}
 	}()
 
-	// Graceful shutdown on Ctrl+C
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	<-sigCh
-
 	log.Printf("[proxy] shutting down")
-	shutdownCtx, cancel := signal.NotifyContext(nil)
-	defer cancel()
-	_ = server.Shutdown(shutdownCtx)
+	_ = server.Close()
+}
+
+func runTunnelMode() {
+	if tunnelPool < 1 {
+		tunnelPool = 1
+	}
+	log.Printf("[tunnel] mode: dialing %s with pool=%d", redactedTunnelURL(), tunnelPool)
+	log.Printf("[tunnel] upstream Chrome target base: %s", targetBase)
+	if listenAddr != "0.0.0.0:9223" {
+		log.Printf("[tunnel] note: -listenAddr is ignored in tunnel mode")
+	}
+	if allowIP != "*" {
+		log.Printf("[tunnel] note: -allowIP is ignored in tunnel mode")
+	}
+
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < tunnelPool; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			runTunnelWorker(id, stop)
+		}(i)
+	}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	<-sigCh
+	log.Printf("[tunnel] shutting down")
+	close(stop)
+	// Give workers a brief window to exit; their dials/relays will unblock on Close.
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+	}
 }

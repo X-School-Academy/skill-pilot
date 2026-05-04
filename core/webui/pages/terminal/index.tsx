@@ -547,10 +547,13 @@ const TerminalPage = () => {
       <Head>
         <title>Terminal</title>
       </Head>
-      <main className="h-screen bg-[#0f1117] text-white flex flex-col overflow-hidden">
+      <main
+        className="bg-[#0f1117] text-white flex flex-col overflow-hidden"
+        style={{ height: "100dvh", minHeight: 0 }}
+      >
         <div
           ref={panelRef}
-          className="flex-1 flex flex-col min-h-0"
+          className="flex-1 flex flex-col min-h-0 overflow-hidden"
         >
           <div className={`${compactChrome ? "h-[32px] px-2" : "h-[42px] px-3"} border-b border-[#2f3645] flex items-center justify-between bg-[#161b26] flex-shrink-0 gap-2`}>
             <div className={`${compactChrome ? "hidden" : "text-sm font-medium truncate"}`}>
@@ -606,7 +609,7 @@ const TerminalPage = () => {
               )}
             </div>
           </div>
-          <div ref={terminalContainerRef} className="flex-1 bg-[#0b0f19]" />
+          <div ref={terminalContainerRef} className="flex-1 min-h-0 overflow-hidden bg-[#0b0f19]" />
         </div>
       </main>
     </>

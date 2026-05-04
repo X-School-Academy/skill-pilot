@@ -25,7 +25,8 @@ import {
 import { EditorView, lineNumbers, keymap, ViewUpdate } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
 import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
 import { json } from '@codemirror/lang-json';
@@ -190,18 +191,35 @@ const editorTheme = EditorView.theme({
     color: '#e2e8f0',
   },
   '.cm-scroller': { overflow: 'auto', height: '100%' },
-  '.cm-content': { padding: '14px 0' },
+  '.cm-content': { padding: '14px 0', caretColor: '#ffffff' },
   '.cm-line': { padding: '0 16px' },
   '.cm-gutters': { background: '#111827', borderRight: '1px solid #1f2937', color: '#64748b' },
   '.cm-activeLineGutter': { background: '#172033', color: '#cbd5e1' },
   '.cm-activeLine': { background: '#172033' },
-  '.cm-cursor': { borderLeftColor: '#f8fafc' },
+  '.cm-cursor, .cm-dropCursor': { borderLeft: '2px solid #ffffff' },
+  '&.cm-focused .cm-cursor': { borderLeftColor: '#ffffff' },
   '.cm-selectionBackground, ::selection': { background: '#1d4ed8 !important' },
   '.cm-focused .cm-selectionBackground': { background: '#2563eb !important' },
   '.cm-panels': { background: '#111827', color: '#e2e8f0' },
   '.cm-searchMatch': { background: '#7c3aed55', outline: '1px solid #8b5cf6' },
   '.cm-searchMatch.cm-searchMatch-selected': { background: '#a855f7aa' },
 });
+
+const editorHighlightStyle = HighlightStyle.define([
+  { tag: [tags.keyword, tags.operatorKeyword], color: '#c4b5fd' },
+  { tag: [tags.name, tags.variableName, tags.deleted, tags.character, tags.macroName], color: '#e2e8f0' },
+  { tag: [tags.propertyName, tags.function(tags.variableName), tags.labelName], color: '#7dd3fc' },
+  { tag: [tags.processingInstruction, tags.string, tags.inserted, tags.special(tags.string)], color: '#86efac' },
+  { tag: [tags.number, tags.changed, tags.annotation, tags.modifier, tags.self, tags.namespace], color: '#fde68a' },
+  { tag: [tags.color, tags.constant(tags.name), tags.standard(tags.name), tags.atom, tags.bool], color: '#fca5a5' },
+  { tag: [tags.className, tags.typeName], color: '#67e8f9' },
+  { tag: [tags.url, tags.escape, tags.regexp, tags.link], color: '#38bdf8', textDecoration: 'underline' },
+  { tag: [tags.meta, tags.comment], color: '#94a3b8' },
+  { tag: tags.heading, color: '#f8fafc', fontWeight: '700' },
+  { tag: tags.strong, fontWeight: '700' },
+  { tag: tags.emphasis, fontStyle: 'italic' },
+  { tag: tags.invalid, color: '#fecaca' },
+], { all: { color: '#e2e8f0' } });
 
 const iconButtonStyle: React.CSSProperties = {
   width: 34,
@@ -523,6 +541,7 @@ export default function FileManagerContent() {
         body: JSON.stringify({
           session_type: 'shell',
           path: targetPath,
+          path_mode: 'file_manager',
           session_name: buildFileManagerTerminalSessionName(),
         }),
       });
@@ -1084,6 +1103,10 @@ export default function FileManagerContent() {
     if (previousMtime !== null && nextMtime === previousMtime) return;
     lastOpenFileMtimeRef.current = nextMtime;
 
+    if (fileViewMode === 'edit' && editorViewRef.current?.hasFocus) {
+      return;
+    }
+
     const hasUnsavedChanges =
       lastSavedPathRef.current === activeFile.path &&
       fileContentRef.current !== lastSavedContentRef.current;
@@ -1094,7 +1117,7 @@ export default function FileManagerContent() {
 
     setRealtimeNotice('This file was updated on disk.');
     await openFileInPanel(activeFile.path, { updateUrl: false, skipClearNotice: true });
-  }, [openFileInPanel]);
+  }, [fileViewMode, openFileInPanel]);
 
   const streamUnavailableMessage = useCallback((watcher?: FileStreamStatusEvent['watcher']) => {
     const isDevWebui = typeof window !== 'undefined' && window.location.port === '3003';
@@ -1345,7 +1368,7 @@ export default function FileManagerContent() {
         extensions: [
           history(),
           lineNumbers(),
-          syntaxHighlighting(defaultHighlightStyle),
+          syntaxHighlighting(editorHighlightStyle),
           langCompartmentRef.current!.of([]),
           editorTheme,
           keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -1356,7 +1379,6 @@ export default function FileManagerContent() {
             if (!path) return;
             const content = update.state.doc.toString();
             setFileContent(content);
-            setOpenFile(prev => (prev ? { ...prev, content } : prev));
             scheduleAutoSave(path, content);
           }),
         ],
@@ -1552,6 +1574,26 @@ export default function FileManagerContent() {
                 }}
               >
                 Preview
+              </button>
+              <button
+                type="button"
+                onClick={toggleTerminalPanel}
+                title={terminalPanelOpen ? 'Hide terminal panel' : 'Show terminal panel'}
+                style={{
+                  width: 30,
+                  height: 28,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 6,
+                  border: '1px solid #d6dce5',
+                  background: terminalPanelOpen ? '#0f5cc0' : '#fff',
+                  color: terminalPanelOpen ? '#fff' : '#334155',
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+              >
+                <IconTerminal2 size={15} />
               </button>
             </div>
             {saveText && (
