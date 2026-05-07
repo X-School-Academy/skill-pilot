@@ -42,6 +42,7 @@ import {
 import EmbeddedSessionPanel, { WorkflowExecuteStatus } from '../../components/EmbeddedSessionPanel';
 import { apiUrl } from '../../libs/api-base';
 import { AUTO_EXECUTE_OPTION, buildExecuteSelectOptions, isAutoExecuteTarget } from '../../libs/execute-targets';
+import { useWorkspaceWatcher } from '../../libs/file-events';
 import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
 
 const API_BASE_URL = apiUrl('/api');
@@ -189,6 +190,9 @@ export default function VibeCodingPage() {
   const [workflowExecuteStatus, setWorkflowExecuteStatus] = useState<WorkflowExecuteStatus | null>(null);
   const [continuingWorkflow, setContinuingWorkflow] = useState(false);
   const rightPaneRef = useRef<HTMLDivElement | null>(null);
+  const lastLoadedContentRef = useRef<string>('');
+  const editorContentRef = useRef<string>('');
+  useEffect(() => { editorContentRef.current = editorContent; }, [editorContent]);
 
   const currentTask = typeof task === 'string' ? task : '';
   const currentProject = currentTask.includes('/') ? currentTask.split('/')[0] : '';
@@ -281,7 +285,9 @@ export default function VibeCodingPage() {
     try {
       const res = await axios.get(`${API_BASE_URL}/vibe-coding/content`, { params: { path } });
       setSelectedKind((res.data.kind as FileKind) || nextKind);
-      setEditorContent(String(res.data.content || ''));
+      const content = String(res.data.content || '');
+      setEditorContent(content);
+      lastLoadedContentRef.current = content;
     } catch (err: any) {
       console.error('Failed to fetch vibe coding content:', err);
       setEditorError(err?.response?.data?.error || 'Failed to load file content.');
@@ -569,6 +575,21 @@ export default function VibeCodingPage() {
       setContinuingWorkflow(false);
     }
   };
+
+  useWorkspaceWatcher({
+    prefix: '/workspace/vibe-coding',
+    onTreeChange: () => { void fetchTree(); },
+    currentFilePath: currentTask ? `/workspace/vibe-coding/${currentTask}` : null,
+    onCurrentFileChange: () => {
+      if (!currentTask) return;
+      if (editorContentRef.current === lastLoadedContentRef.current) {
+        setNotice('File updated on disk.');
+        void fetchContent(currentTask);
+      } else {
+        setEditorError('File changed on disk. Reload after saving or discard your edits.');
+      }
+    },
+  });
 
   useEffect(() => {
     fetchTree();
