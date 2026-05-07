@@ -377,6 +377,25 @@ def config_skills_list():
     return {"categories": categories}
 
 
+@router.get("/api/config/skills/installed")
+def config_skills_installed():
+    installed_dir = _REPO_ROOT / ".agent" / "skills"
+    skills: List[Dict[str, str]] = []
+    if installed_dir.is_dir():
+        for entry in sorted(installed_dir.iterdir()):
+            if entry.name.startswith("."):
+                continue
+            skill_md = entry / "SKILL.md"
+            if not skill_md.exists():
+                continue
+            meta = _parse_skill_frontmatter(skill_md)
+            skills.append({
+                "name": meta.get("name", entry.name),
+                "description": meta.get("description", ""),
+            })
+    return {"skills": skills}
+
+
 @router.post("/api/config/skills/update")
 async def config_skills_update(request: Request):
     try:

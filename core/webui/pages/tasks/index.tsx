@@ -41,6 +41,7 @@ import {
 } from '@tabler/icons-react';
 import { apiUrl } from '../../libs/api-base';
 import { AUTO_EXECUTE_OPTION, buildExecuteSelectOptions, isAutoExecuteTarget } from '../../libs/execute-targets';
+import { useWorkspaceWatcher } from '../../libs/file-events';
 import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
 import { useSessionRoots } from '../../libs/session-roots';
 
@@ -199,6 +200,9 @@ export default function TasksPage() {
   const [workflowExecuteStatus, setWorkflowExecuteStatus] = useState<WorkflowExecuteStatus | null>(null);
   const [continuingWorkflow, setContinuingWorkflow] = useState(false);
   const rightPaneRef = useRef<HTMLDivElement | null>(null);
+  const lastLoadedContentRef = useRef<string>('');
+  const editorContentRef = useRef<string>('');
+  useEffect(() => { editorContentRef.current = editorContent; }, [editorContent]);
   const {
     sessionRootOptions,
     hasSessionWorktrees,
@@ -315,7 +319,9 @@ export default function TasksPage() {
     try {
       const res = await axios.get(`${API_BASE_URL}/tasks/content`, { params: { path } });
       setSelectedKind((res.data.kind as TaskKind) || nextKind);
-      setEditorContent(String(res.data.content || ''));
+      const content = String(res.data.content || '');
+      setEditorContent(content);
+      lastLoadedContentRef.current = content;
     } catch (err: any) {
       console.error('Failed to fetch task content:', err);
       setEditorError(err?.response?.data?.error || 'Failed to load task content.');
@@ -359,15 +365,13 @@ export default function TasksPage() {
   const fetchExecuteOptions = async () => {
     try {
       const [skillsRes, workflowsRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/config/skills`),
+        axios.get(`${API_BASE_URL}/config/skills/installed`),
         axios.get(`${API_BASE_URL}/workflows/tree`),
       ]);
 
       const nextSkills: string[] = [];
-      for (const category of skillsRes.data.categories || []) {
-        for (const skill of category.skills || []) {
-          if (skill?.name) nextSkills.push(String(skill.name));
-        }
+      for (const skill of skillsRes.data.skills || []) {
+        if (skill?.name) nextSkills.push(String(skill.name));
       }
       setSkillOptions(nextSkills.sort((a, b) => a.localeCompare(b)));
 
@@ -460,6 +464,21 @@ export default function TasksPage() {
       setDeletingTask(false);
     }
   };
+
+  useWorkspaceWatcher({
+    prefix: '/workspace/tasks',
+    onTreeChange: () => { void fetchTree(); },
+    currentFilePath: currentTask ? `/workspace/tasks/${currentTask}` : null,
+    onCurrentFileChange: () => {
+      if (!currentTask) return;
+      if (editorContentRef.current === lastLoadedContentRef.current) {
+        setNotice('File updated on disk.');
+        void fetchContent(currentTask);
+      } else {
+        setEditorError('File changed on disk. Reload after saving or discard your edits.');
+      }
+    },
+  });
 
   useEffect(() => {
     fetchTree();
