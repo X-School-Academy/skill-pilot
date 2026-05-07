@@ -401,13 +401,10 @@ export default function WorkflowsPage() {
 
   const fetchSkills = useCallback(async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/config/skills`);
-      const categories = res.data.categories || [];
+      const res = await axios.get(`${API_BASE_URL}/config/skills/installed`);
       const names: string[] = [];
-      for (const cat of categories) {
-        for (const skill of cat.skills || []) {
-          if (skill?.name) names.push(String(skill.name));
-        }
+      for (const skill of res.data.skills || []) {
+        if (skill?.name) names.push(String(skill.name));
       }
       setSkills(names);
     } catch (err) {

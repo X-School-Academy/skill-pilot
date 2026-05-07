@@ -347,15 +347,13 @@ export default function SkillPilotDevelopmentPage() {
   const fetchExecuteOptions = async () => {
     try {
       const [skillsRes, workflowsRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/config/skills`),
+        axios.get(`${API_BASE_URL}/config/skills/installed`),
         axios.get(`${API_BASE_URL}/workflows/tree`),
       ]);
 
       const nextSkills: string[] = [];
-      for (const category of skillsRes.data.categories || []) {
-        for (const skill of category.skills || []) {
-          if (skill?.name) nextSkills.push(String(skill.name));
-        }
+      for (const skill of skillsRes.data.skills || []) {
+        if (skill?.name) nextSkills.push(String(skill.name));
       }
       setSkillOptions(nextSkills.sort((a, b) => a.localeCompare(b)));
 

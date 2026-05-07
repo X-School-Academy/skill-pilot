@@ -322,15 +322,13 @@ export default function VibeCodingPage() {
   const fetchExecuteOptions = async () => {
     try {
       const [skillsRes, workflowsRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/config/skills`),
+        axios.get(`${API_BASE_URL}/config/skills/installed`),
         axios.get(`${API_BASE_URL}/workflows/tree`),
       ]);
 
       const nextSkills: string[] = [];
-      for (const category of skillsRes.data.categories || []) {
-        for (const skill of category.skills || []) {
-          if (skill?.name) nextSkills.push(String(skill.name));
-        }
+      for (const skill of skillsRes.data.skills || []) {
+        if (skill?.name) nextSkills.push(String(skill.name));
       }
       setSkillOptions(nextSkills.sort((a, b) => a.localeCompare(b)));
 
@@ -689,22 +687,22 @@ export default function VibeCodingPage() {
       return [
         {
           label: 'Refine',
-          defaultSkill: 'vibe-coding-project-refine',
+          defaultSkill: 'vibe-coding',
           skillPromptSuffix: `to refine the ${currentInstructionPath}`,
         },
         {
           label: 'Brainstorm',
-          defaultSkill: 'vibe-coding-project-brainstorm',
+          defaultSkill: 'vibe-coding',
           skillPromptSuffix: `to brainstorm ideas and alternatives for the ${currentInstructionPath}`,
         },
         {
           label: 'Initial',
-          defaultSkill: 'vibe-coding-project-initial',
+          defaultSkill: 'vibe-coding',
           skillPromptSuffix: `to init the project defined at ${currentInstructionPath}`,
         },
         {
           label: 'Plan',
-          defaultSkill: 'vibe-coding-project-plan',
+          defaultSkill: 'vibe-coding',
           skillPromptSuffix: `to make a development plan for requirement ${currentInstructionPath}`,
         },
       ];
@@ -713,7 +711,7 @@ export default function VibeCodingPage() {
       return [
         {
           label: 'Implement',
-          defaultSkill: 'vibe-coding-project-implement',
+          defaultSkill: 'vibe-coding',
           skillPromptSuffix: `to implement the code as the ${currentInstructionPath}`,
         },
       ];
@@ -722,17 +720,17 @@ export default function VibeCodingPage() {
       return [
         {
           label: 'Review',
-          defaultSkill: 'vibe-coding-project-review',
+          defaultSkill: 'vibe-coding',
           skillPromptSuffix: `to review the code of the implementation of the ${currentInstructionPath}`,
         },
         {
           label: 'Test',
-          defaultSkill: 'vibe-coding-project-test',
+          defaultSkill: 'vibe-coding',
           skillPromptSuffix: `to test the code of the implementation of the ${currentInstructionPath}`,
         },
         {
           label: 'Deploy',
-          defaultSkill: 'vibe-coding-project-deploy',
+          defaultSkill: 'vibe-coding',
           skillPromptSuffix: `to deploy the code of the implementation of the ${currentInstructionPath}`,
         },
       ];
@@ -741,7 +739,7 @@ export default function VibeCodingPage() {
       return [
         {
           label: 'Update Code',
-          defaultSkill: 'vibe-coding-project-update',
+          defaultSkill: 'vibe-coding',
           skillPromptSuffix: `to update the code based on the update request defined in ${currentInstructionPath}`,
         },
       ];
@@ -750,7 +748,7 @@ export default function VibeCodingPage() {
       return [
         {
           label: 'Apply to Requirements',
-          defaultSkill: 'vibe-coding-project-apply-brainstorm',
+          defaultSkill: 'vibe-coding',
           skillPromptSuffix: `to merge brainstorm ideas from ${currentInstructionPath} into the project requirements`,
         },
       ];
@@ -759,7 +757,7 @@ export default function VibeCodingPage() {
       return [
         {
           label: 'Fix Issues',
-          defaultSkill: 'vibe-coding-project-fix-issues',
+          defaultSkill: 'vibe-coding',
           skillPromptSuffix: `to fix the issues defined in ${currentInstructionPath}`,
         },
       ];
@@ -1141,6 +1139,7 @@ export default function VibeCodingPage() {
               data={skillSelectOptions}
               searchable
               clearable={false}
+              withinPortal
             />
           ) : (
             <Select
@@ -1151,6 +1150,7 @@ export default function VibeCodingPage() {
               data={workflowSelectOptions}
               searchable
               clearable={false}
+              withinPortal
             />
           )}
 
