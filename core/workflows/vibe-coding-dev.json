@@ -21,8 +21,8 @@
       "data": {
         "title": "Create Project",
         "provider_id": "claude",
-        "skill": "vibe-coding-project-create",
-        "responsibility": ""
+        "skill": "vibe-coding",
+        "responsibility": "Create the project."
       }
     },
     {
@@ -35,8 +35,8 @@
       "data": {
         "title": "Refine Requirement",
         "provider_id": "claude",
-        "skill": "vibe-coding-project-refine",
-        "responsibility": ""
+        "skill": "vibe-coding",
+        "responsibility": "Refine the requirement."
       }
     },
     {
@@ -49,8 +49,8 @@
       "data": {
         "title": "Initialize Project",
         "provider_id": "claude",
-        "skill": "vibe-coding-project-initial",
-        "responsibility": ""
+        "skill": "vibe-coding",
+        "responsibility": "Initialize the project."
       }
     },
     {
@@ -63,8 +63,8 @@
       "data": {
         "title": "Plan Project",
         "provider_id": "claude",
-        "skill": "vibe-coding-project-plan",
-        "responsibility": ""
+        "skill": "vibe-coding",
+        "responsibility": "Plan the project."
       }
     },
     {
@@ -77,8 +77,8 @@
       "data": {
         "title": "Implement Project",
         "provider_id": "claude",
-        "skill": "vibe-coding-project-implement",
-        "responsibility": ""
+        "skill": "vibe-coding",
+        "responsibility": "Implement the project."
       }
     },
     {
@@ -91,8 +91,8 @@
       "data": {
         "title": "Review Project",
         "provider_id": "claude",
-        "skill": "vibe-coding-project-review",
-        "responsibility": ""
+        "skill": "vibe-coding",
+        "responsibility": "Review the implementation."
       }
     },
     {
@@ -105,8 +105,8 @@
       "data": {
         "title": "Test Project",
         "provider_id": "claude",
-        "skill": "vibe-coding-project-test",
-        "responsibility": ""
+        "skill": "vibe-coding",
+        "responsibility": "Test the implementation."
       }
     },
     {
@@ -119,8 +119,8 @@
       "data": {
         "title": "Deploy Project",
         "provider_id": "claude",
-        "skill": "vibe-coding-project-deploy",
-        "responsibility": ""
+        "skill": "vibe-coding",
+        "responsibility": "Deploy the project."
       }
     },
     {
