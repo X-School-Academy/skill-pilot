@@ -396,7 +396,8 @@ def _llm_subprocess_env(provider_env: Dict[str, str]) -> Dict[str, str]:
 
 
 def _provider_uses_codex_json(provider: Dict[str, Any]) -> bool:
-    return str(provider.get("bin") or "").strip().lower() == "codex" and "--json" in _string_list(provider, "args")
+    bin_name = Path(str(provider.get("bin") or "").strip()).name.lower()
+    return bin_name == "codex" and "--json" in _string_list(provider, "args")
 
 
 def _provider_uses_gemini_json(provider: Dict[str, Any]) -> bool:
