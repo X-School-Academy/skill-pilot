@@ -1,5 +1,5 @@
 import json
-import json5
+import json5_io as json5
 import os
 import secrets
 import shlex

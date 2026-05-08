@@ -345,7 +345,7 @@ def _request_headers(request: web.Request) -> dict[str, list[str]]:
 def _read_chrome_proxy_config() -> dict:
     try:
         from settings import _SETTINGS_PATH  # type: ignore
-        import json5 as _json5
+        import json5_io as _json5
 
         data = _json5.loads(_SETTINGS_PATH.read_text(encoding="utf-8"))
         services = data.get("services", {}) if isinstance(data, dict) else {}

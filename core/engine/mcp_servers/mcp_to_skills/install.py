@@ -3,11 +3,16 @@ from __future__ import annotations
 
 import argparse
 import json
-import json5
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+_ENGINE_ROOT = str(Path(__file__).resolve().parents[2])
+if _ENGINE_ROOT not in sys.path:
+    sys.path.insert(0, _ENGINE_ROOT)
+
+import json5_io as json5
 
 
 class SkillInstallError(RuntimeError):

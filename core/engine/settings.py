@@ -20,7 +20,7 @@ def _read_service_setting(*keys: str, default: str = "") -> str:
     Priority: env var overrides are checked by the caller before this helper.
     """
     try:
-        import json5 as _json5  # available via engine pyproject.toml dependency
+        import json5_io as _json5
 
         data = _json5.loads(_SETTINGS_PATH.read_text(encoding="utf-8"))
         val: object = data
@@ -50,7 +50,7 @@ def get_runtime_mode(default: str = "production") -> str:
 
 def _read_service_config(service_name: str, mode: str | None = None) -> dict[str, object]:
     try:
-        import json5 as _json5
+        import json5_io as _json5
 
         data = _json5.loads(_SETTINGS_PATH.read_text(encoding="utf-8"))
         services = data.get("services", {}) if isinstance(data, dict) else {}

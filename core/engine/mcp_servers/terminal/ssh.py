@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 import json
-import json5
 import os
 import select
 import shlex
 import socket
+import sys
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
+
+_ENGINE_ROOT = str(Path(__file__).resolve().parents[2])
+if _ENGINE_ROOT not in sys.path:
+    sys.path.insert(0, _ENGINE_ROOT)
+
+import json5_io as json5
 
 import paramiko
 from sshtunnel import SSHTunnelForwarder

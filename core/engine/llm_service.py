@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from fastapi import HTTPException
-from json5 import loads as json5_loads
+from json5_io import loads as json5_loads
 from json_repair import repair_json
 
 from safe_dotenv import loaded_env_key_names

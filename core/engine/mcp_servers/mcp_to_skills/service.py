@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
-import json5
+import json5_io as json5
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
