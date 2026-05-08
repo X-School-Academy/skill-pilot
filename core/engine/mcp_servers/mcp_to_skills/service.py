@@ -129,6 +129,27 @@ class Bridge:
             "has_token": bool(token),
         }
 
+    @staticmethod
+    def _normalize_image_ratio(value: Any) -> str:
+        normalized = str(value or "square").strip().lower()
+        if normalized in {"square", "landscape", "portrait"}:
+            return normalized
+        raise MCPError("create_image ratio must be one of: square, landscape, portrait")
+
+    def _create_image(self, prompt: str, ratio: str) -> dict[str, str]:
+        from image_service import generate_image_file, resolve_image_size_for_provider
+        from llm_service import get_image_provider
+
+        provider = get_image_provider(None)
+        size = resolve_image_size_for_provider(provider, ratio)
+        path = generate_image_file(prompt, provider.get("id"), size)
+        return {
+            "path": path,
+            "provider": str(provider.get("id") or ""),
+            "ratio": ratio,
+            "size": size,
+        }
+
     def _run_tmux(self, args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
         if shutil.which("tmux") is None:
             raise MCPError("tmux is not installed or not available in PATH")
@@ -634,6 +655,13 @@ class Bridge:
             if not isinstance(route_payload, dict):
                 raise MCPError("api_invoke payload must be an object")
             result = self._invoke_internal_api(api_name=api_name_raw.strip(), payload=route_payload)
+            return {"status": "ok", "result": result}
+        if operation == "create_image":
+            prompt = str(payload.get("prompt") or "").strip()
+            if not prompt:
+                raise MCPError("create_image requires a non-empty prompt")
+            ratio = self._normalize_image_ratio(payload.get("ratio"))
+            result = self._create_image(prompt=prompt, ratio=ratio)
             return {"status": "ok", "result": result}
         if operation == "new_agent_session":
             prompt = str(payload.get("prompt") or "").strip()
