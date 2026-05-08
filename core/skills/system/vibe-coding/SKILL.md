@@ -44,9 +44,6 @@ Every project uses this structure:
 
 ```
 workspace/vibe-coding/{project-name}/
-├── assets/
-│   ├── icon.png              # project dashboard icon
-│   └── info.yaml             # project dashboard metadata and commands
 ├── design-docs/
 │   ├── requirements.md       # living - latest scope and intent
 │   ├── plan.md               # living - latest implementation plan
@@ -66,27 +63,7 @@ workspace/vibe-coding/{project-name}/
 └── (project source code, if it lives in-tree)
 ```
 
-The `create` stage is responsible for creating `assets/`, `design-docs/`, and `design-docs/archive/` when the project is first bootstrapped.
-
-## Dashboard Assets
-
-Each project should provide dashboard assets under `workspace/vibe-coding/{project-name}/assets/`:
-
-- `icon.png`: square raster icon for the WebUI dashboard. Use the `create-image` skill to create it from the project concept when a suitable icon does not already exist.
-- `info.yaml`: metadata for the WebUI dashboard.
-
-Use this schema:
-
-```yaml
-display_name: Project Display Name
-commands:
-  start: ""
-  dev: ""
-  build: ""
-  stop: ""
-```
-
-Set command values to runnable shell commands from the project root when known. Leave unknown commands as empty strings rather than inventing commands.
+The `create` stage is responsible for creating `design-docs/` and `design-docs/archive/` when the project is first bootstrapped. The `deploy` stage is responsible for local deployment assets under `assets/` when they do not already exist.
 
 ## File Lifecycle Rules
 
