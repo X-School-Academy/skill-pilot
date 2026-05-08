@@ -6,14 +6,14 @@ Project-oriented coding workspace for creating projects, capturing change reques
 
 ## User Value
 
-- Keeps coding requests, updates, issues, and implementation steps inside one project folder.
+- Keeps requirements, requests, issues, and lifecycle records inside each project's `design-docs/` folder.
 - Makes the project lifecycle explicit from refine through deploy.
 - Supports mixed file types, not just markdown.
 
 ## Main Behavior
 
-- Creates a new project folder and project requirement file.
-- Creates update requests and issue reports inside an existing project.
+- Creates `workspace/vibe-coding/{project-name}/design-docs/requirements.md` for new projects.
+- Creates update requests and issue reports as `design-docs/update.md` and `design-docs/issues.md`.
 - Opens files for editing or media preview depending on type.
 - Exposes action buttons such as `Refine`, `Initial`, `Plan`, `Implement`, `Review`, `Test`, `Deploy`, `Update Code`, and `Fix Issues`.
 - Runs either a selected skill or a selected workflow against the current instruction file.
@@ -40,4 +40,3 @@ Project-oriented coding workspace for creating projects, capturing change reques
 - `core/skills/system/vibe-coding-project-fix-issues/SKILL.md`
 - Keywords: `VibeCodingPage`, `createProject`, `createProjectRequest`, `fileActions`, `runAction`
 - API routes: `/api/vibe-coding/tree`, `/api/vibe-coding/latest`, `/api/vibe-coding/content`, `/api/vibe-coding/save`, `/api/vibe-coding/create-project`, `/api/vibe-coding/create-update-request`, `/api/vibe-coding/create-issue-report`, `/api/vibe-coding/delete`, `/api/vibe-coding/file`
-

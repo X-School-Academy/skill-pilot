@@ -92,6 +92,24 @@ const vibeProjectPath = (path: string): string => {
   return trimmed ? `workspace/vibe-coding/${trimmed}` : 'workspace/vibe-coding';
 };
 
+const VIBE_DESIGN_DOCS_DIR = 'design-docs';
+
+const getVibeProjectName = (path: string): string => {
+  const segments = path.split('/').filter(Boolean);
+  return segments[0] || '';
+};
+
+const isVibeDesignDocPath = (path: string, fileName?: string): boolean => {
+  const segments = path.split('/').filter(Boolean);
+  if (segments.length !== 3) return false;
+  if (segments[1] !== VIBE_DESIGN_DOCS_DIR) return false;
+  return fileName ? segments[2] === fileName : true;
+};
+
+const vibeProjectDesignDocsPath = (project: string): string => (
+  project ? `workspace/vibe-coding/${project}/${VIBE_DESIGN_DOCS_DIR}` : 'workspace/vibe-coding'
+);
+
 const getAncestorDirectoryPaths = (path: string): string[] => {
   const segments = path.split('/').filter(Boolean);
   if (segments.length <= 1) return [];
@@ -195,8 +213,9 @@ export default function VibeCodingPage() {
   useEffect(() => { editorContentRef.current = editorContent; }, [editorContent]);
 
   const currentTask = typeof task === 'string' ? task : '';
-  const currentProject = currentTask.includes('/') ? currentTask.split('/')[0] : '';
+  const currentProject = getVibeProjectName(currentTask);
   const currentFileName = currentTask.split('/').pop() || '';
+  const currentDesignDocName = isVibeDesignDocPath(currentTask) ? currentFileName : '';
   const skillSelectOptions = useMemo(() => buildExecuteSelectOptions(skillOptions), [skillOptions]);
   const workflowSelectOptions = useMemo(() => buildExecuteSelectOptions(workflowOptions), [workflowOptions]);
 
@@ -443,7 +462,7 @@ export default function VibeCodingPage() {
     if (!currentTask) return;
 
     let confirmText = '';
-    if (currentFileName === 'requirements.md') {
+    if (currentDesignDocName === 'requirements.md') {
       const typed = window.prompt(`Deleting ${currentTask} will remove the full project folder. Type delete to confirm.`);
       if (typed === null) return;
       confirmText = typed;
@@ -487,13 +506,14 @@ export default function VibeCodingPage() {
     if (!saved) return;
 
     const projectLabel = currentProject ? `\nVibe coding project name: ${currentProject}` : '';
+    const designDocsLabel = currentProject ? `\nDesign docs path: ${vibeProjectDesignDocsPath(currentProject)}` : '';
     const prompt = executeMode === 'skill'
       ? (isAutoExecuteTarget(target)
-          ? `Find and use the correct agent skill ${pendingAction.skillPromptSuffix}${projectLabel}`
-          : `Use agent skill ${target} ${pendingAction.skillPromptSuffix}${projectLabel}`)
+          ? `Find and use the correct agent skill ${pendingAction.skillPromptSuffix}${projectLabel}${designDocsLabel}`
+          : `Use agent skill ${target} ${pendingAction.skillPromptSuffix}${projectLabel}${designDocsLabel}`)
       : (shouldRunWorkflow
-          ? `Execute workflow ${workflowProjectPath(target)}. ${pendingAction.skillPromptSuffix.charAt(0).toUpperCase()}${pendingAction.skillPromptSuffix.slice(1)}\n\nYour Workspace path: ${currentProject ? vibeProjectPath(currentProject) : 'workspace/vibe-coding'}${projectLabel}\n\nIf you create any intermediate files, save them inside the project workspace above.`
-          : `Find and use the correct workflow ${pendingAction.skillPromptSuffix}${projectLabel}`);
+          ? `Execute workflow ${workflowProjectPath(target)}. ${pendingAction.skillPromptSuffix.charAt(0).toUpperCase()}${pendingAction.skillPromptSuffix.slice(1)}\n\nYour Workspace path: ${currentProject ? vibeProjectPath(currentProject) : 'workspace/vibe-coding'}${projectLabel}${designDocsLabel}\n\nIf you create or update design docs or intermediate files, save them inside the design docs path above.`
+          : `Find and use the correct workflow ${pendingAction.skillPromptSuffix}${projectLabel}${designDocsLabel}`);
 
     setExecuteOpened(false);
     setSessionPromptText(prompt);
@@ -651,24 +671,27 @@ export default function VibeCodingPage() {
   const renderTree = (items: FileItem[]) => items.map((item) => {
     const isSelected = currentTask === item.path;
     if (item.type === 'dir') {
+      const isProjectDir = !item.path.includes('/');
       return (
         <NavLink
           key={item.path}
           label={(
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <span>{item.name}</span>
-              <ActionIcon
-                size="sm"
-                variant="subtle"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  openRequestModal(item.path);
-                }}
-                title={`New update or bug request for ${item.name}`}
-              >
-                <IconMessageCirclePlus size="0.95rem" />
-              </ActionIcon>
+              {isProjectDir && (
+                <ActionIcon
+                  size="sm"
+                  variant="subtle"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    openRequestModal(item.name);
+                  }}
+                  title={`New update or bug request for ${item.name}`}
+                >
+                  <IconMessageCirclePlus size="0.95rem" />
+                </ActionIcon>
+              )}
             </div>
           )}
           icon={<IconFolder size="1.2rem" stroke={1.5} color={theme.colors.blue[6]} />}
@@ -704,7 +727,7 @@ export default function VibeCodingPage() {
   const currentInstructionPath = currentTask ? vibeProjectPath(currentTask) : '';
   const fileActions = useMemo<VibeAction[]>(() => {
     if (!currentInstructionPath) return [];
-    if (currentFileName === 'requirements.md') {
+    if (currentDesignDocName === 'requirements.md') {
       return [
         {
           label: 'Refine',
@@ -728,7 +751,7 @@ export default function VibeCodingPage() {
         },
       ];
     }
-    if (currentFileName === 'plan.md') {
+    if (currentDesignDocName === 'plan.md') {
       return [
         {
           label: 'Implement',
@@ -737,7 +760,7 @@ export default function VibeCodingPage() {
         },
       ];
     }
-    if (currentFileName === 'implement.md') {
+    if (currentDesignDocName === 'implement.md') {
       return [
         {
           label: 'Review',
@@ -756,7 +779,7 @@ export default function VibeCodingPage() {
         },
       ];
     }
-    if (currentFileName === 'update.md') {
+    if (currentDesignDocName === 'update.md') {
       return [
         {
           label: 'Update Code',
@@ -765,7 +788,7 @@ export default function VibeCodingPage() {
         },
       ];
     }
-    if (currentFileName === 'brainstorm.md') {
+    if (currentDesignDocName === 'brainstorm.md') {
       return [
         {
           label: 'Apply to Requirements',
@@ -774,7 +797,7 @@ export default function VibeCodingPage() {
         },
       ];
     }
-    if (currentFileName === 'issues.md') {
+    if (currentDesignDocName === 'issues.md') {
       return [
         {
           label: 'Fix Issues',
@@ -784,7 +807,7 @@ export default function VibeCodingPage() {
       ];
     }
     return [];
-  }, [currentFileName, currentInstructionPath]);
+  }, [currentDesignDocName, currentInstructionPath]);
 
   const mediaUrl = currentTask ? `${API_BASE_URL}/vibe-coding/file?path=${encodeURIComponent(currentTask)}` : '';
   const isMarkdownEditor = selectedKind === 'markdown';
@@ -1062,7 +1085,7 @@ export default function VibeCodingPage() {
               placeholder="project-name"
               value={projectNameInput}
               onChange={(e) => setProjectNameInput(e.currentTarget.value)}
-              description="A project folder will be created in kebab-case. Duplicates get _1, _2, and so on."
+              description="Creates workspace/vibe-coding/{project-name}/design-docs/requirements.md. Duplicates get _1, _2, and so on."
             />
           </div>
           <div>
@@ -1102,6 +1125,7 @@ export default function VibeCodingPage() {
           <div>
             <Text size="sm" weight={700} mb={4}>Project</Text>
             <Text size="sm">{requestProject}</Text>
+            <Text size="xs" color="dimmed">{requestProject ? `${vibeProjectDesignDocsPath(requestProject)}/${requestMode === 'update' ? 'update.md' : 'issues.md'}` : ''}</Text>
           </div>
           <div>
             <Text size="sm" weight={700} mb={4}>{requestMode === 'update' ? 'Update Request' : 'Bug/Issue Report'}</Text>

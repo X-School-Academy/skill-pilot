@@ -647,6 +647,10 @@ def _normalize_vibe_project_name(value: str) -> str:
     return _normalize_task_slug(value, default="project")
 
 
+VIBE_CODING_DESIGN_DOCS_DIR = "design-docs"
+VIBE_CODING_ARCHIVE_DIR = "archive"
+
+
 def _vibe_instruction_project_path(task_path: str) -> str:
     trimmed = str(task_path or "").strip().replace("\\", "/").lstrip("/")
     return f"workspace/vibe-coding/{trimmed}" if trimmed else "workspace/vibe-coding"
@@ -667,8 +671,33 @@ def _ensure_vibe_project_file(project_name: str, file_name: str) -> tuple[Path, 
         raise ValueError("Project name is required")
     project_dir = VIBE_CODING_DIR / normalized_project
     project_dir.mkdir(parents=True, exist_ok=True)
-    file_path = project_dir / file_name
+    design_docs_dir = project_dir / VIBE_CODING_DESIGN_DOCS_DIR
+    design_docs_dir.mkdir(parents=True, exist_ok=True)
+    (design_docs_dir / VIBE_CODING_ARCHIVE_DIR).mkdir(parents=True, exist_ok=True)
+    file_path = design_docs_dir / file_name
     return project_dir, file_path, normalized_project
+
+
+def _vibe_project_root_for_file(file_path: Path) -> Path:
+    try:
+        relative_parts = file_path.relative_to(VIBE_CODING_DIR).parts
+    except ValueError as exc:
+        raise ValueError("Invalid project file") from exc
+    if not relative_parts:
+        raise ValueError("Invalid project file")
+    return VIBE_CODING_DIR / relative_parts[0]
+
+
+def _is_vibe_project_requirements_file(file_path: Path) -> bool:
+    try:
+        relative_parts = file_path.relative_to(VIBE_CODING_DIR).parts
+    except ValueError:
+        return False
+    return (
+        len(relative_parts) == 3
+        and relative_parts[1] == VIBE_CODING_DESIGN_DOCS_DIR
+        and relative_parts[2] == "requirements.md"
+    )
 
 
 def _remove_project_dir(project_dir: Path) -> None:
@@ -1671,7 +1700,10 @@ def vibe_coding_create_project(payload: Dict[str, Any]):
     normalized_project = _normalize_vibe_project_name(project_name)
     project_dir = _unique_vibe_project_dir_path(normalized_project)
     project_dir.mkdir(parents=False, exist_ok=False)
-    file_path = project_dir / "requirements.md"
+    design_docs_dir = project_dir / VIBE_CODING_DESIGN_DOCS_DIR
+    design_docs_dir.mkdir(parents=True, exist_ok=True)
+    (design_docs_dir / VIBE_CODING_ARCHIVE_DIR).mkdir(parents=True, exist_ok=True)
+    file_path = design_docs_dir / "requirements.md"
     file_path.write_text(requirements, encoding="utf-8")
     return {
         "status": "ok",
@@ -1728,8 +1760,8 @@ def vibe_coding_delete(payload: Dict[str, Any]):
     except FileNotFoundError as exc:
         return JSONResponse(status_code=404, content={"error": str(exc)})
 
-    project_dir = file_path.parent
-    if file_path.name == "requirements.md":
+    project_dir = _vibe_project_root_for_file(file_path)
+    if _is_vibe_project_requirements_file(file_path):
         if confirm_text != "delete":
             return JSONResponse(status_code=400, content={"error": "Type 'delete' to confirm removing the project"})
         try:
@@ -1744,10 +1776,13 @@ def vibe_coding_delete(payload: Dict[str, Any]):
 
     file_path.unlink()
     removed_folder = None
-    if project_dir != VIBE_CODING_DIR:
+    parent_dir = file_path.parent
+    design_docs_dir = project_dir / VIBE_CODING_DESIGN_DOCS_DIR
+    cleanup_dir = project_dir if parent_dir == project_dir else parent_dir
+    if cleanup_dir != design_docs_dir:
         try:
-            project_dir.rmdir()
-            removed_folder = str(project_dir.relative_to(VIBE_CODING_DIR))
+            cleanup_dir.rmdir()
+            removed_folder = str(cleanup_dir.relative_to(VIBE_CODING_DIR))
         except OSError:
             pass
 
