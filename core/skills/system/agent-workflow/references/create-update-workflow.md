@@ -87,7 +87,7 @@ If any checks fail, fix the graph before returning the result.
 ### Step 5: Validate Agent Skill Names
 
 1. If an agent node uses `data.skill`, make sure the skill name is the actual skill name, not a descriptive sentence.
-2. Use the exact installed skill name format, for example `create-update-agent-skill`, not a title-cased or spaced variant.
+2. Use the exact installed skill name format, for example `agent-skill`, not a title-cased or spaced variant.
 3. If the correct skill name is unclear, keep `data.skill` empty and put the instruction in `data.responsibility` instead of inventing an incorrect skill name.
 4. Do not leave both `data.skill` and `data.responsibility` empty.
 
