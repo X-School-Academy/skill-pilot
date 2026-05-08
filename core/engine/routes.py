@@ -1,5 +1,6 @@
 from routes_shared import *
 
+import yaml
 import routes_config  # noqa: F401
 import routes_codeware  # noqa: F401
 import routes_integrations  # noqa: F401
@@ -649,6 +650,10 @@ def _normalize_vibe_project_name(value: str) -> str:
 
 VIBE_CODING_DESIGN_DOCS_DIR = "design-docs"
 VIBE_CODING_ARCHIVE_DIR = "archive"
+VIBE_CODING_ASSETS_DIR = "assets"
+VIBE_CODING_ICON_FILE = "icon.png"
+VIBE_CODING_INFO_FILE = "info.yaml"
+VIBE_CODING_COMMAND_KEYS = ("start", "dev", "build", "stop")
 
 
 def _vibe_instruction_project_path(task_path: str) -> str:
@@ -704,6 +709,57 @@ def _remove_project_dir(project_dir: Path) -> None:
     if project_dir == VIBE_CODING_DIR or VIBE_CODING_DIR not in project_dir.parents:
         raise ValueError("Invalid project directory")
     shutil.rmtree(project_dir)
+
+
+def _title_from_vibe_project_name(project_name: str) -> str:
+    words = [part for part in re.split(r"[-_\s]+", project_name.strip()) if part]
+    if not words:
+        return project_name or "Project"
+    return " ".join(word[:1].upper() + word[1:] for word in words)
+
+
+def _initials_from_vibe_project_name(project_name: str) -> str:
+    parts = [part for part in project_name.split("-") if part]
+    if not parts:
+        parts = [part for part in re.split(r"[_\s]+", project_name) if part]
+    return "".join(part[:1].upper() for part in parts[:3]) or "?"
+
+
+def _read_vibe_project_info(info_path: Path) -> Dict[str, Any]:
+    if not info_path.exists() or not info_path.is_file():
+        return {}
+    try:
+        loaded = yaml.safe_load(info_path.read_text(encoding="utf-8")) or {}
+    except Exception as exc:
+        logger.warning("failed to read vibe coding project info %s: %s", info_path, exc)
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _vibe_project_summary(project_dir: Path) -> Dict[str, Any] | None:
+    if not project_dir.is_dir() or project_dir.name.startswith("."):
+        return None
+    assets_dir = project_dir / VIBE_CODING_ASSETS_DIR
+    info = _read_vibe_project_info(assets_dir / VIBE_CODING_INFO_FILE)
+    raw_commands = info.get("commands") if isinstance(info.get("commands"), dict) else {}
+    commands = {
+        key: str(raw_commands.get(key) or "").strip()
+        for key in VIBE_CODING_COMMAND_KEYS
+    }
+    icon_path = assets_dir / VIBE_CODING_ICON_FILE
+    relative_icon = None
+    if icon_path.exists() and icon_path.is_file():
+        relative_icon = str(icon_path.relative_to(VIBE_CODING_DIR))
+    display_name = str(info.get("display_name") or "").strip()
+    return {
+        "name": project_dir.name,
+        "path": str(project_dir.relative_to(VIBE_CODING_DIR)),
+        "display_name": display_name or _title_from_vibe_project_name(project_dir.name),
+        "initials": _initials_from_vibe_project_name(project_dir.name),
+        "icon_path": relative_icon,
+        "commands": commands,
+        "mtime": project_dir.stat().st_mtime,
+    }
 
 
 def _safe_research_path(task_path: str, *, must_exist: bool = True) -> Path:
@@ -1637,6 +1693,19 @@ def vibe_coding_tree():
     if not VIBE_CODING_DIR.exists():
         return {"items": []}
     return {"items": build_tree(VIBE_CODING_DIR, VIBE_CODING_DIR)}
+
+
+@router.get("/api/vibe-coding/projects")
+def vibe_coding_projects():
+    if not VIBE_CODING_DIR.exists():
+        return {"items": []}
+    items = [
+        summary
+        for summary in (_vibe_project_summary(path) for path in VIBE_CODING_DIR.iterdir())
+        if summary is not None
+    ]
+    items.sort(key=lambda item: (-float(item.get("mtime") or 0), str(item.get("display_name") or "")))
+    return {"items": items}
 
 
 @router.get("/api/vibe-coding/latest")
