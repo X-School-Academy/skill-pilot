@@ -58,7 +58,7 @@ For games and visual apps, identify useful reference assets and describe how eac
 - 3D models
 - Fonts or other visible media
 
-As a quick start for games, useful image, audio, and 3D model resources from the original code may be copied into the vibe coding project's `assets/` folder when the license and user intent allow it.
+As a quick start for games, useful image, audio, and 3D model resources from the original code may be copied into `workspace/vibe-coding/{project-name}/assets/` when the license and user intent allow it.
 
 ### Step 5: Handle Attribution and License
 
