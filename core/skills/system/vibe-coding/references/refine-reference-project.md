@@ -77,7 +77,7 @@ If no license is found, do not assume reuse rights. Keep copied assets out of th
 
 Ask the user which tech stack to use after the reference analysis.
 
-For web games, recommend Three.js first. Offer Emscripten when the source project is native code or the learning goal is to port existing native logic to the web.
+For web games, recommend Three.js or PixiJS first. Offer Emscripten when the source project is native code or the learning goal is to port existing native logic to the web.
 
 If the user chooses Emscripten, verify whether the toolchain is installed before implementation. Ask for approval before installing it.
 
