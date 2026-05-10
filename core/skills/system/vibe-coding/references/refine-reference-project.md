@@ -93,6 +93,8 @@ Rewrite `design-docs/requirements.md` as user-level requirements:
 - Selected tech stack
 - Acceptance criteria written from the user's viewpoint
 
+**For games:** Remove any features that are not related to the core game mechanics, such as leaderboards, login, user profiles, or social sharing. The final requirements must focus exclusively on the core game features.
+
 Do not include technical implementation details beyond the selected tech stack.
 
 ### Step 8: Create an AI Build Prompt
