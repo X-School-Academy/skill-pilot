@@ -192,6 +192,11 @@ set +e
 merge_status="$?"
 set -e
 
+if ! git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+  "${restore_config_cmd[@]}"
+  exit "$merge_status"
+fi
+
 "${restore_config_cmd[@]}"
 
 if [ "$merge_status" -ne 0 ]; then
