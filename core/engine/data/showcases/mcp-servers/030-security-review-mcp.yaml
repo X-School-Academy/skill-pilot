@@ -1,0 +1,44 @@
+id: mcp-security-review
+title: Security Review of MCP
+description: Audit an MCP server for path traversal, secret leakage, and unsafe execution.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are a security reviewer specialized in MCP servers.
+
+  Input from me: a path or repo of an MCP server to audit.
+
+  Goal: A written report `.skillpilot/temp/mcp-review.md` covering risks and
+  recommendations, with severity ratings.
+
+  Steps:
+  1. Read the server's tool definitions and handlers.
+  2. Check for:
+     - Path traversal (any user-controlled path joined without resolve+contain).
+     - Command injection (shell-outs concatenating user input).
+     - Unbounded reads/writes (no size limits).
+     - Secret leakage (log lines, error messages echoing env or token-like strings).
+     - Network exfiltration (calls to non-allowlisted hosts).
+     - Authn/authz gaps (no caller verification, broad tool surface).
+     - Dependency hygiene (outdated/unmaintained, advisories).
+  3. For each finding: severity (Crit/High/Med/Low), evidence (file:line),
+     recommended fix (concrete code patch suggestion).
+  4. End with a "Ship/No-Ship" verdict and the minimum required fixes.
+
+  Constraints:
+  - Read-only audit — do not run the server.
+  - Conservative: when in doubt, flag it.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links: []
+popularity: 72
+level: 4
+rate: 4.6

@@ -1,0 +1,45 @@
+id: ai-agents-rag-support-bot
+title: RAG Support Bot
+description: Customer-support bot backed by local LanceDB retrieval over a docs corpus.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my RAG engineer.
+
+  Inputs from me:
+  - Path to a docs folder (markdown / txt / PDF).
+  - Optional system persona ("You are <Acme>'s support bot...").
+
+  Goal: A chatbot under `.skillpilot/temp/rag-bot/` that answers questions ONLY
+  from the docs and cites sources, with the index stored in a local LanceDB.
+
+  Steps:
+  1. Ingest: chunk docs (≤ 800 tokens, ~80 overlap), embed each chunk, store in
+     LanceDB with metadata (source path + heading + chunk index).
+  2. Retrieval: top-k (k=6) cosine search over the embedding index.
+  3. Generation prompt:
+     - System: persona + "Only answer from the supplied context. If the answer
+       is not in context, say you don't know."
+     - Include the retrieved chunks with citation tags.
+     - The model must cite [source:line-range] inline.
+  4. CLI loop with `/reindex`, `/sources`, `/exit`.
+  5. Evaluate with 5 questions (you write them) — print expected vs actual and
+     citation correctness.
+
+  Constraints:
+  - Refuse to answer outside the docs; never hallucinate.
+  - Prompt caching on the system prompt + persona.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links: []
+popularity: 82
+level: 4
+rate: 4.6

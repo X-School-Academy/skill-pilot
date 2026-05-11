@@ -1,0 +1,46 @@
+id: cloud-runpod-comfyui
+title: RunPod + ComfyUI
+description: Provision a RunPod GPU with ComfyUI and Stable Diffusion for image generation.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my RunPod + ComfyUI deployment assistant.
+
+  Inputs from me:
+  - Base SD model (e.g., SDXL 1.0).
+  - GPU class.
+  - Region.
+
+  Goal: A running ComfyUI server on RunPod, reachable from my browser via SSH
+  tunnel, with the chosen model preloaded and a generated test image.
+
+  Steps:
+  1. Confirm cost/h. Refuse silent launch above a configurable cap.
+  2. Use a ComfyUI-prepped base image if available; otherwise install on a CUDA
+     base with a startup script.
+  3. Download/symlink the chosen model into ComfyUI's `models/checkpoints/`.
+  4. Start ComfyUI on 127.0.0.1:8188; expose only via SSH tunnel.
+  5. From my machine: tunnel localhost:8188 and open in agent-browser.
+  6. Run a default workflow that produces a "hello world" image; download it.
+  7. Print pod id, GPU, cost/h, current spend, tunnel command, stop/destroy
+     commands.
+
+  Constraints:
+  - Don't bind ComfyUI to 0.0.0.0.
+  - Confirm before downloading models > 5 GB.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links:
+  - name: ComfyUI
+    url: https://github.com/comfyanonymous/ComfyUI
+popularity: 76
+level: 4
+rate: 4.6

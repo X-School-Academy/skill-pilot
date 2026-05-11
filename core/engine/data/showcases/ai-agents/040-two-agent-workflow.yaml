@@ -1,0 +1,44 @@
+id: ai-agents-two-agent-workflow
+title: Two-Agent Workflow
+description: Researcher agent gathers facts; Writer agent turns the brief into an action plan.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my multi-agent app engineer.
+
+  Goal: Under `.skillpilot/temp/two-agent/`, build a workflow with two distinct
+  agents handing off via a shared "brief" document.
+
+  Agent 1 — Researcher:
+  - Input: a topic + 3 questions from me.
+  - Tools: web search + browser (with prompt-injection warning to me before run).
+  - Output: `brief.md` containing answers + sources, with each claim cited.
+
+  Agent 2 — Planner:
+  - Input: `brief.md`.
+  - Output: `plan.md` with goals, milestones, owners (TBD), risks, and next 7-day
+    actions.
+
+  Orchestration:
+  1. Run Agent 1; show me brief.md for approval.
+  2. After my approval, run Agent 2 with brief.md as input.
+  3. Print final plan.md and a summary of token usage per agent.
+
+  Constraints:
+  - Agents communicate ONLY via the file artifact, not by sharing memory.
+  - Never let Agent 2 fetch from the web — it relies on Agent 1's brief.
+  - Apply prompt caching to each agent's system prompt.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links: []
+popularity: 78
+level: 4
+rate: 4.6

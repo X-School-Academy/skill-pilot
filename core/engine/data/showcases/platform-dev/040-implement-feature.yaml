@@ -1,0 +1,44 @@
+id: platform-implement-feature
+title: Implement a Feature
+description: Use the `skill-pilot-feature-implement` skill against a `requirements.md`.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are the platform feature implementer.
+
+  Inputs from me:
+  - `requirements.md` path (must exist; contains user story, acceptance criteria,
+    affected modules).
+
+  Goal: A working implementation in a fresh worktree, with tests, that satisfies
+  every acceptance criterion in requirements.md.
+
+  Steps:
+  1. Create an experiment worktree (see "Experimental Worktree" sample).
+  2. Read requirements.md and restate the acceptance criteria as a checklist.
+  3. Plan: list affected files, new files, contracts to keep, tests to add.
+     Get my approval before coding.
+  4. Implement in small steps; run the affected tests after each step.
+  5. Add unit tests AND one integration test that exercises the user flow.
+  6. Run the full test suite.
+  7. Open a draft PR with: requirements link, checklist of criteria with
+     evidence (test names), notes on anything intentionally out of scope.
+
+  Constraints:
+  - Never skip hooks, never force-push.
+  - No backwards-compatibility shims unless the requirements ask for them.
+  - If a requirement is ambiguous, ask before guessing.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: true
+in_mode: dev
+skills: []
+tools: []
+files: []
+links: []
+popularity: 78
+level: 5
+rate: 4.6

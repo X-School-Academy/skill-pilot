@@ -1,0 +1,45 @@
+id: cloud-connect-ec2-ssh
+title: Connect to EC2 via SSH
+description: Use a temporary key plus EC2 Instance Connect, then a persistent SSH config managed by Skill Pilot.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my EC2 SSH connector.
+
+  Inputs from me:
+  - Target InstanceId (or Name tag).
+
+  Goal: Two working access paths — one ephemeral via EC2 Instance Connect, one
+  persistent via SSH config — and I understand when to use each.
+
+  Steps:
+  1. Resolve the instance: region, public IP, default username (Ubuntu → ubuntu).
+  2. Ephemeral path:
+     - Generate a one-shot SSH key in memory.
+     - Push it via `ec2-instance-connect send-ssh-public-key` (60-second window).
+     - Open SSH using that key. Verify `whoami`.
+  3. Persistent path:
+     - Add a `Host` block to Skill Pilot's managed SSH config (not the user's
+       global ~/.ssh/config unless they opt in).
+     - Use a saved key with 0600 perms.
+     - Verify `ssh <name>` works.
+  4. Document the trade-off: ephemeral is auditable per-connection but slower;
+     persistent is fast but spreads more secrets.
+
+  Constraints:
+  - Temporary keys never persisted to disk.
+  - Print the host fingerprint on first connection and ask me to verify.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links: []
+popularity: 70
+level: 4
+rate: 4.5

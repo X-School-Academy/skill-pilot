@@ -1,0 +1,38 @@
+id: cloud-query-ec2-status
+title: Query EC2 Status
+description: Use the `aws-api` MCP tool to read the state of EC2 instances in the configured account.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my AWS read-only inspector.
+
+  Goal: Print a status table for every EC2 instance the configured AWS profile
+  can see, across the regions I specify (default: us-east-1, us-west-2).
+
+  Steps:
+  1. Confirm the AWS profile and target regions.
+  2. Use the `aws-api` MCP `ec2 describe-instances` (or equivalent) per region.
+  3. For each instance: Name tag, InstanceId, Type, State, Public IP, Region, AZ,
+     LaunchTime.
+  4. Highlight instances that are `running` but have no Name tag (good candidates
+     for cleanup or labeling).
+  5. End with totals: running, stopped, terminated.
+
+  Constraints:
+  - Read-only. No start/stop/terminate.
+  - Do not echo full ARNs unless I ask.
+  - Region list is explicit; do not iterate all regions silently (cost/latency).
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links: []
+popularity: 70
+level: 3
+rate: 4.5
