@@ -3,7 +3,7 @@ set -e
 set -o pipefail
 
 usage() {
-  echo "Usage: $0 [--ours] [--no-commit] [--dry-run] [source-worktree-path-or-branch]"
+  echo "Usage: $0 [--ours] [--dry-run] [source-worktree-path-or-branch]"
   echo
   echo "Merge the paired worktree branch into the current branch."
   echo "Run from the main worktree to merge a linked worktree into main."
@@ -11,7 +11,6 @@ usage() {
   echo
   echo "Options:"
   echo "  --ours     Resolve conflicting hunks by favoring the current branch, default theirs."
-  echo "  --no-commit  Run merge with --no-commit --no-ff."
   echo "  --dry-run  Print the planned merge command without running it."
 }
 
@@ -25,7 +24,6 @@ current_root="$(cd "$current_root" && pwd -P)"
 cd "$current_root"
 
 strategy_option="theirs"
-no_commit=0
 dry_run=0
 source_arg=""
 
@@ -37,9 +35,6 @@ while [ "$#" -gt 0 ]; do
       ;;
     --ours)
       strategy_option="ours"
-      ;;
-    --no-commit)
-      no_commit=1
       ;;
     --dry-run)
       dry_run=1
@@ -171,27 +166,38 @@ echo "Current worktree: $current_root"
 echo "Current branch:   $current_branch"
 echo "Source branch:    $source_ref"
 echo "Strategy option:  -X $strategy_option"
-echo "No commit:        $no_commit"
 echo "Dry run:          $dry_run"
 echo
 
 merge_message="Merge $source_ref into $current_branch"
-merge_cmd=(git -c submodule.recurse=false merge -X "$strategy_option" -m "$merge_message")
+merge_cmd=(git -c submodule.recurse=false merge -X "$strategy_option" --no-commit --no-ff "$source_ref")
+restore_config_cmd=(git restore --source=HEAD --staged --worktree -- config)
+commit_cmd=(git commit -m "$merge_message")
 
-if [ "$no_commit" = "1" ]; then
-  merge_cmd+=(--no-commit --no-ff)
-fi
-
-merge_cmd+=("$source_ref")
-
-printf "Command: git -c submodule.recurse=false merge -X \"%s\" -m \"%s\"" "$strategy_option" "$merge_message"
-if [ "$no_commit" = "1" ]; then
-  printf " --no-commit --no-ff"
-fi
-printf " \"%s\"\n" "$source_ref"
+printf "Command: git -c submodule.recurse=false merge -X \"%s\" --no-commit --no-ff \"%s\"\n" "$strategy_option" "$source_ref"
+echo "Command: git restore --source=HEAD --staged --worktree -- config"
+printf "Command: git commit -m \"%s\"\n" "$merge_message"
 
 if [ "$dry_run" = "1" ]; then
   exit 0
 fi
 
+set +e
 "${merge_cmd[@]}"
+merge_status="$?"
+set -e
+
+"${restore_config_cmd[@]}"
+
+if [ "$merge_status" -ne 0 ]; then
+  echo "Merge stopped with conflicts. Protected path restored: config"
+  exit "$merge_status"
+fi
+
+if git diff --cached --quiet; then
+  echo "Only protected paths changed; aborting merge."
+  git merge --abort
+  exit 0
+fi
+
+"${commit_cmd[@]}"
