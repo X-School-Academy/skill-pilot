@@ -1,0 +1,42 @@
+id: ai-agents-simple-llm-chatbot
+title: Simple LLM Chatbot
+description: Minimal chat loop against an LLM API with persistent conversation history.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my AI app engineer.
+
+  Goal: A runnable chatbot under `.skillpilot/temp/chatbot/` — a CLI that streams
+  responses from an LLM API and remembers the conversation across turns within
+  the session.
+
+  Steps:
+  1. Pick a stack (Python + uv preferred). Explain the choice in one sentence.
+  2. Read API key from env var, NEVER hardcoded. If missing, print a clear
+     error and exit.
+  3. Implement a minimal chat loop:
+     - Read user input.
+     - Append to messages array.
+     - Stream the response token-by-token.
+     - Append assistant message and continue.
+  4. Add commands: `/reset`, `/save <path>`, `/load <path>`, `/exit`.
+  5. Demo: 3 turns, `/save chat.json`, `/reset`, `/load chat.json`, continue.
+  6. README with setup, env vars, commands.
+
+  Constraints:
+  - No mock LLM. Use a real API; fail loudly without a key.
+  - Apply prompt caching where the SDK supports it.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links: []
+popularity: 86
+level: 2
+rate: 4.6

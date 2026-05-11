@@ -134,11 +134,12 @@ function isAudioLike(value: string | null | undefined): boolean {
   return ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'].some((suffix) => lower.includes(suffix));
 }
 
-function TileThumb({ label, src, seed, isDark }: { label: string; src?: string | null; seed: string; isDark?: boolean }) {
+function TileThumb({ label, src, seed, isDark, size = 64 }: { label: string; src?: string | null; seed: string; isDark?: boolean; size?: number }) {
   const [bg, fg] = pickColor(seed);
+  const radius = Math.round(size * 0.22);
   if (src) {
     return (
-      <div style={{ width: 64, height: 64, borderRadius: 18, overflow: 'hidden', background: isDark ? '#374151' : '#e5e7eb', flexShrink: 0 }}>
+      <div style={{ width: size, height: size, borderRadius: radius, overflow: 'hidden', background: isDark ? '#374151' : '#e5e7eb', flexShrink: 0 }}>
         <img src={src} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
       </div>
     );
@@ -146,15 +147,15 @@ function TileThumb({ label, src, seed, isDark }: { label: string; src?: string |
   return (
     <div
       style={{
-        width: 64,
-        height: 64,
-        borderRadius: 18,
+        width: size,
+        height: size,
+        borderRadius: radius,
         background: `linear-gradient(135deg, ${bg}, ${isDark ? bg : fg})`,
         color: '#fff',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: 22,
+        fontSize: Math.round(size * 0.34),
         fontWeight: 800,
         letterSpacing: 1,
         flexShrink: 0,
@@ -502,6 +503,39 @@ export default function ExploreView() {
   const promptText = isDark ? theme.colors.dark[0] : '#1e293b';
   const linkColor = isDark ? theme.colors.blue[4] : '#2563eb';
 
+  const markdownLinkComponents = {
+    a: ({ href, children }: { href?: string; children?: React.ReactNode }) => {
+      const target = String(href || '');
+      if (target.startsWith('/file-manager?path=')) {
+        return (
+          <a
+            href={target}
+            onClick={(event) => {
+              event.preventDefault();
+              const params = new URL(target, window.location.origin).searchParams;
+              const path = params.get('path') || '';
+              openFileManager(path);
+            }}
+            style={{ color: linkColor, fontWeight: 600 }}
+          >
+            {children}
+          </a>
+        );
+      }
+      return (
+        <a href={target} target="_blank" rel="noreferrer" style={{ color: linkColor, fontWeight: 600 }}>
+          {children}
+        </a>
+      );
+    },
+  };
+
+  const renderMarkdown = (text: string) => (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownLinkComponents}>
+      {promptToMarkdown(text || '')}
+    </ReactMarkdown>
+  );
+
   const renderSampleActions = (sample: ShowcaseSample) => {
     const pathGroups: Array<{ title: string; items: string[] }> = [
       ...(sample.workflow ? [{ title: 'Workflow', items: [sample.workflow] }] : []),
@@ -641,12 +675,101 @@ export default function ExploreView() {
             <Badge color="grape" variant="light">Popularity {sample.popularity}</Badge>
           </Group>
 
-          <div style={{ padding: 24, borderRadius: 22, border: cardBorder, background: cardBg, boxShadow: cardShadow }}>
+          <div style={{ borderRadius: 22, border: cardBorder, background: cardBg, boxShadow: cardShadow, overflow: 'hidden' }}>
+            {sample.thumbnail_url && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (sample.video_url) {
+                    openMedia(sample.video_url as string, sample.title, isAudioLike(sample.video) ? 'audio' : 'video');
+                  } else {
+                    openMedia(sample.thumbnail_url as string, sample.title, 'image');
+                  }
+                }}
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  aspectRatio: '16 / 9',
+                  background: isDark ? '#0f172a' : '#e5e7eb',
+                  padding: 0,
+                  border: 'none',
+                  cursor: sample.video_url ? 'pointer' : 'zoom-in',
+                  display: 'block',
+                  overflow: 'hidden',
+                }}
+              >
+                <img
+                  src={sample.thumbnail_url}
+                  alt={sample.title}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 96,
+                      height: 96,
+                      borderRadius: '50%',
+                      background: 'rgba(0, 0, 0, 0.45)',
+                      backdropFilter: 'blur(2px)',
+                      border: '2px solid rgba(255, 255, 255, 0.85)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 6px 20px rgba(0, 0, 0, 0.35)',
+                    }}
+                  >
+                    <IconPlayerPlay size={44} color="#fff" fill="#fff" style={{ marginLeft: 6 }} />
+                  </div>
+                </div>
+              </button>
+            )}
+            <div style={{ padding: 24 }}>
             <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', marginBottom: 18 }}>
-              <TileThumb label={sample.title} src={sample.thumbnail_url} seed={sample.id} isDark={isDark} />
+              {!sample.thumbnail_url && (
+                <TileThumb label={sample.title} src={sample.thumbnail_url} seed={sample.id} isDark={isDark} />
+              )}
               <div style={{ flex: 1 }}>
                 <Text size={28} weight={800} style={{ lineHeight: 1.15 }}>{sample.title}</Text>
-                <Text size="sm" color="dimmed" mt={8}>{sample.description}</Text>
+                <Box
+                  mt={8}
+                  sx={{
+                    fontSize: 14,
+                    color: isDark ? theme.colors.dark[1] : '#475569',
+                    lineHeight: 1.55,
+                    '& p': { margin: '0 0 8px' },
+                    '& p:last-child': { marginBottom: 0 },
+                    '& ul, & ol': { paddingLeft: 20, margin: '4px 0 8px' },
+                    '& code': {
+                      background: isDark ? theme.colors.dark[5] : '#eef2f7',
+                      padding: '1px 5px',
+                      borderRadius: 4,
+                      fontSize: '0.9em',
+                    },
+                    '& pre': {
+                      background: isDark ? theme.colors.dark[7] : '#f1f5f9',
+                      padding: 10,
+                      borderRadius: 8,
+                      overflowX: 'auto',
+                    },
+                    '& blockquote': {
+                      borderLeft: `3px solid ${isDark ? theme.colors.dark[4] : '#cbd5e1'}`,
+                      margin: '6px 0',
+                      padding: '2px 10px',
+                      color: isDark ? theme.colors.dark[2] : '#64748b',
+                    },
+                  }}
+                >
+                  {renderMarkdown(sample.description)}
+                </Box>
                 <Group spacing="xs" mt={14}>
                   {sample.video_url && (
                     <Button
@@ -699,47 +822,71 @@ export default function ExploreView() {
               </Button>
             </div>
 
-            <div
-              style={{
+            <Box
+              sx={{
                 borderRadius: 16,
                 border: promptBorder,
                 background: promptBg,
                 padding: 18,
                 color: promptText,
                 overflowX: 'auto',
+                fontSize: 14,
+                lineHeight: 1.6,
+                '& p': { margin: '0 0 10px' },
+                '& p:last-child': { marginBottom: 0 },
+                '& h1, & h2, & h3, & h4': { margin: '14px 0 8px', lineHeight: 1.25 },
+                '& h1': { fontSize: 22 },
+                '& h2': { fontSize: 19 },
+                '& h3': { fontSize: 16 },
+                '& ul, & ol': { paddingLeft: 22, margin: '6px 0 10px' },
+                '& li': { margin: '2px 0' },
+                '& code': {
+                  background: isDark ? theme.colors.dark[5] : '#eef2f7',
+                  padding: '1px 6px',
+                  borderRadius: 4,
+                  fontSize: '0.9em',
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                },
+                '& pre': {
+                  background: isDark ? theme.colors.dark[8] : '#0f172a',
+                  color: isDark ? theme.colors.dark[0] : '#e2e8f0',
+                  padding: 12,
+                  borderRadius: 10,
+                  overflowX: 'auto',
+                  margin: '8px 0',
+                },
+                '& pre code': {
+                  background: 'transparent',
+                  color: 'inherit',
+                  padding: 0,
+                },
+                '& blockquote': {
+                  borderLeft: `3px solid ${isDark ? theme.colors.dark[4] : '#cbd5e1'}`,
+                  margin: '8px 0',
+                  padding: '4px 12px',
+                  color: isDark ? theme.colors.dark[2] : '#64748b',
+                },
+                '& table': {
+                  borderCollapse: 'collapse',
+                  margin: '8px 0',
+                  width: '100%',
+                },
+                '& th, & td': {
+                  border: `1px solid ${isDark ? theme.colors.dark[4] : '#e2e8f0'}`,
+                  padding: '6px 10px',
+                  textAlign: 'left',
+                },
+                '& hr': {
+                  border: 0,
+                  borderTop: `1px solid ${isDark ? theme.colors.dark[4] : '#e2e8f0'}`,
+                  margin: '12px 0',
+                },
               }}
             >
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  a: ({ href, children }) => {
-                    const target = String(href || '');
-                    if (target.startsWith('/file-manager?path=')) {
-                      return (
-                        <a
-                          href={target}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            const params = new URL(target, window.location.origin).searchParams;
-                            const path = params.get('path') || '';
-                            openFileManager(path);
-                          }}
-                          style={{ color: linkColor, fontWeight: 600 }}
-                        >
-                          {children}
-                        </a>
-                      );
-                    }
-                    return (
-                      <a href={target} target="_blank" rel="noreferrer" style={{ color: linkColor, fontWeight: 600 }}>
-                        {children}
-                      </a>
-                    );
-                  },
-                }}
-              >
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownLinkComponents}>
                 {linkedPrompt}
               </ReactMarkdown>
+            </Box>
             </div>
           </div>
         </div>
@@ -751,47 +898,89 @@ export default function ExploreView() {
     );
   };
 
-  const renderTile = (title: string, description: string, seed: string, onClick: () => void, src?: string | null, meta?: React.ReactNode) => (
-    <Tooltip label={description} multiline width={280}>
-      <button
-        type="button"
-        onClick={onClick}
-        style={{
-          border: cardBorder,
-          borderRadius: 20,
-          background: cardBg,
-          padding: 18,
-          textAlign: 'left',
-          cursor: 'pointer',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-          minHeight: 182,
-          boxShadow: cardShadow,
-          transition: 'box-shadow 0.2s ease, transform 0.2s ease',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.boxShadow = isDark ? '0 8px 24px rgba(0, 0, 0, 0.5)' : '0 8px 24px rgba(15, 23, 42, 0.12)';
-          e.currentTarget.style.transform = 'translateY(-2px)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.boxShadow = cardShadow;
-          e.currentTarget.style.transform = 'translateY(0)';
-        }}
-      >
-        <TileThumb label={title} src={src} seed={seed} isDark={isDark} />
-        <div>
-          <Text size="sm" weight={700} style={{ lineHeight: 1.35 }}>{title}</Text>
-          <Text size="xs" color="dimmed" mt={6} lineClamp={2}>{description}</Text>
-        </div>
-        {meta && <div>{meta}</div>}
-      </button>
-    </Tooltip>
-  );
+  const renderTile = (
+    title: string,
+    description: string,
+    seed: string,
+    onClick: () => void,
+    src?: string | null,
+    meta?: React.ReactNode,
+    thumbSize = 64,
+    horizontal = false,
+    landscape = false,
+  ) => {
+    const [bg, fg] = pickColor(seed);
+    return (
+      <Tooltip label={description} multiline width={280}>
+        <button
+          type="button"
+          onClick={onClick}
+          style={{
+            border: cardBorder,
+            borderRadius: 20,
+            background: cardBg,
+            padding: landscape ? 0 : 18,
+            textAlign: horizontal ? 'center' : 'left',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: landscape ? 0 : 14,
+            minHeight: landscape ? 240 : (thumbSize > 96 ? 220 : 182),
+            overflow: 'hidden',
+            boxShadow: cardShadow,
+            transition: 'box-shadow 0.2s ease, transform 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.boxShadow = isDark ? '0 8px 24px rgba(0, 0, 0, 0.5)' : '0 8px 24px rgba(15, 23, 42, 0.12)';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.boxShadow = cardShadow;
+            e.currentTarget.style.transform = 'translateY(0)';
+          }}
+        >
+          {landscape ? (
+            <>
+              <div style={{ width: '100%', aspectRatio: '16 / 9', background: src ? (isDark ? '#0f172a' : '#e5e7eb') : `linear-gradient(135deg, ${bg}, ${isDark ? bg : fg})`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                {src ? (
+                  <img src={src} alt={title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                ) : (
+                  <span style={{ color: '#fff', fontSize: 36, fontWeight: 800, letterSpacing: 1 }}>{initialsFromText(title)}</span>
+                )}
+              </div>
+              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left', flex: 1 }}>
+                <Text size="sm" weight={700} style={{ lineHeight: 1.35 }}>{title}</Text>
+                <Text size="xs" color="dimmed" lineClamp={2}>{description}</Text>
+                {meta && <div style={{ marginTop: 'auto' }}>{meta}</div>}
+              </div>
+            </>
+          ) : horizontal ? (
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <TileThumb label={title} src={src} seed={seed} isDark={isDark} size={thumbSize} />
+                <Text size="lg" weight={800} style={{ lineHeight: 1.25, textAlign: 'center' }}>{title}</Text>
+              </div>
+              <Text size="xs" color="dimmed" style={{ textAlign: 'left' }} lineClamp={2}>{description}</Text>
+              {meta && <div style={{ textAlign: 'left' }}>{meta}</div>}
+            </>
+          ) : (
+            <>
+              <TileThumb label={title} src={src} seed={seed} isDark={isDark} size={thumbSize} />
+              <div>
+                <Text size="sm" weight={700} style={{ lineHeight: 1.35 }}>{title}</Text>
+                <Text size="xs" color="dimmed" mt={6} lineClamp={2}>{description}</Text>
+              </div>
+              {meta && <div>{meta}</div>}
+            </>
+          )}
+        </button>
+      </Tooltip>
+    );
+  };
 
   const renderCategoryGrid = () => (
     <div style={{ padding: 20 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 18 }}>
         {categories.map((category) => renderTile(
           category.category,
           category.description,
@@ -801,6 +990,8 @@ export default function ExploreView() {
           <Text size="xs" color="dimmed">
             {(category.samples?.length || 0) + (category.subcategories?.length || 0)} items
           </Text>,
+          120,
+          true,
         ))}
       </div>
     </div>
@@ -819,7 +1010,7 @@ export default function ExploreView() {
           </Button>
         )}
       </Group>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
         {samples.map((sample) => renderTile(
           sample.title,
           sample.description,
@@ -831,6 +1022,9 @@ export default function ExploreView() {
             <Badge variant="light">Level {sample.level}</Badge>
             <Badge leftSection={<IconStar size="0.7rem" />} color="yellow" variant="light">{sample.rate.toFixed(1)}</Badge>
           </Group>,
+          64,
+          false,
+          true,
         ))}
       </div>
     </div>
@@ -878,6 +1072,8 @@ export default function ExploreView() {
                   <Text size="xs" color="dimmed">
                     {(sub.samples?.length || 0) + (sub.subcategories?.length || 0)} items
                   </Text>,
+                  120,
+                  true,
                 ))}
               </div>
             </div>
@@ -886,7 +1082,7 @@ export default function ExploreView() {
           {hasSamps && (
             <div>
               {hasSubs && <Text size="lg" weight={700} mb={14}>Samples</Text>}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 18 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
                 {selectedCategory.samples.map((sample) => renderTile(
                   sample.title,
                   sample.description,
@@ -898,6 +1094,9 @@ export default function ExploreView() {
                     <Badge variant="light">Level {sample.level}</Badge>
                     <Badge leftSection={<IconStar size="0.7rem" />} color="yellow" variant="light">{sample.rate.toFixed(1)}</Badge>
                   </Group>,
+                  64,
+                  false,
+                  true,
                 ))}
               </div>
             </div>

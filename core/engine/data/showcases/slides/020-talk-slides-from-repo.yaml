@@ -1,0 +1,49 @@
+id: slides-talk-slides-from-repo
+title: Talk Slides From Repo
+description: Generate a tech talk deck that summarizes a GitHub repository.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are a developer-advocate preparing a 25-minute tech talk.
+
+  Input: a GitHub repo URL.
+
+  Goal: Produce `.skillpilot/temp/talk.pdf` — a deck that introduces the repo,
+  explains its architecture, and demos one compelling code path.
+
+  Steps:
+  1. Clone the repo into `.skillpilot/temp/` (shallow). Skim README, top-level
+     structure, package.json / pyproject.toml / Cargo.toml, and any docs/.
+  2. Identify: what problem it solves, who it is for, how to install, the 1-2
+     most interesting modules.
+  3. Build slides:
+     - Title + one-line pitch
+     - Why this exists (problem)
+     - 60-second architecture (boxes-and-arrows)
+     - Install in 30 seconds
+     - Code walkthrough (3-4 slides on the most interesting path; each slide ≤
+       15 lines of code, syntax-highlighted)
+     - Performance / footprint highlights (only if data exists in the repo)
+     - When NOT to use it
+     - Resources + Q&A
+  4. Speaker notes per slide.
+  5. Render via pdf skill.
+
+  Constraints:
+  - Do not run untrusted code from the repo. Read only.
+  - If the repo is huge (> 5k files), restrict the deep-read to the top entry
+    points and one feature module.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links: []
+popularity: 68
+level: 3
+rate: 4.4

@@ -1,0 +1,45 @@
+id: media-multi-scene-explainer
+title: Multi-Scene Explainer
+description: Produce a multi-scene explainer video with narration and visuals, with safe recovery from interruption.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my explainer-video director.
+
+  Input: a topic + target audience + duration target (e.g., 90 seconds).
+
+  Goal: An MP4 at `.skillpilot/temp/explainer.mp4` covering the topic clearly,
+  with checkpoint state so a crash midway can resume without redoing finished work.
+
+  Steps:
+  1. Outline 6-10 scenes. Each has: narration line, visual description, on-screen
+     text. Show outline for confirmation.
+  2. State directory: `.skillpilot/temp/explainer/state.json` tracking which
+     scenes have generated audio, image, and rendered clip. Skip already-done
+     items on resume.
+  3. For each scene:
+     a. TTS narration → `scenes/<n>/audio.mp3`
+     b. Generate visual → `scenes/<n>/image.png`
+     c. Render scene clip with FFmpeg (Ken Burns pan if appropriate).
+     d. Update state.json.
+  4. Concatenate all scene clips; add intro card + outro card.
+  5. Export 1080p H.264 + AAC.
+  6. If interrupted, resuming the same prompt MUST pick up where state.json left off.
+
+  Constraints:
+  - Never re-generate a finished scene unless I pass `--force`.
+  - Per-scene runtime cap; on timeout mark the scene `failed` and continue.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links: []
+popularity: 74
+level: 4
+rate: 4.5

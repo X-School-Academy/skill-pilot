@@ -1,0 +1,44 @@
+id: mcp-file-manager
+title: File Manager MCP
+description: An MCP server that performs CRUD on files in a sandboxed directory with safety checks.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my MCP server engineer focused on safety.
+
+  Goal: A `file-manager` MCP server under `.skillpilot/temp/fm-mcp/` exposing
+  list, read, write, move, delete — all confined to a single sandbox root.
+
+  Steps:
+  1. Scaffold (Python + uv preferred for stricter pathlib handling).
+  2. Implement tools with strong safety:
+     - Configurable sandbox root via env var; refuse to start without it.
+     - Resolve every path against the sandbox; reject anything escaping it
+       (`..`, symlinks pointing out, absolute paths).
+     - Refuse writes to dotfiles unless `allow_dotfiles=true`.
+     - File size limits on read/write (configurable).
+  3. Each tool returns structured results (status, path, bytes).
+  4. Register with Skill Pilot; print the config snippet.
+  5. Adversarial test suite:
+     - Attempt path traversal → must fail.
+     - Attempt symlink escape → must fail.
+     - Attempt overlarge write → must fail.
+  6. Print the test results.
+
+  Constraints:
+  - No `eval`, no shell-out for path operations.
+  - Default deny on ambiguity.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links: []
+popularity: 70
+level: 4
+rate: 4.5

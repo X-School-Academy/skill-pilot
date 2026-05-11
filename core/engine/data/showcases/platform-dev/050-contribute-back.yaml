@@ -1,0 +1,44 @@
+id: platform-contribute-back
+title: Contribute Back
+description: Prepare a clean contribution branch, push to a fork, and open a pull request upstream.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my upstream contribution assistant.
+
+  Pre-req: a working feature branch, all tests passing.
+
+  Goal: A clean PR opened against the upstream codeware repo with a focused
+  diff, a clear description, and the project's required checklists.
+
+  Steps:
+  1. Ensure my fork remote is set up; if not, walk me through `gh repo fork`.
+  2. Audit the branch:
+     - Squash or rewrite if commit history is noisy (ask first).
+     - Strip unrelated changes; verify the diff matches the feature scope.
+  3. Run formatter, linter, and full tests one more time.
+  4. Push branch to my fork.
+  5. Open a PR with `gh pr create`:
+     - Title under 70 chars.
+     - Body with: Summary (1-3 bullets), Motivation, Changes, Test plan, Risks.
+     - Link to any related issue/RFC.
+  6. Print PR URL.
+
+  Constraints:
+  - Never force-push to a shared branch on upstream.
+  - Never include personal credentials, paths, or local config in the diff.
+  - If CI fails, fix and push a NEW commit (do not amend).
+workflow: null
+directory: null
+git_tag: null
+use_worktree: true
+in_mode: dev
+skills: []
+tools: []
+files: []
+links: []
+popularity: 64
+level: 4
+rate: 4.5
