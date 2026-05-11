@@ -502,6 +502,39 @@ export default function ExploreView() {
   const promptText = isDark ? theme.colors.dark[0] : '#1e293b';
   const linkColor = isDark ? theme.colors.blue[4] : '#2563eb';
 
+  const markdownLinkComponents = {
+    a: ({ href, children }: { href?: string; children?: React.ReactNode }) => {
+      const target = String(href || '');
+      if (target.startsWith('/file-manager?path=')) {
+        return (
+          <a
+            href={target}
+            onClick={(event) => {
+              event.preventDefault();
+              const params = new URL(target, window.location.origin).searchParams;
+              const path = params.get('path') || '';
+              openFileManager(path);
+            }}
+            style={{ color: linkColor, fontWeight: 600 }}
+          >
+            {children}
+          </a>
+        );
+      }
+      return (
+        <a href={target} target="_blank" rel="noreferrer" style={{ color: linkColor, fontWeight: 600 }}>
+          {children}
+        </a>
+      );
+    },
+  };
+
+  const renderMarkdown = (text: string) => (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownLinkComponents}>
+      {promptToMarkdown(text || '')}
+    </ReactMarkdown>
+  );
+
   const renderSampleActions = (sample: ShowcaseSample) => {
     const pathGroups: Array<{ title: string; items: string[] }> = [
       ...(sample.workflow ? [{ title: 'Workflow', items: [sample.workflow] }] : []),
@@ -646,7 +679,37 @@ export default function ExploreView() {
               <TileThumb label={sample.title} src={sample.thumbnail_url} seed={sample.id} isDark={isDark} />
               <div style={{ flex: 1 }}>
                 <Text size={28} weight={800} style={{ lineHeight: 1.15 }}>{sample.title}</Text>
-                <Text size="sm" color="dimmed" mt={8}>{sample.description}</Text>
+                <Box
+                  mt={8}
+                  sx={{
+                    fontSize: 14,
+                    color: isDark ? theme.colors.dark[1] : '#475569',
+                    lineHeight: 1.55,
+                    '& p': { margin: '0 0 8px' },
+                    '& p:last-child': { marginBottom: 0 },
+                    '& ul, & ol': { paddingLeft: 20, margin: '4px 0 8px' },
+                    '& code': {
+                      background: isDark ? theme.colors.dark[5] : '#eef2f7',
+                      padding: '1px 5px',
+                      borderRadius: 4,
+                      fontSize: '0.9em',
+                    },
+                    '& pre': {
+                      background: isDark ? theme.colors.dark[7] : '#f1f5f9',
+                      padding: 10,
+                      borderRadius: 8,
+                      overflowX: 'auto',
+                    },
+                    '& blockquote': {
+                      borderLeft: `3px solid ${isDark ? theme.colors.dark[4] : '#cbd5e1'}`,
+                      margin: '6px 0',
+                      padding: '2px 10px',
+                      color: isDark ? theme.colors.dark[2] : '#64748b',
+                    },
+                  }}
+                >
+                  {renderMarkdown(sample.description)}
+                </Box>
                 <Group spacing="xs" mt={14}>
                   {sample.video_url && (
                     <Button
@@ -699,48 +762,71 @@ export default function ExploreView() {
               </Button>
             </div>
 
-            <div
-              style={{
+            <Box
+              sx={{
                 borderRadius: 16,
                 border: promptBorder,
                 background: promptBg,
                 padding: 18,
                 color: promptText,
                 overflowX: 'auto',
+                fontSize: 14,
+                lineHeight: 1.6,
+                '& p': { margin: '0 0 10px' },
+                '& p:last-child': { marginBottom: 0 },
+                '& h1, & h2, & h3, & h4': { margin: '14px 0 8px', lineHeight: 1.25 },
+                '& h1': { fontSize: 22 },
+                '& h2': { fontSize: 19 },
+                '& h3': { fontSize: 16 },
+                '& ul, & ol': { paddingLeft: 22, margin: '6px 0 10px' },
+                '& li': { margin: '2px 0' },
+                '& code': {
+                  background: isDark ? theme.colors.dark[5] : '#eef2f7',
+                  padding: '1px 6px',
+                  borderRadius: 4,
+                  fontSize: '0.9em',
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                },
+                '& pre': {
+                  background: isDark ? theme.colors.dark[8] : '#0f172a',
+                  color: isDark ? theme.colors.dark[0] : '#e2e8f0',
+                  padding: 12,
+                  borderRadius: 10,
+                  overflowX: 'auto',
+                  margin: '8px 0',
+                },
+                '& pre code': {
+                  background: 'transparent',
+                  color: 'inherit',
+                  padding: 0,
+                },
+                '& blockquote': {
+                  borderLeft: `3px solid ${isDark ? theme.colors.dark[4] : '#cbd5e1'}`,
+                  margin: '8px 0',
+                  padding: '4px 12px',
+                  color: isDark ? theme.colors.dark[2] : '#64748b',
+                },
+                '& table': {
+                  borderCollapse: 'collapse',
+                  margin: '8px 0',
+                  width: '100%',
+                },
+                '& th, & td': {
+                  border: `1px solid ${isDark ? theme.colors.dark[4] : '#e2e8f0'}`,
+                  padding: '6px 10px',
+                  textAlign: 'left',
+                },
+                '& hr': {
+                  border: 0,
+                  borderTop: `1px solid ${isDark ? theme.colors.dark[4] : '#e2e8f0'}`,
+                  margin: '12px 0',
+                },
               }}
             >
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  a: ({ href, children }) => {
-                    const target = String(href || '');
-                    if (target.startsWith('/file-manager?path=')) {
-                      return (
-                        <a
-                          href={target}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            const params = new URL(target, window.location.origin).searchParams;
-                            const path = params.get('path') || '';
-                            openFileManager(path);
-                          }}
-                          style={{ color: linkColor, fontWeight: 600 }}
-                        >
-                          {children}
-                        </a>
-                      );
-                    }
-                    return (
-                      <a href={target} target="_blank" rel="noreferrer" style={{ color: linkColor, fontWeight: 600 }}>
-                        {children}
-                      </a>
-                    );
-                  },
-                }}
-              >
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownLinkComponents}>
                 {linkedPrompt}
               </ReactMarkdown>
-            </div>
+            </Box>
           </div>
         </div>
 
