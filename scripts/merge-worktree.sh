@@ -3,7 +3,7 @@ set -e
 set -o pipefail
 
 usage() {
-  echo "Usage: $0 [--ours] [--no-commit] [--try-run] [source-worktree-path-or-branch]"
+  echo "Usage: $0 [--ours] [--no-commit] [--dry-run] [source-worktree-path-or-branch]"
   echo
   echo "Merge the paired worktree branch into the current branch."
   echo "Run from the main worktree to merge a linked worktree into main."
@@ -12,7 +12,7 @@ usage() {
   echo "Options:"
   echo "  --ours     Resolve conflicting hunks by favoring the current branch, default theirs."
   echo "  --no-commit  Run merge with --no-commit --no-ff."
-  echo "  --try-run  Print the planned merge command without running it."
+  echo "  --dry-run  Print the planned merge command without running it."
 }
 
 current_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
@@ -26,7 +26,7 @@ cd "$current_root"
 
 strategy_option="theirs"
 no_commit=0
-try_run=0
+dry_run=0
 source_arg=""
 
 while [ "$#" -gt 0 ]; do
@@ -41,8 +41,8 @@ while [ "$#" -gt 0 ]; do
     --no-commit)
       no_commit=1
       ;;
-    --try-run)
-      try_run=1
+    --dry-run)
+      dry_run=1
       ;;
     --)
       shift
@@ -172,7 +172,7 @@ echo "Current branch:   $current_branch"
 echo "Source branch:    $source_ref"
 echo "Strategy option:  -X $strategy_option"
 echo "No commit:        $no_commit"
-echo "Try run:          $try_run"
+echo "Dry run:          $dry_run"
 echo
 
 merge_message="Merge $source_ref into $current_branch"
@@ -190,7 +190,7 @@ if [ "$no_commit" = "1" ]; then
 fi
 printf " \"%s\"\n" "$source_ref"
 
-if [ "$try_run" = "1" ]; then
+if [ "$dry_run" = "1" ]; then
   exit 0
 fi
 
