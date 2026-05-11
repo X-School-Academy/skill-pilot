@@ -91,6 +91,27 @@ def ensure_worktree_config_symlink(worktree_path: Path) -> None:
     target.symlink_to(rel_source, target_is_directory=True)
 
 
+def commit_worktree_config_if_changed(
+    worktree_path: Path,
+    *,
+    message: str = "Track shared config symlink",
+) -> bool:
+    git_command(["add", "--", "config"], cwd=worktree_path)
+    proc = git_command(
+        ["diff", "--cached", "--quiet", "--", "config"],
+        cwd=worktree_path,
+        check=False,
+    )
+    if proc.returncode == 0:
+        return False
+    if proc.returncode != 1:
+        output = (proc.stderr or proc.stdout or "").strip()
+        raise RuntimeError(output or "Failed to check staged config changes")
+
+    git_command(["commit", "-m", message, "--", "config"], cwd=worktree_path)
+    return True
+
+
 def create_worktree(
     path: Path,
     *,
@@ -114,6 +135,7 @@ def create_worktree(
             apply_and_drop_stash_for_worktree(repo_root, path, stash_ref)
             stash_ref = None
         ensure_worktree_config_symlink(path)
+        commit_worktree_config_if_changed(path)
     except Exception:
         if stash_ref:
             restore_stash_to_repo(repo_root, stash_ref)
