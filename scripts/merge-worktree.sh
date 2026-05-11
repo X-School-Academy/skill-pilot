@@ -162,6 +162,11 @@ if [ "$source_ref" = "$current_branch" ]; then
   exit 0
 fi
 
+if ! git diff --quiet -- config || ! git diff --cached --quiet -- config; then
+  echo "config has uncommitted changes. Commit, stash, or restore it before worktree merge."
+  exit 1
+fi
+
 echo "Current worktree: $current_root"
 echo "Current branch:   $current_branch"
 echo "Source branch:    $source_ref"
