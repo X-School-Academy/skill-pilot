@@ -3,72 +3,72 @@
     "id": "basics",
     "category": "Basics",
     "description": "Beginner-friendly, low-risk first runs that confirm the environment works end-to-end.",
-    "thumbnail": null
+    "thumbnail": "/showcases/basics.png"
   },
   {
     "id": "browser-tasks",
     "category": "Browser Tasks",
     "description": "Everyday browser-driven automations. Each one warns about prompt-injection risk before navigating.",
-    "thumbnail": null
+    "thumbnail": "/showcases/browser-tasks.png"
   },
   {
     "id": "tutorials",
     "category": "Tutorials",
     "description": "Turn raw material (notes, recordings, videos) into structured learning content.",
-    "thumbnail": null
+    "thumbnail": "/showcases/tutorials.png"
   },
   {
     "id": "slides",
     "category": "Slides",
     "description": "Generate PDF and HTML decks from notes, ideas, or repositories.",
-    "thumbnail": null
+    "thumbnail": "/showcases/slides.png"
   },
   {
     "id": "websites",
     "category": "Websites",
     "description": "Build, screenshot, iterate, and ship small websites end-to-end.",
-    "thumbnail": null
+    "thumbnail": "/showcases/websites.png"
   },
   {
     "id": "games",
     "category": "Games",
     "description": "Remake compact open-source games with PixiJS or three.js.",
-    "thumbnail": null
+    "thumbnail": "/showcases/games.png"
   },
   {
     "id": "media-generation",
     "category": "Media Generation",
     "description": "Generate videos, podcasts, talking avatars, and captioned media.",
-    "thumbnail": null
+    "thumbnail": "/showcases/media-generation.png"
   },
   {
     "id": "ai-agents",
     "category": "AI Agents",
     "description": "Progressively deeper agent construction — chatbots, RAG, multi-agent workflows.",
-    "thumbnail": null
+    "thumbnail": "/showcases/ai-agents.png"
   },
   {
     "id": "agent-skills",
     "category": "Agent Skills",
     "description": "Install, scaffold, and compose Skill Pilot agent skills.",
-    "thumbnail": null
+    "thumbnail": "/showcases/agent-skills.png"
   },
   {
     "id": "mcp-servers",
     "category": "MCP Servers",
     "description": "Build and audit Model Context Protocol servers and integrations.",
-    "thumbnail": null
+    "thumbnail": "/showcases/mcp-servers.png"
   },
   {
     "id": "platform-dev",
     "category": "Platform Dev",
     "description": "Improve Skill Pilot itself: codeware status, worktrees, features, contributions.",
-    "thumbnail": null
+    "thumbnail": "/showcases/platform-dev.png"
   },
   {
     "id": "cloud-gpu",
     "category": "Cloud & GPU",
     "description": "Cloud and GPU infrastructure fluency: AWS EC2, SSH, RunPod GPUs.",
-    "thumbnail": null
+    "thumbnail": "/showcases/cloud-gpu.png"
   }
 ]

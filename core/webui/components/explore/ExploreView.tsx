@@ -134,11 +134,12 @@ function isAudioLike(value: string | null | undefined): boolean {
   return ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'].some((suffix) => lower.includes(suffix));
 }
 
-function TileThumb({ label, src, seed, isDark }: { label: string; src?: string | null; seed: string; isDark?: boolean }) {
+function TileThumb({ label, src, seed, isDark, size = 64 }: { label: string; src?: string | null; seed: string; isDark?: boolean; size?: number }) {
   const [bg, fg] = pickColor(seed);
+  const radius = Math.round(size * 0.22);
   if (src) {
     return (
-      <div style={{ width: 64, height: 64, borderRadius: 18, overflow: 'hidden', background: isDark ? '#374151' : '#e5e7eb', flexShrink: 0 }}>
+      <div style={{ width: size, height: size, borderRadius: radius, overflow: 'hidden', background: isDark ? '#374151' : '#e5e7eb', flexShrink: 0 }}>
         <img src={src} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
       </div>
     );
@@ -146,15 +147,15 @@ function TileThumb({ label, src, seed, isDark }: { label: string; src?: string |
   return (
     <div
       style={{
-        width: 64,
-        height: 64,
-        borderRadius: 18,
+        width: size,
+        height: size,
+        borderRadius: radius,
         background: `linear-gradient(135deg, ${bg}, ${isDark ? bg : fg})`,
         color: '#fff',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: 22,
+        fontSize: Math.round(size * 0.34),
         fontWeight: 800,
         letterSpacing: 1,
         flexShrink: 0,
@@ -837,7 +838,7 @@ export default function ExploreView() {
     );
   };
 
-  const renderTile = (title: string, description: string, seed: string, onClick: () => void, src?: string | null, meta?: React.ReactNode) => (
+  const renderTile = (title: string, description: string, seed: string, onClick: () => void, src?: string | null, meta?: React.ReactNode, thumbSize = 64, horizontal = false) => (
     <Tooltip label={description} multiline width={280}>
       <button
         type="button"
@@ -847,12 +848,12 @@ export default function ExploreView() {
           borderRadius: 20,
           background: cardBg,
           padding: 18,
-          textAlign: 'left',
+          textAlign: horizontal ? 'center' : 'left',
           cursor: 'pointer',
           display: 'flex',
           flexDirection: 'column',
-          gap: 16,
-          minHeight: 182,
+          gap: 14,
+          minHeight: thumbSize > 96 ? 220 : 182,
           boxShadow: cardShadow,
           transition: 'box-shadow 0.2s ease, transform 0.2s ease',
         }}
@@ -865,19 +866,31 @@ export default function ExploreView() {
           e.currentTarget.style.transform = 'translateY(0)';
         }}
       >
-        <TileThumb label={title} src={src} seed={seed} isDark={isDark} />
-        <div>
-          <Text size="sm" weight={700} style={{ lineHeight: 1.35 }}>{title}</Text>
-          <Text size="xs" color="dimmed" mt={6} lineClamp={2}>{description}</Text>
-        </div>
-        {meta && <div>{meta}</div>}
+        {horizontal ? (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              <TileThumb label={title} src={src} seed={seed} isDark={isDark} size={thumbSize} />
+              <Text size="lg" weight={800} style={{ lineHeight: 1.25, textAlign: 'center' }}>{title}</Text>
+            </div>
+            <Text size="xs" color="dimmed" style={{ textAlign: 'left' }} lineClamp={2}>{description}</Text>
+          </>
+        ) : (
+          <>
+            <TileThumb label={title} src={src} seed={seed} isDark={isDark} size={thumbSize} />
+            <div>
+              <Text size="sm" weight={700} style={{ lineHeight: 1.35 }}>{title}</Text>
+              <Text size="xs" color="dimmed" mt={6} lineClamp={2}>{description}</Text>
+            </div>
+          </>
+        )}
+        {meta && <div style={{ textAlign: horizontal ? 'left' : undefined }}>{meta}</div>}
       </button>
     </Tooltip>
   );
 
   const renderCategoryGrid = () => (
     <div style={{ padding: 20 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 18 }}>
         {categories.map((category) => renderTile(
           category.category,
           category.description,
@@ -887,6 +900,8 @@ export default function ExploreView() {
           <Text size="xs" color="dimmed">
             {(category.samples?.length || 0) + (category.subcategories?.length || 0)} items
           </Text>,
+          120,
+          true,
         ))}
       </div>
     </div>
@@ -964,6 +979,8 @@ export default function ExploreView() {
                   <Text size="xs" color="dimmed">
                     {(sub.samples?.length || 0) + (sub.subcategories?.length || 0)} items
                   </Text>,
+                  120,
+                  true,
                 ))}
               </div>
             </div>

@@ -888,8 +888,17 @@ def _normalize_showcase_media(value: Any) -> Dict[str, Any]:
     if not raw:
         return {"value": None, "url": None, "is_external": False, "is_media": False}
     is_external = _is_http_url(raw)
-    url = raw if is_external else _download_url_for_repo_path(raw)
-    kind = _task_type_from_path(raw if is_external else "/" + raw)
+    if is_external:
+        url = raw
+        kind_path = raw
+    elif raw.startswith("/"):
+        # Absolute URL path served by the webui (e.g. Next.js public/ assets like "/showcases/foo.png").
+        url = raw
+        kind_path = raw
+    else:
+        url = _download_url_for_repo_path(raw)
+        kind_path = "/" + raw
+    kind = _task_type_from_path(kind_path)
     return {
         "value": raw,
         "url": url,
