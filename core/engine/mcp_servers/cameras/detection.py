@@ -35,7 +35,7 @@ _SETTINGS_PATH = _PROJECT_DIR / "config" / "settings.json5"
 
 def _get_engine_port() -> int:
     try:
-        import json5
+        import json5_io as json5
 
         data = json5.loads(_SETTINGS_PATH.read_text(encoding="utf-8"))
         engine = data.get("services", {}).get("engine", {})

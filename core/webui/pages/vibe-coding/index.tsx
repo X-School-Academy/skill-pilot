@@ -31,15 +31,24 @@ import {
 } from '@mantine/core';
 import {
   IconArrowLeft,
+  IconBug,
   IconClock,
+  IconCode,
   IconFileText,
   IconFolder,
+  IconHierarchy,
   IconMessageCirclePlus,
+  IconPackage,
+  IconPlayerPlay,
+  IconPlayerStop,
   IconPlus,
   IconRefresh,
+  IconRocket,
   IconSortAscending,
+  IconUpload,
 } from '@tabler/icons-react';
 import EmbeddedSessionPanel, { WorkflowExecuteStatus } from '../../components/EmbeddedSessionPanel';
+import MainLayout from '../../components/main-layout';
 import { apiUrl } from '../../libs/api-base';
 import { AUTO_EXECUTE_OPTION, buildExecuteSelectOptions, isAutoExecuteTarget } from '../../libs/execute-targets';
 import { useWorkspaceWatcher } from '../../libs/file-events';
@@ -69,6 +78,16 @@ interface VibeAction {
   label: string;
   defaultSkill: string;
   skillPromptSuffix: string;
+}
+
+interface VibeProjectSummary {
+  name: string;
+  path: string;
+  display_name: string;
+  initials: string;
+  icon_path: string | null;
+  commands: Record<'start' | 'dev' | 'build' | 'stop', string>;
+  mtime: number;
 }
 
 const detectFileKind = (path: string): FileKind => {
@@ -161,6 +180,9 @@ export default function VibeCodingPage() {
   const isDevMode = process.env.NODE_ENV === 'development';
   const [opened, setOpened] = useState(false);
   const [treeData, setTreeData] = useState<FileItem[]>([]);
+  const [projects, setProjects] = useState<VibeProjectSummary[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [commandStarting, setCommandStarting] = useState<string | null>(null);
   const [selectedKind, setSelectedKind] = useState<FileKind>('text');
   const [loading, setLoading] = useState(false);
   const [treeLoading, setTreeLoading] = useState(false);
@@ -213,6 +235,12 @@ export default function VibeCodingPage() {
   useEffect(() => { editorContentRef.current = editorContent; }, [editorContent]);
 
   const currentTask = typeof task === 'string' ? task : '';
+  const currentView = router.query.view === 'explorer' || typeof task === 'string' ? 'explorer' : 'dashboard';
+  const selectedProjectName = typeof router.query.project === 'string' ? router.query.project : '';
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.name === selectedProjectName) || null,
+    [projects, selectedProjectName],
+  );
   const currentProject = getVibeProjectName(currentTask);
   const currentFileName = currentTask.split('/').pop() || '';
   const currentDesignDocName = isVibeDesignDocPath(currentTask) ? currentFileName : '';
@@ -287,6 +315,18 @@ export default function VibeCodingPage() {
     }
   };
 
+  const fetchProjects = async () => {
+    setProjectsLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/vibe-coding/projects`);
+      setProjects(res.data.items || []);
+    } catch (err) {
+      console.error('Failed to fetch vibe coding projects:', err);
+    } finally {
+      setProjectsLoading(false);
+    }
+  };
+
   const fetchContent = async (path: string) => {
     const nextKind = detectFileKind(path);
     setLoading(true);
@@ -320,7 +360,7 @@ export default function VibeCodingPage() {
     try {
       const res = await axios.get(`${API_BASE_URL}/vibe-coding/latest`);
       if (res.data.path) {
-        router.push(`/vibe-coding?task=${encodeURIComponent(res.data.path)}`, undefined, { shallow: true });
+        router.push(`/vibe-coding?view=explorer&task=${encodeURIComponent(res.data.path)}`, undefined, { shallow: true });
       } else {
         setEditorContent('');
         setNotice('');
@@ -419,10 +459,14 @@ export default function VibeCodingPage() {
         requirements: projectRequirementsInput,
       });
       const createdPath = String(res.data.path || '');
+      const createdProject = String(res.data.project || '');
       setProjectModalOpened(false);
       await fetchTree();
-      if (createdPath) {
-        router.push(`/vibe-coding?task=${encodeURIComponent(createdPath)}`, undefined, { shallow: true });
+      await fetchProjects();
+      if (createdProject) {
+        router.push(`/vibe-coding?project=${encodeURIComponent(createdProject)}`, undefined, { shallow: true });
+      } else if (createdPath) {
+        router.push(`/vibe-coding?view=explorer&task=${encodeURIComponent(createdPath)}`, undefined, { shallow: true });
       }
     } catch (err: any) {
       console.error('Failed to create vibe coding project:', err);
@@ -447,8 +491,9 @@ export default function VibeCodingPage() {
       const createdPath = String(res.data.path || '');
       setRequestModalOpened(false);
       await fetchTree();
+      await fetchProjects();
       if (createdPath) {
-        router.push(`/vibe-coding?task=${encodeURIComponent(createdPath)}`, undefined, { shallow: true });
+        router.push(`/vibe-coding?view=explorer&task=${encodeURIComponent(createdPath)}`, undefined, { shallow: true });
       }
     } catch (err: any) {
       console.error('Failed to create vibe coding request:', err);
@@ -479,6 +524,7 @@ export default function VibeCodingPage() {
         confirm_text: confirmText,
       });
       await fetchTree();
+      await fetchProjects();
       router.push('/vibe-coding', undefined, { shallow: true });
     } catch (err: any) {
       console.error('Failed to delete vibe coding file:', err);
@@ -540,6 +586,93 @@ export default function VibeCodingPage() {
     setNewSessionWorkflowResume(false);
   };
 
+  const openNewProjectWorkflowPanel = () => {
+    setSessionPromptText('Complete the vibe coding project using the `vibe-coding-dev` workflow as the user requirements below. Ask the user clarifying questions before implementation if any requirement is unclear.\n\nRequirements:\n');
+    setNewSessionWorkflow('vibe-coding-dev.json');
+    setNewSessionNextNodeTrigger('auto_continue');
+    setNewSessionWorkflowResumeAvailable(false);
+    setNewSessionWorkflowResume(false);
+    setLiveSessionName(null);
+    setWorkflowSessionActive(false);
+    setWorkflowExecuteStatus(null);
+    setSessionPanelHeight(50);
+    setSessionPanelOpen(true);
+  };
+
+  const openProjectPromptPanel = (project: VibeProjectSummary, label: string, prompt: string) => {
+    setSessionPromptText(prompt);
+    setNewSessionWorkflow(null);
+    setNewSessionNextNodeTrigger('auto_continue');
+    setNewSessionWorkflowResumeAvailable(false);
+    setNewSessionWorkflowResume(false);
+    setLiveSessionName(null);
+    setWorkflowSessionActive(false);
+    setWorkflowExecuteStatus(null);
+    setSessionPanelHeight(50);
+    setSessionPanelOpen(true);
+    setNotice(`${label} prompt is ready for ${project.display_name}.`);
+    setEditorError('');
+  };
+
+  const openProjectActionPrompt = (project: VibeProjectSummary, action: 'push' | 'update' | 'issue' | 'deploy') => {
+    const projectPath = vibeProjectPath(project.name);
+    const designDocsPath = vibeProjectDesignDocsPath(project.name);
+    const prompts: Record<'push' | 'update' | 'issue' | 'deploy', { label: string; text: string }> = {
+      push: {
+        label: 'Push',
+        text: `Commit and push the code for vibe coding project ${project.display_name} to its GitHub repository.\n\nProject path: ${projectPath}\nDesign docs path: ${designDocsPath}\n\nReview the working tree first, summarize the changes, ask for any missing commit or remote details, then commit and push when ready.`,
+      },
+      update: {
+        label: 'Update',
+        text: `Ask the user what feature or change they want to add to vibe coding project ${project.display_name}, then use the vibe-coding skill to complete the update request.\n\nProject path: ${projectPath}\nDesign docs path: ${designDocsPath}\n\nAfter the user provides the request, create or update the required design docs, implement the change, test it, and report the result.`,
+      },
+      issue: {
+        label: 'Issue',
+        text: `Ask the user what bug or issue they want fixed in vibe coding project ${project.display_name}, then use the vibe-coding skill to diagnose and fix it.\n\nProject path: ${projectPath}\nDesign docs path: ${designDocsPath}\n\nAfter the user provides the issue, record it in the project design docs, implement the fix, test it, and report the result.`,
+      },
+      deploy: {
+        label: 'Deploy',
+        text: `Ask the user to confirm the production deployment target for vibe coding project ${project.display_name}, then use the vibe-coding skill to redeploy it if production deployment is configured.\n\nProject path: ${projectPath}\nDesign docs path: ${designDocsPath}\n\nCheck the deployment notes first, confirm any missing environment details, run the deployment, and report the deployed target.`,
+      },
+    };
+    openProjectPromptPanel(project, prompts[action].label, prompts[action].text);
+  };
+
+  const startProjectCommand = async (project: VibeProjectSummary, commandKey: 'start' | 'dev' | 'build' | 'stop') => {
+    const command = String(project.commands?.[commandKey] || '').trim();
+    if (!command) {
+      setEditorError(`No ${commandKey} command is configured in ${project.name}/assets/info.yaml.`);
+      setNotice('');
+      return;
+    }
+    const commandId = `${project.name}:${commandKey}`;
+    setCommandStarting(commandId);
+    setEditorError('');
+    setNotice('');
+    try {
+      const res = await axios.post(`${API_BASE_URL}/terminal/tmux/create`, {
+        command,
+        path: vibeProjectPath(project.name),
+      });
+      const sessionName: string | undefined = res.data?.session?.name;
+      if (sessionName) {
+        setLiveSessionName(sessionName);
+        setSessionPromptText('');
+        setNewSessionWorkflow(null);
+        setWorkflowSessionActive(false);
+        setWorkflowExecuteStatus(null);
+        setSessionPanelHeight(50);
+        setSessionPanelOpen(true);
+        setNotice(`${commandKey.charAt(0).toUpperCase()}${commandKey.slice(1)} command started for ${project.display_name}.`);
+      }
+    } catch (err: any) {
+      console.error(`Failed to start ${commandKey} command:`, err);
+      setEditorError(err?.response?.data?.error || `Failed to start ${commandKey} command.`);
+    } finally {
+      setCommandStarting(null);
+    }
+  };
+
   const handleStartSession = async (path?: string) => {
     const trimmedPrompt = sessionPromptText.trim();
     if (!trimmedPrompt || startingSession) return;
@@ -598,7 +731,10 @@ export default function VibeCodingPage() {
 
   useWorkspaceWatcher({
     prefix: '/workspace/vibe-coding',
-    onTreeChange: () => { void fetchTree(); },
+    onTreeChange: () => {
+      void fetchTree();
+      void fetchProjects();
+    },
     currentFilePath: currentTask ? `/workspace/vibe-coding/${currentTask}` : null,
     onCurrentFileChange: () => {
       if (!currentTask) return;
@@ -613,6 +749,7 @@ export default function VibeCodingPage() {
 
   useEffect(() => {
     fetchTree();
+    fetchProjects();
     fetchLlmProviders();
     fetchExecuteOptions();
     void axios.get(`${API_BASE_URL}/config/settings`).then((res) => {
@@ -629,10 +766,10 @@ export default function VibeCodingPage() {
   useEffect(() => {
     if (currentTask) {
       fetchContent(currentTask);
-    } else if (router.isReady) {
+    } else if (router.isReady && currentView === 'explorer') {
       fetchLatest();
     }
-  }, [currentTask, router.isReady]);
+  }, [currentTask, router.isReady, currentView]);
 
   useEffect(() => {
     if (!workflowSessionActive) return undefined;
@@ -717,7 +854,7 @@ export default function VibeCodingPage() {
         icon={<IconFileText size="1.2rem" stroke={1.5} color={theme.colors.gray[6]} />}
         active={isSelected}
         onClick={() => {
-          router.push(`/vibe-coding?task=${encodeURIComponent(item.path)}`, undefined, { shallow: true });
+          router.push(`/vibe-coding?view=explorer&task=${encodeURIComponent(item.path)}`, undefined, { shallow: true });
           setOpened(false);
         }}
       />
@@ -1024,6 +1161,283 @@ export default function VibeCodingPage() {
 
     return !loading ? <Text align="center" py="xl" color="dimmed">Select a project file from the sidebar to begin.</Text> : null;
   };
+
+  const renderProjectAvatar = (project: VibeProjectSummary, size = 76) => {
+    if (project.icon_path) {
+      return (
+        <div style={{ width: size, height: size, borderRadius: 8, overflow: 'hidden', background: '#eef2f7', flexShrink: 0 }}>
+          <img
+            src={`${API_BASE_URL}/vibe-coding/file?path=${encodeURIComponent(project.icon_path)}`}
+            alt={project.display_name}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        </div>
+      );
+    }
+    return (
+      <div
+        style={{
+          width: size,
+          height: size,
+          borderRadius: 8,
+          background: '#1f2937',
+          color: '#ffffff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: Math.max(20, Math.round(size * 0.32)),
+          fontWeight: 800,
+          letterSpacing: 0,
+          flexShrink: 0,
+        }}
+      >
+        {project.initials}
+      </div>
+    );
+  };
+
+  const dashboardShell = (content: React.ReactNode) => (
+    <MainLayout title="Vibe Coding">
+      <div
+        ref={rightPaneRef}
+        style={{
+          height: '100%',
+          minHeight: 0,
+          display: 'grid',
+          gridTemplateRows: sessionPanelOpen ? `${100 - sessionPanelHeight}fr 12px ${sessionPanelHeight}fr` : '1fr',
+          overflow: 'hidden',
+          background: '#ffffff',
+        }}
+      >
+        <div style={{ minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {(editorError || notice) && (
+            <div style={{ flexShrink: 0, borderBottom: '1px solid #e5e7eb' }}>
+              {editorError && <Text color="red" size="sm" px={24} py={10}>{editorError}</Text>}
+              {!editorError && notice && <Text color="green" size="sm" px={24} py={10}>{notice}</Text>}
+            </div>
+          )}
+          {content}
+        </div>
+        {sessionPanelOpen && (
+          <>
+            <div
+              onMouseDown={(event) => {
+                event.preventDefault();
+                setIsSessionPanelResizing(true);
+              }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'row-resize', color: '#93a4cc' }}
+            >
+              <span style={{ fontSize: 16, lineHeight: 1 }}>...</span>
+            </div>
+            <div style={{ minHeight: 0, overflow: 'hidden' }}>
+              <EmbeddedSessionPanel
+                currentLabel={selectedProject?.display_name || 'Vibe coding session'}
+                liveSessionName={liveSessionName}
+                sessionPromptText={sessionPromptText}
+                setSessionPromptText={setSessionPromptText}
+                newSessionWorkflow={newSessionWorkflow}
+                newSessionSandbox={newSessionSandbox}
+                setNewSessionSandbox={setNewSessionSandbox}
+                newSessionAuto={newSessionAuto}
+                setNewSessionAuto={setNewSessionAuto}
+                newSessionNetwork={newSessionNetwork}
+                setNewSessionNetwork={setNewSessionNetwork}
+                newSessionNextNodeTrigger={newSessionNextNodeTrigger}
+                setNewSessionNextNodeTrigger={setNewSessionNextNodeTrigger}
+                newSessionWorkflowResumeAvailable={newSessionWorkflowResumeAvailable}
+                newSessionWorkflowResume={newSessionWorkflowResume}
+                setNewSessionWorkflowResume={setNewSessionWorkflowResume}
+                startingSession={startingSession}
+                onStart={(path) => void handleStartSession(path)}
+                onClose={closeSessionPanel}
+                workflowExecuteStatus={workflowExecuteStatus}
+                workflowSessionActive={workflowSessionActive}
+                continuingWorkflow={continuingWorkflow}
+                onContinueWorkflow={() => void handleWorkflowContinue()}
+                hideSessionRootSelect
+              />
+            </div>
+          </>
+        )}
+      </div>
+    </MainLayout>
+  );
+
+  const renderDashboard = () => dashboardShell(
+    <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+      <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <Text size={20} weight={800}>Vibe Coding</Text>
+          <Text size="sm" color="dimmed">Projects</Text>
+        </div>
+        <Tooltip label="Explorer">
+          <ActionIcon
+            variant="light"
+            size="lg"
+            onClick={() => { void router.push('/vibe-coding?view=explorer', undefined, { shallow: true }); }}
+            aria-label="Open Explorer view"
+          >
+            <IconHierarchy size="1.25rem" />
+          </ActionIcon>
+        </Tooltip>
+      </div>
+      <div style={{ padding: '28px 32px' }}>
+        {projectsLoading && projects.length === 0 ? (
+          <Text color="dimmed">Loading projects...</Text>
+        ) : (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))',
+              gap: 22,
+              alignItems: 'start',
+            }}
+          >
+            {projects.map((project) => (
+              <button
+                key={project.name}
+                type="button"
+                onClick={() => { void router.push(`/vibe-coding?project=${encodeURIComponent(project.name)}`, undefined, { shallow: true }); }}
+                style={{
+                  border: '1px solid transparent',
+                  background: 'transparent',
+                  padding: 12,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  minHeight: 132,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 10,
+                }}
+                onMouseEnter={(event) => {
+                  event.currentTarget.style.borderColor = '#dbe3f0';
+                  event.currentTarget.style.background = '#f8fafc';
+                }}
+                onMouseLeave={(event) => {
+                  event.currentTarget.style.borderColor = 'transparent';
+                  event.currentTarget.style.background = 'transparent';
+                }}
+              >
+                {renderProjectAvatar(project)}
+                <Text size="sm" weight={700} align="center" style={{ lineHeight: 1.25, wordBreak: 'break-word' }}>
+                  {project.display_name}
+                </Text>
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={openNewProjectWorkflowPanel}
+              style={{
+                border: '1px dashed #94a3b8',
+                background: '#f8fafc',
+                color: '#334155',
+                padding: 12,
+                borderRadius: 8,
+                cursor: 'pointer',
+                minHeight: 132,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+              }}
+            >
+              <IconPlus size={52} stroke={1.6} />
+              <Text size="sm" weight={700}>New Project</Text>
+            </button>
+          </div>
+        )}
+      </div>
+    </div>,
+  );
+
+  const renderProjectDetail = (project: VibeProjectSummary | null) => dashboardShell(
+    <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+      <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <Group spacing="md" align="center">
+          <ActionIcon variant="subtle" onClick={() => { void router.push('/vibe-coding', undefined, { shallow: true }); }} aria-label="Back to dashboard">
+            <IconArrowLeft size="1.1rem" />
+          </ActionIcon>
+          {project && renderProjectAvatar(project, 48)}
+          <div>
+            <Text size={20} weight={800}>{project?.display_name || selectedProjectName || 'Project'}</Text>
+            <Text size="sm" color="dimmed">{project ? vibeProjectPath(project.name) : 'Project metadata not found'}</Text>
+          </div>
+        </Group>
+        <Tooltip label="Explorer">
+          <ActionIcon
+            variant="light"
+            size="lg"
+            onClick={() => { void router.push('/vibe-coding?view=explorer', undefined, { shallow: true }); }}
+            aria-label="Open Explorer view"
+          >
+            <IconHierarchy size="1.25rem" />
+          </ActionIcon>
+        </Tooltip>
+      </div>
+      {!project ? (
+        <Box p="xl">
+          <Text color="dimmed">This project is not available. Return to the dashboard and refresh the project list.</Text>
+        </Box>
+      ) : (
+        <Stack spacing="lg" p="xl" style={{ maxWidth: 980 }}>
+          <Group spacing="sm">
+            {[
+              { key: 'start' as const, label: 'Start', icon: <IconPlayerPlay size="1rem" /> },
+              { key: 'dev' as const, label: 'Dev', icon: <IconCode size="1rem" /> },
+              { key: 'build' as const, label: 'Build', icon: <IconPackage size="1rem" /> },
+              { key: 'stop' as const, label: 'Stop', icon: <IconPlayerStop size="1rem" /> },
+            ].map((action) => (
+              <Button
+                key={action.key}
+                leftIcon={action.icon}
+                variant={action.key === 'stop' ? 'light' : 'filled'}
+                color={action.key === 'stop' ? 'red' : 'blue'}
+                onClick={() => void startProjectCommand(project, action.key)}
+                loading={commandStarting === `${project.name}:${action.key}`}
+                disabled={!project.commands?.[action.key]}
+              >
+                {action.label}
+              </Button>
+            ))}
+          </Group>
+          <Group spacing="sm">
+            {[
+              { key: 'push' as const, label: 'Push', icon: <IconUpload size="1rem" /> },
+              { key: 'update' as const, label: 'Update', icon: <IconPlus size="1rem" /> },
+              { key: 'issue' as const, label: 'Issue', icon: <IconBug size="1rem" /> },
+              { key: 'deploy' as const, label: 'Deploy', icon: <IconRocket size="1rem" /> },
+            ].map((action) => (
+              <Button
+                key={action.key}
+                leftIcon={action.icon}
+                variant="default"
+                onClick={() => openProjectActionPrompt(project, action.key)}
+              >
+                {action.label}
+              </Button>
+            ))}
+          </Group>
+          <Box style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, background: '#f8fafc' }}>
+            <Text size="sm" weight={700} mb={8}>Configured Commands</Text>
+            <Stack spacing={4}>
+              {(['start', 'dev', 'build', 'stop'] as const).map((key) => (
+                <Text key={key} size="sm" color={project.commands?.[key] ? undefined : 'dimmed'} style={{ fontFamily: PAGE_EDITOR_FONT, wordBreak: 'break-word' }}>
+                  {key}: {project.commands?.[key] || '(not configured)'}
+                </Text>
+              ))}
+            </Stack>
+          </Box>
+        </Stack>
+      )}
+    </div>,
+  );
+
+  if (currentView === 'dashboard') {
+    if (selectedProjectName) return renderProjectDetail(selectedProject);
+    return renderDashboard();
+  }
 
   return (
     <AppShell
@@ -1369,6 +1783,7 @@ export default function VibeCodingPage() {
                   workflowSessionActive={workflowSessionActive}
                   continuingWorkflow={continuingWorkflow}
                   onContinueWorkflow={() => void handleWorkflowContinue()}
+                  hideSessionRootSelect
                 />
               </div>
             </>

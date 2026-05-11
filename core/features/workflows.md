@@ -32,9 +32,7 @@ Workflow builder and runner for graph-based agent workflows stored under `core/w
 - `core/engine/routes.py`
 - `core/workflows/new-workflow.json`
 - `core/workflows/setup-openclaw.json`
-- `core/workflows/test-workflow-four-skills.json`
-- `core/skills/system/create-update-agent-workflow/SKILL.md`
-- `core/skills/system/run-workflow/SKILL.md`
+- `core/workflows/test-number-workflow.json`
+- `core/skills/system/agent-workflow/SKILL.md`
 - Keywords: `WorkflowsPage`, `removeSelectedEdge`, `execute`, `validate`, `continue`, `workflow graph`
 - API routes: `/api/workflows/tree`, `/api/workflows/latest`, `/api/workflows/content`, `/api/workflows/execute/status`, `/api/workflows/execute`, `/api/workflows/execute/continue`, `/api/workflows/validate`, `/api/workflows/save`
-

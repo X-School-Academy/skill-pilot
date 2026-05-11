@@ -36,7 +36,7 @@ from code_executor import execute_code_impl
 from course_utils import build_tree, find_latest_course, read_course_meta, safe_course_path, write_course_meta
 from dev_swarm.router import router as dev_swarm_router
 from file_realtime import FileRealtimeHub
-import json5
+import json5_io as json5
 from workflow_editor_utils import (
     build_workflow_tree,
     find_latest_workflow,

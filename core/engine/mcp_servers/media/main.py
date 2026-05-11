@@ -12,7 +12,6 @@ import binascii
 from contextlib import asynccontextmanager
 import hashlib
 import json
-import json5
 import math
 import mimetypes
 import os
@@ -31,6 +30,7 @@ _engine_root = str(Path(__file__).resolve().parents[2])
 if _engine_root not in sys.path:
     sys.path.insert(0, _engine_root)
 
+import json5_io as json5
 from fastmcp import FastMCP
 
 from logger import get_logger

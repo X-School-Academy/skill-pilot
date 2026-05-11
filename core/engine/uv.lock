@@ -1251,15 +1251,15 @@ wheels = [
 
 [[package]]
 name = "json-five"
-version = "1.1.2"
+version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "regex" },
     { name = "sly" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1a/b1/3f9e2feb61fc7d78fa6cf584477416e75ea9c9b4796a62ace787539c9a04/json_five-1.1.2.tar.gz", hash = "sha256:1c5b1bae6039bc44632d009b32338d4b59ab765c596d96577b52cc3dadc936e2", size = 26785, upload-time = "2024-06-11T21:55:32.074Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/71/51/3bdd9d4db8d8b3590983003340d62a528d0c216d0e2e19ff8336915266ac/json-five-1.1.1.tar.gz", hash = "sha256:4a6299873fa44db92b4aa013332476a6fdb36fafb81204db4b1d064e104897a8", size = 26709, upload-time = "2023-08-04T06:35:37.102Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0f/6a/5f871b895705576faeb1992f0fb574759237ae4e92b905c3d806d84ceea9/json_five-1.1.2-py3-none-any.whl", hash = "sha256:b10608e6af9730b9e1c1a099e71f86acb905991f830957a6b25f53bd4826fe8f", size = 21444, upload-time = "2024-06-11T21:55:30.537Z" },
+    { url = "https://files.pythonhosted.org/packages/d8/16/9b43f0720f63601c13499452b1bc4bcf8038f681e1da6d109a5a867ca52a/json_five-1.1.1-py3-none-any.whl", hash = "sha256:20a45f299262eb61f6438a51d5000c4dbf018ae1a8ae225173c38d04add2513c", size = 21434, upload-time = "2023-08-04T06:35:35.527Z" },
 ]
 
 [[package]]
@@ -3385,7 +3385,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "fastmcp", specifier = ">=0.1.0" },
     { name = "google-genai", specifier = ">=1.30.0" },
-    { name = "json-five", specifier = ">=1.1.2" },
+    { name = "json-five", specifier = "==1.1.1" },
     { name = "json-repair", specifier = ">=0.30.0" },
     { name = "langchain", specifier = ">=0.3.0" },
     { name = "langchain-core", specifier = ">=0.3.0" },

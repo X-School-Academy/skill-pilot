@@ -27,4 +27,4 @@ Create `workspace/vibe-coding/{project-name}/design-docs/requirements.md` from t
 
 ### Step 4: Report
 
-Report the project folder path and the created `requirements.md`.
+Report the project folder path and `design-docs/requirements.md`.

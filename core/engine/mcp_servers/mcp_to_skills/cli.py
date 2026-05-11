@@ -195,6 +195,21 @@ def build_parser() -> argparse.ArgumentParser:
         default="{}",
         help="JSON object payload (default: {})",
     )
+    create_image_parser = subparsers.add_parser(
+        "create-image",
+        help="Create an image through the running engine socket and print the local file path",
+    )
+    create_image_parser.add_argument(
+        "--ratio",
+        choices=("square", "landscape", "portrait"),
+        default="square",
+        help="Output image ratio preset. Defaults to square.",
+    )
+    create_image_parser.add_argument(
+        "--prompt",
+        required=True,
+        help="Detailed image generation prompt.",
+    )
     run_workflow_parser = subparsers.add_parser(
         "run-workflow",
         help="Execute a workflow JSON by running each SubAgent via engine socket inference",
@@ -508,6 +523,48 @@ def main() -> int:
 
         result = response.get("result")
         print(json.dumps(result, ensure_ascii=False))
+        return 0
+
+    if args.command == "create-image":
+        request_payload = {
+            "operation": "create_image",
+            "prompt": str(args.prompt).strip(),
+            "ratio": str(args.ratio).strip(),
+        }
+        try:
+            response_raw = send_request_with_runtime_fallback(
+                json.dumps(request_payload, ensure_ascii=True),
+                timeout,
+                socket_path,
+                explicit_socket=explicit_socket,
+            )
+        except EngineNotStartedError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        except Exception as exc:
+            print(f"create-image request failed: {exc}", file=sys.stderr)
+            return 2
+        try:
+            response = json.loads(response_raw)
+        except json.JSONDecodeError:
+            print(response_raw)
+            return 0
+
+        if not isinstance(response, dict):
+            print(response_raw)
+            return 0
+        if response.get("status") != "ok":
+            detail = response.get("detail") or "create-image request failed"
+            print(str(detail), file=sys.stderr)
+            return 2
+
+        result = response.get("result") or {}
+        if isinstance(result, dict):
+            path = result.get("path")
+            if path is not None:
+                print(str(path))
+                return 0
+        print(response_raw)
         return 0
 
     if args.command == "run-workflow":

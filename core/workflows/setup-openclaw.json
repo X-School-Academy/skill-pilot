@@ -29,7 +29,8 @@
       "data": {
         "title": "Agent Browser Init",
         "provider_id": "claude",
-        "skill": "init-agent-browser"
+        "skill": "agent-browser",
+        "responsibility": "Run the agent-browser init action to initialize and verify browser automation before downstream browser tasks."
       }
     },
     {

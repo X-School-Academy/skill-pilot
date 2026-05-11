@@ -63,7 +63,7 @@ workspace/vibe-coding/{project-name}/
 └── (project source code, if it lives in-tree)
 ```
 
-The `create` stage is responsible for creating `design-docs/` and `design-docs/archive/` when the project is first bootstrapped.
+The `create` stage is responsible for creating `design-docs/` and `design-docs/archive/` when the project is first bootstrapped. The `deploy` stage is responsible for local deployment assets under `assets/` when they do not already exist.
 
 ## File Lifecycle Rules
 
