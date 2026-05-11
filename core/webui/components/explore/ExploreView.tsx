@@ -675,9 +675,68 @@ export default function ExploreView() {
             <Badge color="grape" variant="light">Popularity {sample.popularity}</Badge>
           </Group>
 
-          <div style={{ padding: 24, borderRadius: 22, border: cardBorder, background: cardBg, boxShadow: cardShadow }}>
+          <div style={{ borderRadius: 22, border: cardBorder, background: cardBg, boxShadow: cardShadow, overflow: 'hidden' }}>
+            {sample.thumbnail_url && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (sample.video_url) {
+                    openMedia(sample.video_url as string, sample.title, isAudioLike(sample.video) ? 'audio' : 'video');
+                  } else {
+                    openMedia(sample.thumbnail_url as string, sample.title, 'image');
+                  }
+                }}
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  aspectRatio: '16 / 9',
+                  background: isDark ? '#0f172a' : '#e5e7eb',
+                  padding: 0,
+                  border: 'none',
+                  cursor: sample.video_url ? 'pointer' : 'zoom-in',
+                  display: 'block',
+                  overflow: 'hidden',
+                }}
+              >
+                <img
+                  src={sample.thumbnail_url}
+                  alt={sample.title}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 96,
+                      height: 96,
+                      borderRadius: '50%',
+                      background: 'rgba(0, 0, 0, 0.45)',
+                      backdropFilter: 'blur(2px)',
+                      border: '2px solid rgba(255, 255, 255, 0.85)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 6px 20px rgba(0, 0, 0, 0.35)',
+                    }}
+                  >
+                    <IconPlayerPlay size={44} color="#fff" fill="#fff" style={{ marginLeft: 6 }} />
+                  </div>
+                </div>
+              </button>
+            )}
+            <div style={{ padding: 24 }}>
             <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', marginBottom: 18 }}>
-              <TileThumb label={sample.title} src={sample.thumbnail_url} seed={sample.id} isDark={isDark} />
+              {!sample.thumbnail_url && (
+                <TileThumb label={sample.title} src={sample.thumbnail_url} seed={sample.id} isDark={isDark} />
+              )}
               <div style={{ flex: 1 }}>
                 <Text size={28} weight={800} style={{ lineHeight: 1.15 }}>{sample.title}</Text>
                 <Box
@@ -828,6 +887,7 @@ export default function ExploreView() {
                 {linkedPrompt}
               </ReactMarkdown>
             </Box>
+            </div>
           </div>
         </div>
 
@@ -838,55 +898,85 @@ export default function ExploreView() {
     );
   };
 
-  const renderTile = (title: string, description: string, seed: string, onClick: () => void, src?: string | null, meta?: React.ReactNode, thumbSize = 64, horizontal = false) => (
-    <Tooltip label={description} multiline width={280}>
-      <button
-        type="button"
-        onClick={onClick}
-        style={{
-          border: cardBorder,
-          borderRadius: 20,
-          background: cardBg,
-          padding: 18,
-          textAlign: horizontal ? 'center' : 'left',
-          cursor: 'pointer',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 14,
-          minHeight: thumbSize > 96 ? 220 : 182,
-          boxShadow: cardShadow,
-          transition: 'box-shadow 0.2s ease, transform 0.2s ease',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.boxShadow = isDark ? '0 8px 24px rgba(0, 0, 0, 0.5)' : '0 8px 24px rgba(15, 23, 42, 0.12)';
-          e.currentTarget.style.transform = 'translateY(-2px)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.boxShadow = cardShadow;
-          e.currentTarget.style.transform = 'translateY(0)';
-        }}
-      >
-        {horizontal ? (
-          <>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+  const renderTile = (
+    title: string,
+    description: string,
+    seed: string,
+    onClick: () => void,
+    src?: string | null,
+    meta?: React.ReactNode,
+    thumbSize = 64,
+    horizontal = false,
+    landscape = false,
+  ) => {
+    const [bg, fg] = pickColor(seed);
+    return (
+      <Tooltip label={description} multiline width={280}>
+        <button
+          type="button"
+          onClick={onClick}
+          style={{
+            border: cardBorder,
+            borderRadius: 20,
+            background: cardBg,
+            padding: landscape ? 0 : 18,
+            textAlign: horizontal ? 'center' : 'left',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: landscape ? 0 : 14,
+            minHeight: landscape ? 240 : (thumbSize > 96 ? 220 : 182),
+            overflow: 'hidden',
+            boxShadow: cardShadow,
+            transition: 'box-shadow 0.2s ease, transform 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.boxShadow = isDark ? '0 8px 24px rgba(0, 0, 0, 0.5)' : '0 8px 24px rgba(15, 23, 42, 0.12)';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.boxShadow = cardShadow;
+            e.currentTarget.style.transform = 'translateY(0)';
+          }}
+        >
+          {landscape ? (
+            <>
+              <div style={{ width: '100%', aspectRatio: '16 / 9', background: src ? (isDark ? '#0f172a' : '#e5e7eb') : `linear-gradient(135deg, ${bg}, ${isDark ? bg : fg})`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                {src ? (
+                  <img src={src} alt={title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                ) : (
+                  <span style={{ color: '#fff', fontSize: 36, fontWeight: 800, letterSpacing: 1 }}>{initialsFromText(title)}</span>
+                )}
+              </div>
+              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'left', flex: 1 }}>
+                <Text size="sm" weight={700} style={{ lineHeight: 1.35 }}>{title}</Text>
+                <Text size="xs" color="dimmed" lineClamp={2}>{description}</Text>
+                {meta && <div style={{ marginTop: 'auto' }}>{meta}</div>}
+              </div>
+            </>
+          ) : horizontal ? (
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <TileThumb label={title} src={src} seed={seed} isDark={isDark} size={thumbSize} />
+                <Text size="lg" weight={800} style={{ lineHeight: 1.25, textAlign: 'center' }}>{title}</Text>
+              </div>
+              <Text size="xs" color="dimmed" style={{ textAlign: 'left' }} lineClamp={2}>{description}</Text>
+              {meta && <div style={{ textAlign: 'left' }}>{meta}</div>}
+            </>
+          ) : (
+            <>
               <TileThumb label={title} src={src} seed={seed} isDark={isDark} size={thumbSize} />
-              <Text size="lg" weight={800} style={{ lineHeight: 1.25, textAlign: 'center' }}>{title}</Text>
-            </div>
-            <Text size="xs" color="dimmed" style={{ textAlign: 'left' }} lineClamp={2}>{description}</Text>
-          </>
-        ) : (
-          <>
-            <TileThumb label={title} src={src} seed={seed} isDark={isDark} size={thumbSize} />
-            <div>
-              <Text size="sm" weight={700} style={{ lineHeight: 1.35 }}>{title}</Text>
-              <Text size="xs" color="dimmed" mt={6} lineClamp={2}>{description}</Text>
-            </div>
-          </>
-        )}
-        {meta && <div style={{ textAlign: horizontal ? 'left' : undefined }}>{meta}</div>}
-      </button>
-    </Tooltip>
-  );
+              <div>
+                <Text size="sm" weight={700} style={{ lineHeight: 1.35 }}>{title}</Text>
+                <Text size="xs" color="dimmed" mt={6} lineClamp={2}>{description}</Text>
+              </div>
+              {meta && <div>{meta}</div>}
+            </>
+          )}
+        </button>
+      </Tooltip>
+    );
+  };
 
   const renderCategoryGrid = () => (
     <div style={{ padding: 20 }}>
@@ -920,7 +1010,7 @@ export default function ExploreView() {
           </Button>
         )}
       </Group>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
         {samples.map((sample) => renderTile(
           sample.title,
           sample.description,
@@ -932,6 +1022,9 @@ export default function ExploreView() {
             <Badge variant="light">Level {sample.level}</Badge>
             <Badge leftSection={<IconStar size="0.7rem" />} color="yellow" variant="light">{sample.rate.toFixed(1)}</Badge>
           </Group>,
+          64,
+          false,
+          true,
         ))}
       </div>
     </div>
@@ -989,7 +1082,7 @@ export default function ExploreView() {
           {hasSamps && (
             <div>
               {hasSubs && <Text size="lg" weight={700} mb={14}>Samples</Text>}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 18 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
                 {selectedCategory.samples.map((sample) => renderTile(
                   sample.title,
                   sample.description,
@@ -1001,6 +1094,9 @@ export default function ExploreView() {
                     <Badge variant="light">Level {sample.level}</Badge>
                     <Badge leftSection={<IconStar size="0.7rem" />} color="yellow" variant="light">{sample.rate.toFixed(1)}</Badge>
                   </Group>,
+                  64,
+                  false,
+                  true,
                 ))}
               </div>
             </div>

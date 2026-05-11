@@ -1,7 +1,7 @@
 id: cloud-enable-aws-cli-safely
 title: Enable AWS CLI Safely
 description: Configure the AWS CLI, store credentials securely, and verify without leaking secrets.
-thumbnail: null
+thumbnail: /showcases/cloud-gpu/cloud-enable-aws-cli-safely.png
 video: null
 tutorial: null
 request: null

@@ -1,7 +1,7 @@
 id: cloud-provision-ec2-ubuntu
 title: Provision EC2 Ubuntu
 description: Provision an Ubuntu EC2 instance with safe networking defaults and summarize connection details.
-thumbnail: null
+thumbnail: /showcases/cloud-gpu/cloud-provision-ec2-ubuntu.png
 video: null
 tutorial: null
 request: null

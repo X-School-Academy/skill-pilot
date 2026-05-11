@@ -1,7 +1,7 @@
 id: cloud-deploy-media-mcp-runpod
 title: Deploy Media MCP to RunPod
 description: Deploy Skill Pilot's Media MCP to a RunPod GPU and integrate it with the local engine.
-thumbnail: null
+thumbnail: /showcases/cloud-gpu/cloud-deploy-media-mcp-runpod.png
 video: null
 tutorial: null
 request: null

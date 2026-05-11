@@ -1,7 +1,7 @@
 id: cloud-runpod-comfyui
 title: RunPod + ComfyUI
 description: Provision a RunPod GPU with ComfyUI and Stable Diffusion for image generation.
-thumbnail: null
+thumbnail: /showcases/cloud-gpu/cloud-runpod-comfyui.png
 video: null
 tutorial: null
 request: null

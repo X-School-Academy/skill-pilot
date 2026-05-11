@@ -1,7 +1,7 @@
 id: cloud-connect-ec2-ssh
 title: Connect to EC2 via SSH
 description: Use a temporary key plus EC2 Instance Connect, then a persistent SSH config managed by Skill Pilot.
-thumbnail: null
+thumbnail: /showcases/cloud-gpu/cloud-connect-ec2-ssh.png
 video: null
 tutorial: null
 request: null
