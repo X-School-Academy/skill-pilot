@@ -1,6 +1,6 @@
 ---
 name: codeware
-description: Manage Skill Pilot codeware operations and feature lifecycle work. Use when the user wants to sync or restore codeware, configure a personal fork, contribute upstream, create a private workspace repo, or run feature development steps such as create, refine, initial, plan, implement, review, test, merge, update, or fix issues.
+description: Manage Skill Pilot codeware operations and feature lifecycle work. Use when the user wants to sync or restore codeware, configure a personal fork, contribute upstream, create a private workspace repo, or run feature development steps such as create, refine, initial, plan, implement, review, test, merge, freeze, update, or fix issues.
 ---
 
 # AI Builder - Codeware
@@ -11,7 +11,7 @@ Handle Skill Pilot codeware maintenance and feature development workflows.
 
 - The user wants to update, restore, repair, or contribute Skill Pilot codeware
 - The user wants to configure remotes, forks, contribution branches, or a private workspace repo
-- The user wants to create, refine, plan, implement, review, test, merge, update, or fix a feature under `core/development/`
+- The user wants to create, refine, plan, implement, review, test, merge, freeze, update, or fix a feature under `core/development/`
 
 ## Your Roles in This Skill
 
@@ -40,7 +40,7 @@ Follow these steps in order.
 Map the user request to one operation family:
 
 - Codeware maintenance: `update`, `restore`, `add remote`, `contribute`, or `create private workspace repo`
-- Feature lifecycle: `create`, `refine`, `initial`, `plan`, `implement`, `review`, `test`, `merge`, `update feature`, or `fix issues`
+- Feature lifecycle: `create`, `refine`, `initial`, `plan`, `implement`, `review`, `test`, `merge`, `freeze`, `update feature`, or `fix issues`
 
 ### Step 2: Load the correct reference
 

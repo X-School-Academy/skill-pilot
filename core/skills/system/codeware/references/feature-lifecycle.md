@@ -18,5 +18,6 @@ Use this reference as the map for feature work under `core/development/`. After 
 - `review`: use `references/feature-lifecycle-review.md`
 - `test`: use `references/feature-lifecycle-test.md`
 - `merge`: use `references/feature-lifecycle-merge.md`
+- `freeze`: use `references/feature-lifecycle-freeze.md`
 - `update feature`: use `references/feature-lifecycle-update.md`
 - `fix issues`: use `references/feature-lifecycle-fix-issues.md`
