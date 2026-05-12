@@ -32,7 +32,9 @@ Write `design-docs/update-impl.md` describing what changed, what was verified, a
 
 ### Step 6: Refresh Living Design Docs
 
-Update `design-docs/requirements.md`, `design-docs/plan.md`, and `design-docs/implement.md` to reflect the changes from this update cycle.
+Update `design-docs/requirements.md`, `design-docs/plan.md`, and `design-docs/implementation.md` to reflect the changes from this update cycle.
+
+Update `CHANGELOG.md` with a summary of what changed in this update cycle (a final changelog entry will also be added by the `merge` stage).
 
 ### Step 7: Archive the Update Cycle Files
 
@@ -47,4 +49,4 @@ mv design-docs/update-impl.md "design-docs/archive/update-impl.$timestamp.md"
 
 ### Step 8: Report
 
-Report the updated behavior, verification, refreshed living docs, and archived files.
+Report the updated behavior, verification, refreshed living docs, and archived files. State that the next step is `test`, then `review`, then `merge`.

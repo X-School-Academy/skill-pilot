@@ -5,14 +5,14 @@ Test a Vibe Coding project implementation and report the results.
 ## When to Use
 
 - The user asks to test the implementation
-- `design-docs/implement.md` exists
+- `design-docs/implementation.md` exists
 - Goal is validation, bug discovery, or coverage analysis
 
 ## Steps
 
 ### Step 1: Read the Implementation Context
 
-Read `design-docs/implement.md` and identify the affected flows.
+Read `design-docs/implementation.md` and identify the affected flows.
 
 ### Step 2: Run Relevant Checks
 
@@ -25,13 +25,19 @@ Use this priority order — apply higher-priority methods first and cover as muc
 
 Apply only the methods relevant to the project.
 
-### Step 3: Save the Test Report
+### Step 3: Fix Failures and Retest
 
-Write results to `design-docs/tested.md` (created fresh per test pass): passed checks, failed checks, bugs found, coverage gaps.
+If any checks fail, fix the code immediately and rerun the relevant checks. Repeat until all requirements pass. Do not proceed to the next stage while failures remain.
 
-### Step 4: Hand off
+### Step 4: Save the Test Report
 
-Once the user has decided what to do with the results (typically by writing `issues.md` or `update.md`), the consuming stage archives `tested.md`:
+Write results to `design-docs/tested.md` (created fresh per test pass): passed checks, fixed issues, remaining risks, coverage gaps.
+
+Update `design-docs/implementation.md` if the fixes changed what was implemented.
+
+### Step 5: Hand off
+
+Once the user has decided what to do with the results (or when running in the default new-project flow, proceed directly to `review`), the consuming stage archives `tested.md`:
 
 ```bash
 timestamp=$(date +"%Y-%m-%d-%H%M")

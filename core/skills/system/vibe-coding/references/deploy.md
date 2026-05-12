@@ -12,13 +12,13 @@ Deploy a Vibe Coding project locally as launchable software, and deploy to a rem
 
 ### Step 1: Read the Implementation Context
 
-Read `design-docs/implement.md` and identify deployment target, runtime, and dependencies.
+Read `design-docs/implementation.md` and identify deployment target, runtime, and dependencies.
 
 ### Step 2: Determine Local and Remote Targets
 
 Every project needs a local deployment because Skill Pilot is an AI operating system: local deployment means installing or packaging the software so the user can launch and operate it from the WebUI dashboard.
 
-If no remote production target is specified in `requirements.md`, `plan.md`, or `implement.md`, do not invent one. Ask the user how and where to deploy remotely only when remote production deployment is required or requested.
+If no remote production target is specified in `requirements.md`, `plan.md`, or `implementation.md`, do not invent one. Ask the user how and where to deploy remotely only when remote production deployment is required or requested.
 
 ### Step 3: Prepare Local Deployment
 
@@ -81,6 +81,13 @@ Write `design-docs/deployment.md` (overwrite — it is a living doc):
 - Environment / runtime details for local and remote deployment
 - Remaining setup items
 
-### Step 7: Report
+### Step 7: Update Top-Level Project Files
+
+After a successful deployment, update:
+
+- `README.md` — refresh the Setup, Usage, and any deployment-specific sections (URLs, commands, environment requirements) so users have an accurate operational guide.
+- `deployment.md` is already updated in Step 6; no further action needed for `CHANGELOG.md` or `AGENTS.md` in the deploy stage.
+
+### Step 8: Report
 
 Summarize the local deployment outcome, dashboard assets, remote production outcome if applicable, and next steps.

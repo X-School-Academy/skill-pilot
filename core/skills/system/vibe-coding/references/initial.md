@@ -1,14 +1,13 @@
 # Stage Reference: initial
 
-Initialize the project repo and first setup based on `requirements.md`.
+Initialize the project repo and first setup based on `requirements.md`, or create a new git branch for an update or bug fix.
 
 ## When to Use
 
-- The user wants to initialize a new coding project from `requirements.md`
-- First-pass repo setup is needed
-- GitHub initialization may be part of bootstrap
+- **New project**: the user wants to initialize a new coding project from `requirements.md`; first-pass repo setup is needed.
+- **Update or bug fix**: the user wants to start work on a change to an existing project; a new branch is needed for the work.
 
-## Steps
+## New Project Path
 
 ### Step 1: Review the Requirement
 
@@ -40,3 +39,27 @@ Write `design-docs/initialized.md` as a write-once mark capturing:
 ### Step 5: Report
 
 Confirm what was initialized and that `initialized.md` was written.
+
+## Update or Bug Fix Path
+
+### Step 1: Derive the Branch Name
+
+Derive a concise kebab-case branch name from the update or fix description (e.g., `fix-login-timeout`, `update-dark-mode`).
+
+### Step 2: Create and Check Out the Branch
+
+```bash
+git checkout -b {branch-name}
+```
+
+### Step 3: Record the Branch
+
+Append a note to `design-docs/initialized.md` (it already exists) recording:
+
+- Branch name
+- Date created
+- Brief description of the change
+
+### Step 4: Report
+
+Confirm the branch name and that the working tree is on the new branch.

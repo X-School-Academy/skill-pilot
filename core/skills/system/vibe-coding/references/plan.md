@@ -22,9 +22,18 @@ Read `design-docs/requirements.md`.
 
 Inspect relevant code and identify implementation gaps.
 
-### Step 3: Write the Plan
+### Step 3: Archive the Existing Plan
 
-Create or update `design-docs/plan.md`. Include:
+If `design-docs/plan.md` already exists, archive it before writing the new one:
+
+```bash
+timestamp=$(date +"%Y-%m-%d-%H%M")
+mv design-docs/plan.md "design-docs/archive/plan.$timestamp.md"
+```
+
+### Step 4: Write the Plan
+
+Create `design-docs/plan.md`. Include:
 
 - Scope
 - Current-state analysis
@@ -32,6 +41,8 @@ Create or update `design-docs/plan.md`. Include:
 - Likely file changes
 - Open questions
 
-### Step 4: Ask for Approval
+For the **update or bug fix flow**, also read `design-docs/implementation.md` alongside `requirements.md` to understand the current implementation state before planning changes.
+
+### Step 5: Ask for Approval
 
 Present the plan as ready for approval before implementation starts.

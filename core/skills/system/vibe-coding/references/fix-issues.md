@@ -32,7 +32,9 @@ Write `design-docs/issues-impl.md` describing which issues were fixed, how they 
 
 ### Step 6: Refresh Living Design Docs
 
-Update `design-docs/requirements.md`, `design-docs/plan.md`, and `design-docs/implement.md` to reflect any behavior change introduced by the fixes.
+Update `design-docs/requirements.md`, `design-docs/plan.md`, and `design-docs/implementation.md` to reflect any behavior change introduced by the fixes.
+
+Update `CHANGELOG.md` with a summary of what was fixed (a final changelog entry will also be added by the `merge` stage).
 
 ### Step 7: Archive the Fix Cycle Files
 
@@ -47,4 +49,4 @@ mv design-docs/issues-impl.md "design-docs/archive/issues-impl.$timestamp.md"
 
 ### Step 8: Report
 
-Report which issues were fixed, how they were verified, refreshed living docs, and archived files.
+Report which issues were fixed, how they were verified, refreshed living docs, and archived files. State that the next step is `test`, then `review`, then `merge`.

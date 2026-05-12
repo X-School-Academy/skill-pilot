@@ -25,6 +25,14 @@ Create:
 
 Create `workspace/vibe-coding/{project-name}/design-docs/requirements.md` from the user's prompt in clear English. Keep it requirement-focused; avoid implementation details.
 
-### Step 4: Report
+### Step 4: Create Top-Level Project Files
 
-Report the project folder path and `design-docs/requirements.md`.
+Create stub versions of the three top-level project files:
+
+- `README.md` — project name as the H1 heading, one-line description derived from the requirements, placeholder sections for Overview, Usage, and Setup.
+- `CHANGELOG.md` — single `## Unreleased` section with no entries yet.
+- `AGENTS.md` — project name as the H1 heading, a note that the `vibe-coding` skill manages this project, and a placeholder section for project-specific AI agent instructions.
+
+### Step 5: Report
+
+Report the project folder path, `design-docs/requirements.md`, and the three top-level files created.

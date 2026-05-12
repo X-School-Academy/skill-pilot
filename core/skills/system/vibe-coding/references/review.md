@@ -5,26 +5,32 @@ Review a Vibe Coding project implementation with a code-review mindset.
 ## When to Use
 
 - The user asks to review the implementation
-- `design-docs/implement.md` exists
+- `design-docs/implementation.md` exists
 - Bugs, regressions, and missing tests should be identified
 
 ## Steps
 
 ### Step 1: Read the Implementation Context
 
-Read `design-docs/implement.md` and inspect the relevant code paths.
+Read `design-docs/implementation.md` and inspect the relevant code paths.
 
 ### Step 2: Review for Findings
 
-Prioritize correctness issues, regressions, unsafe assumptions, and missing verification.
+Prioritize correctness issues, regressions, unsafe assumptions, and missing verification. Also check for code cleanliness, efficiency, and documentation quality.
 
-### Step 3: Save the Review
+### Step 3: Fix Issues Found
 
-Write findings to `design-docs/reviewed.md` (created fresh per review). Order findings by severity, then list open questions and residual risks.
+Fix all issues discovered during the review. After fixing, re-inspect the affected code to confirm the fix is correct and no new issues were introduced. Only proceed once the code is clean and all findings are resolved.
 
-### Step 4: Hand off
+### Step 4: Save the Review
 
-Present the findings to the user. Once the user has decided what to do with them (typically by writing `issues.md` or `update.md`), the consuming stage is responsible for archiving `reviewed.md`:
+Write findings and their resolutions to `design-docs/reviewed.md` (created fresh per review). Record what was found, what was fixed, and any residual risks.
+
+Update `design-docs/implementation.md` to reflect any code changes made during the review.
+
+### Step 5: Hand off
+
+Present the review summary to the user. Once the user has decided what to do with any remaining notes (or when running in the default flow, proceed directly to `deploy` or `merge`), the consuming stage is responsible for archiving `reviewed.md`:
 
 ```bash
 timestamp=$(date +"%Y-%m-%d-%H%M")
