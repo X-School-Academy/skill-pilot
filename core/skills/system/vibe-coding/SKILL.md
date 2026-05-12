@@ -52,8 +52,7 @@ mv design-docs/plan.md "design-docs/archive/plan.$timestamp.md"
 ```
 
 **Intermediates** — archive after consumption using `{basename}.{YYYY-MM-DD-HHMM}.md`:
-- Human-loop: `brainstorm.md`, `issues.md`, `update.md`, `reviewed.md`, `tested.md`
-- Review-output: `issues-plan.md`, `issues-impl.md`, `update-plan.md`, `update-impl.md`
+- `brainstorm.md`, `update.md`, `issues.md`, `reviewed.md`, `tested.md`
 
 `initialized.md` is write-once — never refresh it.
 
@@ -62,6 +61,8 @@ mv design-docs/plan.md "design-docs/archive/plan.$timestamp.md"
 **New project:** `create → refine → initialize → plan → implement → test → review → deploy`
 
 **Update/fix:** `update/fix → refine → initialize-branch → plan → implement → test → review → merge → deploy`
+
+The `update/fix` stage only sets up the trigger doc. `plan` and `implement` then run the same as in the new project flow, but automatically read the trigger doc for context.
 
 | Stage | Purpose |
 |-------|---------|

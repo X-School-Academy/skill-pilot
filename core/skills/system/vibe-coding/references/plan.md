@@ -4,9 +4,9 @@ Create a development plan from `requirements.md`.
 
 ## When to Use
 
-- The user wants a dev plan from `design-docs/requirements.md`
+- The user wants a dev plan
 - A file-by-file implementation approach is needed
-- Next step is implementation planning, not coding
+- Works for all flows: new project, update, and fix
 
 ## Package Management Tools
 
@@ -14,9 +14,12 @@ Use `uv` for Python projects and `pnpm` for Node.js projects unless the user ask
 
 ## Steps
 
-### Step 1: Read the Requirement
+### Step 1: Read the Context
 
-Read `design-docs/requirements.md`.
+Detect the active flow and read the appropriate docs:
+- New project: read `design-docs/requirements.md`
+- Update flow (`update.md` present): read `design-docs/requirements.md`, `design-docs/implementation.md`, and `design-docs/update.md`
+- Fix flow (`issues.md` present): read `design-docs/requirements.md`, `design-docs/implementation.md`, and `design-docs/issues.md`
 
 ### Step 2: Review the Current Codebase
 
@@ -40,8 +43,6 @@ Create `design-docs/plan.md`. Include:
 - Implementation phases
 - Likely file changes
 - Open questions
-
-For the **update or bug fix flow**, also read `design-docs/implementation.md` alongside `requirements.md` to understand the current implementation state before planning changes.
 
 ### Step 5: Ask for Approval
 

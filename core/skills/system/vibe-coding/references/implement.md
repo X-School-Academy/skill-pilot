@@ -6,7 +6,7 @@ Implement the project according to `plan.md`.
 
 - The user wants code written from `design-docs/plan.md`
 - The plan is approved
-- Project is moving from planning into execution
+- Works for all flows: new project, update, and fix
 
 ## Steps
 
@@ -35,9 +35,8 @@ Write the implementation summary to `design-docs/implementation.md` (overwrite �
 Update the top-level files to reflect the current implementation state:
 
 - `README.md` — update Setup, Usage, and any feature sections that changed.
+- `CHANGELOG.md` — append an entry describing what was added, changed, or fixed.
 - `AGENTS.md` — update any project-specific AI agent notes that are now out of date.
-
-(`CHANGELOG.md` is updated by the `update` and `fix-issues` stages, not here.)
 
 ### Step 6: Report
 

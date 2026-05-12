@@ -15,6 +15,7 @@ create → refine → initial → plan → implement → test → review → mer
 ```
 update/fix → refine → initial (new branch) → plan → implement → test → review → merge → freeze
 ```
+The `update/fix` stage only sets up the trigger doc. `plan` and `implement` then run the same as in Flow 1, but automatically read the trigger doc for context.
 
 ### Flow 3: Under Agent-Workflow
 Same sequence as Flow 1 or Flow 2. After each step completes, also invoke the `agent-workflow` skill's continue-workflow action. See `references/feature-lifecycle-agent-workflow.md`.
@@ -35,15 +36,15 @@ These five files are created at `create` time and kept up to date throughout all
 
 ## Working Docs and Archive Convention
 
-Per-cycle working docs are specific to each flow and archived before a new cycle starts:
+`plan.md` is shared across all flows and archived before each new plan. Trigger docs are archived when a new cycle starts:
 
-| Flow | Working docs | Archived as |
-|------|-------------|-------------|
-| New feature | `plan.md` | `archive/plan.{timestamp}.md` |
-| Update | `update.md`, `update-plan.md`, `update-impl.md` | `archive/update.{timestamp}.md`, etc. |
-| Fix | `issues.md`, `issues-plan.md`, `issues-impl.md` | `archive/issues.{timestamp}.md`, etc. |
+| File | When archived |
+|------|--------------|
+| `plan.md` | Before writing a new plan (all flows) |
+| `update.md` | When `update feature` is called again for a new cycle |
+| `issues.md` | When `fix issues` is called again for a new cycle |
 
-Archive files go under `core/development/{feature-name}/archive/`.
+Archive files go under `core/development/{feature-name}/archive/` as `{basename}.{YYYY-MM-DD-HHMM}.md`.
 
 ---
 
@@ -51,26 +52,18 @@ Archive files go under `core/development/{feature-name}/archive/`.
 
 ```
 core/development/{feature-name}/
-├── README.md
-├── CHANGELOG.md
-├── AGENTS.md
-├── requirements.md
-├── implementation.md
-├── plan.md                    # new feature flow
-├── update.md                  # update flow
-├── update-plan.md
-├── update-impl.md
-├── issues.md                  # fix flow
-├── issues-plan.md
-├── issues-impl.md
+├── README.md              # persistent
+├── CHANGELOG.md           # persistent
+├── AGENTS.md              # persistent
+├── requirements.md        # persistent
+├── implementation.md      # persistent
+├── plan.md                # shared across all flows
+├── update.md              # update flow trigger doc
+├── issues.md              # fix flow trigger doc
 └── archive/
     ├── plan.{timestamp}.md
     ├── update.{timestamp}.md
-    ├── update-plan.{timestamp}.md
-    ├── update-impl.{timestamp}.md
-    ├── issues.{timestamp}.md
-    ├── issues-plan.{timestamp}.md
-    └── issues-impl.{timestamp}.md
+    └── issues.{timestamp}.md
 ```
 
 ---
