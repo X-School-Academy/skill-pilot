@@ -28,16 +28,6 @@ Feature-oriented development workspace for creating product feature requests und
 
 - `core/webui/pages/skill-pilot-development/index.tsx`
 - `core/engine/routes.py`
-- `core/skills/system/skill-pilot-feature-create/SKILL.md`
-- `core/skills/system/skill-pilot-feature-refine/SKILL.md`
-- `core/skills/system/skill-pilot-feature-initial/SKILL.md`
-- `core/skills/system/skill-pilot-feature-plan/SKILL.md`
-- `core/skills/system/skill-pilot-feature-implement/SKILL.md`
-- `core/skills/system/skill-pilot-feature-review/SKILL.md`
-- `core/skills/system/skill-pilot-feature-test/SKILL.md`
-- `core/skills/system/skill-pilot-feature-merge/SKILL.md`
-- `core/skills/system/skill-pilot-feature-update/SKILL.md`
-- `core/skills/system/skill-pilot-feature-fix-issues/SKILL.md`
+- `core/skills/system/codeware/SKILL.md`
 - Keywords: `SkillPilotDevelopmentPage`, `fetchFeatureOptions`, `createEntry`, `createFeatureRequest`, `selectedRelatedFeatures`, `fileActions`
 - API routes: `/api/skill-pilot-development/features`, `/api/skill-pilot-development/tree`, `/api/skill-pilot-development/latest`, `/api/skill-pilot-development/content`, `/api/skill-pilot-development/save`, `/api/skill-pilot-development/create-feature`, `/api/skill-pilot-development/create-update-request`, `/api/skill-pilot-development/create-issue-report`, `/api/skill-pilot-development/delete`, `/api/skill-pilot-development/file`
-

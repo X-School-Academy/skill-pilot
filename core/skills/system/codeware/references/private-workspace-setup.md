@@ -5,10 +5,10 @@ Replace the sample `workspace/` submodule (`https://github.com/X-School-Academy/
 ## When to use
 
 Run this flow when:
-- The current `workspace/` `origin` still points to `https://github.com/X-School-Academy/skill-pilot_workspace.git`, **and**
+- The current `workspace/` `origin` still points to `https://github.com/X-School-Academy/skill-pilot_workspace.git`, and
 - The user wants their work version-controlled under their own private repo.
 
-If `origin` already points to a non-sample URL, stop and report the current URL instead of proceeding — the workspace has already been linked.
+If `origin` already points to a non-sample URL, stop and report the current URL instead of proceeding; the workspace has already been linked.
 
 ## Role announcements
 
@@ -16,7 +16,7 @@ Announce each step before running it, for example:
 - **As a DevOps Engineer**, I will check the current `workspace/` remote.
 - **As a Security Engineer**, I will warn about browser automation risks before opening github.com.
 
-## Step 1 — Verify the current state
+## Step 1: Verify the current state
 
 From the Skill Pilot repo root:
 
@@ -27,14 +27,14 @@ git status --porcelain
 ```
 
 Stop and ask the user how to proceed if any of the following is true:
-- `origin` is **not** `https://github.com/X-School-Academy/skill-pilot_workspace.git` (it is already personalized).
-- `git status` shows uncommitted changes inside `workspace/` — commit or stash them first so they are preserved when the remote changes.
+- `origin` is not `https://github.com/X-School-Academy/skill-pilot_workspace.git` because it is already personalized.
+- `git status` shows uncommitted changes inside `workspace/`; commit or stash them first so they are preserved when the remote changes.
 
-## Step 2 — Have the user create an empty private repo
+## Step 2: Have the user create an empty private repo
 
-Ask the user to create a **new empty private** GitHub repository (no README, no license, no `.gitignore`), for example:
+Ask the user to create a new empty private GitHub repository with no README, license, or `.gitignore`, for example:
 
-```
+```text
 https://github.com/<you>/my-workspace.git
 ```
 
@@ -42,36 +42,32 @@ If the user wants you to open a browser to create it, first warn about prompt-in
 
 Collect the exact HTTPS URL of the new repo from the user. Do not guess the URL.
 
-## Step 3 — Point `workspace/` origin at the new repo and push
+## Step 3: Point `workspace/` origin at the new repo and push
 
 From inside the `workspace/` folder:
 
 ```bash
 cd workspace
-
 git remote set-url origin https://github.com/<you>/my-workspace.git
-
 git push -u origin main
 ```
 
 If the user's local workspace branch is not `main`, push the actual current branch name instead and record it in the report.
 
-## Step 4 — Update the parent repo's submodule URL
+## Step 4: Update the parent repo's submodule URL
 
-From the Skill Pilot repo root (one level above `workspace/`):
+From the Skill Pilot repo root:
 
 ```bash
-cd ..
-
 git config -f .gitmodules submodule.workspace.url https://github.com/<you>/my-workspace.git
 git submodule sync
 git add .gitmodules
 git commit -m "chore: point workspace submodule to personal private repo"
 ```
 
-Do **not** push this commit automatically. Report to the user that the `.gitmodules` commit is ready locally, and ask whether to push it now (the user's parent-repo remote policy may differ per setup — they may be on `user`, a fork, or a different branch).
+Do not push this commit automatically. Report that the `.gitmodules` commit is ready locally, and ask whether to push it now.
 
-## Step 5 — Verify
+## Step 5: Verify
 
 Run, and show the user:
 
@@ -88,4 +84,4 @@ Return:
 - Old and new `workspace/` remote URLs
 - The workspace branch that was pushed
 - Whether the `.gitmodules` change was committed, and whether it was pushed
-- Any blocker encountered (uncommitted changes, auth issues, wrong branch, etc.)
+- Any blocker encountered

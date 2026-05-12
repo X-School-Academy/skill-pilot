@@ -1,6 +1,6 @@
 # Git Workflows
 
-Use these procedures for `update` and `restore`.
+Use these procedures for codeware `update` and `restore`.
 
 Official upstream repository:
 
@@ -120,7 +120,7 @@ git reset --hard upstream/codeware
 - Rewrite `about/version.json5` to the pre-reset `(applied_version, applied_build)`.
 - Rewrite `workspace/config/version.json5` to the pre-reset workspace version.
 
-These writes are local only; they are not committed. Do not skip this step — without it, any workspace migrations between the user's previous applied state and the newest release would be silently skipped.
+These writes are local only; they are not committed. Do not skip this step; without it, any workspace migrations between the user's previous applied state and the newest release would be silently skipped.
 
 6. Apply pending upgrade notices exactly as in Step 7 of the update flow. This brings both version files forward to the newest release's state, running every migration in between.
 
@@ -137,7 +137,7 @@ These writes are local only; they are not committed. Do not skip this step — w
 
 ## Version files and the changelog
 
-- `about/version.json5` tracks the *applied* state of this checkout. It is authoritative for "what version am I on right now."
-- `about/changelog/*.md` contains the migration instructions between versions and builds. Never modify these files during an update or restore — they describe the work to do, not the work completed.
+- `about/version.json5` tracks the applied state of this checkout. It is authoritative for "what version am I on right now."
+- `about/changelog/*.md` contains the migration instructions between versions and builds. Never modify these files during an update or restore; they describe the work to do, not the work completed.
 - `workspace/config/version.json5` tracks the workspace structure and config format. Bump it only when a changelog build explicitly states a new `Workspace target` and you have applied that build's workspace migration steps.
 - See `about/AGENTS.md` for the full upgrade and restore procedures, including how to compare `(version, build)` pairs and what to do on failure.

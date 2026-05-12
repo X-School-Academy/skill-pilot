@@ -51,4 +51,4 @@ If `Workspace target` differs from the previous build's target, the workspace mu
 
 ## Upgrading
 
-Users do not edit this folder by hand. The `codeware-management` skill handles updates and restores, including walking pending changelog entries and bumping both version files. See `core/skills/system/codeware-management/`.
+Users do not edit this folder by hand. The `codeware` skill handles updates and restores, including walking pending changelog entries and bumping both version files. See `core/skills/system/codeware/`.

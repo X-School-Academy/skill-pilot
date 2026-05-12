@@ -21,8 +21,8 @@
       "data": {
         "title": "Create Feature",
         "provider_id": "claude",
-        "skill": "skill-pilot-feature-create",
-        "responsibility": ""
+        "skill": "codeware",
+        "responsibility": "Use the codeware feature lifecycle create operation."
       }
     },
     {
@@ -35,8 +35,8 @@
       "data": {
         "title": "Refine Requirement",
         "provider_id": "claude",
-        "skill": "skill-pilot-feature-refine",
-        "responsibility": ""
+        "skill": "codeware",
+        "responsibility": "Use the codeware feature lifecycle refine operation."
       }
     },
     {
@@ -49,8 +49,8 @@
       "data": {
         "title": "Initial Branch",
         "provider_id": "claude",
-        "skill": "skill-pilot-feature-initial",
-        "responsibility": ""
+        "skill": "codeware",
+        "responsibility": "Use the codeware feature lifecycle initial branch operation."
       }
     },
     {
@@ -63,8 +63,8 @@
       "data": {
         "title": "Plan Feature",
         "provider_id": "claude",
-        "skill": "skill-pilot-feature-plan",
-        "responsibility": ""
+        "skill": "codeware",
+        "responsibility": "Use the codeware feature lifecycle plan operation."
       }
     },
     {
@@ -77,8 +77,8 @@
       "data": {
         "title": "Implement Feature",
         "provider_id": "claude",
-        "skill": "skill-pilot-feature-implement",
-        "responsibility": ""
+        "skill": "codeware",
+        "responsibility": "Use the codeware feature lifecycle implement operation."
       }
     },
     {
@@ -91,8 +91,8 @@
       "data": {
         "title": "Review Feature",
         "provider_id": "claude",
-        "skill": "skill-pilot-feature-review",
-        "responsibility": ""
+        "skill": "codeware",
+        "responsibility": "Use the codeware feature lifecycle review operation."
       }
     },
     {
@@ -105,8 +105,8 @@
       "data": {
         "title": "Test Feature",
         "provider_id": "claude",
-        "skill": "skill-pilot-feature-test",
-        "responsibility": ""
+        "skill": "codeware",
+        "responsibility": "Use the codeware feature lifecycle test operation."
       }
     },
     {
@@ -119,8 +119,8 @@
       "data": {
         "title": "Merge Feature",
         "provider_id": "claude",
-        "skill": "skill-pilot-feature-merge",
-        "responsibility": ""
+        "skill": "codeware",
+        "responsibility": "Use the codeware feature lifecycle merge operation."
       }
     },
     {

@@ -755,26 +755,26 @@ export default function SkillPilotDevelopmentPage() {
     if (!currentInstructionPath) return [];
     if (currentFileName === 'requirements.md') {
       return [
-        { label: 'Refine', defaultSkill: 'skill-pilot-feature-refine', skillPromptSuffix: `to refine the ${currentInstructionPath}` },
-        { label: 'Initial', defaultSkill: 'skill-pilot-feature-initial', skillPromptSuffix: `to create a new branch for the feature defined at ${currentInstructionPath}` },
-        { label: 'Plan', defaultSkill: 'skill-pilot-feature-plan', skillPromptSuffix: `to make a development plan for requirement ${currentInstructionPath}` },
+        { label: 'Refine', defaultSkill: 'codeware', skillPromptSuffix: `to refine the ${currentInstructionPath}` },
+        { label: 'Initial', defaultSkill: 'codeware', skillPromptSuffix: `to create a new branch for the feature defined at ${currentInstructionPath}` },
+        { label: 'Plan', defaultSkill: 'codeware', skillPromptSuffix: `to make a development plan for requirement ${currentInstructionPath}` },
       ];
     }
     if (currentFileName === 'plan.md') {
-      return [{ label: 'Implement', defaultSkill: 'skill-pilot-feature-implement', skillPromptSuffix: `to implement the code as the ${currentInstructionPath}` }];
+      return [{ label: 'Implement', defaultSkill: 'codeware', skillPromptSuffix: `to implement the code as the ${currentInstructionPath}` }];
     }
     if (currentFileName === 'implement.md') {
       return [
-        { label: 'Review', defaultSkill: 'skill-pilot-feature-review', skillPromptSuffix: `to review the code of the implementation of the ${currentInstructionPath}` },
-        { label: 'Test', defaultSkill: 'skill-pilot-feature-test', skillPromptSuffix: `to test the code of the implementation of the ${currentInstructionPath}` },
-        { label: 'Merge', defaultSkill: 'skill-pilot-feature-merge', skillPromptSuffix: `to merge the code of the implementation of the ${currentInstructionPath}` },
+        { label: 'Review', defaultSkill: 'codeware', skillPromptSuffix: `to review the code of the implementation of the ${currentInstructionPath}` },
+        { label: 'Test', defaultSkill: 'codeware', skillPromptSuffix: `to test the code of the implementation of the ${currentInstructionPath}` },
+        { label: 'Merge', defaultSkill: 'codeware', skillPromptSuffix: `to merge the code of the implementation of the ${currentInstructionPath}` },
       ];
     }
     if (currentFileName === 'update.md') {
-      return [{ label: 'Update Code', defaultSkill: 'skill-pilot-feature-update', skillPromptSuffix: `to update the code based on the update request defined in ${currentInstructionPath}` }];
+      return [{ label: 'Update Code', defaultSkill: 'codeware', skillPromptSuffix: `to update the code based on the update request defined in ${currentInstructionPath}` }];
     }
     if (currentFileName === 'issues.md') {
-      return [{ label: 'Fix Issues', defaultSkill: 'skill-pilot-feature-fix-issues', skillPromptSuffix: `to fix the issues defined in ${currentInstructionPath}` }];
+      return [{ label: 'Fix Issues', defaultSkill: 'codeware', skillPromptSuffix: `to fix the issues defined in ${currentInstructionPath}` }];
     }
     return [];
   }, [currentFileName, currentInstructionPath]);
