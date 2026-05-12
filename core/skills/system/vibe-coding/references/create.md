@@ -31,7 +31,7 @@ Create stub versions of the three top-level project files:
 
 - `README.md` — project name as the H1 heading, one-line description derived from the requirements, placeholder sections for Overview, Usage, and Setup.
 - `CHANGELOG.md` — single `## Unreleased` section with no entries yet.
-- `AGENTS.md` — project name as the H1 heading, a note that the `vibe-coding` skill manages this project, and a placeholder section for project-specific AI agent instructions.
+- `AGENTS.md` — use `references/agents-template.md` as the template; replace `{Project Name}` and `{project-name}` with the actual project name.
 
 ### Step 5: Report
 
