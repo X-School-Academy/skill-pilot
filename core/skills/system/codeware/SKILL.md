@@ -48,6 +48,7 @@ Map the user request to one operation family:
 - For `add remote` or `contribute`, use `references/github-contribution.md`
 - For `create private workspace repo`, use `references/private-workspace-setup.md`
 - For feature lifecycle work, use `references/feature-lifecycle.md`
+- If running inside an `agent-workflow`, also load `references/feature-lifecycle-agent-workflow.md`
 
 ### Step 3: Execute with safety checks
 
