@@ -36,24 +36,25 @@ the template data are at `core/engine/data`, we will put the showcase thumbnails
 ## There are several types of the showcases with which users can do with Skill Pilot AI agents:
 
 1. Use browser to do something, like search, setup token from a website, aws web console operations, etc.
-2. Create videos, audio books, most are for education or social media, like youtube, tiktok, etc.
-3. Create slides, documents, spreadsheets, etc. for work or education.
-4. Create online interactive tutorials for self learning
-5. Vibe coding a small project without coding knowledge by prompting the AI agent to do the coding. e.g. create a website, create a game, create a mobile app, AI related MCP servers, Agent skills, AI agents, or a npm, pip package, etc.
-6. Do some researches, like technical research, market research, etc.
-7. Use Skill Pilot AI agents to schedule some automation tasks, like calendar management, email management, etc.
-8. Control Skill Pilot AI agents remotely by Discord bot, and receive notifications from the bot, like the status of the task which is running with Skill Pilot AI Agents, or human loop need the user to approve, etc.
-9. Develop new features for Skill Pilot AI agents, such as creating new skills, updating UI, and new extensions, bug fixing, etc.
-10. Learning how to build a Skill Pilot AI agent by reverse engineering:
+2. Do some task using mcp, cli tools, such as git operations, aws, runpod instance management, etc.
+3. Create videos, audio books, most are for education or social media, like youtube, tiktok, etc.
+4. Create slides, documents, spreadsheets, etc. for work or education.
+5. Create online interactive tutorials for self learning
+6. Vibe coding a small project without coding knowledge by prompting the AI agent to do the coding. e.g. create a website, create a game, create a mobile app, AI related MCP servers, Agent skills, AI agents, or a npm, pip package, etc.
+7. Do some researches, like technical research, market research, etc.
+8. Use Skill Pilot AI agents to schedule some automation tasks, like calendar management, email management, etc.
+9. Control Skill Pilot AI agents remotely by Discord bot, and receive notifications from the bot, like the status of the task which is running with Skill Pilot AI Agents, or human loop need the user to approve, etc.
+10. Develop new features for Skill Pilot AI agents, such as creating new skills, updating UI, and new extensions, bug fixing, etc.
+11. Learning how to build a Skill Pilot AI agent by reverse engineering:
   - remove a feature of agent skill or update existing code to create bugs or issues for users to fix or improve
   - draft a feature or agent skill `requirements.md` as per `core/development/explore-showcase-skill/reverse-engineering-guide.md` or create file `update.md` or `issue.md` for the bug fixing task or improvement task.
   - then ask the users to implement the feature or agent skill by themselves with the `requirements.md` drafted.
-11. Learning how to build a project or game by reverse engineering:
+12. Learning how to build a project or game by reverse engineering:
   - provide a project or game git url,
   - draft a requirements.md for the project or game as per `core/development/explore-showcase-skill/reverse-engineering-guide.md`
   - keep any assets of the existing project or games.
   - then ask the users to implement the project or game by themselves with the `requirements.md` drafted, and the assets provided. or create the assets by themselves with the help of Skill Pilot AI agents.
-12. Skill Pilot AI agent codeware related task or code analysis tasks showcases, such as:
+13. Skill Pilot AI agent codeware related task or code analysis tasks showcases, such as:
    - check update
    - code restore
    - make contribution
@@ -87,3 +88,9 @@ the template data are at `core/engine/data`, we will put the showcase thumbnails
  **Update system agent skills vibe coding and codeware to copy any requirements.md files to the appropriate directory if the files are not already there**
 --
 This agent skill will follow the user's instructions to update the data at folder `core/engine/data` and create the reference files at `workspace/showcases/{showcase_slug_id}/` for the showcases or create zip file and upload to aws s3, and unzip the file to `workspace/showcases/{showcase_slug_id}/` when the user starts to ask AI agents to do the task.
+
+Agent skills will be used by this system agent skill which need to be mentioned clearly.
+
+when need an image, using the `create-image` agent skill
+when need to create a video using the `multiple-scene-video` agent skill
+when need to create an online interactive tutorial or tutorial video, using the `ccourse-creator` agent skill
