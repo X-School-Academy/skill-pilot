@@ -1,62 +1,110 @@
-We need to create a Skill Pilot agent in the folder `core/engine/skill_pilot_agent/`.
+# Skill Pilot Agent Requirements
 
-Use the package `openai-agents`.
+## Goal
 
-Update `config/ai_providers.json5` to add support for an optional key named `default.background_llm`. If the value is set and is `"skill-pilot"`, then Skill Pilot should use the Skill Pilot agent for any LLM background tasks that do not require a tmux terminal session.
+Create a Skill Pilot agent for background LLM tasks that do not require a terminal or tmux session.
 
-The Skill Pilot agent must be selected only through `default.background_llm: "skill-pilot"`. It should not become the normal default LLM provider unless `default.llm` is also explicitly changed elsewhere.
+The agent should use an OpenAI-compatible API endpoint and should behave like the other AI agent CLIs used by Skill Pilot, so it can be selected by configuration and invoked as a background provider.
 
-The Skill Pilot agent will use an OpenAI-compatible API endpoint configured by the following environment variables:
+## Provider Selection
 
-* `SKILL_PILOT_BASE_URL`
-* `SKILL_PILOT_API_KEY`
-* `SKILL_PILOT_MODEL`
+- Skill Pilot must support an optional default setting named `background_llm` in `config/ai_providers.json5`.
+- When `background_llm` is set to `skill-pilot`, background LLM tasks that do not require a terminal session should use the Skill Pilot agent.
+- The Skill Pilot agent must be selected only through `default.background_llm: "skill-pilot"`.
+- Setting `background_llm` must not change the normal default LLM provider.
+- The normal default LLM provider remains controlled by `default.llm`.
+- Terminal and tmux agent sessions must continue using the normal LLM provider selection.
+- If the Skill Pilot background agent is not selected, unavailable, or not configured, background LLM tasks should continue using the existing default LLM behavior.
+
+## Endpoint Configuration
+
+The Skill Pilot agent must use these environment variables:
+
+- `SKILL_PILOT_BASE_URL`
+- `SKILL_PILOT_API_KEY`
+- `SKILL_PILOT_MODEL`
+
+`SKILL_PILOT_BASE_URL` is the OpenAI-compatible API base URL.
+
+`SKILL_PILOT_API_KEY` is the API key for that endpoint.
 
 `SKILL_PILOT_MODEL` is the default model name used by the Skill Pilot agent.
 
-`SKILL_PILOT_BASE_URL` is the OpenAI-compatible API base URL for the Skill Pilot agent, for example:
+The agent should fail clearly when required endpoint configuration is missing.
 
-```bash
-http://localhost:8000/v1
-```
+## Agent CLI
 
-The agent will be wrapped as:
+The agent must be available through a command named:
 
 ```bash
 core/bin/skill-pilot-agent
 ```
 
-This CLI should be similar to the other AI agent CLIs, so it remains compatible with the current codebase.
+The CLI should accept a user prompt and return the final answer in a format compatible with existing background LLM calls.
 
-## CLI Arguments
+The CLI must support these options:
 
-The agent will support the following arguments:
+- `--sandbox yes|no`
+- `--auto yes|no`
+- `--network yes|no`
+- `--model <model>`
+- `--agent-dir <path>`
+- `--agent-file <path|none>`
+- `--log-level <level>`
+- `--max-retries <number>`
+- `--timeout <seconds>`
+- `--bash-commands <command1,command2,...>`
+- `--skills-dir <path>`
+- `--skills <skill1,skill2,...|none>`
 
-* `--sandbox yes|no`: The default is `yes`. When enabled, the agent runs in a sandbox environment.
-* `--auto yes|no`: The default is `yes`. When enabled, the agent can automatically use tools without asking for confirmation.
-* `--network yes|no`: The default is `no`. When disabled, network access is not allowed.
-* `--model <model>`: Overrides the default model from `SKILL_PILOT_MODEL`.
+Default behavior:
 
-For now, we will only implement the default behavior for the `sandbox`, `auto`, and `network` arguments.
+- `--sandbox` defaults to `yes`.
+- `--auto` defaults to `yes`.
+- `--network` defaults to `no`.
+- `--model` defaults to `SKILL_PILOT_MODEL`.
+- `--agent-dir` defaults to the configured project root.
+- `--agent-file` defaults to `AGENTS.md`.
+- `--log-level` defaults to `info`.
+- `--max-retries` defaults to `3`.
+- `--timeout` defaults to `60` seconds.
+- `--bash-commands` defaults to all available commands.
+- `--skills-dir` defaults to the agent skill directory under the project root.
+- `--skills` defaults to all available skills.
 
-## Other Agent Arguments
+The first release only needs to support the default behavior for `sandbox`, `auto`, and `network`. Unsupported non-default behavior should fail clearly rather than silently pretending to work.
 
-* `--agent-dir <path>`: The root directory where the agent operates. The default is the current project root directory.
-* `--log-level <level>`: The log level for the agent. The default is `info`.
-* `--max-retries <number>`: The maximum number of retries for failed tasks. The default is `3`.
-* `--timeout <seconds>`: The timeout for each task. The default is `60` seconds.
-* `--bash-commands <command1,command2,...>`: A comma-separated list of bash commands that the agent is allowed to use. The default is all available commands.
-* `--skills-dir <path>`: The directory where the agent can find skills. The default is `.agent` under the project root.
-* `--skills <skill1,skill2,...>`: A comma-separated list of skills that the agent can use from the skills directory. The default is all available skills.
+## Agent Instructions
 
-The first release must support `--skills-dir` and `--skills`, including loading the selected skill instructions for the agent.
+- The agent must load only the root agent instruction file from the configured agent directory.
+- The agent must not automatically load nested agent instruction files.
+- The agent must allow the caller to skip agent instruction loading.
+- If subdirectory-specific instructions are needed later, they should be supplied intentionally for that task rather than loaded automatically.
 
-## Agent Behavior
+## Skills
 
-The agent should load only the root `AGENTS.md` file found directly in the `agent-dir` directory.
+- The first release must support loading skill instructions.
+- The caller must be able to specify the skill directory.
+- The caller must be able to load all available skills, selected skills, or no skills.
+- Skill loading must respect project ignore rules so ignored files are not read or processed.
 
-The agent should not load all nested `AGENTS.md` files at once. If subdirectory-specific instructions are needed later, they should be added to the task-specific system prompt or loaded selectively for that task context.
+## Tooling
 
-The agent should only use bash commands as tools.
+- The agent should only use bash commands as tools.
+- The caller must be able to restrict which bash commands are allowed.
+- When network access is disabled, the agent must use the strongest available network restriction.
+- If strong network restriction is required but not available, the agent must fail safely.
+- The agent should not claim that files were created, edited, counted, or verified unless tool output confirms it.
 
-When `--network no` is set, the agent should use strict OS-level network enforcement if `openai-agents` supports it. If `openai-agents` does not support strict network enforcement, the implementation should document that limitation and fail safely or use the strongest available enforcement.
+## Acceptance Criteria
+
+- The Skill Pilot agent can be invoked as a CLI command.
+- The Skill Pilot agent can be selected for background LLM tasks through `default.background_llm: "skill-pilot"` in `config/ai_providers.json5`.
+- Normal default LLM selection remains unchanged unless configured separately.
+- Terminal and tmux sessions are not rerouted to the Skill Pilot background agent.
+- The agent uses the configured OpenAI-compatible endpoint and model.
+- The CLI supports the required options and defaults.
+- The agent loads only the intended root agent instruction file by default.
+- The agent supports loading all skills, selected skills, and no skills.
+- The agent exposes only bash tooling.
+- The agent provides clear failures for missing configuration and unsupported first-release modes.
