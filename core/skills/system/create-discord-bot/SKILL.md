@@ -91,7 +91,7 @@ Open Discord in a headed browser (web browser agent skill):
 AI should:
 1. Wait for the user to sign in if Discord shows the login screen.
 2. Detect whether a suitable server already exists.
-  - the server name contains `openclaw` or `skillpilot` depending on the workflow purpose
+  - the server name contains `skillpilot` or a project-specific name depending on the workflow purpose
   - the user has admin permission: open the server by clicking the server name in the left top to see if having `Server Settings` menu
   - then ask user to conform the server name or create a new one
 3. If no server exists or need to create a new one, create one automatically:

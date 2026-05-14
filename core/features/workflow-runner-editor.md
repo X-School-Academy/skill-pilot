@@ -31,7 +31,7 @@ workflow, workflow runner, workflow editor, workflow execution, run-workflow, ag
 - `core/engine/mcp_servers/mcp_to_skills/workflow_execution.py` — skill-level workflow execution
 - `core/engine/mcp_servers/mcp_to_skills/run_workflow.py` — run_workflow MCP action
 - `core/bin/run-workflow` — CLI runner
-- `core/workflows/` — bundled workflow templates: `course-plan-and-schedule.json`, `research-multi-agent.json`, `setup-openclaw.json`, `vibe-coding-dev.json`, `skill-pilot-dev.json`, `test-number-workflow.json`
+- `core/workflows/` — bundled workflow templates: `course-plan-and-schedule.json`, `research-multi-agent.json`, `vibe-coding-dev.json`, `skill-pilot-dev.json`, `test-number-workflow.json`
 - `core/webui/pages/workflows/index.tsx` — workflow editor/runner page
 
 ## Search Commands

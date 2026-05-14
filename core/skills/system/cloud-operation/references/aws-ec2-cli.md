@@ -1,24 +1,13 @@
----
-name: aws-ec2
-description: AWS EC2 virtual machine management for instances, AMIs, and networking. Use when launching instances, configuring security groups, managing key pairs, troubleshooting connectivity, or automating instance lifecycle.
-last_updated: "2026-01-07"
-doc_source: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/
----
+# AWS EC2 — CLI Reference
 
-# AWS EC2
+Command reference, core concepts, and troubleshooting for EC2 operations.
 
-Amazon Elastic Compute Cloud (EC2) provides resizable compute capacity in the cloud. Launch virtual servers, configure networking and security, and manage storage.
+## Execution Rule
 
-All the aws cli commands are just for refernence, do not use it directly, you need to coorperate these commands with ai agent skill aws-api-* then follow the instruction for how to use it
-
-## Table of Contents
-
-- [Core Concepts](#core-concepts)
-- [Common Patterns](#common-patterns)
-- [CLI Reference](#cli-reference)
-- [Best Practices](#best-practices)
-- [Troubleshooting](#troubleshooting)
-- [References](#references)
+- Treat every AWS CLI command in this file as reference for the intended AWS operation only.
+- Do not run raw `aws ...` shell commands directly.
+- Execute each AWS operation through `aws-api` skill (`call_aws` tool).
+- If an AWS command shape, flag, parameter, or failure is unclear, use `aws-api` skill (`suggest_aws_commands` tool) to get the corrected command pattern, then run the resolved operation through `aws-api` (`call_aws`).
 
 ## Core Concepts
 
@@ -47,20 +36,11 @@ Template containing OS, software, and configuration for launching instances.
 
 ### Security Groups
 
-Virtual firewalls controlling inbound and outbound traffic.
-
-## Execution Rule
-
-- Treat every AWS CLI command shown in this skill as reference for the intended AWS operation only.
-- Do not run raw `aws ...` shell commands directly from this skill.
-- Execute each AWS operation through agent skill `aws-api-call-aws`.
-- If an AWS command shape, flag, parameter, or failure is unclear, use agent skill `aws-api-suggest-aws-commands` to get the corrected command pattern, then run the resolved operation through `aws-api-call-aws`.
+Virtual firewalls controlling inbound and outbound traffic at the instance level.
 
 ## Common Patterns
 
 ### Launch an Instance
-
-**AWS CLI:**
 
 ```bash
 # Create key pair
@@ -78,16 +58,10 @@ aws ec2 create-security-group \
 
 # Allow SSH and HTTP
 aws ec2 authorize-security-group-ingress \
-  --group-id sg-12345678 \
-  --protocol tcp \
-  --port 22 \
-  --cidr 10.0.0.0/8
+  --group-id sg-12345678 --protocol tcp --port 22 --cidr 10.0.0.0/8
 
 aws ec2 authorize-security-group-ingress \
-  --group-id sg-12345678 \
-  --protocol tcp \
-  --port 80 \
-  --cidr 0.0.0.0/0
+  --group-id sg-12345678 --protocol tcp --port 80 --cidr 0.0.0.0/0
 
 # Launch instance
 aws ec2 run-instances \
@@ -98,14 +72,12 @@ aws ec2 run-instances \
   --subnet-id subnet-12345678 \
   --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=web-server}]'
 
-# It returns configuration and metadata about the EC2 instances - pending, running, stopping, etc.
 aws ec2 describe-instances --instance-ids i-1234567890abcdef0
 ```
 
 ### User Data Script
 
 ```bash
-# User data shell scripts must start with the #! characters and the path to the interpreter you want to read the script 
 aws ec2 run-instances \
   --image-id ami-0123456789abcdef0 \
   --instance-type t3.micro \
@@ -117,22 +89,17 @@ aws ec2 run-instances \
     apt install -y nginx
     systemctl start nginx
     systemctl enable nginx
-    echo "<h1>Hello from $(hostname)</h1>" > /var/www/html/index.html
   '
 ```
 
 ### Attach IAM Role
 
 ```bash
-# Create instance profile
-aws iam create-instance-profile \
-  --instance-profile-name web-server-profile
-
+aws iam create-instance-profile --instance-profile-name web-server-profile
 aws iam add-role-to-instance-profile \
   --instance-profile-name web-server-profile \
   --role-name web-server-role
 
-# Launch with profile
 aws ec2 run-instances \
   --image-id ami-0123456789abcdef0 \
   --instance-type t3.micro \
@@ -146,7 +113,6 @@ aws ec2 run-instances \
 aws ec2 create-image \
   --instance-id i-1234567890abcdef0 \
   --name "my-custom-ami-$(date +%Y%m%d)" \
-  --description "Custom AMI with web server" \
   --no-reboot
 ```
 
@@ -169,22 +135,18 @@ aws ec2 request-spot-instances \
 ### EBS Volume Management
 
 ```bash
-# Create volume
 aws ec2 create-volume \
   --availability-zone us-east-1a \
   --size 100 \
   --volume-type gp3 \
   --iops 3000 \
-  --throughput 125 \
   --encrypted
 
-# Attach to instance
 aws ec2 attach-volume \
   --volume-id vol-12345678 \
   --instance-id i-1234567890abcdef0 \
   --device /dev/sdf
 
-# Create snapshot
 aws ec2 create-snapshot \
   --volume-id vol-12345678 \
   --description "Daily backup"
@@ -193,14 +155,11 @@ aws ec2 create-snapshot \
 ### EC2 Instance Connect
 
 ```bash
-# Push SSH key temporarily
+# Push SSH key temporarily (expires in 60 seconds)
 aws ec2-instance-connect send-ssh-public-key \
   --instance-id i-1234567890abcdef0 \
   --instance-os-user ec2-user \
   --ssh-public-key file://~/.ssh/id_rsa.pub
-
-# Connect via browser or CLI
-aws ec2-instance-connect ssh --instance-id i-1234567890abcdef0
 ```
 
 ## CLI Reference
@@ -225,7 +184,6 @@ aws ec2-instance-connect ssh --instance-id i-1234567890abcdef0
 | `aws ec2 describe-security-groups` | List security groups |
 | `aws ec2 authorize-security-group-ingress` | Add inbound rule |
 | `aws ec2 revoke-security-group-ingress` | Remove inbound rule |
-| `aws ec2 authorize-security-group-egress` | Add outbound rule |
 
 ### AMIs
 
@@ -246,11 +204,41 @@ aws ec2-instance-connect ssh --instance-id i-1234567890abcdef0
 | `aws ec2 create-snapshot` | Create snapshot |
 | `aws ec2 modify-volume` | Resize/modify volume |
 
+## Useful Queries
+
+```bash
+# Latest Ubuntu 24.04 LTS arm64 AMI (Canonical)
+aws ec2 describe-images \
+  --owners 099720109477 \
+  --filters Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-* \
+            Name=state,Values=available \
+  --query 'sort_by(Images, &CreationDate)[-1].ImageId'
+
+# List Amazon-owned AMIs
+aws ec2 describe-images \
+  --owners amazon \
+  --filters Name=state,Values=available \
+            Name=name,Values='al2023-ami-*-x86_64' \
+  --query 'sort_by(Images,&CreationDate)[].{Name:Name,ImageId:ImageId}' \
+  --output table
+
+# Instance types available in current region
+aws ec2 describe-instance-type-offerings \
+  --location-type region \
+  --filters Name=instance-type,Values='t4g.*' \
+  --query 'InstanceTypeOfferings[].InstanceType' \
+  --output table
+
+# Specs for an instance type
+aws ec2 describe-instance-types \
+  --instance-types t4g.small \
+  --query 'InstanceTypes[].{Type:InstanceType,vCPU:VCpuInfo.DefaultVCpus,MemoryMiB:MemoryInfo.SizeInMiB}' \
+  --output table
+```
+
 ## Best Practices
 
-### Security
-
-- **Use IAM roles** instead of access keys on instances
+- **Use IAM roles** on instances instead of access keys
 - **Restrict security groups** — principle of least privilege
 - **Use private subnets** for backend instances
 - **Enable IMDSv2** to prevent SSRF attacks
@@ -264,96 +252,48 @@ aws ec2 modify-instance-metadata-options \
   --http-endpoint enabled
 ```
 
-### Performance
-
-- **Right-size instances** — monitor and adjust
-- **Use EBS-optimized instances**
-- **Choose appropriate EBS volume type**
-- **Use placement groups** for low-latency networking
-
-### Cost Optimization
-
-- **Use Spot Instances** for fault-tolerant workloads
-- **Stop/terminate unused instances**
-- **Use Reserved Instances** for steady-state workloads
-- **Delete unused EBS volumes and snapshots**
-
-### Reliability
-
-- **Use Auto Scaling Groups** for high availability
-- **Deploy across multiple AZs**
-- **Use Elastic Load Balancer** for traffic distribution
-- **Implement health checks**
-
 ## Troubleshooting
 
 ### Cannot SSH to Instance
 
-**Checklist:**
-
-1. Security group allows SSH (port 22) from your IP
-2. Instance has public IP or use bastion/SSM
+1. Security group allows port 22 from your IP
+2. Instance has public IP (or use SSM)
 3. Key pair matches instance
-4. Instance is running
+4. Instance state is `running`
 5. Network ACL allows traffic
 
 ```bash
-# Check security group
 aws ec2 describe-security-groups --group-ids sg-12345678
-
-# Check instance state
 aws ec2 describe-instances \
   --instance-ids i-1234567890abcdef0 \
   --query "Reservations[].Instances[].{State:State.Name,PublicIP:PublicIpAddress}"
-```
 
-**Use Session Manager instead:**
-
-```bash
+# Alternative: use Session Manager (no SSH required)
 aws ssm start-session --target i-1234567890abcdef0
 ```
 
 ### Instance Won't Start
 
-**Causes:**
-- Reached instance limits
-- Insufficient capacity in AZ
-- EBS volume issue
-- Invalid AMI
-
 ```bash
-# Check instance state reason
 aws ec2 describe-instances \
   --instance-ids i-1234567890abcdef0 \
   --query "Reservations[].Instances[].StateReason"
 ```
 
+Causes: instance limit reached, insufficient AZ capacity, EBS issue, invalid AMI.
+
 ### Instance Unreachable
 
-**Debug:**
-
 ```bash
-# Check instance status
-aws ec2 describe-instance-status \
-  --instance-ids i-1234567890abcdef0
-
-# Get console output
-aws ec2 get-console-output \
-  --instance-id i-1234567890abcdef0
-
-# Get screenshot (for Windows/GUI issues)
-aws ec2 get-console-screenshot \
-  --instance-id i-1234567890abcdef0
+aws ec2 describe-instance-status --instance-ids i-1234567890abcdef0
+aws ec2 get-console-output --instance-id i-1234567890abcdef0
 ```
 
-### High CPU/Memory
+### High CPU
 
 ```bash
-# Enable detailed monitoring
-aws ec2 monitor-instances \
-  --instance-ids i-1234567890abcdef0
+aws ec2 monitor-instances --instance-ids i-1234567890abcdef0
 
-# Check CloudWatch metrics
 aws cloudwatch get-metric-statistics \
   --namespace AWS/EC2 \
   --metric-name CPUUtilization \
@@ -364,63 +304,7 @@ aws cloudwatch get-metric-statistics \
   --statistics Average
 ```
 
-## Others
-
-```bash 
-# List Amazon-owned available AMIs in your region
-aws ec2 describe-images \
-  --owners amazon \
-  --filters Name=state,Values=available \
-  --query 'Images[].{Name:Name,ImageId:ImageId}' \
-  --output table
-
-# Example: Amazon Linux 2023 x86_64 AMIs
-aws ec2 describe-images \
-  --owners amazon \
-  --filters \
-    Name=state,Values=available \
-    Name=name,Values='al2023-ami-*-x86_64' \
-  --query 'sort_by(Images,&CreationDate)[].{Name:Name,ImageId:ImageId,Created:CreationDate}' \
-  --output table
-
-# List instance types offered in current region
-aws ec2 describe-instance-type-offerings \
-  --location-type region \
-  --query 'InstanceTypeOfferings[].InstanceType' \
-  --output text
-
-# Check a specific family, e.g. t3
-aws ec2 describe-instance-type-offerings \
-  --location-type region \
-  --filters Name=instance-type,Values='t3.*' \
-  --query 'InstanceTypeOfferings[].InstanceType' \
-  --output table
-
-# Get specs for one instance type
-aws ec2 describe-instance-types \
-  --instance-types t3.micro \
-  --query 'InstanceTypes[].{
-    Type:InstanceType,
-    vCPU:VCpuInfo.DefaultVCpus,
-    MemoryMiB:MemoryInfo.SizeInMiB,
-    Network:NetworkInfo.NetworkPerformance
-  }' \
-  --output table
-
-# List specs for a family
-aws ec2 describe-instance-types \
-  --filters Name=instance-type,Values='t3.*' \
-  --query 'InstanceTypes[].{
-    Type:InstanceType,
-    vCPU:VCpuInfo.DefaultVCpus,
-    MemoryGiB: MemoryInfo.SizeInMiB
-  }' \
-  --output table
-```
-
 ## References
 
 - [EC2 User Guide](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/)
-- [EC2 API Reference](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/)
 - [EC2 CLI Reference](https://docs.aws.amazon.com/cli/latest/reference/ec2/)
-- [boto3 EC2](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html)
