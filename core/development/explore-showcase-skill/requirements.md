@@ -94,3 +94,5 @@ Agent skills will be used by this system agent skill which need to be mentioned 
 when need an image, using the `create-image` agent skill
 when need to create a video using the `multiple-scene-video` agent skill
 when need to create an online interactive tutorial or tutorial video, using the `ccourse-creator` agent skill
+
+All images, videos will need to be uploaded to aws s3 using `cloud-operation` skill once user approved the content.
