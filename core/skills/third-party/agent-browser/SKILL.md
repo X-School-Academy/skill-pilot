@@ -1,12 +1,18 @@
 ---
 name: agent-browser
-description: Web browser automation CLI for AI agents. Use when the user needs to interact with websites, including navigating pages, filling forms, clicking buttons, taking screenshots, extracting data, testing web apps, or automating any browser task. Triggers include requests to "open a website", "fill out a form", "click a button", "take a screenshot", "scrape data from a page", "test this web app", "login to a site", "automate browser actions", or any task requiring programmatic web interaction.
+description: Web browser automation CLI for AI agents. Use when the user needs to initialize or verify browser automation, interact with websites, navigate pages, fill forms, click buttons, take screenshots, extract data, test web apps, log in to sites, or automate any browser task.
 allowed-tools: Bash(core/bin/agent-browser:*)
 ---
 
 # Browser Automation with agent-browser
 
 The CLI uses Chrome/Chromium via CDP directly through the local wrapper script. Use `core/bin/agent-browser` for all commands in this skill.
+
+## Init Action
+
+Use the init action before browser automation when `core/bin/agent-browser` may not be ready, Chrome may be missing, the environment connection method is unknown, or the user asks to initialize or verify browser automation.
+
+Follow [references/init.md](references/init.md) for environment detection, Chrome connection setup, verification, and workflow output requirements.
 
 ## Core Workflow
 
@@ -648,6 +654,7 @@ Priority (lowest to highest): `~/.agent-browser/config.json` < `./agent-browser.
 | [references/video-recording.md](references/video-recording.md)       | Recording workflows for debugging and documentation       |
 | [references/profiling.md](references/profiling.md)                   | Chrome DevTools profiling for performance analysis        |
 | [references/proxy-support.md](references/proxy-support.md)           | Proxy configuration, geo-testing, rotating proxies        |
+| [references/init.md](references/init.md)                             | Initialize and verify browser automation setup            |
 
 ## Browser Engine Selection
 

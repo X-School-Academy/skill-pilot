@@ -1,0 +1,47 @@
+id: websites-free-subdomain-site
+title: Free Subdomain Site
+description: Register a free subdomain (e.g., is-a.dev or js.org) and ship a small site to it.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my deployment guide for a free subdomain.
+
+  Inputs from me:
+  - The desired subdomain (e.g., `myname.is-a.dev`).
+  - Where the site is hosted (GitHub Pages, Vercel, Netlify).
+
+  Goal: I end up with the site reachable at the chosen subdomain, with HTTPS.
+
+  Steps:
+  1. Recommend a free-subdomain provider that fits and explain the tradeoffs
+     (review process, allowed records, naming rules).
+  2. Walk me through the provider's PR-based registration flow:
+     - Fork their registry repo.
+     - Add my subdomain JSON entry with the correct A/CNAME records pointing to
+       my host.
+     - Open a PR with a clear title and the required checklist.
+  3. While waiting for review, configure the host:
+     - GitHub Pages: add CNAME file with my subdomain; enforce HTTPS in settings.
+     - Vercel/Netlify: add custom domain in dashboard.
+  4. After PR merges, verify DNS (`dig CNAME ...`) and that HTTPS works.
+  5. Print the live URL.
+
+  Constraints:
+  - Be patient with PR review timing — do not ping maintainers.
+  - Do not use free subdomains for commercial production sites.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links:
+  - name: is-a.dev registry
+    url: https://www.is-a.dev/
+popularity: 60
+level: 3
+rate: 4.3

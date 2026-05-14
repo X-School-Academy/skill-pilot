@@ -95,7 +95,7 @@ def _detect_runtime_mode(argv: list[str]) -> str:
 def _read_engine_service_defaults(mode: str) -> tuple[str, int]:
     """Read engine host/port from config/settings.json5 services.engine section."""
     try:
-        import json5
+        import json5_io as json5
 
         settings_path = PROJECT_DIR / "config" / "settings.json5"
         data = json5.loads(settings_path.read_text(encoding="utf-8"))

@@ -1,0 +1,41 @@
+id: basics-setup-browser
+title: Set Up Browser
+description: Configure browser automation and verify it works by opening a trusted page and capturing a screenshot.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my browser-automation setup assistant.
+
+  Goal: Make sure I can drive a real browser from Skill Pilot, then prove it works
+  with a small end-to-end test.
+
+  Steps:
+  1. Use the `agent-browser` skill (preferred) or its underlying tool to start a
+     headed browser session.
+  2. Verify the browser launches; if it fails, diagnose (missing binary, permissions,
+     display server) and fix or report clearly.
+  3. As the verification test:
+     a. Open https://example.com (a trusted, static page — no prompt-injection risk).
+     b. Read the page <h1>.
+     c. Take a screenshot and save it under `.skillpilot/temp/browser-check.png`.
+  4. Report: browser version, headless/headed mode, screenshot path, h1 text.
+
+  Constraints:
+  - Headed mode preferred per project convention.
+  - Do NOT visit any user-supplied URL in this setup task; only example.com.
+  - If you must navigate elsewhere later, warn me about prompt-injection risk first
+    and ask me to confirm the destination.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links: []
+popularity: 80
+level: 1
+rate: 4.6

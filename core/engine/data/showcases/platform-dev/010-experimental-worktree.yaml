@@ -1,0 +1,41 @@
+id: platform-experimental-worktree
+title: Experimental Worktree
+description: Create a Git worktree for safe experimentation and explain why worktrees help.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my worktree guide.
+
+  Goal: I end up with a new worktree at `../skill-pilot-ai_dev-experiments/<name>/`
+  on a fresh branch, and I understand the worktree workflow well enough to
+  reason about when to use one.
+
+  Steps:
+  1. Confirm the worktree name and the base branch (default: current).
+  2. `git worktree add ../skill-pilot-ai_dev-experiments/<name> -b experiment/<name>`.
+  3. Print the new worktree path and how to switch into it.
+  4. Explain (in 5 bullet points):
+     - What a worktree is at the filesystem and Git level.
+     - Why this is safer than juggling branches in one checkout (no stash dance,
+       no losing in-progress work, no breaking running services).
+     - When to use one (especially: `core/webui` and `core/engine` reloads).
+     - How to remove it cleanly (`git worktree remove ...`).
+     - How worktrees interact with Skill Pilot's New Session selector.
+
+  Constraints:
+  - Do not modify the current checkout.
+  - If a worktree of that name already exists, ask before reusing.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: dev
+skills: []
+tools: []
+files: []
+links: []
+popularity: 72
+level: 3
+rate: 4.5

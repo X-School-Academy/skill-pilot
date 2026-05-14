@@ -1,46 +1,47 @@
-# Discord Bot
+# Feature Retrieval Index: Discord Bot Integration
 
-## Brief
+## Retrieval Keywords
 
-Frozen core Discord integration that connects a bot token, stores channel conversation memory, and exposes session history and broadcast support in the current implementation.
+Discord, discord bot, discord session, discord broadcast, discord status, discord sessions, discord_bot, discord_session, create-discord-bot, discord channel, discord integration, Discord API, bot token, channel_id
 
-## User Value
+## Scope
 
-- Brings Discord-based agent conversations into the Skill Pilot UI.
-- Supports both setup and ongoing channel/session monitoring.
-- Makes cached conversation history accessible by channel.
-- Freezes the current behavior so humans and AI agents can reason about the live Discord integration without re-reading the whole codebase.
+- Discord bot creation and management
+- Broadcasting messages via Discord
+- Listing active Discord sessions and channels
+- Discord status check
+- Excludes: general chat/LLM (separate feature)
 
 ## Main Behavior
 
-- Checks Discord auth state and token availability before loading the main view.
-- Saves the bot token through the WebUI.
-- Lists Discord sessions by channel and loads message history for the active tab.
-- Shows connection status, guild count, and auth-related errors.
-- Supports server-side broadcast operations and cached session retrieval.
-- Supports only one human user in a whole Discord server for reliable conversation context.
-- Treats one Discord channel as one session, so all human messages in that channel are interpreted as one logical user context.
-- Fits direct-message usage best; shared multi-user guild channels are outside the supported conversation model.
-- Stores full conversation history as append-only JSONL under `.skillpilot/discord/sessions/`, keyed by `channel_id`.
-- Uses three memory tiers: complete cached history, active live buffer after the last summary, and retained memory summary from earlier turns.
-- Keeps the most recent `DISCORD_BUFFER_MSG_COUNT` messages in the live buffer for active context.
-- On reload, compacts overflowed unsummarized messages into retained memory before trimming the live buffer so restart does not silently drop context.
-- Triggers normal summarization from the configured context budget derived from `DISCORD_MAX_BUFFER_TOKENS`.
-- Injects retained memory into the LLM as assistant-authored memory context rather than a system instruction.
-- Exposes full cached history in the WebUI for session inspection and support review.
+- `POST /api/discord/broadcast` sends a message to a Discord channel
+- `GET /api/discord/status` returns bot connection status
+- `GET /api/discord/sessions` lists active Discord sessions
+- `GET /api/discord/sessions/{channel_id}` returns a specific session
+- Discord bot runs as a background service managed via tmux or direct process
+
+## Code Map
+
+- `core/engine/routes_integrations.py` — `/api/discord/*` route handlers
+- `core/engine/discord_bot.py` — Discord bot logic
+- `core/engine/discord_session.py` — Discord session management
+- `core/skills/system/create-discord-bot/` — skill for creating and configuring discord bots
+
+## Search Commands
+
+```bash
+rg "api/discord" core/engine/routes_integrations.py -n
+cat core/engine/discord_bot.py | head -40
+find core/skills/system/create-discord-bot/ -type f
+```
 
 ## Related Features
 
-- `processes.md`
-- `ai-and-security.md`
-- `profile.md`
+- `core/features/llm-ai-chat.md`
+- `core/features/skill-agent-system.md`
 
-## Code References
+## Update Notes
 
-- `core/webui/pages/index.tsx`
-- `core/engine/discord_bot.py`
-- `core/engine/discord_session.py`
-- `core/engine/routes.py`
-- Functions and classes: `fetchDiscordAuthStatus`, `fetchDiscordStatus`, `fetchDiscordSessions`, `fetchDiscordHistory`, `saveDiscordToken`, `ChatSession`, `SessionManager`, `get_llm_messages`, `load_from_cache`, `summarise`
-- Keywords: `discordActiveTab`, `DISCORD_BUFFER_MSG_COUNT`, `DISCORD_MAX_BUFFER_TOKENS`, `.skillpilot/discord/sessions`
-- API routes: `/api/discord/status`, `/api/discord/sessions`, `/api/discord/sessions/{channel_id}`, `/api/discord/token`, `/api/discord/broadcast`
+- Discord bot token must be set in `config/.env`
+- Sessions identified by Discord `channel_id`
+- Bot requires `discord.py` or equivalent in Python dependencies

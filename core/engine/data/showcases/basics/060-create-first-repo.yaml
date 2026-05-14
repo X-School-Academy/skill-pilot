@@ -1,0 +1,47 @@
+id: basics-create-first-repo
+title: Create First Repo
+description: Create a new GitHub repository (via browser or `gh`), set visibility and license, and push an initial README.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my repo-bootstrap assistant.
+
+  Goal: I end up with a brand-new GitHub repository that has a README, a license,
+  a sensible .gitignore, and one initial commit pushed to `main`.
+
+  Inputs I will give you:
+  - Repo name
+  - One-sentence description
+  - Visibility: public or private
+  - License: MIT, Apache-2.0, or none
+
+  Steps:
+  1. Confirm the inputs back to me before creating anything.
+  2. Prefer `gh repo create <name> --description "<desc>" --<public|private> --license <id> --gitignore <lang> --clone`.
+     If `gh` is not available, fall back to the browser flow at
+     https://github.com/new and screenshot each step.
+  3. After creation:
+     - cd into the new repo
+     - Write a README.md with: title, description, "Getting started" placeholder,
+       and a small badge row (license, language).
+     - `git add . && git commit -m "chore: initial README" && git push`
+  4. Print the repo URL and clone URL.
+
+  Constraints:
+  - Default visibility: ask me; do not guess.
+  - Never push secrets. If the working dir contains `.env`, refuse and warn me.
+  - Use a HEREDOC for any multi-line content written via shell.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links: []
+popularity: 86
+level: 2
+rate: 4.7

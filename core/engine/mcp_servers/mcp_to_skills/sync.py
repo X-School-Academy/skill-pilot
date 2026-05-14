@@ -4,13 +4,13 @@ from __future__ import annotations
 import argparse
 from collections import deque
 import json
-import json5
 import logging
 import os
 import queue
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import textwrap
@@ -19,6 +19,12 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+_ENGINE_ROOT = str(Path(__file__).resolve().parents[2])
+if _ENGINE_ROOT not in sys.path:
+    sys.path.insert(0, _ENGINE_ROOT)
+
+import json5_io as json5
 from safe_dotenv import load_env_with_safeguard, safe_env
 
 logger = logging.getLogger(__name__)

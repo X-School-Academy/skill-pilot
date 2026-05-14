@@ -1,10 +1,8 @@
 """JSON5 read/write helpers built on json-five.
 
-Plain reads use ``json5.loads`` (returns native Python data, identical to the
-old ``json5`` package).  For *writes* that target a file which may contain
-comments, use ``write_preserving_comments`` — it loads the existing file as a
-json-five model, reconciles the model with the new value (preserving wsc/comment
-trivia on overlapping nodes) and dumps the model back via ``ModelDumper``.
+Plain reads use ``json5.loads``. Writes that target files with comments should
+use ``write_preserving_comments`` so json-five's model loader/dumper can retain
+comments and whitespace on surviving nodes.
 """
 
 from __future__ import annotations
@@ -26,6 +24,10 @@ from json5.model import (
     JSONText,
     NullLiteral,
 )
+
+load = json5.load
+loads = json5.loads
+dumps = json5.dumps
 
 
 def _escape_double(value: str) -> str:
@@ -90,9 +92,7 @@ def _copy_trivia(old, new):
 
 
 def _reconcile(node, new_value):
-    """Mutate ``node`` so its data equals ``new_value``; return the (possibly
-    replaced) node. Comments and whitespace on overlapping keys/values are
-    preserved; comments attached to keys removed by the update are dropped."""
+    """Mutate ``node`` so its data equals ``new_value`` and keep overlapping trivia."""
     if isinstance(node, JSONObject) and isinstance(new_value, dict):
         existing: dict[str, tuple] = {}
         for k_node, v_node in zip(node.keys, node.values):
@@ -160,26 +160,17 @@ def write_preserving_comments(
     indent: int = 2,
     trailing_newline: bool = True,
 ) -> None:
-    """Write ``new_value`` to ``path`` as JSON5.
-
-    If ``path`` already exists with parseable content, comments and formatting
-    are preserved on keys/elements that survive the update. Otherwise a fresh
-    file is written via ``json5.dumps(new_value, indent=indent)``.
-    """
+    """Write ``new_value`` to ``path`` as JSON5 while preserving comments."""
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
 
-    output: str
     if p.is_file():
-        try:
-            text = p.read_text(encoding="utf-8")
-            model = json5.loads(text, loader=ModelLoader())
-            if isinstance(model, JSONText):
-                model.value = _reconcile(model.value, new_value)
-                output = json5.dumps(model, dumper=ModelDumper())
-            else:
-                output = json5.dumps(new_value, indent=indent)
-        except Exception:
+        text = p.read_text(encoding="utf-8")
+        model = json5.loads(text, loader=ModelLoader())
+        if isinstance(model, JSONText):
+            model.value = _reconcile(model.value, new_value)
+            output = json5.dumps(model, dumper=ModelDumper())
+        else:
             output = json5.dumps(new_value, indent=indent)
     else:
         output = json5.dumps(new_value, indent=indent)

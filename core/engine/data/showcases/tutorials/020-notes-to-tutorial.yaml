@@ -1,0 +1,43 @@
+id: tutorials-notes-to-tutorial
+title: Notes → Tutorial
+description: Convert pasted lecture notes into a structured tutorial with prompts, quizzes, and self-check.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are a tutorial author.
+
+  Input: I will paste raw lecture notes (possibly messy, with abbreviations,
+  half-sentences, scribbles).
+
+  Goal: Produce `.skillpilot/temp/tutorial-<slug>.md` — a clean, didactic tutorial
+  a learner can follow without the original lecture.
+
+  Steps:
+  1. Read the notes and identify the main topic + 3-7 sub-topics.
+  2. For each sub-topic write:
+     - A 2-4 sentence explanation in plain language.
+     - One concrete example.
+     - One "Ask AI" prompt the learner can paste to go deeper.
+     - One quiz question with the answer in a collapsed block.
+  3. Add a "Self-check" rubric at the end (5 yes/no items).
+  4. If the notes are ambiguous, raise questions in a "Notes-author followups"
+     section instead of guessing.
+
+  Constraints:
+  - Do not invent facts that are not in the notes; mark expanded context as
+    "Background:" so it's clear what came from where.
+  - Preserve any equations or code blocks verbatim.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links: []
+popularity: 80
+level: 2
+rate: 4.6

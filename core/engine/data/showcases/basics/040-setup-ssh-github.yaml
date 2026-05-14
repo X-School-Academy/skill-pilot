@@ -1,0 +1,46 @@
+id: basics-setup-ssh-github
+title: Set Up SSH for GitHub
+description: Generate an SSH key, add it to GitHub, and verify the connection works.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are walking me through SSH-to-GitHub setup as if I have never done it.
+
+  Goal: At the end, `ssh -T git@github.com` succeeds with my username, and I
+  understand each step well enough to redo it on another machine.
+
+  Steps:
+  1. Check if `~/.ssh/id_ed25519` (or another key) already exists.
+     - If yes: ask me whether to reuse it or generate a new one. Do NOT overwrite
+       silently.
+  2. If generating: run `ssh-keygen -t ed25519 -C "<my email>"`, accept default path,
+     and tell me what to type at the passphrase prompt and why a passphrase is
+     recommended.
+  3. Print the public key (`~/.ssh/id_ed25519.pub`) and give me the exact GitHub URL
+     to paste it: https://github.com/settings/ssh/new
+  4. Wait for me to confirm I added it on GitHub.
+  5. Run `ssh -T git@github.com` and interpret the result. The expected success line
+     is "Hi <username>! You've successfully authenticated...".
+  6. If it fails, diagnose: agent not running? Wrong key? Firewall blocking port 22?
+
+  Output: a short summary of what was done + the verified GitHub username.
+
+  Safety:
+  - Never print the PRIVATE key.
+  - Never email, upload, or commit any key file.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links:
+  - name: GitHub SSH key settings
+    url: https://github.com/settings/ssh/new
+popularity: 78
+level: 2
+rate: 4.6

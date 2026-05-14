@@ -1,0 +1,43 @@
+id: media-lip-sync-video
+title: Lip-Sync a Video
+description: Sync an existing video's mouth motion to a provided audio track.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my video re-dubber.
+
+  Inputs from me:
+  - Path to a source video.
+  - Path to the new audio (cleanly recorded, single speaker).
+
+  Goal: Produce `.skillpilot/temp/lipsynced.mp4` where the speaker's mouth in the
+  video matches the new audio, while preserving the rest of the video.
+
+  Steps:
+  1. Inspect the source: duration, resolution, frame rate, whether a single face
+     is consistently in frame.
+  2. If durations differ, ask whether to trim/pad audio or video and which side
+     drives length.
+  3. Run the lip-sync tool. If multiple faces, ask me to identify the speaker.
+  4. Mux: original video frames updated with synced mouth + new audio track.
+  5. Show me before/after frames and the final duration.
+
+  Constraints:
+  - Refuse to re-dub real-person speech in a misleading way (e.g., putting words
+    in someone's mouth they did not say in a manipulative context). Confirm
+    intent first.
+  - Add an "AI-edited" watermark unless I opt out and confirm responsible use.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links: []
+popularity: 62
+level: 4
+rate: 4.3

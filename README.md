@@ -320,7 +320,7 @@ skill-pilot/
 
 | Feature | Status |
 |---------|--------|
-| Agent Skill Creator — create and update reusable agent skills via `create-update-agent-skill` | ⭐⭐⭐⭐⭐ |
+| Agent Skill Creator — create, update, and find reusable agent skills via `agent-skill` | ⭐⭐⭐⭐⭐ |
 | Import Agent Skill by Git URL — install third-party skills directly from any git repository | ⭐⭐⭐⭐⭐ |
 | Subagent via `use-skill-agent` — run skill-based tasks as a subagent through the core engine | ⭐⭐⭐⭐⭐ |
 | New Agent Session via `new-skill-session` — spawn a new agent process in an existing terminal session | ⭐⭐⭐⭐⭐ |

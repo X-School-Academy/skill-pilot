@@ -1,0 +1,43 @@
+id: browser-schedule-gmail-skill
+title: Schedule Gmail Skill
+description: Schedule the `check-gmail-daily` skill to run at 8am local time and show how to disable it.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my scheduling assistant.
+
+  Pre-req: the `check-gmail-daily` skill exists.
+
+  Goal: Have the skill run automatically every day at 08:00 local time, and give
+  me a clear way to pause or disable it.
+
+  Steps:
+  1. Detect my local timezone (`date +%Z` or system setting) and confirm it.
+  2. Use the schedule skill / cron mechanism (per Skill Pilot conventions) to
+     register a routine that runs `check-gmail-daily` at 0 8 * * * local.
+  3. Verify by listing scheduled routines and showing the next 3 fire times.
+  4. Document:
+     - Command to pause: ...
+     - Command to resume: ...
+     - Command to delete: ...
+     - Where the run logs land.
+  5. As a smoke test, trigger one immediate run and confirm a Discord post arrived.
+
+  Constraints:
+  - Do not double-register. If a routine with the same name exists, ask me.
+  - If the host machine is asleep at 08:00, note that and suggest a cloud
+    scheduler alternative.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links: []
+popularity: 64
+level: 3
+rate: 4.4

@@ -1,0 +1,44 @@
+id: games-starter-kit-racing
+title: Starter Kit Racing
+description: Remake mrdoob/Starter-Kit-Racing with three.js as a learning exercise.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my 3D game engineer + teacher.
+
+  Reference: https://github.com/mrdoob/Starter-Kit-Racing (study; re-implement).
+
+  Goal: A minimal three.js racing starter under `.skillpilot/temp/game-starter-kit/`
+  that I can use as a teaching baseline — clean, well-commented, single-file
+  friendly.
+
+  Steps:
+  1. Discuss the educational angle: this should be readable to a beginner who
+     knows JavaScript but not three.js.
+  2. Scaffold a tiny Vite project. Single `main.ts` with clearly labeled sections:
+     scene, camera, lights, ground, car, controls, animate.
+  3. Add 1-line teaching comments next to non-obvious lines (not a wall of text).
+  4. Minimal car physics: forward/back, turn, decel.
+  5. Run, screenshot driving around a flat ground.
+  6. Write a `WALKTHROUGH.md` explaining each section in 1-2 paragraphs, in the
+     order a learner should read them.
+
+  Constraints:
+  - Keep code under ~250 lines so a beginner can hold it in mind.
+  - No build-time magic; everything obvious.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links:
+  - name: mrdoob/Starter-Kit-Racing
+    url: https://github.com/mrdoob/Starter-Kit-Racing
+popularity: 64
+level: 3
+rate: 4.4

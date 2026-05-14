@@ -12,10 +12,9 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any
+import sys
 
 import aiohttp
-import json5
-import sys
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +22,8 @@ _PROJECT_DIR = Path(__file__).resolve().parents[4]
 _ENGINE_DIR = Path(__file__).resolve().parents[2]
 if str(_ENGINE_DIR) not in sys.path:
     sys.path.insert(0, str(_ENGINE_DIR))
+
+import json5_io as json5
 _CONFIG_PATH = _PROJECT_DIR / "config" / "cameras.json5"
 
 _DEFAULT_DETECTION = {"enabled": False, "fps": 1, "model": "yolov8n"}
