@@ -2,7 +2,7 @@
 
 ## Retrieval Keywords
 
-explore, showcase, showcases, explore page, template start, template status, explore template, skill-pilot explore, starter template, example project, explore-showcase-skill, new-skill-session
+explore, showcase, showcases, explore page, template start, template status, explore template, skill-pilot explore, starter template, example project, explore-showcase-skill, new-agent-session
 
 ## Scope
 
@@ -21,14 +21,14 @@ explore, showcase, showcases, explore page, template start, template status, exp
 
 - `core/engine/routes.py` — `/api/explore/*` route handlers
 - `core/development/explore-showcase-skill/` — explore showcase feature development docs
-- `core/skills/system/new-skill-session/` — new session from template skill
+- `core/skills/system/new-agent-session/` — new session from template skill
 
 ## Search Commands
 
 ```bash
 rg "api/explore" core/engine/routes.py -n
 find core/development/explore-showcase-skill/ -type f
-find core/skills/system/new-skill-session/ -type f
+find core/skills/system/new-agent-session/ -type f
 ```
 
 ## Related Features

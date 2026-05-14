@@ -323,7 +323,7 @@ skill-pilot/
 | Agent Skill Creator — create, update, and find reusable agent skills via `agent-skill` | ⭐⭐⭐⭐⭐ |
 | Import Agent Skill by Git URL — install third-party skills directly from any git repository | ⭐⭐⭐⭐⭐ |
 | Background Prompt via `background-prompt` — execute a task in the background with a prompt through the core engine | ⭐⭐⭐⭐⭐ |
-| New Agent Session via `new-skill-session` — spawn a new agent process in an existing terminal session | ⭐⭐⭐⭐⭐ |
+| New Agent Session via `new-agent-session` — spawn a new agent process in an existing terminal session | ⭐⭐⭐⭐⭐ |
 | Agent Skill Schedule Support — cron-based skill scheduling via APScheduler | ⭐⭐⭐⭐⭐ |
 | MCP to Skills — expose MCP server tools as callable agent skills | ⭐⭐⭐⭐⭐ |
 | Multiple Agent Workflow Diagram Creator & Executor — visual multi-agent workflow editor and runner | ⭐⭐⭐⭐ |

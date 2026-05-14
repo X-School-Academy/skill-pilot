@@ -1,18 +1,18 @@
 ---
-name: new-skill-session
-description: Create a new agent session by stopping the current agent process and start a new prompt or using a new skill in the latest web or native terminal bash session.
+name: new-agent-session
+description: Start a new agent session by stopping the current agent process and launching a new prompt in the latest web or native terminal bash session.
 ---
 
-# AI Builder - New Skill Session
+# New Agent Session
 
 Use this skill to restart or replace an agent process inside an existing tmux-backed bash session.
 
 ## When to Use This Skill
 
-- User asks to use a new skill in a new agent session
-- User asks to start a new agent process in the current session.
-- User asks to replace the running agent prompt without destroying the terminal session.
-- You need to reuse the latest web or native terminal session created by Skill Pilot.
+- User asks to start a new agent session with a new prompt
+- User asks to start a new agent process in the current session
+- User asks to replace the running agent prompt without destroying the terminal session
+- You need to reuse the latest web or native terminal session created by Skill Pilot
 
 ## Your Roles in This Skill
 
