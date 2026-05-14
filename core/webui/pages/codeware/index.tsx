@@ -100,13 +100,13 @@ const CODEWARE_ACTIONS: CodewareAction[] = [
 
 const CODEWARE_PROMPTS: Record<CodewareAction['key'], string> = {
   update:
-    'Use the codeware-management agent skill to update the codeware: merge the latest official upstream/codeware into the local user branch, then walk and apply any pending upgrade notices.',
+    'Use the codeware agent skill to update the codeware: merge the latest official upstream/codeware into the local user branch, then walk and apply any pending upgrade notices.',
   restore:
-    'Use the codeware-management agent skill to restore the user branch from the official codeware branch, backing up local work first, then walk and apply any pending upgrade notices.',
+    'Use the codeware agent skill to restore the user branch from the official codeware branch, backing up local work first, then walk and apply any pending upgrade notices.',
   'add remote':
-    'Use the codeware-management agent skill to add or fix my personal GitHub fork as the origin remote (add remote flow). Ask me for the fork URL if you do not already have it.',
+    'Use the codeware agent skill to add or fix my personal GitHub fork as the origin remote (add remote flow). Ask me for the fork URL if you do not already have it.',
   contribute:
-    'Use the codeware-management agent skill to create a clean contribution branch from upstream/contrib, push it to my fork, and open a pull request. Ask me which feature or fix I want to contribute and include a brief description in the PR.',
+    'Use the codeware agent skill to create a clean contribution branch from upstream/contrib, push it to my fork, and open a pull request. Ask me which feature or fix I want to contribute and include a brief description in the PR.',
 };
 
 export default function CodewarePage() {
@@ -294,7 +294,7 @@ export default function CodewarePage() {
   const runCreatePrivateWorkspaceRepo = () => {
     openSessionWithPrompt(
       'Workspace: Create Private Workspace Repo',
-      'Use the codeware-management agent skill with the "create private workspace repo" operation to replace the sample workspace/ submodule with a new empty private GitHub repository I will provide, following the steps in workspace/README.md.',
+      'Use the codeware agent skill with the "create private workspace repo" operation to replace the sample workspace/ submodule with a new empty private GitHub repository I will provide, following the steps in workspace/README.md.',
     );
   };
 
@@ -457,7 +457,7 @@ export default function CodewarePage() {
         <Text span weight={700}>Skill Pilot Codeware</Text> — a new form of software where AI and humans read,
         write, and evolve code together. Ship new features, polish what&apos;s here, fix bugs, and
         contribute back. Every action below opens a session pre-wired to the{' '}
-        <Code>codeware-management</Code> agent skill.
+        <Code>codeware</Code> agent skill.
       </Text>
 
       <Stack spacing="md">

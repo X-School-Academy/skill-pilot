@@ -40,6 +40,7 @@ import {
 import EmbeddedSessionPanel, { WorkflowExecuteStatus } from '../../components/EmbeddedSessionPanel';
 import { apiUrl } from '../../libs/api-base';
 import { AUTO_EXECUTE_OPTION, buildExecuteSelectOptions, isAutoExecuteTarget } from '../../libs/execute-targets';
+import { useWorkspaceWatcher } from '../../libs/file-events';
 import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
 
 const API_BASE_URL = apiUrl('/api');
@@ -183,6 +184,9 @@ export default function ResearchPage() {
   const [workflowExecuteStatus, setWorkflowExecuteStatus] = useState<WorkflowExecuteStatus | null>(null);
   const [continuingWorkflow, setContinuingWorkflow] = useState(false);
   const rightPaneRef = useRef<HTMLDivElement | null>(null);
+  const lastLoadedContentRef = useRef<string>('');
+  const editorContentRef = useRef<string>('');
+  useEffect(() => { editorContentRef.current = editorContent; }, [editorContent]);
 
   const currentTask = typeof task === 'string' ? task : '';
   const currentTopic = currentTask.includes('/') ? currentTask.split('/')[0] : '';
@@ -275,7 +279,9 @@ export default function ResearchPage() {
     try {
       const res = await axios.get(`${API_BASE_URL}/research/content`, { params: { path } });
       setSelectedKind((res.data.kind as FileKind) || nextKind);
-      setEditorContent(String(res.data.content || ''));
+      const content = String(res.data.content || '');
+      setEditorContent(content);
+      lastLoadedContentRef.current = content;
     } catch (err: any) {
       console.error('Failed to fetch research content:', err);
       setEditorError(err?.response?.data?.error || 'Failed to load file content.');
@@ -316,15 +322,13 @@ export default function ResearchPage() {
   const fetchExecuteOptions = async () => {
     try {
       const [skillsRes, workflowsRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/config/skills`),
+        axios.get(`${API_BASE_URL}/config/skills/installed`),
         axios.get(`${API_BASE_URL}/workflows/tree`),
       ]);
 
       const nextSkills: string[] = [];
-      for (const category of skillsRes.data.categories || []) {
-        for (const skill of category.skills || []) {
-          if (skill?.name) nextSkills.push(String(skill.name));
-        }
+      for (const skill of skillsRes.data.skills || []) {
+        if (skill?.name) nextSkills.push(String(skill.name));
       }
       setSkillOptions(nextSkills.sort((a, b) => a.localeCompare(b)));
 
@@ -529,6 +533,21 @@ export default function ResearchPage() {
       setContinuingWorkflow(false);
     }
   };
+
+  useWorkspaceWatcher({
+    prefix: '/workspace/research',
+    onTreeChange: () => { void fetchTree(); },
+    currentFilePath: currentTask ? `/workspace/research/${currentTask}` : null,
+    onCurrentFileChange: () => {
+      if (!currentTask) return;
+      if (editorContentRef.current === lastLoadedContentRef.current) {
+        setNotice('File updated on disk.');
+        void fetchContent(currentTask);
+      } else {
+        setEditorError('File changed on disk. Reload after saving or discard your edits.');
+      }
+    },
+  });
 
   useEffect(() => {
     fetchTree();

@@ -1,0 +1,49 @@
+id: cloud-runpod-ollama
+title: RunPod + Ollama
+description: Provision a RunPod GPU pod, deploy a text model with Ollama, and document access.
+thumbnail: /showcases/cloud-gpu/cloud-runpod-ollama.png
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my RunPod + Ollama deployment assistant.
+
+  Inputs from me:
+  - Model name (e.g., `llama3.1:8b`).
+  - GPU class (e.g., RTX 4090 / A100-40GB).
+  - Region preference.
+
+  Goal: A running RunPod pod serving Ollama on a private port, accessible to me
+  via SSH tunnel. I get cost/h, the API endpoint, and a stop command.
+
+  Steps:
+  1. Confirm cost/hour for the chosen GPU; refuse to launch silently > $1/h.
+  2. Provision a pod from a CUDA base image with Ollama pre-installed (or install
+     during boot with a startup script).
+  3. Bind Ollama to localhost only inside the pod; expose port 11434 only via
+     SSH tunnel.
+  4. `ollama pull <model>` and warm it up.
+  5. From my machine: open an SSH tunnel (reuse the SSH Tunnel Task pattern).
+  6. Smoke test: `curl http://localhost:11434/api/generate -d '{...}'`.
+  7. Print: pod id, region, GPU, hourly cost, current spend, stop command,
+     destroy command.
+
+  Constraints:
+  - Never expose Ollama publicly.
+  - Stop pod when idle; offer to set an auto-shutdown.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links:
+  - name: RunPod
+    url: https://www.runpod.io/
+  - name: Ollama
+    url: https://ollama.ai/
+popularity: 78
+level: 4
+rate: 4.6

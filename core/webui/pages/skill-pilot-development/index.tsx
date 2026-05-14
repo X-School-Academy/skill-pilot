@@ -42,6 +42,7 @@ import {
 import EmbeddedSessionPanel, { WorkflowExecuteStatus } from '../../components/EmbeddedSessionPanel';
 import { apiUrl } from '../../libs/api-base';
 import { AUTO_EXECUTE_OPTION, buildExecuteSelectOptions, isAutoExecuteTarget } from '../../libs/execute-targets';
+import { useWorkspaceWatcher } from '../../libs/file-events';
 import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
 
 const API_BASE_URL = apiUrl('/api');
@@ -200,6 +201,9 @@ export default function SkillPilotDevelopmentPage() {
   const [workflowExecuteStatus, setWorkflowExecuteStatus] = useState<WorkflowExecuteStatus | null>(null);
   const [continuingWorkflow, setContinuingWorkflow] = useState(false);
   const rightPaneRef = useRef<HTMLDivElement | null>(null);
+  const lastLoadedContentRef = useRef<string>('');
+  const editorContentRef = useRef<string>('');
+  useEffect(() => { editorContentRef.current = editorContent; }, [editorContent]);
 
   const currentTask = typeof task === 'string' ? task : '';
   const currentFeature = currentTask.includes('/') ? currentTask.split('/')[0] : '';
@@ -306,7 +310,9 @@ export default function SkillPilotDevelopmentPage() {
     try {
       const res = await axios.get(`${API_BASE_URL}/skill-pilot-development/content`, { params: { path } });
       setSelectedKind((res.data.kind as FileKind) || nextKind);
-      setEditorContent(String(res.data.content || ''));
+      const content = String(res.data.content || '');
+      setEditorContent(content);
+      lastLoadedContentRef.current = content;
     } catch (err: any) {
       console.error('Failed to fetch development content:', err);
       setEditorError(err?.response?.data?.error || 'Failed to load file content.');
@@ -347,15 +353,13 @@ export default function SkillPilotDevelopmentPage() {
   const fetchExecuteOptions = async () => {
     try {
       const [skillsRes, workflowsRes] = await Promise.all([
-        axios.get(`${API_BASE_URL}/config/skills`),
+        axios.get(`${API_BASE_URL}/config/skills/installed`),
         axios.get(`${API_BASE_URL}/workflows/tree`),
       ]);
 
       const nextSkills: string[] = [];
-      for (const category of skillsRes.data.categories || []) {
-        for (const skill of category.skills || []) {
-          if (skill?.name) nextSkills.push(String(skill.name));
-        }
+      for (const skill of skillsRes.data.skills || []) {
+        if (skill?.name) nextSkills.push(String(skill.name));
       }
       setSkillOptions(nextSkills.sort((a, b) => a.localeCompare(b)));
 
@@ -623,6 +627,21 @@ export default function SkillPilotDevelopmentPage() {
     }
   };
 
+  useWorkspaceWatcher({
+    prefix: '/core/development',
+    onTreeChange: () => { void fetchTree(); },
+    currentFilePath: currentTask ? `/core/development/${currentTask}` : null,
+    onCurrentFileChange: () => {
+      if (!currentTask) return;
+      if (editorContentRef.current === lastLoadedContentRef.current) {
+        setNotice('File updated on disk.');
+        void fetchContent(currentTask);
+      } else {
+        setEditorError('File changed on disk. Reload after saving or discard your edits.');
+      }
+    },
+  });
+
   useEffect(() => {
     fetchTree();
     fetchFeatureOptions();
@@ -736,26 +755,26 @@ export default function SkillPilotDevelopmentPage() {
     if (!currentInstructionPath) return [];
     if (currentFileName === 'requirements.md') {
       return [
-        { label: 'Refine', defaultSkill: 'skill-pilot-feature-refine', skillPromptSuffix: `to refine the ${currentInstructionPath}` },
-        { label: 'Initial', defaultSkill: 'skill-pilot-feature-initial', skillPromptSuffix: `to create a new branch for the feature defined at ${currentInstructionPath}` },
-        { label: 'Plan', defaultSkill: 'skill-pilot-feature-plan', skillPromptSuffix: `to make a development plan for requirement ${currentInstructionPath}` },
+        { label: 'Refine', defaultSkill: 'codeware', skillPromptSuffix: `to refine the ${currentInstructionPath}` },
+        { label: 'Initial', defaultSkill: 'codeware', skillPromptSuffix: `to create a new branch for the feature defined at ${currentInstructionPath}` },
+        { label: 'Plan', defaultSkill: 'codeware', skillPromptSuffix: `to make a development plan for requirement ${currentInstructionPath}` },
       ];
     }
     if (currentFileName === 'plan.md') {
-      return [{ label: 'Implement', defaultSkill: 'skill-pilot-feature-implement', skillPromptSuffix: `to implement the code as the ${currentInstructionPath}` }];
+      return [{ label: 'Implement', defaultSkill: 'codeware', skillPromptSuffix: `to implement the code as the ${currentInstructionPath}` }];
     }
     if (currentFileName === 'implement.md') {
       return [
-        { label: 'Review', defaultSkill: 'skill-pilot-feature-review', skillPromptSuffix: `to review the code of the implementation of the ${currentInstructionPath}` },
-        { label: 'Test', defaultSkill: 'skill-pilot-feature-test', skillPromptSuffix: `to test the code of the implementation of the ${currentInstructionPath}` },
-        { label: 'Merge', defaultSkill: 'skill-pilot-feature-merge', skillPromptSuffix: `to merge the code of the implementation of the ${currentInstructionPath}` },
+        { label: 'Review', defaultSkill: 'codeware', skillPromptSuffix: `to review the code of the implementation of the ${currentInstructionPath}` },
+        { label: 'Test', defaultSkill: 'codeware', skillPromptSuffix: `to test the code of the implementation of the ${currentInstructionPath}` },
+        { label: 'Merge', defaultSkill: 'codeware', skillPromptSuffix: `to merge the code of the implementation of the ${currentInstructionPath}` },
       ];
     }
     if (currentFileName === 'update.md') {
-      return [{ label: 'Update Code', defaultSkill: 'skill-pilot-feature-update', skillPromptSuffix: `to update the code based on the update request defined in ${currentInstructionPath}` }];
+      return [{ label: 'Update Code', defaultSkill: 'codeware', skillPromptSuffix: `to update the code based on the update request defined in ${currentInstructionPath}` }];
     }
     if (currentFileName === 'issues.md') {
-      return [{ label: 'Fix Issues', defaultSkill: 'skill-pilot-feature-fix-issues', skillPromptSuffix: `to fix the issues defined in ${currentInstructionPath}` }];
+      return [{ label: 'Fix Issues', defaultSkill: 'codeware', skillPromptSuffix: `to fix the issues defined in ${currentInstructionPath}` }];
     }
     return [];
   }, [currentFileName, currentInstructionPath]);

@@ -36,6 +36,7 @@ interface EmbeddedSessionPanelProps {
   workflowSessionActive: boolean;
   continuingWorkflow: boolean;
   onContinueWorkflow: () => void;
+  hideSessionRootSelect?: boolean;
 }
 
 export default function EmbeddedSessionPanel({
@@ -62,6 +63,7 @@ export default function EmbeddedSessionPanel({
   workflowSessionActive,
   continuingWorkflow,
   onContinueWorkflow,
+  hideSessionRootSelect = false,
 }: EmbeddedSessionPanelProps) {
   const {
     sessionRootOptions,
@@ -146,7 +148,7 @@ export default function EmbeddedSessionPanel({
                 Workflow mode: {`core/workflows/${newSessionWorkflow}`}
               </Text>
             )}
-            {hasSessionWorktrees && (
+            {!hideSessionRootSelect && hasSessionWorktrees && (
               <Select
                 label="Worktree"
                 placeholder="Choose where to start"
@@ -164,7 +166,9 @@ export default function EmbeddedSessionPanel({
               value={sessionPromptText}
               onChange={(event) => setSessionPromptText(event.currentTarget.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) onStart(selectedSessionPath || undefined);
+                if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                  onStart(hideSessionRootSelect ? undefined : (selectedSessionPath || undefined));
+                }
               }}
               autosize={false}
               minRows={1}
@@ -229,7 +233,11 @@ export default function EmbeddedSessionPanel({
                 </>
               )}
             </div>
-            <Button onClick={() => onStart(selectedSessionPath || undefined)} disabled={!sessionPromptText.trim() || startingSession} loading={startingSession}>
+            <Button
+              onClick={() => onStart(hideSessionRootSelect ? undefined : (selectedSessionPath || undefined))}
+              disabled={!sessionPromptText.trim() || startingSession}
+              loading={startingSession}
+            >
               Start
             </Button>
           </div>

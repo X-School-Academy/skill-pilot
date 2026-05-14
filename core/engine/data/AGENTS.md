@@ -14,7 +14,7 @@ This folder contains the Explore showcase index and the sample YAML files it ref
   - `id`: stable folder id
   - `category`: display label
   - `description`: short user-facing summary
-  - `thumbnail`: optional image path/url or `null`
+  - `thumbnail`: optional image. Accepts `http(s)://...` (remote), `/...` (webui public asset, e.g. `/showcases/foo.png`), a repo-relative path (served via the engine file API), or `null`
   - `subcategories`: optional nested category array
 - Samples are discovered from matching folders under `showcases/`.
 - Keep category ids aligned with the directory structure.

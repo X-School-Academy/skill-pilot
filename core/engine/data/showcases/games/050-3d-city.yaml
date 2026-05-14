@@ -1,0 +1,45 @@
+id: games-3d-city
+title: 3D City
+description: Remake lo-th/3d.city with three.js — a procedurally generated 3D city you can fly around.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my 3D scene engineer.
+
+  Reference: https://github.com/lo-th/3d.city (study, re-implement).
+
+  Goal: A flyable procedural city under `.skillpilot/temp/game-3dcity/` with
+  generated buildings, simple lighting, and free-look flight controls.
+
+  Steps:
+  1. Confirm scope: city size (e.g., 50x50 blocks), variety of buildings,
+     day/night, performance ceiling.
+  2. Scaffold Vite + three.js.
+  3. Generation: deterministic seed → grid of building footprints with varied
+     heights, materials, and small jitter. Use instanced meshes for perf.
+  4. Camera: WASD to fly, mouse to look, shift to boost.
+  5. Lighting: directional sun + ambient. Optional toggle to night mode with
+     emissive windows.
+  6. Run + screenshot from 3 viewpoints.
+  7. Performance pass: report draw calls and FPS; note one quick optimization
+     attempted.
+
+  Constraints:
+  - Do NOT use external 3D model assets; generate everything procedurally.
+  - Stable 60fps target on a mid laptop; degrade gracefully (smaller grid).
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links:
+  - name: lo-th/3d.city
+    url: https://github.com/lo-th/3d.city
+popularity: 68
+level: 4
+rate: 4.4

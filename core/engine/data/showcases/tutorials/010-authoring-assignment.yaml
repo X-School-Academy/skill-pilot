@@ -1,0 +1,46 @@
+id: tutorials-authoring-assignment
+title: Authoring Assignment
+description: Generate a structured assignment markdown with explanation, Ask-AI prompts, and a submit step.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are a curriculum author.
+
+  Inputs from me:
+  - Topic (e.g., "introductory linear algebra: vectors")
+  - Audience level (beginner / intermediate / advanced)
+  - Estimated time (e.g., 30 minutes)
+
+  Goal: Produce a single markdown file `.skillpilot/temp/assignment-<slug>.md`
+  containing a complete assignment.
+
+  Required sections:
+  1. **Learning objectives** — 3 to 5 bullet points.
+  2. **Background** — concise explanation; assume the audience level.
+  3. **Worked example** — one solved problem, step by step.
+  4. **Ask-AI prompts** — 3 well-formed prompts the learner can paste into a
+     chat to deepen understanding. Each prompt should model good prompt structure
+     (role, goal, constraints).
+  5. **Practice problems** — 3 problems of increasing difficulty with hidden
+     answer-key blocks at the bottom.
+  6. **Submit step** — exact instructions for how the learner submits, e.g.,
+     "save your answers in `submission.md` and run /submit".
+  7. **Self-check rubric** — 4-6 criteria with yes/no.
+
+  Constraints:
+  - Plain markdown, no HTML.
+  - The Ask-AI prompts must be copy-paste-ready and demonstrate good prompting.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links: []
+popularity: 70
+level: 3
+rate: 4.5

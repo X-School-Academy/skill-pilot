@@ -40,6 +40,7 @@ import {
   IconChevronsRight,
 } from '@tabler/icons-react';
 import { apiUrl } from '../../libs/api-base';
+import { useWorkspaceWatcher } from '../../libs/file-events';
 
 const API_BASE_URL = apiUrl('/api');
 
@@ -401,13 +402,10 @@ export default function WorkflowsPage() {
 
   const fetchSkills = useCallback(async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/config/skills`);
-      const categories = res.data.categories || [];
+      const res = await axios.get(`${API_BASE_URL}/config/skills/installed`);
       const names: string[] = [];
-      for (const cat of categories) {
-        for (const skill of cat.skills || []) {
-          if (skill?.name) names.push(String(skill.name));
-        }
+      for (const skill of res.data.skills || []) {
+        if (skill?.name) names.push(String(skill.name));
       }
       setSkills(names);
     } catch (err) {
@@ -480,6 +478,20 @@ export default function WorkflowsPage() {
     void fetchProviders();
     void fetchSkills();
   }, [fetchTree, fetchProviders, fetchSkills]);
+
+  useWorkspaceWatcher({
+    prefix: '/core/workflows',
+    onTreeChange: () => { void fetchTree(); },
+    currentFilePath: workflowPath ? `/core/workflows/${workflowPath}` : null,
+    onCurrentFileChange: () => {
+      if (!workflowPath) return;
+      if (hasUnsavedChangesRef.current) {
+        setErrors([{ rule: 'EXTERNAL_CHANGE', message: 'Workflow changed on disk. Reload after saving or discard your edits.', node_ids: [], edge_ids: [] }]);
+      } else {
+        void loadWorkflow(workflowPath, true);
+      }
+    },
+  });
 
   useEffect(() => {
     if (!defaultProviderId) return;

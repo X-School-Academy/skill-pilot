@@ -1607,7 +1607,7 @@ export default function HomePage() {
     const name = skillSubScreen.skillName;
     let prompt: string;
     if (skillSubScreen.createSkill) {
-      prompt = `Create a user agent skill use agent skill \`create-update-agent-skill\`, as user's requirement below:\n\n${instruction}`;
+      prompt = `Create a user agent skill using agent skill \`agent-skill\`, as user's requirement below:\n\n${instruction}`;
     } else {
       prompt = `Use agent skill: ${name}.`;
       if (instruction) {
@@ -1835,7 +1835,7 @@ export default function HomePage() {
           <button
             type="button"
             onClick={() => {
-              setSkillSubScreen({ mode: 'use', skillName: 'create-update-agent-skill', categoryId: 'system', createSkill: true });
+              setSkillSubScreen({ mode: 'use', skillName: 'agent-skill', categoryId: 'system', createSkill: true });
               setSkillUsePrompt('');
             }}
             style={{

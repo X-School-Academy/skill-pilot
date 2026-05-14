@@ -33,7 +33,7 @@ _SETTINGS_PATH = Path(__file__).resolve().parents[4] / "config" / "settings.json
 def _get_ice_servers() -> list[dict]:
     servers = [{"urls": "stun:stun.l.google.com:19302"}]
     try:
-        import json5
+        import json5_io as json5
         data = json5.loads(_SETTINGS_PATH.read_text(encoding="utf-8"))
         turn_urls = (
             os.environ.get("TURN_SERVER_URLS")

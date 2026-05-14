@@ -995,7 +995,7 @@ run_init_wizard_if_needed() {
     git -C "${ROOT_DIR}" submodule update --init --recursive workspace
   fi
 
-  if [[ -f "${ENGINE_ENV_FILE}" ]]; then
+  if [[ -f "${ENGINE_ENV_FILE}" || -L "${ENGINE_ENV_FILE}" ]]; then
     return
   fi
 

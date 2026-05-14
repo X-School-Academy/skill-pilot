@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import json5
+import json5_io as json5
 from llm_service import llm_stream, load_llm_providers, stop_client
 
 

@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "name": "skill-pilot-dev",
-  "updated_at": "2026-03-10T08:26:02Z",
+  "updated_at": "2026-05-12T05:03:45Z",
   "nodes": [
     {
       "id": 0,
@@ -15,120 +15,120 @@
       "id": 1,
       "type": "agent",
       "position": {
-        "x": 320,
-        "y": 320
+        "x": 260,
+        "y": 125
       },
       "data": {
         "title": "Create Feature",
         "provider_id": "claude",
-        "skill": "skill-pilot-feature-create",
-        "responsibility": ""
+        "skill": "codeware",
+        "responsibility": "Use the codeware feature lifecycle create operation."
       }
     },
     {
       "id": 2,
       "type": "agent",
       "position": {
-        "x": 560,
-        "y": 320
+        "x": 480,
+        "y": 387
       },
       "data": {
         "title": "Refine Requirement",
         "provider_id": "claude",
-        "skill": "skill-pilot-feature-refine",
-        "responsibility": ""
+        "skill": "codeware",
+        "responsibility": "Use the codeware feature lifecycle refine operation."
       }
     },
     {
       "id": 3,
       "type": "agent",
       "position": {
-        "x": 800,
-        "y": 320
+        "x": 734,
+        "y": 136
       },
       "data": {
         "title": "Initial Branch",
         "provider_id": "claude",
-        "skill": "skill-pilot-feature-initial",
-        "responsibility": ""
+        "skill": "codeware",
+        "responsibility": "Use the codeware feature lifecycle initial branch operation."
       }
     },
     {
       "id": 4,
       "type": "agent",
       "position": {
-        "x": 1040,
-        "y": 320
+        "x": 965,
+        "y": 400
       },
       "data": {
         "title": "Plan Feature",
         "provider_id": "claude",
-        "skill": "skill-pilot-feature-plan",
-        "responsibility": ""
+        "skill": "codeware",
+        "responsibility": "Use the codeware feature lifecycle plan operation."
       }
     },
     {
       "id": 5,
       "type": "agent",
       "position": {
-        "x": 1280,
-        "y": 320
+        "x": 1197,
+        "y": 131
       },
       "data": {
         "title": "Implement Feature",
         "provider_id": "claude",
-        "skill": "skill-pilot-feature-implement",
-        "responsibility": ""
+        "skill": "codeware",
+        "responsibility": "Use the codeware feature lifecycle implement operation."
       }
     },
     {
       "id": 6,
       "type": "agent",
       "position": {
-        "x": 1537,
+        "x": 1720,
         "y": 125
       },
       "data": {
         "title": "Review Feature",
         "provider_id": "claude",
-        "skill": "skill-pilot-feature-review",
-        "responsibility": ""
+        "skill": "codeware",
+        "responsibility": "Use the codeware feature lifecycle review operation."
       }
     },
     {
       "id": 7,
       "type": "agent",
       "position": {
-        "x": 1521,
-        "y": 496
+        "x": 1473,
+        "y": 406
       },
       "data": {
         "title": "Test Feature",
         "provider_id": "claude",
-        "skill": "skill-pilot-feature-test",
-        "responsibility": ""
+        "skill": "codeware",
+        "responsibility": "Use the codeware feature lifecycle test operation."
       }
     },
     {
       "id": 8,
       "type": "agent",
       "position": {
-        "x": 1760,
-        "y": 296
+        "x": 1945,
+        "y": 406
       },
       "data": {
         "title": "Merge Feature",
         "provider_id": "claude",
-        "skill": "skill-pilot-feature-merge",
-        "responsibility": ""
+        "skill": "codeware",
+        "responsibility": "Use the codeware feature lifecycle merge operation."
       }
     },
     {
       "id": -1,
       "type": "end",
       "position": {
-        "x": 2000,
-        "y": 320
+        "x": 2181,
+        "y": 145
       }
     }
   ],
@@ -169,37 +169,30 @@
       "target_anchor": "left"
     },
     {
-      "id": "5->6",
-      "source": 5,
-      "target": 6,
-      "source_anchor": "top",
+      "id": "8->-1",
+      "source": 8,
+      "target": -1,
+      "source_anchor": "right",
       "target_anchor": "left"
     },
     {
       "id": "5->7",
       "source": 5,
       "target": 7,
-      "source_anchor": "bottom",
+      "source_anchor": "right",
+      "target_anchor": "left"
+    },
+    {
+      "id": "7->6",
+      "source": 7,
+      "target": 6,
+      "source_anchor": "right",
       "target_anchor": "left"
     },
     {
       "id": "6->8",
       "source": 6,
       "target": 8,
-      "source_anchor": "right",
-      "target_anchor": "top"
-    },
-    {
-      "id": "7->8",
-      "source": 7,
-      "target": 8,
-      "source_anchor": "right",
-      "target_anchor": "bottom"
-    },
-    {
-      "id": "8->-1",
-      "source": 8,
-      "target": -1,
       "source_anchor": "right",
       "target_anchor": "left"
     }

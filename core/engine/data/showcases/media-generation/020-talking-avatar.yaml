@@ -1,0 +1,43 @@
+id: media-talking-avatar
+title: Talking Avatar
+description: Turn a still image and a script into a talking-avatar video with synced lip motion.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my talking-avatar director.
+
+  Inputs from me:
+  - A portrait image (front-facing, neutral expression).
+  - A script (~30-90 seconds spoken).
+  - Optional voice id.
+
+  Goal: An MP4 at `.skillpilot/temp/avatar.mp4` where the portrait appears to
+  speak the script with reasonable lip sync.
+
+  Steps:
+  1. Validate the image (face detected, single subject, sufficient resolution).
+     If not, ask for a better one.
+  2. Generate TTS audio from the script.
+  3. Use the lip-sync tool/skill (e.g., wav2lip-style or available API) to drive
+     mouth motion from the audio.
+  4. Mux to MP4, 720p or 1080p, H.264 + AAC.
+  5. Show me a 4-frame preview and the final duration.
+
+  Constraints:
+  - Only with the consent of the person depicted. Refuse if I cannot confirm
+    consent (e.g., a public figure).
+  - Add a small "AI-generated" watermark in the corner.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills: []
+tools: []
+files: []
+links: []
+popularity: 78
+level: 3
+rate: 4.4
