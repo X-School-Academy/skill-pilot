@@ -41,8 +41,8 @@ As a {Role}, I will {action description}
 ## Execution Rule
 
 - Never run raw `aws ...` shell commands directly.
-- Execute all AWS operations through `aws-api` skill (`call_aws` tool).
-- If an AWS command shape, flag, or parameter is unclear, use `aws-api` skill (`suggest_aws_commands` tool) first, then run through `aws-api` (`call_aws`).
+- Execute all AWS operations through the `aws-api` skill.
+- For AWS tasks not covered by the reference files above, use the `aws-api` skill directly, e.g. S3, ECR, ECS, SES, Lambda, RDS, DynamoDB etc.
 
 ## Common Preconditions
 
