@@ -3,7 +3,7 @@ __pycache__
 
 .next
 node_modules
-
+.pnpm-store
 # typescript
 *.tsbuildinfo
 next-env.d.ts
