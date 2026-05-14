@@ -87,12 +87,19 @@ the template data are at `core/engine/data`, we will put the showcase thumbnails
 
  **Update system agent skills vibe coding and codeware to copy any requirements.md files to the appropriate directory if the files are not already there**
 --
-This agent skill will follow the user's instructions to update the data at folder `core/engine/data` and create the reference files at `workspace/showcases/{showcase_slug_id}/` for the showcases or create zip file and upload to aws s3, and unzip the file to `workspace/showcases/{showcase_slug_id}/` when the user starts to ask AI agents to do the task.
+This agent skill will follow the user's instructions with steps below:
 
-Agent skills will be used by this system agent skill which need to be mentioned clearly.
+1. create file  `workspace/showcases/{showcase_slug_id}/showcase.yaml` for user to review and approval
 
-when need an image, using the `create-image` agent skill
-when need to create a video using the `multiple-scene-video` agent skill
-when need to create an online interactive tutorial or tutorial video, using the `ccourse-creator` agent skill
+2. Create any image, video, and online tutorial with agent skills
 
-All images, videos will need to be uploaded to aws s3 using `cloud-operation` skill once user approved the content.
+- `create-image` agent skill for creating images
+- `multiple-scene-video` agent skill for creating videos
+- `ccourse-creator` agent skill for creating online interactive tutorials 
+
+and save the created content to `workspace/showcases/{showcase_slug_id}/assets/` folder, and update the `showcase.yaml` file with the created content information, such as the file name, file path, and url if have.
+and maintain a file `files.yaml` to list all the image, video, online tutorial files created related to path `workspace/showcases/{showcase_slug_id}`, which we will use to zip these files later.
+ Then ask user to review and approval.
+
+3. after user approval, update the data at folder`core/engine/data`, and copy the any assets to `core/webui/public/showcases/{showcase_category}/` for final review
+
