@@ -1,15 +1,15 @@
 ---
-name: use-skill-agent
-description: Use core/bin/skill-agent to run a task prompt through the core engine default LLM provider and return plain text output. Use when the user explicitly asks to use Skill Agent for a task.
+name: background-prompt
+description: Execute a task in the background with a prompt through the core engine LLM provider and return plain text output. Use when the user wants to run a prompt as a background task via the Skill Agent.
 ---
 
-# AI Builder - Use Skill Agent
+# Background Prompt
 
-Run user tasks through the local `core/bin/skill-agent` tool.
+Run a prompt as a background task through the local `core/bin/skill-agent` tool.
 
 ## When to Use This Skill
 
-- User explicitly asks to use Skill Agent
+- User wants to execute a prompt in the background
 - User wants a prompt executed by the default core engine LLM provider
 - The task is suitable for single-prompt inference with plain text output
 
@@ -31,9 +31,9 @@ This communication pattern ensures transparency and allows for human-in-the-loop
 
 Follow these steps in order:
 
-### Step 1: Confirm Skill Agent intent
+### Step 1: Confirm intent
 
-Ensure the user asked to use Skill Agent. If not explicit, ask for confirmation before invoking.
+Ensure the user wants to run a background prompt. If not explicit, ask for confirmation before invoking.
 
 ### Step 2: Build the prompt
 

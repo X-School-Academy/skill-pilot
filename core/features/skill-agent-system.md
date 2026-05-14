@@ -34,7 +34,7 @@ skill agent, skill-agent, skill install, skill-install, skill eval, skill-eval, 
 - `core/skills/system/` — system skills directory
 - `core/skills/user/` — user skills directory
 - `dev-swarm/skills/` — dev swarm skills directory
-- `core/skills/system/use-skill-agent/` — use-skill-agent skill
+- `core/skills/system/background-prompt/` — background-prompt skill
 - `core/skills/system/install-third-party-agent-skill-from-git/` — git skill installer skill
 
 ## Search Commands
