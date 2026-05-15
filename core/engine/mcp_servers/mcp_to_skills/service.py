@@ -23,7 +23,7 @@ import json5_io as json5
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
-from llm_service import build_terminal_command, get_provider, llm_get_text, load_llm_providers
+from llm_service import build_terminal_command, get_background_provider, get_provider, llm_get_text, load_llm_providers
 from safe_dotenv import apply_env_key_values, loaded_env_key_names, safe_env
 from session_agent_store import get_session_agent_meta, set_session_agent_meta
 from settings import get_auth_token, get_runtime_mode, get_service_host_port
@@ -618,7 +618,7 @@ class Bridge:
                 raise MCPError("skill_agent_infer requires a non-empty prompt")
             provider_id_raw = payload.get("provider_id")
             requested_provider_id = str(provider_id_raw).strip() if isinstance(provider_id_raw, str) else None
-            provider = get_provider(requested_provider_id)
+            provider = get_background_provider(requested_provider_id)
             provider_id = str(provider.get("id") or "").strip()
             security_flags = self._skill_agent_security(provider_id)
             auto = bool(payload.get("auto")) if "auto" in payload else bool(security_flags["auto"])
