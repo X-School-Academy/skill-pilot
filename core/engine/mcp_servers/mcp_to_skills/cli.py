@@ -210,6 +210,25 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Detailed image generation prompt.",
     )
+    create_audio_parser = subparsers.add_parser(
+        "create-audio",
+        help="Create TTS audio through the running engine socket and print the local file path",
+    )
+    create_audio_parser.add_argument(
+        "--text",
+        required=True,
+        help="Plain text to synthesize.",
+    )
+    create_audio_parser.add_argument(
+        "--format",
+        default="mp3",
+        help="Output audio format, for example mp3, wav, opus, aac, flac, or pcm. Defaults to mp3.",
+    )
+    create_audio_parser.add_argument(
+        "--voice",
+        default=None,
+        help="Optional TTS voice id. Uses the configured provider default when omitted.",
+    )
     run_workflow_parser = subparsers.add_parser(
         "run-workflow",
         help="Execute a workflow JSON by running each SubAgent via engine socket inference",
@@ -555,6 +574,49 @@ def main() -> int:
             return 0
         if response.get("status") != "ok":
             detail = response.get("detail") or "create-image request failed"
+            print(str(detail), file=sys.stderr)
+            return 2
+
+        result = response.get("result") or {}
+        if isinstance(result, dict):
+            path = result.get("path")
+            if path is not None:
+                print(str(path))
+                return 0
+        print(response_raw)
+        return 0
+
+    if args.command == "create-audio":
+        request_payload = {
+            "operation": "create_audio",
+            "text": str(args.text).strip(),
+            "format": str(args.format).strip().lower(),
+            "voice": str(args.voice).strip() if args.voice is not None else None,
+        }
+        try:
+            response_raw = send_request_with_runtime_fallback(
+                json.dumps(request_payload, ensure_ascii=True),
+                timeout,
+                socket_path,
+                explicit_socket=explicit_socket,
+            )
+        except EngineNotStartedError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        except Exception as exc:
+            print(f"create-audio request failed: {exc}", file=sys.stderr)
+            return 2
+        try:
+            response = json.loads(response_raw)
+        except json.JSONDecodeError:
+            print(response_raw)
+            return 0
+
+        if not isinstance(response, dict):
+            print(response_raw)
+            return 0
+        if response.get("status") != "ok":
+            detail = response.get("detail") or "create-audio request failed"
             print(str(detail), file=sys.stderr)
             return 2
 

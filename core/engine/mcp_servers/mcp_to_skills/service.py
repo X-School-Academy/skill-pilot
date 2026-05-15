@@ -150,6 +150,19 @@ class Bridge:
             "size": size,
         }
 
+    def _create_audio(self, text: str, output_format: str, voice: str | None = None) -> dict[str, str]:
+        from llm_service import get_tts_provider
+        from tts_service import text_to_speech_file
+
+        provider = get_tts_provider(None)
+        path = text_to_speech_file(text, provider.get("id"), voice=voice, output_format=output_format)
+        return {
+            "path": path,
+            "provider": str(provider.get("id") or ""),
+            "format": output_format,
+            "voice": str(voice or provider.get("voice") or ""),
+        }
+
     def _run_tmux(self, args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
         if shutil.which("tmux") is None:
             raise MCPError("tmux is not installed or not available in PATH")
@@ -662,6 +675,17 @@ class Bridge:
                 raise MCPError("create_image requires a non-empty prompt")
             ratio = self._normalize_image_ratio(payload.get("ratio"))
             result = self._create_image(prompt=prompt, ratio=ratio)
+            return {"status": "ok", "result": result}
+        if operation == "create_audio":
+            text = str(payload.get("text") or "").strip()
+            if not text:
+                raise MCPError("create_audio requires non-empty text")
+            output_format = str(payload.get("format") or "mp3").strip().lower()
+            if not output_format:
+                raise MCPError("create_audio requires a non-empty format")
+            voice_raw = payload.get("voice")
+            voice = str(voice_raw).strip() if isinstance(voice_raw, str) and voice_raw.strip() else None
+            result = self._create_audio(text=text, output_format=output_format, voice=voice)
             return {"status": "ok", "result": result}
         if operation == "new_agent_session":
             prompt = str(payload.get("prompt") or "").strip()

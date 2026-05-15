@@ -122,7 +122,7 @@ After approval, generate the showcase assets using the appropriate agent skills:
 
 | Asset | Skill |
 |---|---|
-| Thumbnail image | `create-image` |
+| Thumbnail image | `create-image-audio` |
 | Video | `multiple-scene-video` |
 | Online interactive tutorial | `course-creator` |
 

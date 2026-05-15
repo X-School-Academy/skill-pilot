@@ -59,7 +59,7 @@ If the project lacks safe start/stop scripts, add small project-owned scripts or
 
 Only create dashboard assets during deployment, and only if they do not already exist:
 
-- `workspace/vibe-coding/{project-name}/assets/icon.png`: square raster icon for the WebUI dashboard. Use the `create-image` skill to create it from the project concept when missing.
+- `workspace/vibe-coding/{project-name}/assets/icon.png`: square raster icon for the WebUI dashboard. Use the `create-image-audio` skill to create it from the project concept when missing.
 - `workspace/vibe-coding/{project-name}/assets/info.yaml`: metadata and local deployment commands for the WebUI dashboard.
 
 If `icon.png` already exists, keep it. If `info.yaml` already exists, update only missing or stale deployment fields; preserve user-provided display names and valid custom commands unless they are clearly wrong.
