@@ -10,5 +10,5 @@
     // version's changelog file, newest build on top.
     version: '1_00_06',
     workspace_version: '1_00_05',
-    build: 26051301,
+    build: 26051501,
 }
