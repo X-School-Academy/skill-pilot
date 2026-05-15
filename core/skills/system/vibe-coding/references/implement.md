@@ -10,6 +10,14 @@ Implement the project according to `plan.md`.
 
 ## Steps
 
+### Step 0: Copy showcase files if needed
+
+If this project was launched from an Explore showcase that has a `directory` field:
+- Check whether `requirements.md`, `update.md`, and `issues.md` exist in `workspace/showcases/{showcase_slug_id}/`.
+- For each file that exists there but is not already present in the `directory` path, copy it to `directory` before starting work.
+
+Skip this step if the project was not launched from an Explore showcase.
+
 ### Step 1: Read the Plan
 
 Read `design-docs/plan.md` and identify implementation steps in order.

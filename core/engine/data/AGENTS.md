@@ -40,7 +40,12 @@ Supported sample fields:
 - `extensions`: optional array
 - `tools`: array
 - `files`: array
-- `links`: array of `{ name, url }`
+- `goals`: optional markdown list string describing the expected outcomes after the user completes the showcase task
+- `zip-files-url`: optional URL to a zip file that is auto-unzipped to `workspace/showcases/{id}/` when the user starts the template
+- `video_prompt`: optional prompt string used by the explore-showcase skill to generate a video for this showcase (not shown in UI)
+- `tutorial_prompt`: optional prompt string used by the explore-showcase skill to generate an online interactive tutorial (not shown in UI)
+- `terms`: optional string array of technology terms related to this showcase; users can click each term to learn more
+- `links`: array of `{ name, url, prompt }` where `prompt` is optional and used by the explore-showcase skill to generate linked resource content (not shown in UI)
 - `popularity`: numeric score
 - `level`: numeric difficulty
 - `rate`: numeric rating

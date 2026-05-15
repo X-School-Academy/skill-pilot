@@ -22,6 +22,7 @@ import {
   IconArrowLeft,
   IconCopy,
   IconExternalLink,
+  IconFile,
   IconFolderOpen,
   IconPlayerPlay,
   IconSparkles,
@@ -63,6 +64,8 @@ interface ShowcaseSample {
   tools: string[];
   files: string[];
   links: ShowcaseLink[];
+  goals: string | null;
+  terms: string[];
   popularity: number;
   level: number;
   rate: number;
@@ -122,6 +125,14 @@ function promptToMarkdown(prompt: string): string {
     const path = `/${String(pathValue).replace(/^\/+/, '')}`;
     return `[@${pathValue}](/file-manager?path=${encodeURIComponent(path)})`;
   });
+}
+
+function toKebabCase(term: string): string {
+  return term
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
 }
 
 function isVideoLike(value: string | null | undefined): boolean {
@@ -190,6 +201,7 @@ export default function ExploreView() {
   const [templateMonitorLaunchId, setTemplateMonitorLaunchId] = useState('');
   const [templateMonitorReady, setTemplateMonitorReady] = useState(false);
   const [templateMonitorStatus, setTemplateMonitorStatus] = useState('');
+  const [fileModal, setFileModal] = useState<{ path: string; name: string; content: string | null; loading: boolean; error: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -320,6 +332,18 @@ export default function ExploreView() {
 
   const openMedia = (url: string, title: string, type: 'image' | 'video' | 'audio') => {
     setMediaModal({ url, title, type });
+  };
+
+  const openFileContent = async (filePath: string) => {
+    const name = filePath.split('/').pop() || filePath;
+    setFileModal({ path: filePath, name, content: null, loading: true, error: '' });
+    try {
+      const normalizedPath = filePath.startsWith('/') ? filePath : `/${filePath}`;
+      const res = await axios.get(`${API_BASE_URL}/files/read`, { params: { path: normalizedPath } });
+      setFileModal((prev) => prev ? { ...prev, content: String(res.data?.content ?? ''), loading: false } : null);
+    } catch (err: any) {
+      setFileModal((prev) => prev ? { ...prev, content: null, loading: false, error: err?.response?.data?.error || 'Failed to load file.' } : null);
+    }
   };
 
   const maybeOpenTutorial = (sample: ShowcaseSample) => {
@@ -542,7 +566,6 @@ export default function ExploreView() {
       ...(sample.directory ? [{ title: 'Directory', items: [sample.directory] }] : []),
       { title: 'Skills', items: sample.skills },
       { title: 'Tools', items: sample.tools },
-      { title: 'Files', items: sample.files },
     ];
 
     return (
@@ -607,6 +630,29 @@ export default function ExploreView() {
             )}
           </div>
         ))}
+
+        {sample.files.length > 0 && (
+          <div style={{ padding: 18, borderRadius: 18, border: cardBorder, background: cardBg }}>
+            <Text size="sm" weight={700} mb={10}>Files</Text>
+            <Stack spacing={6}>
+              {sample.files.map((filePath) => {
+                const fileName = filePath.split('/').pop() || filePath;
+                return (
+                  <Button
+                    key={filePath}
+                    variant="subtle"
+                    compact
+                    styles={{ inner: { justifyContent: 'flex-start' } }}
+                    leftIcon={<IconFile size="0.9rem" />}
+                    onClick={() => void openFileContent(filePath)}
+                  >
+                    {fileName}
+                  </Button>
+                );
+              })}
+            </Stack>
+          </div>
+        )}
 
         {sample.extensions.length > 0 && (
           <div style={{ padding: 18, borderRadius: 18, border: cardBorder, background: cardBg }}>
@@ -887,6 +933,50 @@ export default function ExploreView() {
                 {linkedPrompt}
               </ReactMarkdown>
             </Box>
+
+            {sample.goals && (
+              <>
+                <Divider my="md" />
+                <Text size="sm" weight={700} mb={10}>Goals</Text>
+                <Box
+                  sx={{
+                    fontSize: 14,
+                    color: isDark ? theme.colors.dark[1] : '#475569',
+                    lineHeight: 1.6,
+                    '& p': { margin: '0 0 8px' },
+                    '& p:last-child': { marginBottom: 0 },
+                    '& ul, & ol': { paddingLeft: 20, margin: '4px 0 8px' },
+                    '& li': { margin: '2px 0' },
+                  }}
+                >
+                  {renderMarkdown(sample.goals)}
+                </Box>
+              </>
+            )}
+
+            {sample.terms.length > 0 && (
+              <>
+                <Divider my="md" />
+                <Text size="sm" weight={700} mb={10}>Keywords</Text>
+                <Group spacing={8}>
+                  {sample.terms.map((term) => (
+                    <Badge
+                      key={term}
+                      variant="light"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => window.open(
+                        `https://skill-pilot.ai/explore/terms?slug=${encodeURIComponent(sample.id)}&term=${encodeURIComponent(toKebabCase(term))}`,
+                        '_blank',
+                        'noopener,noreferrer',
+                      )}
+                    >
+                      {term}
+                    </Badge>
+                  ))}
+                </Group>
+              </>
+            )}
+
             </div>
           </div>
         </div>
@@ -1294,6 +1384,44 @@ export default function ExploreView() {
         )}
         {mediaModal?.type === 'audio' && (
           <audio src={mediaModal.url} controls autoPlay style={{ width: '100%' }} />
+        )}
+      </Modal>
+
+      <Modal
+        opened={Boolean(fileModal)}
+        onClose={() => setFileModal(null)}
+        size="xl"
+        centered
+        title={fileModal?.name || 'File'}
+      >
+        {fileModal?.loading && (
+          <Group spacing="xs" style={{ padding: 16 }}>
+            <Loader size="sm" />
+            <Text size="sm" color="dimmed">Loading file...</Text>
+          </Group>
+        )}
+        {fileModal?.error && (
+          <Text color="red" size="sm" style={{ padding: 16 }}>{fileModal.error}</Text>
+        )}
+        {fileModal?.content != null && (
+          <ScrollArea style={{ maxHeight: '70vh' }}>
+            <pre
+              style={{
+                margin: 0,
+                padding: 16,
+                fontSize: 13,
+                lineHeight: 1.6,
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                background: isDark ? theme.colors.dark[8] : '#f8fafc',
+                borderRadius: 8,
+                color: isDark ? theme.colors.dark[0] : '#1e293b',
+              }}
+            >
+              {fileModal.content}
+            </pre>
+          </ScrollArea>
         )}
       </Modal>
     </>

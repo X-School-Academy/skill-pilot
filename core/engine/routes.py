@@ -977,6 +977,12 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
     extensions = _normalize_showcase_extensions(sample.get("extensions"))
     links = [_normalize_showcase_link(item) for item in (sample.get("links") or [])]
 
+    goals = str(sample.get("goals") or "").strip() or None
+    terms_raw = sample.get("terms")
+    terms: List[str] = []
+    if isinstance(terms_raw, list):
+        terms = [str(t).strip() for t in terms_raw if str(t).strip()]
+
     try:
         popularity = int(sample.get("popularity", 0))
         level = int(sample.get("level", 1))
@@ -1017,6 +1023,8 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
         "tools": tools,
         "files": files,
         "links": links,
+        "goals": goals,
+        "terms": terms,
         "popularity": popularity,
         "level": level,
         "rate": rate,
