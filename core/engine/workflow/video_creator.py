@@ -22,6 +22,7 @@ import uuid
 import yaml
 
 from image_service import generate_image_from_prompt
+from llm_service import get_tts_provider
 from .llm_adapter import WorkflowLLMAdapter
 
 # Import VideoStyle from separate module to avoid circular imports
@@ -189,6 +190,10 @@ class VideoCreatorWorkflow:
         video_style = VideoStyle(theme=selected_theme, width=width, height=height)
         if voice_name:
             video_style.voice_name = voice_name
+        else:
+            provider_voice = get_tts_provider(None).get("voice")
+            if isinstance(provider_voice, str) and provider_voice.strip():
+                video_style.voice_name = provider_voice.strip()
         return video_style
 
     async def __aenter__(self):
