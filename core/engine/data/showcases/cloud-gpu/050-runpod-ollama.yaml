@@ -39,6 +39,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links:
   - name: RunPod
     url: https://www.runpod.io/

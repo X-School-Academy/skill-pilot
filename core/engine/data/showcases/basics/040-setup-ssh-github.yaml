@@ -38,6 +38,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links:
   - name: GitHub SSH key settings
     url: https://github.com/settings/ssh/new

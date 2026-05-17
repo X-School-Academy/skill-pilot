@@ -38,6 +38,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links:
   - name: ComfyUI
     url: https://github.com/comfyanonymous/ComfyUI

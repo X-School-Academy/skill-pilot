@@ -37,6 +37,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links:
   - name: Model Context Protocol
     url: https://modelcontextprotocol.io

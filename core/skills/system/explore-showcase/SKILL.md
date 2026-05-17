@@ -87,6 +87,7 @@ Each showcase entry contains:
    - `in_mode`: `prod` (execute in the stable prod instance) or `dev` (execute in prod, monitor in dev WebUI for live-reload)
    - `directory`: where the files will be copied to from the showcase files folder `workspace/showcases/{showcase_slug_id}/` when use template
    - `terms`: technology terms users can explore afterwards
+   - `related`: optional related showcase list, using `{ slug, caption }` entries where `slug` is another showcase id and `caption` explains the connection
    - `video_prompt`: prompt used to generate the showcase video
    - `tutorial_prompt`: prompt used to generate the online interactive tutorial or video
    - `links[].prompt`: prompt used to generate interactive tutorials or videos
@@ -110,6 +111,7 @@ Key decisions to make for each showcase:
 - Write a clear, runnable `prompt` string. Reference files with `@path/to/file`.
 - Write a `goals` field as a markdown bullet list of expected outcomes.
 - Choose `terms` for technology concepts users can explore later.
+- Add `related` entries when another showcase is a natural next step or prerequisite; keep captions short and user-facing.
 - Write `video_prompt` and `tutorial_prompt` if you plan to generate media assets in step 2.
 
 Ask the user to review and approve `showcase.yaml` before continuing.

@@ -45,6 +45,7 @@ Supported sample fields:
 - `video_prompt`: optional prompt string used by the explore-showcase skill to generate a video for this showcase (not shown in UI)
 - `tutorial_prompt`: optional prompt string used by the explore-showcase skill to generate an online interactive tutorial (not shown in UI)
 - `terms`: optional string array of technology terms related to this showcase; users can click each term to learn more
+- `related`: optional array of `{ slug, caption }` entries where `slug` references another showcase `id` and `caption` explains why it is related
 - `links`: array of `{ name, url, prompt }` where `prompt` is optional and used by the explore-showcase skill to generate linked resource content (not shown in UI)
 - `popularity`: numeric score
 - `level`: numeric difficulty

@@ -38,6 +38,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links:
   - name: Discord Developer Portal
     url: https://discord.com/developers/applications

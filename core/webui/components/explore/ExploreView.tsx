@@ -39,6 +39,11 @@ interface ShowcaseLink {
   url: string;
 }
 
+interface ShowcaseRelated {
+  slug: string;
+  caption: string;
+}
+
 interface ShowcaseSample {
   id: string;
   title: string;
@@ -64,6 +69,7 @@ interface ShowcaseSample {
   tools: string[];
   files: string[];
   links: ShowcaseLink[];
+  related: ShowcaseRelated[];
   goals: string | null;
   terms: string[];
   popularity: number;
@@ -314,6 +320,15 @@ export default function ExploreView() {
       category: categoryName || selectedCategoryName || undefined,
       sample: sample.id,
     });
+  };
+
+  const openSampleBySlug = (slug: string) => {
+    const target = allSamples.find((sample) => sample.id === slug);
+    if (target) {
+      openSample(target, target.__category);
+      return;
+    }
+    updateQuery({ sample: slug });
   };
 
   const goBackFromSample = () => {
@@ -974,6 +989,39 @@ export default function ExploreView() {
                     </Badge>
                   ))}
                 </Group>
+              </>
+            )}
+
+            {sample.related.length > 0 && (
+              <>
+                <Divider my="md" />
+                <Text size="sm" weight={700} mb={10}>Related</Text>
+                <Stack spacing={8}>
+                  {sample.related.map((related) => (
+                    <button
+                      type="button"
+                      key={`${related.slug}-${related.caption}`}
+                      onClick={() => openSampleBySlug(related.slug)}
+                      style={{
+                        width: '100%',
+                        border: isDark ? `1px solid ${theme.colors.dark[4]}` : '1px solid #dbeafe',
+                        borderRadius: 10,
+                        background: isDark ? theme.colors.dark[6] : '#eff6ff',
+                        color: isDark ? theme.colors.blue[2] : '#1d4ed8',
+                        cursor: 'pointer',
+                        padding: '10px 12px',
+                        textAlign: 'left',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        lineHeight: 1.45,
+                        whiteSpace: 'normal',
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
+                      {related.caption}
+                    </button>
+                  ))}
+                </Stack>
               </>
             )}
 

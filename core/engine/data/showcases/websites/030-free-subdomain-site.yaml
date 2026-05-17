@@ -39,6 +39,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links:
   - name: is-a.dev registry
     url: https://www.is-a.dev/
