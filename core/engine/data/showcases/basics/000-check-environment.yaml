@@ -1,7 +1,7 @@
 id: basics-check-environment
 title: Check Environment
 description: Use the terminal skill to inspect system architecture and runtime so we know what's available before doing anything else.
-thumbnail: null
+thumbnail: /showcases/basics/basics-check-environment.png
 video: null
 tutorial: null
 request: null

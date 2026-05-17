@@ -1,7 +1,7 @@
 id: slides-lecture-summary-pdf
 title: Lecture Summary → PDF Deck
 description: Convert a markdown lecture summary into a PDF presentation deck via the `pdf` skill.
-thumbnail: null
+thumbnail: /showcases/slides/slides-lecture-summary-pdf.png
 video: null
 tutorial: null
 request: null

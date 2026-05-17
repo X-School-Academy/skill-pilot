@@ -1,7 +1,7 @@
 id: mcp-notes-server
 title: Notes MCP Server
 description: Build a small MCP server that exposes add/list/search-note tools, with a sample agent prompt that uses it.
-thumbnail: null
+thumbnail: /showcases/mcp-servers/mcp-notes-server.png
 video: null
 tutorial: null
 request: null

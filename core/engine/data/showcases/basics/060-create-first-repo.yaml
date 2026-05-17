@@ -1,7 +1,7 @@
 id: basics-create-first-repo
 title: Create First Repo
 description: Create a new GitHub repository (via browser or `gh`), set visibility and license, and push an initial README.
-thumbnail: null
+thumbnail: /showcases/basics/basics-create-first-repo.png
 video: null
 tutorial: null
 request: null

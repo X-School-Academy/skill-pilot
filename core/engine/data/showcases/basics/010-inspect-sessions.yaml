@@ -1,7 +1,7 @@
 id: basics-inspect-sessions
 title: Inspect Sessions
 description: List Skill Pilot processes and tmux sessions and flag any that are stale.
-thumbnail: null
+thumbnail: /showcases/basics/basics-inspect-sessions.png
 video: null
 tutorial: null
 request: null

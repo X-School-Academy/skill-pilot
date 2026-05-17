@@ -1,7 +1,7 @@
 id: mcp-configure-server
 title: Configure MCP Server
 description: Add an external MCP server to Skill Pilot and verify the tools are visible to agents.
-thumbnail: null
+thumbnail: /showcases/mcp-servers/mcp-configure-server.png
 video: null
 tutorial: null
 request: null

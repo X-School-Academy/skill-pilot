@@ -1,7 +1,7 @@
 id: platform-experimental-worktree
 title: Experimental Worktree
 description: Create a Git worktree for safe experimentation and explain why worktrees help.
-thumbnail: null
+thumbnail: /showcases/platform-dev/platform-experimental-worktree.png
 video: null
 tutorial: null
 request: null

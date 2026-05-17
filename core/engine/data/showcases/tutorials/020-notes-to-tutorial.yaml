@@ -1,7 +1,7 @@
 id: tutorials-notes-to-tutorial
 title: Notes → Tutorial
 description: Convert pasted lecture notes into a structured tutorial with prompts, quizzes, and self-check.
-thumbnail: null
+thumbnail: /showcases/tutorials/tutorials-notes-to-tutorial.png
 video: null
 tutorial: null
 request: null

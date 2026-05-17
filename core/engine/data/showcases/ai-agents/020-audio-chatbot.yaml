@@ -1,7 +1,7 @@
 id: ai-agents-audio-chatbot
 title: Audio Chatbot
 description: Voice-in, voice-out conversational chatbot using STT + LLM + TTS.
-thumbnail: null
+thumbnail: /showcases/ai-agents/ai-agents-audio-chatbot.png
 video: null
 tutorial: null
 request: null

@@ -1,7 +1,7 @@
 id: media-lip-sync-video
 title: Lip-Sync a Video
 description: Sync an existing video's mouth motion to a provided audio track.
-thumbnail: null
+thumbnail: /showcases/media-generation/media-lip-sync-video.png
 video: null
 tutorial: null
 request: null

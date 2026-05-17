@@ -1,7 +1,7 @@
 id: media-short-story-video
 title: Short Story Video
 description: Generate a multi-scene short video with TTS narration and image transitions from a story prompt.
-thumbnail: null
+thumbnail: /showcases/media-generation/media-short-story-video.png
 video: null
 tutorial: null
 request: null

@@ -1,7 +1,7 @@
 id: agent-skills-browser-plus-llm
 title: Skill With Browser + LLM
 description: Compose browser automation and LLM reasoning in one skill — fetch a page, extract structured data, summarize.
-thumbnail: null
+thumbnail: /showcases/agent-skills/agent-skills-browser-plus-llm.png
 video: null
 tutorial: null
 request: null

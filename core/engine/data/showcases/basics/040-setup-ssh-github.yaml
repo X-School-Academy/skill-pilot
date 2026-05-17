@@ -1,7 +1,7 @@
 id: basics-setup-ssh-github
 title: Set Up SSH for GitHub
 description: Generate an SSH key, add it to GitHub, and verify the connection works.
-thumbnail: null
+thumbnail: /showcases/basics/basics-setup-ssh-github.png
 video: null
 tutorial: null
 request: null

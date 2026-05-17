@@ -1,7 +1,7 @@
 id: games-racing-game
 title: Racing Game
 description: Remake a 3D racing game with three.js, referencing pmndrs/racing-game.
-thumbnail: null
+thumbnail: /showcases/games/games-racing-game.png
 video: null
 tutorial: null
 request: null

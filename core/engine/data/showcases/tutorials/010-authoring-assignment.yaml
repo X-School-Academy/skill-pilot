@@ -1,7 +1,7 @@
 id: tutorials-authoring-assignment
 title: Authoring Assignment
 description: Generate a structured assignment markdown with explanation, Ask-AI prompts, and a submit step.
-thumbnail: null
+thumbnail: /showcases/tutorials/tutorials-authoring-assignment.png
 video: null
 tutorial: null
 request: null

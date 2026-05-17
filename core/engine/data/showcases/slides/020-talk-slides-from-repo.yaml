@@ -1,7 +1,7 @@
 id: slides-talk-slides-from-repo
 title: Talk Slides From Repo
 description: Generate a tech talk deck that summarizes a GitHub repository.
-thumbnail: null
+thumbnail: /showcases/slides/slides-talk-slides-from-repo.png
 video: null
 tutorial: null
 request: null

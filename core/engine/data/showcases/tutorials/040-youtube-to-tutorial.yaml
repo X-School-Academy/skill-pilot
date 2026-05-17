@@ -1,7 +1,7 @@
 id: tutorials-youtube-to-tutorial
 title: YouTube → Tutorial
 description: Convert a YouTube video into a structured tutorial using captions or transcribed audio.
-thumbnail: null
+thumbnail: /showcases/tutorials/tutorials-youtube-to-tutorial.png
 video: null
 tutorial: null
 request: null

@@ -1,7 +1,7 @@
 id: browser-schedule-gmail-skill
 title: Schedule Gmail Skill
 description: Schedule the `check-gmail-daily` skill to run at 8am local time and show how to disable it.
-thumbnail: null
+thumbnail: /showcases/browser-tasks/browser-schedule-gmail-skill.png
 video: null
 tutorial: null
 request: null

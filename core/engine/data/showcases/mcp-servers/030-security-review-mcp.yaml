@@ -1,7 +1,7 @@
 id: mcp-security-review
 title: Security Review of MCP
 description: Audit an MCP server for path traversal, secret leakage, and unsafe execution.
-thumbnail: null
+thumbnail: /showcases/mcp-servers/mcp-security-review.png
 video: null
 tutorial: null
 request: null

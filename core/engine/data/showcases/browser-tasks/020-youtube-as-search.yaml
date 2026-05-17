@@ -1,7 +1,7 @@
 id: browser-youtube-as-search
 title: YouTube as Search
 description: Find a specific knowledge point inside a YouTube video and record a short demo with audio.
-thumbnail: null
+thumbnail: /showcases/browser-tasks/browser-youtube-as-search.png
 video: null
 tutorial: null
 request: null

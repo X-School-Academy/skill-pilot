@@ -1,7 +1,7 @@
 id: media-burn-in-captions
 title: Burn-In Captions
 description: Auto-transcribe a video and burn captions into the frames via FFmpeg.
-thumbnail: null
+thumbnail: /showcases/media-generation/media-burn-in-captions.png
 video: null
 tutorial: null
 request: null

@@ -1,7 +1,7 @@
 id: agent-skills-install-third-party
 title: Install Third-Party Skill
 description: Install an agent skill from a Git URL, normalize it for Skill Pilot, and explain its license and structure.
-thumbnail: null
+thumbnail: /showcases/agent-skills/agent-skills-install-third-party.png
 video: null
 tutorial: null
 request: null

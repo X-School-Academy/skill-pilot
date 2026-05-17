@@ -1,7 +1,7 @@
 id: websites-github-action-email
 title: GitHub Action → Email
 description: On every new GitHub issue, send an email via a Gmail app password stored in repo secrets.
-thumbnail: null
+thumbnail: /showcases/websites/websites-github-action-email.png
 video: null
 tutorial: null
 request: null

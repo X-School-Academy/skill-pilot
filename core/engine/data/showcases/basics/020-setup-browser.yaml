@@ -1,7 +1,7 @@
 id: basics-setup-browser
 title: Set Up Browser
 description: Configure browser automation and verify it works by opening a trusted page and capturing a screenshot.
-thumbnail: null
+thumbnail: /showcases/basics/basics-setup-browser.png
 video: null
 tutorial: null
 request: null
