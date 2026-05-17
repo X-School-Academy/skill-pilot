@@ -12,7 +12,6 @@ import {
   Group,
   Loader,
   Modal,
-  ScrollArea,
   Stack,
   Text,
   Tooltip,
@@ -44,6 +43,11 @@ interface ShowcaseRelated {
   caption: string;
 }
 
+interface ShowcaseResolvedItem {
+  label: string;
+  path: string | null;
+}
+
 interface ShowcaseSample {
   id: string;
   title: string;
@@ -65,9 +69,12 @@ interface ShowcaseSample {
   git_tag: string | null;
   use_worktree: boolean;
   skills: string[];
+  skill_items?: ShowcaseResolvedItem[];
   extensions: string[];
   tools: string[];
+  tool_items?: ShowcaseResolvedItem[];
   files: string[];
+  file_items?: ShowcaseResolvedItem[];
   links: ShowcaseLink[];
   related: ShowcaseRelated[];
   goals: string | null;
@@ -207,7 +214,6 @@ export default function ExploreView() {
   const [templateMonitorLaunchId, setTemplateMonitorLaunchId] = useState('');
   const [templateMonitorReady, setTemplateMonitorReady] = useState(false);
   const [templateMonitorStatus, setTemplateMonitorStatus] = useState('');
-  const [fileModal, setFileModal] = useState<{ path: string; name: string; content: string | null; loading: boolean; error: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -285,7 +291,7 @@ export default function ExploreView() {
     return base;
   }, [allSamples, mode]);
 
-  const updateQuery = (patch: Record<string, string | undefined>) => {
+  const updateQuery = (patch: Record<string, string | undefined>, options?: { history?: 'replace' | 'push' }) => {
     const nextQuery: Record<string, string> = {};
     const current = router.query;
     Object.entries(current).forEach(([key, value]) => {
@@ -299,7 +305,12 @@ export default function ExploreView() {
         nextQuery[key] = value;
       }
     });
-    void router.replace({ pathname: '/', query: nextQuery }, undefined, { shallow: true });
+    const nextRoute = { pathname: '/', query: nextQuery };
+    if (options?.history === 'push') {
+      void router.push(nextRoute, undefined, { shallow: true });
+      return;
+    }
+    void router.replace(nextRoute, undefined, { shallow: true });
   };
 
   const openMode = (nextMode: ExploreMode) => {
@@ -325,10 +336,14 @@ export default function ExploreView() {
   const openSampleBySlug = (slug: string) => {
     const target = allSamples.find((sample) => sample.id === slug);
     if (target) {
-      openSample(target, target.__category);
+      updateQuery({
+        explore_mode: mode === 'category' ? 'category' : mode,
+        category: target.__category || selectedCategoryName || undefined,
+        sample: target.id,
+      }, { history: 'push' });
       return;
     }
-    updateQuery({ sample: slug });
+    updateQuery({ sample: slug }, { history: 'push' });
   };
 
   const goBackFromSample = () => {
@@ -347,18 +362,6 @@ export default function ExploreView() {
 
   const openMedia = (url: string, title: string, type: 'image' | 'video' | 'audio') => {
     setMediaModal({ url, title, type });
-  };
-
-  const openFileContent = async (filePath: string) => {
-    const name = filePath.split('/').pop() || filePath;
-    setFileModal({ path: filePath, name, content: null, loading: true, error: '' });
-    try {
-      const normalizedPath = filePath.startsWith('/') ? filePath : `/${filePath}`;
-      const res = await axios.get(`${API_BASE_URL}/files/read`, { params: { path: normalizedPath } });
-      setFileModal((prev) => prev ? { ...prev, content: String(res.data?.content ?? ''), loading: false } : null);
-    } catch (err: any) {
-      setFileModal((prev) => prev ? { ...prev, content: null, loading: false, error: err?.response?.data?.error || 'Failed to load file.' } : null);
-    }
   };
 
   const maybeOpenTutorial = (sample: ShowcaseSample) => {
@@ -575,12 +578,61 @@ export default function ExploreView() {
     </ReactMarkdown>
   );
 
+  const renderResolvedItem = (item: ShowcaseResolvedItem, icon: React.ReactNode, displayLabel?: string) => {
+    const label = displayLabel || item.label;
+    if (item.path) {
+      return (
+        <Button
+          key={`${item.label}-${item.path}`}
+          variant="subtle"
+          compact
+          styles={{ inner: { justifyContent: 'flex-start' }, label: { textAlign: 'left' } }}
+          leftIcon={icon}
+          onClick={() => openFileManager(item.path as string)}
+        >
+          {label}
+        </Button>
+      );
+    }
+    return (
+      <Group
+        key={item.label}
+        spacing={8}
+        noWrap
+        style={{
+          minHeight: 30,
+          padding: '4px 10px',
+          color: isDark ? theme.colors.dark[2] : '#64748b',
+        }}
+      >
+        {icon}
+        <Text size="sm" style={{ flex: 1, minWidth: 0, lineHeight: 1.35, wordBreak: 'break-word' }}>{label}</Text>
+      </Group>
+    );
+  };
+
   const renderSampleActions = (sample: ShowcaseSample) => {
-    const pathGroups: Array<{ title: string; items: string[] }> = [
-      ...(sample.workflow ? [{ title: 'Workflow', items: [sample.workflow] }] : []),
-      ...(sample.directory ? [{ title: 'Directory', items: [sample.directory] }] : []),
-      ...(sample.skills.length > 0 ? [{ title: 'Skills', items: sample.skills }] : []),
-      ...(sample.tools.length > 0 ? [{ title: 'Tools', items: sample.tools }] : []),
+    const pathGroups: Array<{ title: string; items: ShowcaseResolvedItem[]; icon: React.ReactNode }> = [
+      ...(sample.workflow ? [{
+        title: 'Workflow',
+        items: [{ label: sample.workflow, path: null }],
+        icon: <IconFile size="0.9rem" />,
+      }] : []),
+      ...(sample.directory ? [{
+        title: 'Directory',
+        items: [{ label: sample.directory, path: null }],
+        icon: <IconFolderOpen size="0.9rem" />,
+      }] : []),
+      ...(sample.skills.length > 0 ? [{
+        title: 'Skills',
+        items: sample.skill_items || sample.skills.map((skill) => ({ label: skill, path: null })),
+        icon: <IconFolderOpen size="0.9rem" />,
+      }] : []),
+      ...(sample.tools.length > 0 ? [{
+        title: 'Tools',
+        items: sample.tool_items || sample.tools.map((tool) => ({ label: tool, path: null })),
+        icon: <IconFile size="0.9rem" />,
+      }] : []),
     ];
 
     return (
@@ -626,18 +678,7 @@ export default function ExploreView() {
           <div key={group.title} style={{ padding: 18, borderRadius: 18, border: cardBorder, background: cardBg }}>
             <Text size="sm" weight={700} mb={10}>{group.title}</Text>
             <Stack spacing={6}>
-              {group.items.map((item) => (
-                <Button
-                  key={item}
-                  variant="subtle"
-                  compact
-                  styles={{ inner: { justifyContent: 'flex-start' } }}
-                  leftIcon={<IconFolderOpen size="0.9rem" />}
-                  onClick={() => openFileManager(item)}
-                >
-                  {item}
-                </Button>
-              ))}
+              {group.items.map((item) => renderResolvedItem(item, group.icon))}
             </Stack>
           </div>
         ))}
@@ -646,20 +687,9 @@ export default function ExploreView() {
           <div style={{ padding: 18, borderRadius: 18, border: cardBorder, background: cardBg }}>
             <Text size="sm" weight={700} mb={10}>Files</Text>
             <Stack spacing={6}>
-              {sample.files.map((filePath) => {
-                const fileName = filePath.split('/').pop() || filePath;
-                return (
-                  <Button
-                    key={filePath}
-                    variant="subtle"
-                    compact
-                    styles={{ inner: { justifyContent: 'flex-start' } }}
-                    leftIcon={<IconFile size="0.9rem" />}
-                    onClick={() => void openFileContent(filePath)}
-                  >
-                    {fileName}
-                  </Button>
-                );
+              {(sample.file_items || sample.files.map((filePath) => ({ label: filePath, path: null }))).map((item) => {
+                const fileName = item.label.split('/').pop() || item.label;
+                return renderResolvedItem(item, <IconFile size="0.9rem" />, fileName);
               })}
             </Stack>
           </div>
@@ -670,19 +700,21 @@ export default function ExploreView() {
             <Text size="sm" weight={700} mb={10}>Extensions</Text>
             <Stack spacing={6}>
               {sample.extensions.map((ext) => {
-                const extPath = ext.startsWith('extensions/') ? ext : `extensions/${ext}`;
                 const extName = ext.replace(/^extensions\//, '');
                 return (
-                  <Button
+                  <Group
                     key={ext}
-                    variant="subtle"
-                    compact
-                    styles={{ inner: { justifyContent: 'flex-start' } }}
-                    leftIcon={<IconFolderOpen size="0.9rem" />}
-                    onClick={() => openFileManager(extPath)}
+                    spacing={8}
+                    noWrap
+                    style={{
+                      minHeight: 30,
+                      padding: '4px 10px',
+                      color: isDark ? theme.colors.dark[2] : '#64748b',
+                    }}
                   >
-                    {extName}
-                  </Button>
+                    <IconFolderOpen size="0.9rem" />
+                    <Text size="sm" style={{ flex: 1, minWidth: 0, lineHeight: 1.35, wordBreak: 'break-word' }}>{extName}</Text>
+                  </Group>
                 );
               })}
             </Stack>
@@ -966,7 +998,7 @@ export default function ExploreView() {
             {sample.terms.length > 0 && (
               <>
                 <Divider my="md" />
-                <Text size="sm" weight={700} mb={10}>Keywords</Text>
+                <Text size="sm" weight={700} mb={10}>Terms</Text>
                 <Group spacing={8}>
                   {sample.terms.map((term) => (
                     <Badge
@@ -1429,43 +1461,6 @@ export default function ExploreView() {
         )}
       </Modal>
 
-      <Modal
-        opened={Boolean(fileModal)}
-        onClose={() => setFileModal(null)}
-        size="xl"
-        centered
-        title={fileModal?.name || 'File'}
-      >
-        {fileModal?.loading && (
-          <Group spacing="xs" style={{ padding: 16 }}>
-            <Loader size="sm" />
-            <Text size="sm" color="dimmed">Loading file...</Text>
-          </Group>
-        )}
-        {fileModal?.error && (
-          <Text color="red" size="sm" style={{ padding: 16 }}>{fileModal.error}</Text>
-        )}
-        {fileModal?.content != null && (
-          <ScrollArea style={{ maxHeight: '70vh' }}>
-            <pre
-              style={{
-                margin: 0,
-                padding: 16,
-                fontSize: 13,
-                lineHeight: 1.6,
-                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-                background: isDark ? theme.colors.dark[8] : '#f8fafc',
-                borderRadius: 8,
-                color: isDark ? theme.colors.dark[0] : '#1e293b',
-              }}
-            >
-              {fileModal.content}
-            </pre>
-          </ScrollArea>
-        )}
-      </Modal>
     </>
   );
 }

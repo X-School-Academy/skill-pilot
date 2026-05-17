@@ -1,0 +1,53 @@
+id: media-html-playwright-image
+title: Create Image with HTML and Playwright
+description: Render a precise social image or story card from HTML/CSS using a browser screenshot pipeline.
+thumbnail: /showcases/media-generation/media-html-playwright-image.png
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my browser-rendered image producer.
+
+  Goal: Create a polished PNG at `.skillpilot/temp/html-image/output.png` from
+  an HTML/CSS layout rendered in Playwright.
+
+  Steps:
+  1. Ask me for the image purpose, size, copy, and visual style.
+  2. Build a single HTML file with responsive CSS under `.skillpilot/temp/html-image/`.
+  3. Use Playwright to render the page at the target viewport and capture a PNG.
+  4. Inspect the screenshot for clipped text, overlap, and wrong sizing; iterate once if needed.
+  5. Report the PNG path and the exact viewport used.
+
+  Constraints:
+  - Do not use remote assets unless I explicitly provide trusted URLs.
+  - Keep text selectable in HTML before screenshotting.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills:
+  - agent-browser
+tools:
+  - playwright
+  - core/bin/agent-browser
+files: []
+goals: |
+  - Generate a browser-rendered PNG from editable HTML and CSS.
+  - Learn when screenshots are better than image-generation for exact text layouts.
+terms:
+  - HTML
+  - CSS
+  - Playwright
+  - screenshot
+  - viewport
+  - png
+related:
+  - slug: media-kids-audio-book-video
+    caption: Use browser-rendered cards as scenes in an audio-book video.
+  - slug: agent-skills-create-video-with-html
+    caption: Turn the same browser rendering idea into a video skill.
+links: []
+popularity: 70
+level: 3
+rate: 4.4

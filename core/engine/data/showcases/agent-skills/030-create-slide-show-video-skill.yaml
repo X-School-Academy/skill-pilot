@@ -1,0 +1,53 @@
+id: agent-skills-create-slide-show-video
+title: Create a Slide Show Video Skill
+description: Package an image-and-audio slideshow pipeline as a reusable Skill Pilot agent skill.
+thumbnail: /showcases/agent-skills/agent-skills-create-slide-show-video.png
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my agent-skill builder.
+
+  Goal: Create an agent skill named `create-slide-show-video` that turns ordered
+  images and audio clips into a finished MP4.
+
+  Steps:
+  1. Draft the skill contract: inputs, output path, scene manifest, and constraints.
+  2. Scaffold the skill under `dev-swarm/skills/create-slide-show-video/`.
+  3. Include an FFmpeg-based implementation plan for pan/zoom, transitions,
+     audio sync, and H.264/AAC export.
+  4. Add a smoke test using generated placeholder images and short audio clips.
+  5. Document one example prompt for an audio-book video.
+
+  Constraints:
+  - Do not depend on copyrighted media.
+  - Keep temporary outputs under `.skillpilot/temp/`.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills:
+  - agent-skill
+tools:
+  - ffmpeg
+  - ffprobe
+files: []
+goals: |
+  - Create a reusable Skill Pilot skill for slideshow video production.
+  - Learn how to turn a repeated media workflow into an agent skill.
+terms:
+  - Agent Skill
+  - ffmpeg
+  - h264
+  - aac
+  - mp4
+related:
+  - slug: media-kids-audio-book-video
+    caption: Use this skill to compose the audio-book scenes.
+  - slug: agent-skills-create-video-with-html
+    caption: Compare FFmpeg slideshow and browser-rendered video skills.
+links: []
+popularity: 74
+level: 4
+rate: 4.5

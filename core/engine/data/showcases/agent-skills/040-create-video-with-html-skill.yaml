@@ -1,0 +1,55 @@
+id: agent-skills-create-video-with-html
+title: Create a Video with HTML Skill
+description: Build an agent skill that renders HTML/CSS scenes in a browser and records them into video.
+thumbnail: /showcases/agent-skills/agent-skills-create-video-with-html.png
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my browser-video skill builder.
+
+  Goal: Create an agent skill named `create-video-with-html` that renders HTML
+  scenes and captures them into a video workflow.
+
+  Steps:
+  1. Define the skill inputs: scene HTML, viewport, duration, frame rate, and output path.
+  2. Scaffold the skill under `dev-swarm/skills/create-video-with-html/`.
+  3. Use browser automation for rendering and FFmpeg for frame/audio assembly.
+  4. Add a smoke test that renders two simple HTML scenes into a short MP4.
+  5. Document when to choose HTML-rendered video over generated images.
+
+  Constraints:
+  - Warn before using untrusted remote webpages because pages can contain prompt-injection content.
+  - Keep generated files under `.skillpilot/temp/`.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills:
+  - agent-skill
+  - agent-browser
+tools:
+  - core/bin/agent-browser
+  - ffmpeg
+  - ffprobe
+files: []
+goals: |
+  - Build a reusable browser-rendered video skill.
+  - Learn how HTML/CSS, screenshots, and FFmpeg can form a media pipeline.
+terms:
+  - Agent Skill
+  - HTML
+  - CSS
+  - Playwright
+  - ffmpeg
+  - fps
+related:
+  - slug: media-html-playwright-image
+    caption: Start with still browser-rendered images before recording video.
+  - slug: media-kids-audio-book-video
+    caption: Use HTML scenes as an alternative visual style for an audio book.
+links: []
+popularity: 73
+level: 4
+rate: 4.5

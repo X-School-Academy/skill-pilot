@@ -917,6 +917,92 @@ def _normalize_showcase_link(item: Any) -> Dict[str, str]:
     return {"name": name, "url": url}
 
 
+def _repo_relative_if_inside(path: Path) -> str | None:
+    candidate = path.resolve()
+    if candidate != _REPO_ROOT and _REPO_ROOT not in candidate.parents:
+        return None
+    return candidate.relative_to(_REPO_ROOT).as_posix()
+
+
+def _resolve_showcase_skill_path(name: str) -> str | None:
+    value = str(name or "").strip().strip("/")
+    if not value:
+        return None
+    direct = (_REPO_ROOT / value).resolve()
+    if direct.is_dir():
+        rel = _repo_relative_if_inside(direct)
+        if rel and (rel.startswith("core/skills/") or rel.startswith("dev-swarm/skills/")):
+            return rel
+
+    skill_name = value.split("/")[-1]
+    for parent in (_REPO_ROOT / "core" / "skills").glob("*"):
+        candidate = parent / skill_name
+        if candidate.is_dir():
+            return candidate.relative_to(_REPO_ROOT).as_posix()
+    candidate = _REPO_ROOT / "dev-swarm" / "skills" / skill_name
+    if candidate.is_dir():
+        return candidate.relative_to(_REPO_ROOT).as_posix()
+    return None
+
+
+_SHOWCASE_TEXT_EXTENSIONS = {
+    ".bash",
+    ".cjs",
+    ".css",
+    ".cts",
+    ".dart",
+    ".go",
+    ".html",
+    ".ini",
+    ".java",
+    ".js",
+    ".json",
+    ".json5",
+    ".jsx",
+    ".kt",
+    ".md",
+    ".mjs",
+    ".mts",
+    ".php",
+    ".py",
+    ".rb",
+    ".rs",
+    ".sh",
+    ".sql",
+    ".swift",
+    ".toml",
+    ".ts",
+    ".tsx",
+    ".txt",
+    ".yaml",
+    ".yml",
+    ".zsh",
+}
+
+
+def _is_showcase_text_file(path: Path, rel_path: str) -> bool:
+    if not path.is_file():
+        return False
+    if rel_path.startswith("core/bin/"):
+        return True
+    return path.suffix.lower() in _SHOWCASE_TEXT_EXTENSIONS
+
+
+def _resolve_showcase_text_path(raw_path: str) -> str | None:
+    try:
+        rel_path = _normalize_repo_relative_path(raw_path)
+    except ValueError:
+        return None
+    candidate = (_REPO_ROOT / rel_path).resolve()
+    if not _is_showcase_text_file(candidate, rel_path):
+        return None
+    return rel_path
+
+
+def _showcase_item(label: str, path: str | None = None) -> Dict[str, str | None]:
+    return {"label": label, "path": path}
+
+
 def _normalize_showcase_related(item: Any) -> Dict[str, str]:
     if not isinstance(item, dict):
         raise ValueError("Showcase related entries must be objects")
@@ -984,6 +1070,9 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
     skills = _normalize_showcase_repo_paths(sample.get("skills"))
     tools = _normalize_showcase_repo_paths(sample.get("tools"))
     files = _normalize_showcase_repo_paths(sample.get("files"))
+    skill_items = [_showcase_item(skill, _resolve_showcase_skill_path(skill)) for skill in skills]
+    tool_items = [_showcase_item(tool, _resolve_showcase_text_path(tool)) for tool in tools]
+    file_items = [_showcase_item(file_path, _resolve_showcase_text_path(file_path)) for file_path in files]
     extensions = _normalize_showcase_extensions(sample.get("extensions"))
     links = [_normalize_showcase_link(item) for item in (sample.get("links") or [])]
     related = [_normalize_showcase_related(item) for item in (sample.get("related") or [])]
@@ -1030,9 +1119,12 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
         "git_tag": git_tag,
         "use_worktree": use_worktree,
         "skills": skills,
+        "skill_items": skill_items,
         "extensions": extensions,
         "tools": tools,
+        "tool_items": tool_items,
         "files": files,
+        "file_items": file_items,
         "links": links,
         "related": related,
         "goals": goals,

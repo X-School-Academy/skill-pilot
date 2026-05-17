@@ -39,7 +39,9 @@ in_mode: prod
 skills: []
 tools: []
 files: []
-related: []
+related:
+  - slug: media-kids-audio-book-video
+    caption: Apply multi-scene planning to a story-driven audio-book video.
 links: []
 popularity: 74
 level: 4

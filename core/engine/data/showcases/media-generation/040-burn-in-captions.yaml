@@ -35,7 +35,9 @@ in_mode: prod
 skills: []
 tools: []
 files: []
-related: []
+related:
+  - slug: media-kids-audio-book-video
+    caption: Add captions to a narrated audio-book video after rendering.
 links: []
 popularity: 76
 level: 3

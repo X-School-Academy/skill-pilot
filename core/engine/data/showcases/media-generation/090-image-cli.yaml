@@ -1,0 +1,52 @@
+id: media-image-cli
+title: Create an Image Generation Shell CLI
+description: Build a small shell command that generates PNG, JPG, or WebP images from prompts using gpt-image-2.
+thumbnail: /showcases/media-generation/media-image-cli.png
+video: null
+tutorial: null
+request: null
+prompt: |
+  Role: You are my image-generation CLI builder.
+
+  Goal: Create a local shell CLI that accepts a prompt and writes a generated
+  image using `gpt-image-2`.
+
+  Steps:
+  1. Design a command interface with prompt, output path, ratio, and format.
+  2. Implement the CLI under `.skillpilot/temp/image-cli/`.
+  3. Validate supported ratios and output extensions: PNG, JPG, and WebP.
+  4. Generate one sample image with `core/bin/create-image`.
+  5. Confirm the image dimensions and type with local inspection tools.
+
+  Constraints:
+  - Do not read secrets directly; use the available Skill Pilot image tooling.
+  - Keep generated files under `.skillpilot/temp/`.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills:
+  - create-image-audio
+tools:
+  - core/bin/create-image
+  - ffmpeg
+files: []
+goals: |
+  - Build a reusable prompt-to-image CLI.
+  - Learn how image ratio and file format affect generated media workflows.
+terms:
+  - png
+  - jpg
+  - webp
+  - gpt-image-2
+  - shell command
+related:
+  - slug: media-kids-audio-book-video
+    caption: Provides the generated scene images for the audio-book workflow.
+  - slug: media-tts-cli
+    caption: Combine generated images with narration audio.
+links: []
+popularity: 72
+level: 3
+rate: 4.4

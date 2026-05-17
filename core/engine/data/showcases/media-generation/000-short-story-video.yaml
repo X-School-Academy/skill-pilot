@@ -36,7 +36,9 @@ in_mode: prod
 skills: []
 tools: []
 files: []
-related: []
+related:
+  - slug: media-kids-audio-book-video
+    caption: Adapt the same generated-story pipeline for children's audio books.
 links: []
 popularity: 80
 level: 3
