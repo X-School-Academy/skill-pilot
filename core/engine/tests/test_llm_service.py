@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 import shutil
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -43,6 +44,45 @@ def test_llm_get_text():
     print(f"llm_get_text raw output:\n{result}")
 
     assert "The total number of a is:" in result
+
+
+def test_llm_get_text_ignores_stderr_logs_on_success():
+    provider = {"id": "skill-pilot", "bin": "skill-pilot-agent", "args": ["{{prompt}}"]}
+    completed = MagicMock(
+        returncode=0,
+        stdout="flowchart LR\n    A --> B\n",
+        stderr="[18/May/2026:08:19:41 +1000] INFO noisy runtime log\n",
+    )
+
+    with patch("llm_service.get_background_provider", return_value=provider), patch(
+        "llm_service.subprocess.run",
+        return_value=completed,
+    ):
+        result = llm_service.llm_get_text([{"role": "user", "content": "Return Mermaid code"}])
+
+    assert result == "flowchart LR\n    A --> B"
+    assert "18/May/2026" not in result
+
+
+def test_llm_get_text_raises_on_nonzero_even_with_stdout():
+    provider = {"id": "skill-pilot", "bin": "skill-pilot-agent", "args": ["{{prompt}}"]}
+    completed = MagicMock(
+        returncode=1,
+        stdout="flowchart LR\n    A --> B\n",
+        stderr="skill-pilot-agent error: failed\n",
+    )
+
+    with patch("llm_service.get_background_provider", return_value=provider), patch(
+        "llm_service.subprocess.run",
+        return_value=completed,
+    ):
+        try:
+            llm_service.llm_get_text([{"role": "user", "content": "Return Mermaid code"}])
+        except RuntimeError as exc:
+            assert "LLM command failed" in str(exc)
+            assert "skill-pilot-agent error: failed" in str(exc)
+        else:
+            raise AssertionError("Expected llm_get_text to raise on non-zero provider exit")
 
 
 def test_llm_get_tts():

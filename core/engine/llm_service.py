@@ -725,7 +725,9 @@ def llm_get_text(
     except FileNotFoundError as exc:
         raise RuntimeError(f"LLM command not found: {cmd[0]}") from exc
 
-    output = ((proc.stdout or "") + (proc.stderr or "")).strip()
+    stdout = (proc.stdout or "").strip()
+    stderr = (proc.stderr or "").strip()
+    output = "\n".join(part for part in (stdout, stderr) if part).strip()
     logger.info(
         "[llm] output client_id=%s provider_id=%s returncode=%s\n%s",
         client_id,
@@ -733,9 +735,11 @@ def llm_get_text(
         proc.returncode,
         output,
     )
-    parsed = _parse_stream_json_text(provider, output)
-    if proc.returncode not in (0, None) and not parsed:
+    if proc.returncode not in (0, None):
         raise RuntimeError(f"LLM command failed (provider={provider.get('id')}): {output}")
+
+    output_source = stdout or stderr
+    parsed = _parse_stream_json_text(provider, output_source)
     return parsed or output
 
 
