@@ -82,12 +82,18 @@ terms:
   - shell command
   - apt-get
   - brew
+  - bash
+  - bash script
+  - markdown
+  - yaml
+  - json
   - python
   - pip
   - uv
   - gpt-image-2
   - gpt-4o-mini-tts
   - gpt-5.5
+  - acc
 related:
   - slug: media-html-playwright-image
     caption: Render custom story-card images with browser automation.
@@ -101,7 +107,16 @@ related:
     caption: Package the slideshow pipeline as a reusable skill.
   - slug: agent-skills-create-video-with-html
     caption: Learn a browser-rendered video skill for richer scenes.
-links: []
+links:
+  - name: Bash, Bash script
+    url: /courses?course=showcases/bash-and-bash-script.md
+    prompt: Create an interactive course that teaches Bash commands and Bash scripts for repeatable AI media workflows.
+  - name: Python, pip vs uv
+    url: /courses?course=showcases/python-pip-vs-uv.md
+    prompt: Create an interactive course that teaches Python execution, pip package installation, and uv project-managed runs for agent tooling.
+  - name: markdown, yaml, json
+    url: /courses?course=showcases/markdown-yaml-json.md
+    prompt: Create an interactive course that teaches when to use Markdown, YAML, and JSON in AI-agent instructions and configuration.
 popularity: 78
 level: 3
 rate: 4.6

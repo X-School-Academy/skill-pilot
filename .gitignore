@@ -14,6 +14,8 @@ next-env.d.ts
 # local env files
 .env*.local
 
+core/webui/public/showcases/videos
+
 skillpilot-ssh-key.pub
 skillpilot-ssh-key
 
