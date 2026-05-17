@@ -579,8 +579,8 @@ export default function ExploreView() {
     const pathGroups: Array<{ title: string; items: string[] }> = [
       ...(sample.workflow ? [{ title: 'Workflow', items: [sample.workflow] }] : []),
       ...(sample.directory ? [{ title: 'Directory', items: [sample.directory] }] : []),
-      { title: 'Skills', items: sample.skills },
-      { title: 'Tools', items: sample.tools },
+      ...(sample.skills.length > 0 ? [{ title: 'Skills', items: sample.skills }] : []),
+      ...(sample.tools.length > 0 ? [{ title: 'Tools', items: sample.tools }] : []),
     ];
 
     return (
@@ -625,24 +625,20 @@ export default function ExploreView() {
         {pathGroups.map((group) => (
           <div key={group.title} style={{ padding: 18, borderRadius: 18, border: cardBorder, background: cardBg }}>
             <Text size="sm" weight={700} mb={10}>{group.title}</Text>
-            {group.items.length === 0 ? (
-              <Text size="xs" color="dimmed">None</Text>
-            ) : (
-              <Stack spacing={6}>
-                {group.items.map((item) => (
-                  <Button
-                    key={item}
-                    variant="subtle"
-                    compact
-                    styles={{ inner: { justifyContent: 'flex-start' } }}
-                    leftIcon={<IconFolderOpen size="0.9rem" />}
-                    onClick={() => openFileManager(item)}
-                  >
-                    {item}
-                  </Button>
-                ))}
-              </Stack>
-            )}
+            <Stack spacing={6}>
+              {group.items.map((item) => (
+                <Button
+                  key={item}
+                  variant="subtle"
+                  compact
+                  styles={{ inner: { justifyContent: 'flex-start' } }}
+                  leftIcon={<IconFolderOpen size="0.9rem" />}
+                  onClick={() => openFileManager(item)}
+                >
+                  {item}
+                </Button>
+              ))}
+            </Stack>
           </div>
         ))}
 
@@ -693,11 +689,9 @@ export default function ExploreView() {
           </div>
         )}
 
-        <div style={{ padding: 18, borderRadius: 18, border: cardBorder, background: cardBg }}>
-          <Text size="sm" weight={700} mb={10}>Links</Text>
-          {sample.links.length === 0 ? (
-            <Text size="xs" color="dimmed">None</Text>
-          ) : (
+        {sample.links.length > 0 && (
+          <div style={{ padding: 18, borderRadius: 18, border: cardBorder, background: cardBg }}>
+            <Text size="sm" weight={700} mb={10}>Links</Text>
             <Stack spacing={8}>
               {sample.links.map((link) => (
                 <Button
@@ -712,8 +706,8 @@ export default function ExploreView() {
                 </Button>
               ))}
             </Stack>
-          )}
-        </div>
+          </div>
+        )}
       </Stack>
     );
   };
