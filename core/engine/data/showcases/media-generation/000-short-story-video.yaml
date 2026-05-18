@@ -6,28 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my video producer.
+  Create a short narrated video from a story idea.
 
-  Input: a one-paragraph story idea I provide.
-
-  Goal: A finished MP4 at `.skillpilot/temp/story.mp4` (1080p, 30-90 seconds)
-  with narrated audio, scene images, and smooth transitions.
-
-  Steps:
-  1. Expand the idea into a 6-8 scene script. Each scene = 1 sentence narration +
-     1 image prompt. Show me the script for confirmation.
-  2. Generate one image per scene via the image-gen tool. Save under
-     `.skillpilot/temp/story/scenes/`.
-  3. Generate TTS for each narration line. Pick a consistent voice; tell me which.
-  4. Compose with FFmpeg: cross-fade transitions between images, narration on
-     audio track, optional ambient background music at -20dB.
-  5. Export 1080p MP4 (H.264 + AAC).
-  6. Show me the final duration, file size, and a single contact-sheet thumbnail.
-
-  Constraints:
-  - All assets generated locally; no copyrighted material.
-  - If image-gen quota fails, fall back to placeholder colored cards with the
-    scene text overlaid, and mark the project as draft.
+  Ask me for the story topic and desired tone, plan the scenes for review, then create a finished video with matching visuals, narration, and gentle motion. Save the project under `.skillpilot/temp/story-video/`.
 workflow: null
 directory: null
 git_tag: null

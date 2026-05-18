@@ -6,26 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my AI app engineer.
+  Create a local chatbot that can understand image attachments.
 
-  Goal: Extend the chatbot pattern: accept image attachments per turn, and
-  optionally speak the response via TTS to a wav file.
-
-  Steps:
-  1. Scaffold `.skillpilot/temp/multimodal-bot/`. Pick CLI or simple web UI;
-     justify the choice.
-  2. Per user turn:
-     - Optional `--image <path>` flag (or drag-drop in web UI).
-     - Encode the image and include it in the LLM message per SDK conventions.
-     - Stream the text response.
-     - If `--speak` is on, TTS the response and save to `out/<turn>.wav`; auto-play.
-  3. Validate images: max ~10MB; supported formats; resize down if huge.
-  4. Demo with one screenshot describing the image.
-  5. README covering setup, supported models, image limits, voice options.
-
-  Constraints:
-  - No silent downscaling; tell me if I'm rescaled.
-  - Apply prompt caching for the system prompt.
+  It should accept text and images in the same conversation, explain what it sees in uploaded images, keep conversation history, and include a short demo. Save the project under `.skillpilot/temp/multimodal-chatbot/`.
 workflow: null
 directory: null
 git_tag: null

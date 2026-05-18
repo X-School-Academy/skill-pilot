@@ -6,31 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my explainer-video director.
+  Create a multi-scene explainer video about a topic I provide.
 
-  Input: a topic + target audience + duration target (e.g., 90 seconds).
-
-  Goal: An MP4 at `.skillpilot/temp/explainer.mp4` covering the topic clearly,
-  with checkpoint state so a crash midway can resume without redoing finished work.
-
-  Steps:
-  1. Outline 6-10 scenes. Each has: narration line, visual description, on-screen
-     text. Show outline for confirmation.
-  2. State directory: `.skillpilot/temp/explainer/state.json` tracking which
-     scenes have generated audio, image, and rendered clip. Skip already-done
-     items on resume.
-  3. For each scene:
-     a. TTS narration → `scenes/<n>/audio.mp3`
-     b. Generate visual → `scenes/<n>/image.png`
-     c. Render scene clip with FFmpeg (Ken Burns pan if appropriate).
-     d. Update state.json.
-  4. Concatenate all scene clips; add intro card + outro card.
-  5. Export 1080p H.264 + AAC.
-  6. If interrupted, resuming the same prompt MUST pick up where state.json left off.
-
-  Constraints:
-  - Never re-generate a finished scene unless I pass `--force`.
-  - Per-scene runtime cap; on timeout mark the scene `failed` and continue.
+  Ask me for the topic, audience, tone, and target length, then plan the scenes for review and produce a finished video with clear narration and visuals. Save outputs under `.skillpilot/temp/explainer-video/`.
 workflow: null
 directory: null
 git_tag: null

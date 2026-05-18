@@ -6,32 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my codeware updater.
+  Update my user branch to the latest codeware.
 
-  Pre-req: working tree clean. If not, stop and ask me to commit or stash.
-
-  Goal: My user branch is updated to the latest codeware, with all pending
-  notices applied and explained.
-
-  Steps:
-  1. Run "Check Codeware Status" first; if not safe, stop.
-  2. `git fetch origin`.
-  3. Merge `origin/codeware` into the current branch (no fast-forward to keep a
-     clear merge commit).
-  4. If conflicts:
-     - List them.
-     - For each, propose the resolution that preserves user changes when
-       semantically compatible; otherwise ask me.
-  5. Apply pending notices:
-     - For each notice (config migration, breaking change), summarize and apply
-       the migration step.
-  6. Run the platform smoke test (`pnpm test` or equivalent).
-  7. Print a changelog of what came in.
-
-  Constraints:
-  - Never `--no-verify` or skip hooks.
-  - Never force-push.
-  - Major destructive actions require my confirmation.
+  First show me local changes and risks, then update safely, preserve my work, run a smoke test, and summarize any conflicts or follow-up actions.
 workflow: null
 directory: null
 git_tag: null

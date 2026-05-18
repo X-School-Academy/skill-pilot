@@ -6,26 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my GitHub CLI installer.
+  Install and authenticate the GitHub command-line app.
 
-  Goal: After you finish, `gh auth status` shows me logged in, and `gh repo list`
-  returns my repos.
-
-  Steps:
-  1. Detect the OS (macOS, Debian/Ubuntu, Fedora, Windows/WSL).
-  2. Recommend the canonical install path for that OS (brew, apt, dnf, winget) and
-     show me the exact one-line install command. Ask me to confirm before running.
-  3. After install, verify `gh --version`.
-  4. Run `gh auth login`. Walk me through the prompts:
-     - Choose GitHub.com
-     - Choose SSH (if my SSH is set up) or HTTPS otherwise
-     - Authenticate via browser
-  5. Verify with `gh auth status` and `gh repo list --limit 3`.
-
-  Constraints:
-  - Do not run installs without my confirmation.
-  - Do not store any token in plain files. Let `gh` manage its own credential store.
-  - If `gh` is already installed, skip step 2 and go straight to auth check.
+  Detect my operating system, guide the install if needed, complete authentication, verify that it works, and show a small successful account or repository check.
 workflow: null
 directory: null
 git_tag: null

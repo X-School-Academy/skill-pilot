@@ -6,38 +6,11 @@ video: /showcases/videos/media-kids-audio-book-video.mp4
 tutorial: null
 request: null
 prompt: |
-  Role: You are my children's audio-book producer.
+  Create a kids audio book video about the story of "The Tortoise and the Hare".
 
-  Story: The Tortoise and the Hare.
+  Make the story suitable for young children, with a warm narration style, gentle pacing, colorful storybook scenes, and a clear moral about patience and steady effort. Keep the adaptation original and avoid scary language.
 
-  Goal: Produce a kid-friendly audio-book video at `.skillpilot/temp/tortoise-hare-audio-book.mp4`
-  with generated illustrations, narrated audio, and gentle motion suitable for young children.
-
-  Skills to use:
-  - `create-slide-show-video` for planning scenes and composing the final audio-book video.
-  - `create-image-audio` for generated scene images and narration audio.
-
-  Steps:
-  1. Draft an age-appropriate 8-10 scene adaptation of The Tortoise and the Hare.
-     Keep the moral clear, avoid scary language, and use short narration lines.
-  2. Show me the scene list for approval. Each scene should include narration,
-     a visual prompt, estimated duration, and optional on-screen title text.
-  3. Generate one image per scene with `core/bin/create-image` using a consistent
-     children's storybook illustration style.
-  4. Generate narration audio with `core/bin/create-audio` using `gpt-4o-mini-tts`.
-     Use a warm, calm voice and keep file names aligned with the scene numbers.
-  5. Use FFmpeg to create a slideshow video with gentle zoom/pan movement, clean
-     audio sync, and H.264/AAC output compatible with common players.
-  6. Run `ffprobe` on the final MP4 and report duration, resolution, bitrate,
-     codec details, and the output path.
-  7. Save the project files under `.skillpilot/temp/tortoise-hare-audio-book/`
-     so the video can be revised later.
-
-  Constraints:
-  - Keep all story text original and public-domain safe.
-  - Do not use remote copyrighted images, music, or voices.
-  - If generation fails for any scene, create a simple fallback card and clearly
-    mark the video as a draft.
+  Before creating the final video, show me the planned scenes so I can review the story flow. Save the finished video and the reusable project files under `.skillpilot/temp/tortoise-hare-audio-book/`.
 workflow: null
 directory: null
 git_tag: null

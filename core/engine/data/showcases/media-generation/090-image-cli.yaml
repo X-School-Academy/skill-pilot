@@ -6,21 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my image-generation CLI builder.
+  Create a small local command that turns a text prompt into an image file.
 
-  Goal: Create a local shell CLI that accepts a prompt and writes a generated
-  image using `gpt-image-2`.
-
-  Steps:
-  1. Design a command interface with prompt, output path, ratio, and format.
-  2. Implement the CLI under `.skillpilot/temp/image-cli/`.
-  3. Validate supported ratios and output extensions: PNG, JPG, and WebP.
-  4. Generate one sample image with `core/bin/create-image`.
-  5. Confirm the image dimensions and type with local inspection tools.
-
-  Constraints:
-  - Do not read secrets directly; use the available Skill Pilot image tooling.
-  - Keep generated files under `.skillpilot/temp/`.
+  It should support a simple way to choose the prompt, output path, image ratio, and image format. Include helpful validation, generate one sample image, and print clear usage examples. Save the command and sample output under `.skillpilot/temp/image-cli/`.
 workflow: null
 directory: null
 git_tag: null

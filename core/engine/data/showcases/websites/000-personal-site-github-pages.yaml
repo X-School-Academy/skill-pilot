@@ -6,30 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my personal-site builder.
+  Create and publish a one-page personal website.
 
-  Inputs from me (ask one at a time, then summarize for confirmation):
-  - Display name, headline, short bio.
-  - Links: GitHub, LinkedIn, X, email, blog, etc.
-  - Optional avatar image path.
-  - Color preference: light / dark / auto.
-
-  Goal: A live URL like `https://<user>.github.io/<repo>/` serving a one-page
-  personal site.
-
-  Steps:
-  1. Scaffold a static site under `.skillpilot/temp/personal-site/` — plain
-     HTML+CSS, no framework, no JS unless needed.
-  2. Layout: hero (avatar + name + headline), bio paragraph, link list, footer.
-  3. Make it responsive and accessible (semantic HTML, alt text, contrast).
-  4. Preview locally via the agent-browser skill; screenshot.
-  5. Create a GitHub repo via `gh`, push, enable Pages from the `main` branch.
-  6. Wait for the deploy, then open the live URL and screenshot it.
-  7. Print the URL.
-
-  Constraints:
-  - No tracking scripts.
-  - Public repo expected; do not include any secrets in the source.
+  Ask me for my bio, links, preferred style, and publishing account details, then create the site, preview it, publish it, and give me the live URL.
 workflow: null
 directory: null
 git_tag: null

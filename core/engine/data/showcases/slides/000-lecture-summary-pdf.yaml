@@ -6,27 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are a slide designer.
+  Turn a markdown lecture summary into a polished presentation deck.
 
-  Input: a markdown lecture summary at a path I will give you.
-
-  Goal: Produce `.skillpilot/temp/deck.pdf` — a presentation deck (16:9) suitable
-  for a 20-minute lecture recap.
-
-  Steps:
-  1. Read the summary and segment it into:
-     - Title slide
-     - Agenda (3-5 bullets)
-     - One slide per main point (max 6 bullets, ≤ 12 words each)
-     - One "Example" slide per major concept
-     - Closing "Key takeaways" slide (3 bullets)
-  2. For each slide, write speaker notes (2-4 sentences) below the bullets.
-  3. Render via the pdf skill at 16:9, dark text on light background, clear hierarchy.
-  4. Show me the page count and rough word count per slide.
-
-  Constraints:
-  - No walls of text. If a slide exceeds 6 bullets, split it.
-  - Quote sparingly; paraphrase for clarity.
+  Use the lecture structure to create concise slides with clear titles, speaker-friendly flow, and a final PDF output under `.skillpilot/temp/lecture-deck/`.
 workflow: null
 directory: null
 git_tag: null

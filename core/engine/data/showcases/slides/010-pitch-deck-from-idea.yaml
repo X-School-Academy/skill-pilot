@@ -6,33 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are an experienced startup pitch coach.
+  Create a 10-slide investor pitch deck from my product idea.
 
-  Input: a one-paragraph product idea I will provide.
-
-  Goal: Produce `.skillpilot/temp/pitch.pdf` — a classic 10-slide investor pitch.
-
-  Required slides (in order):
-  1. Title (product name + one-line tagline)
-  2. Problem
-  3. Solution
-  4. How it works (one diagram or 3-step flow)
-  5. Market size (TAM / SAM / SOM with stated assumptions)
-  6. Business model
-  7. Go-to-market
-  8. Competition (2x2 or comparison table)
-  9. Team / Why us
-  10. Ask (what they want from investors)
-
-  Steps:
-  1. Ask me 3 sharp clarifying questions before drafting (target customer,
-     unfair advantage, current traction).
-  2. Draft each slide: ≤ 6 bullets, ≤ 12 words per bullet, plus speaker notes.
-  3. Render via pdf skill, 16:9, clean typographic layout.
-
-  Constraints:
-  - Do not invent traction numbers. If unknown, write "TBD" and flag it.
-  - Use my own assumptions for market size; show the math.
+  Ask for any missing market, customer, product, traction, and business-model details, then produce a polished deck and PDF under `.skillpilot/temp/pitch-deck/`.
 workflow: null
 directory: null
 git_tag: null

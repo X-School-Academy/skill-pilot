@@ -6,27 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my caption editor.
+  Add readable burned-in captions to a video.
 
-  Input: a path to a video.
-
-  Goal: Produce `.skillpilot/temp/captioned.mp4` with hard-burned captions and
-  a sidecar `.srt` file.
-
-  Steps:
-  1. Extract audio (ffmpeg → wav) and transcribe with the available STT tool.
-  2. Generate an `.srt` with sensible line breaks (max ~42 chars/line, 2 lines).
-  3. Show me a 10-line preview of the SRT and ask for tweaks (timing, spelling).
-  4. Burn captions with FFmpeg (`subtitles=...:force_style=...`):
-     - Bottom-third position
-     - High-contrast (white text + black outline)
-     - Readable size scaled to video resolution
-  5. Export H.264 + AAC, preserve original resolution.
-  6. Save the SRT next to the MP4.
-
-  Constraints:
-  - Do not rewrite speech; transcribe verbatim. Note `[unclear]` where audio is
-    unintelligible rather than guessing.
+  Ask me for the video path first. Keep the captions faithful to the spoken words, use sensible line breaks, and show me a short caption preview before creating the final captioned video. Save the finished video and caption file under `.skillpilot/temp/`.
 workflow: null
 directory: null
 git_tag: null

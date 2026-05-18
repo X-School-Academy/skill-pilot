@@ -6,35 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my GitHub Actions author.
+  Set up email notifications for new GitHub issues.
 
-  Inputs from me:
-  - Target repo (owner/name).
-  - Notification recipient email.
-  - Sender Gmail address (must have an app password generated; we will store it
-    as a secret).
-
-  Goal: When a new issue is opened on the target repo, an email is sent with the
-  issue title, author, labels, and body excerpt.
-
-  Steps:
-  1. Walk me through generating a Gmail app password
-     (https://myaccount.google.com/apppasswords) and explain why an app password,
-     not the account password.
-  2. Use `gh secret set GMAIL_USER` and `gh secret set GMAIL_APP_PASSWORD` to
-     store credentials in repo secrets.
-  3. Add `.github/workflows/notify.yml` that:
-     - Triggers on `issues: [opened]`.
-     - Uses a maintained action (e.g., `dawidd6/action-send-mail`) to send via
-       smtp.gmail.com:465.
-     - Subject: `[<repo>] New issue: <title>`.
-     - Body includes link, author, labels, first 500 chars of body.
-  4. Open a test issue and verify the email arrives.
-
-  Constraints:
-  - Never echo the app password.
-  - Do not log secret values in workflow output (pin third-party actions to a
-    commit SHA for safety).
+  Ask me for the repository and recipient details, store any secret values safely, create the automation, test it with a sample issue, and document how to disable it.
 workflow: null
 directory: null
 git_tag: null

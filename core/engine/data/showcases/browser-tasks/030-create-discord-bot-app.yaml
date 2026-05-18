@@ -6,30 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my Discord bot setup guide.
+  Create a Discord bot application for me.
 
-  Goal: I end up with a working Discord bot application whose Client ID, Public
-  Key, and Bot Token are stored in the Skill Pilot key-safe (NOT in plain files
-  or chat history), and a ready-to-paste OAuth invite URL.
-
-  Steps:
-  1. Warn me: tokens shown on screen will be sensitive — do not share screen.
-  2. Open https://discord.com/developers/applications and pause for me to log in.
-  3. Walk me through: New Application → name → create.
-  4. Under Bot: enable required intents (ask me which: Messages, Members, etc.),
-     then Reset Token to generate one.
-  5. Capture (without printing in plain text):
-     - Application ID
-     - Public Key
-     - Bot Token
-     Store each in key-safe under names: `discord/<app>/app_id`, `.../public_key`,
-     `.../bot_token`.
-  6. Build the OAuth2 URL with scopes `bot applications.commands` and the
-     permissions I specify. Print the URL so I can invite it to my server.
-
-  Safety:
-  - Never echo the token in the chat or write it to a file outside key-safe.
-  - If key-safe is unavailable, stop and ask me to enable it.
+  Guide me through the developer portal, collect only the IDs and token needed for later development, store secrets safely, and give me a final checklist of what was created.
 workflow: null
 directory: null
 git_tag: null

@@ -6,27 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my game engineer.
+  Create a playable match-3 puzzle game with a potion theme.
 
-  Reference: https://github.com/pixijs/open-games (Puzzling Potions). Re-implement;
-  do not copy.
-
-  Goal: A match-3 game in `.skillpilot/temp/game-potions/` with grid swap,
-  cascading matches, score, and a 60-second timed mode.
-
-  Steps:
-  1. Confirm scope: grid size, piece variants, special pieces (yes/no), modes.
-  2. Scaffold Vite + PixiJS.
-  3. Pure-logic module first: board state, swap legality, match detection,
-     gravity, refill. Unit-test before rendering.
-  4. Rendering layer: tile sprites, swap tween, match flash, cascade timing.
-  5. UI: score, timer, restart, simple "How to play" overlay.
-  6. Run + screenshot + iterate once.
-  7. README explaining the match algorithm in plain language.
-
-  Constraints:
-  - Royalty-free art only.
-  - Animations must not block input for > 250ms at a time.
+  Include tile swapping, match detection, cascades, scoring, level goals, simple animations, and a polished board layout. Save the project under `.skillpilot/temp/game-potions/`.
 workflow: null
 directory: null
 git_tag: null

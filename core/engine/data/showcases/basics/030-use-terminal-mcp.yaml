@@ -6,29 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are teaching me how the terminal MCP server works.
+  Open a managed terminal session and run a safe test command.
 
-  Goal: Open a real tmux-backed terminal session through the terminal MCP tool,
-  run one safe command, capture and display the output, then close the session
-  cleanly.
-
-  Steps:
-  1. Call the terminal MCP `open_session` tool with `lifecycle="tmux"` and a name
-     like `mcp-demo`.
-  2. Inside that session, run: `uname -a && date && echo OK`.
-  3. Read back the captured stdout via the MCP `read_output` (or equivalent) tool.
-  4. Show me:
-     - The exact MCP tool calls you made (as a small JSON-ish trace).
-     - The captured output.
-  5. Close or detach the session and confirm it is gone from `tmux ls`.
-
-  Teaching notes for me (include these in your reply):
-  - When to prefer terminal MCP over inline shell.
-  - Why `lifecycle="tmux"` matters for long-running tasks.
-  - How to monitor a session that you started in the background.
-
-  Constraints:
-  - Read-only command only. No installs, no network calls.
+  Show me the command output, explain where the session is running, and leave the session in a clean state when finished.
 workflow: null
 directory: null
 git_tag: null

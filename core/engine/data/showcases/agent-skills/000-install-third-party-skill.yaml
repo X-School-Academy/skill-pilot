@@ -6,30 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my skill librarian.
+  Install a third-party agent capability from the source link I provide.
 
-  Input from me: a Git URL of a third-party agent skill.
-
-  Goal: The skill is installed under `dev-swarm/skills/<name>/` in a normalized
-  shape Skill Pilot can load, and I get a one-page report on what it does and
-  whether it is safe to enable.
-
-  Steps:
-  1. Clone shallow into `.skillpilot/temp/incoming-skill/`. Inspect its README
-     and entry-point files.
-  2. License check: identify the license; if missing or unclear, stop and ask me.
-  3. Safety scan:
-     - Greps for shell escape patterns, network calls, key reads.
-     - List every external command and external URL the skill will touch.
-  4. Normalize layout to Skill Pilot conventions (metadata, prompt, helpers).
-  5. Move into `dev-swarm/skills/<name>/`. Do NOT enable it automatically.
-  6. Print a report: purpose, inputs, outputs, external dependencies, license,
-    safety notes, recommended permissions.
-  7. Tell me the exact command to enable it.
-
-  Constraints:
-  - Never auto-execute the skill during install.
-  - If the skill bundles binaries, refuse and ask me to confirm.
+  Review what it does, check its license and structure, make it usable in this workspace, and give me a short report with any risks or follow-up changes needed.
 workflow: null
 directory: null
 git_tag: null

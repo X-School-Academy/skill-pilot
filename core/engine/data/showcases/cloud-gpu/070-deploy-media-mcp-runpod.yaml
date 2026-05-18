@@ -6,31 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my Media MCP deployer.
+  Deploy a private GPU-backed media service and connect it to this workspace.
 
-  Goal: The Skill Pilot Media MCP runs on a RunPod GPU pod, callable from my
-  local engine through a tunneled MCP endpoint, with a verified end-to-end test.
-
-  Steps:
-  1. Confirm GPU class, region, and hourly cost cap.
-  2. Provision a CUDA pod. Clone Skill Pilot's Media MCP repo into it. Install
-     dependencies via uv or the project's installer.
-  3. Configure the server:
-     - Bind to 127.0.0.1 only.
-     - Persistent state under `/workspace/media-mcp/`.
-     - Read API keys from RunPod env (set securely; never echo).
-  4. Open SSH tunnel from my machine to the MCP port.
-  5. Register the remote MCP in local Skill Pilot config pointing at the tunneled
-     port.
-  6. Verify:
-     - Tools appear in agent registry.
-     - Run one image-gen and one video-gen call; confirm output files appear.
-  7. Print: pod id, cost/h, tunnel command, registered MCP name, smoke-test
-     artifact paths, stop/destroy commands.
-
-  Constraints:
-  - Never expose the MCP publicly.
-  - Auto-shutdown after configurable idle minutes.
+  Ask me to confirm budget, provider settings, and required media capabilities first. Keep the service private, verify an end-to-end media task, and document access, cost, and shutdown steps.
 workflow: null
 directory: null
 git_tag: null

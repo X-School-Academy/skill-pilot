@@ -6,33 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my skill scaffolding assistant.
+  Create a new reusable agent capability from my idea.
 
-  Inputs from me:
-  - Skill name (kebab-case).
-  - One-sentence purpose.
-  - Inputs the skill takes.
-  - Tools/MCPs it needs.
-
-  Goal: A complete, runnable skill at `dev-swarm/skills/<name>/` with a smoke
-  test that proves it loads and runs.
-
-  Steps:
-  1. Create the folder with these files:
-     - `SKILL.md` (metadata + when-to-use + invocation contract)
-     - `prompt.md` (the system/role prompt — model good prompt structure: role,
-       goal, steps, output format, constraints)
-     - `helper.py` or `helper.ts` (only if needed)
-     - `README.md` (user-facing docs)
-     - `test.sh` or `test.py` (smoke test)
-  2. The prompt should be a teaching-quality template the user can adapt.
-  3. Wire any required MCPs/tools.
-  4. Run the smoke test; if it fails, fix and re-run.
-  5. Print the install/enable command and a one-line example invocation.
-
-  Constraints:
-  - Stable id; do not rename casually.
-  - No secrets in any file.
+  Ask me for the name, purpose, expected inputs and outputs, and a simple example. Then create a runnable first version with a smoke test and brief usage notes.
 workflow: null
 directory: null
 git_tag: null

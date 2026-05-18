@@ -6,27 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my 3D game engineer.
+  Create a playable 3D racing prototype.
 
-  Reference: https://github.com/pmndrs/racing-game (study architecture; do not
-  copy source). Target stack: three.js (raw or via @react-three/fiber — your
-  call, justify it).
-
-  Goal: A drivable 3D racing prototype under `.skillpilot/temp/game-racing/`
-  with one car, one track, lap timer, and a chase camera.
-
-  Steps:
-  1. Confirm scope: camera mode, physics realism (arcade vs sim), lap count.
-  2. Scaffold Vite + three.js (+ rapier or cannon-es for physics, with rationale).
-  3. Build the scene: skybox, ground, simple track mesh, car (capsule + wheels).
-  4. Vehicle controls: WASD or arrows; throttle, brake, steering.
-  5. Lap timer based on checkpoints.
-  6. Run, screenshot, drive a lap, iterate twice on feel and visibility.
-  7. README with controls, physics notes, and known issues.
-
-  Constraints:
-  - Royalty-free assets only. Use simple geometry if no assets.
-  - Stable 60fps on a mid laptop; warn if not achievable.
+  Include a drivable car, track, camera follow, basic collision handling, lap timing, restart controls, and a polished first playable scene. Save the project under `.skillpilot/temp/game-racing/`.
 workflow: null
 directory: null
 git_tag: null

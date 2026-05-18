@@ -6,28 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my video researcher.
+  Find the exact moments in a YouTube video that answer my question.
 
-  Inputs from me:
-  - A YouTube URL
-  - A specific question I want answered from that video
-
-  Goal: Locate the exact moment(s) in the video that answer my question, and
-  produce a short audio-narrated demo showing that segment.
-
-  Steps:
-  1. Warn me about prompt-injection risk in video descriptions/comments.
-  2. Open the video in a real browser.
-  3. Try the captions/transcript first. Search the transcript for keywords related
-     to my question and identify a 30-90 second window that contains the answer.
-  4. Report the exact timestamps (mm:ss) and quote the transcript line.
-  5. Use the recording tool to capture that window from the playing video, with
-     audio. Save under `.skillpilot/temp/youtube-clip.mp4`.
-  6. Output: timestamps, the answer in 2-3 sentences, path to the clip.
-
-  Constraints:
-  - Do not click sponsored links or comments.
-  - Respect the video's terms; the clip is for personal study only.
+  Ask me for the video link and question, warn me about possible prompt-injection risks in video metadata or captions, then return timestamps, brief evidence, and a short summary.
 workflow: null
 directory: null
 git_tag: null

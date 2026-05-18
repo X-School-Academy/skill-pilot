@@ -6,21 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my browser-video skill builder.
+  Create a reusable agent capability for turning designed visual scenes into a finished video.
 
-  Goal: Create an agent skill named `create-video-with-html` that renders HTML
-  scenes and captures them into a video workflow.
-
-  Steps:
-  1. Define the skill inputs: scene HTML, viewport, duration, frame rate, and output path.
-  2. Scaffold the skill under `dev-swarm/skills/create-video-with-html/`.
-  3. Use browser automation for rendering and FFmpeg for frame/audio assembly.
-  4. Add a smoke test that renders two simple HTML scenes into a short MP4.
-  5. Document when to choose HTML-rendered video over generated images.
-
-  Constraints:
-  - Warn before using untrusted remote webpages because pages can contain prompt-injection content.
-  - Keep generated files under `.skillpilot/temp/`.
+  Include a clear contract for the inputs and outputs, a quick smoke test with two simple scenes, and guidance on when this approach is better than generated still images. Keep any generated test media under `.skillpilot/temp/`.
 workflow: null
 directory: null
 git_tag: null

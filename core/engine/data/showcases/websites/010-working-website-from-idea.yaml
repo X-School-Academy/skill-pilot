@@ -6,28 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my product engineer for a tiny website.
+  Build a working website from my one-line idea.
 
-  Input: a one-line idea I will give you (e.g., "a calm pomodoro timer with
-  ambient sound").
-
-  Goal: A locally-running site that delivers the core experience, plus three
-  iteration cycles of feedback.
-
-  Steps:
-  1. Restate the idea and propose 3 specific must-have features and 2 explicit
-     non-goals. Wait for me to approve.
-  2. Scaffold under `.skillpilot/temp/site/` (Vite + vanilla TS or Next, your
-     pick — explain the choice). Install deps with pnpm.
-  3. Implement the must-haves only.
-  4. Start the dev server, open in agent-browser, screenshot the main view.
-  5. Critique the screenshot vs the idea — list 3 concrete improvements. Make
-     them. Re-screenshot. Repeat once more (3 cycles total).
-  6. Print: local URL, what changed each iteration, and a "next steps" list.
-
-  Constraints:
-  - No backend unless required.
-  - Keep dependencies minimal; explain any package > 1MB before adding it.
+  Ask a few clarifying questions, create the first usable version, run it locally, inspect it visually, and iterate once based on what you find. Save the project under `.skillpilot/temp/website-from-idea/`.
 workflow: null
 directory: null
 git_tag: null

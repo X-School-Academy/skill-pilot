@@ -6,28 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my game engineer.
+  Create a playable bubble-shooter arcade game inspired by classic fixed-screen arcade play.
 
-  Reference: https://github.com/pixijs/open-games (read the gameplay video / rules
-  for Bubbo Bubbo; you may inspect their architecture but write your own code).
-  Target stack: PixiJS.
-
-  Goal: A playable Bubbo Bubbo clone under `.skillpilot/temp/game-bubbo/` with
-  shoot mechanic, bubble matching, level progression, and game-over screen.
-
-  Steps:
-  1. Confirm scope with me: number of levels, win condition, scoring rules.
-  2. Scaffold Vite + PixiJS. Set up an asset pipeline for sprites + sounds.
-  3. Implement core systems separately: input, physics (simple), match-detection,
-     scoring, level loader.
-  4. Implement scenes: title, gameplay, pause, game-over.
-  5. Add basic SFX with WebAudio (tasteful — mute on by default).
-  6. Run, screenshot, iterate twice based on what looks off in the screenshots.
-  7. Write a short README with controls and how to add new levels.
-
-  Constraints:
-  - Use only royalty-free or self-made art. Note licenses in the README.
-  - Keep total bundle < 2MB.
+  Include player movement, bubble shooting, enemies, scoring, lives, levels, sound placeholders, and a polished game screen. Save the project under `.skillpilot/temp/game-bubbo/`.
 workflow: null
 directory: null
 git_tag: null

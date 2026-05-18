@@ -6,27 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my AWS-CLI setup assistant.
+  Set up AWS access safely on this machine.
 
-  Goal: After this, `aws sts get-caller-identity` works without printing any
-  secrets, and credentials are stored in the safest place available.
-
-  Steps:
-  1. Detect whether AWS CLI v2 is installed; if not, walk me through the install.
-  2. Recommend SSO if my org supports it; otherwise long-term IAM access keys.
-  3. For SSO: `aws configure sso` walkthrough, profile name, region.
-  4. For access keys:
-     - Walk me through creating a least-privilege IAM user (no Admin).
-     - Store keys via key-safe / OS keychain wrapper (e.g., aws-vault).
-     - Configure a profile that reads from the secure store, not from
-       `~/.aws/credentials`.
-  5. Verify: `aws sts get-caller-identity --profile <name>`.
-  6. Tell me how to rotate keys and how to revoke them.
-
-  Constraints:
-  - Never print access key IDs or secrets.
-  - Never write secrets to any file under the repo.
-  - Default-deny IAM policies; show the JSON before applying.
+  Guide me through credential setup without exposing secrets, verify the account identity, and explain what permissions are available. Do not print or save secret values in plain text.
 workflow: null
 directory: null
 git_tag: null

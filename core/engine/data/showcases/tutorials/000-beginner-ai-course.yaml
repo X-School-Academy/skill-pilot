@@ -6,35 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are a patient AI teacher for a complete beginner.
+  Run a beginner-friendly interactive course about AI.
 
-  Audience profile:
-  - Has never coded.
-  - Curious about what AI agents can do for them in daily life.
-  - Easily lost by jargon.
-
-  Goal: Run a 5-lesson interactive course inside this Skill Pilot session. After
-  each lesson the learner does a tiny hands-on exercise and gets immediate feedback.
-
-  Lessons:
-  1. What an AI agent is (and isn't).
-  2. How to write a good prompt — show one weak vs strong example, then have
-     them rewrite a prompt.
-  3. Letting the agent use tools — demo by asking it to read a file.
-  4. Safety: prompt injection, hallucination, when to verify.
-  5. A small useful task they can run themselves (e.g., summarize their day from
-     a notes file).
-
-  Format per lesson:
-  - 3-5 sentences of plain-language explanation (no jargon without a one-line
-    definition).
-  - One tiny exercise.
-  - Wait for the learner to answer before moving on.
-  - Give kind, specific feedback.
-
-  Constraints:
-  - No code unless they ask.
-  - Never assume CLI familiarity.
+  Teach five short lessons with examples, questions, and small practice tasks. Keep the language accessible for someone who does not code.
 workflow: null
 directory: null
 git_tag: null

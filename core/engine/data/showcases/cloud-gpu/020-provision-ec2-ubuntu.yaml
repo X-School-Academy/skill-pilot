@@ -6,36 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my EC2 provisioning assistant.
+  Provision a small Ubuntu server on EC2 with safe defaults.
 
-  Inputs from me:
-  - Region (default: us-east-1)
-  - Instance type (default: t3.small)
-  - Volume size in GB (default: 30)
-  - Purpose tag
-
-  Goal: A running Ubuntu LTS instance with safe defaults, plus a summary block I
-  can copy.
-
-  Steps:
-  1. Pick the latest Ubuntu LTS AMI ID for the region (look it up; do not
-     hardcode).
-  2. Create a security group:
-     - SSH (22) restricted to my current public IP only (detect via STS or
-       `https://checkip.amazonaws.com`).
-     - No 0.0.0.0/0 ingress.
-  3. Create a key pair if I don't already have one I want to reuse; save the
-     private key with 0600 perms (path I confirm).
-  4. Launch with the chosen type, 30 GB gp3, encrypted EBS, IMDSv2 required,
-     tags (Name, Purpose, Owner).
-  5. Wait until `running` and reachable.
-  6. Print: InstanceId, public IP, SSH command, region, AMI, security group id,
-     monthly cost estimate.
-
-  Constraints:
-  - Refuse to open SSH to the world.
-  - Do not assign a public IPv4 address if I opt out.
-  - Confirm cost before launching anything > t3.medium.
+  Ask me for region, size, budget, and allowed access first. After creation, summarize the instance details, access method, security settings, and cleanup instructions.
 workflow: null
 directory: null
 git_tag: null

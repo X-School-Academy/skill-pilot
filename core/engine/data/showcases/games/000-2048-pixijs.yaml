@@ -6,29 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my game engineer.
+  Create a playable 2048-style puzzle game.
 
-  Reference: https://github.com/gabrielecirulli/2048 (read the rules and CSS only;
-  do not copy code). Target stack: PixiJS.
-
-  Goal: A working 2048 game in `.skillpilot/temp/game-2048/` that runs locally
-  in the browser, has keyboard + swipe controls, scoring, win/lose detection,
-  and a restart button.
-
-  Steps:
-  1. Confirm rules with me in 4 bullets so we agree on edge cases (merging,
-     spawn rate, win condition at 2048, continue-after-win).
-  2. Scaffold a Vite + PixiJS project. Install only what's needed.
-  3. Implement game logic in a pure module (no Pixi imports) so it is testable.
-  4. Implement rendering: 4x4 grid, tile sprites, smooth slide+merge animations.
-  5. Add input: arrow keys, WASD, and swipe (touch).
-  6. Persist best score in localStorage.
-  7. Run dev server, open in agent-browser, play one round, screenshot.
-  8. Write 5 unit tests for the logic module.
-
-  Constraints:
-  - Do not vendor source from the reference repo. Re-implement.
-  - 60 fps target on a normal laptop.
+  Build the core tile movement, merging, scoring, win and game-over states, keyboard controls, and a polished visual layout. Save the project under `.skillpilot/temp/game-2048/`.
 workflow: null
 directory: null
 git_tag: null

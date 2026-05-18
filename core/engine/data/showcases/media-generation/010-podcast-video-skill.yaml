@@ -6,31 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my skill author for podcast production.
+  Create a reusable podcast video production capability.
 
-  Goal: Create an agent skill `make-podcast-video` that takes a script + show
-  metadata and produces:
-  1. Cover art image (1:1, e.g., 1500x1500).
-  2. Spoken-audio MP3 of the script via TTS.
-  3. A simple MP4 video (cover art + waveform + chapter titles), ready to upload.
-
-  Inputs the skill takes:
-  - script.md (with H2 chapters)
-  - show name, episode title, host name
-  - optional voice id
-
-  Steps:
-  1. Scaffold the skill: metadata, prompt, helpers under `.skillpilot/temp/`.
-  2. Implement: parse chapters, TTS each chapter and concatenate, generate cover
-     art, render video with FFmpeg (showwaves filter for waveform; drawtext for
-     chapter titles with timing).
-  3. Output structured: `out/cover.png`, `out/audio.mp3`, `out/video.mp4`.
-  4. Test on a 2-chapter sample script.
-  5. Document in skill README: inputs, outputs, runtime expectation, tuning knobs.
-
-  Constraints:
-  - Skill must be re-runnable; output dir cleaned per run.
-  - No copyrighted music.
+  It should turn a script and show title into cover art, narration, and a simple finished video. Include a quick test episode and brief usage notes.
 workflow: null
 directory: null
 git_tag: null

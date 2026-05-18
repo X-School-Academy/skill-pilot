@@ -6,25 +6,9 @@ video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my codeware restorer.
+  Restore my user branch back to official codeware.
 
-  Goal: Bring the user branch back to a clean codeware state. Preserve any local
-  work in a clearly named backup branch first.
-
-  Steps:
-  1. Show me everything that would be lost: `git status` + `git log codeware..HEAD`.
-  2. Ask for explicit confirmation to proceed. If no, stop.
-  3. Backup: create `backup/<branch>-<date>` pointing at the current HEAD; push to
-     origin if I have a remote.
-  4. Reset the working branch to `origin/codeware` (hard). Verify.
-  5. Run the platform smoke test.
-  6. Print: backup branch name, restore commit, test result.
-  7. Tell me how to recover from the backup if I change my mind.
-
-  Constraints:
-  - Refuse to run if `git status` is not clean unless I explicitly opt in.
-  - Never delete the backup branch in this run.
-  - Never operate on `main`/`codeware` itself; only the user branch.
+  Before making changes, show me exactly what local work would be backed up or lost. Proceed only after I confirm, then preserve a backup and verify the restored state.
 workflow: null
 directory: null
 git_tag: null
