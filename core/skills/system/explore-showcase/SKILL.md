@@ -103,12 +103,13 @@ Follow these three steps in order. Ask for user review and approval after steps 
 Create the file `workspace/showcases/{showcase_slug_id}/showcase.yaml` with all applicable fields for user review and approval.
 
 The YAML must follow the schema documented in `core/engine/data/AGENTS.md`.
+Before writing the `prompt` field, read `references/prompt-writing.md` and follow its user-facing prompt rules.
 
 Key decisions to make for each showcase:
 - Choose the correct `in_mode`: `dev` for Skill Pilot development showcases, `prod` for everything else.
 - Set `use_worktree: true` and `git_tag` only for reverse-engineering showcases that need a specific code checkpoint.
 - Set `directory` when the showcase files belong somewhere other than `workspace/showcases/{id}/` (e.g., `core/development/{feature}/` for codeware showcases).
-- Write a clear, runnable `prompt` string. Reference files with `@path/to/file`.
+- Write a clear, runnable, user-facing `prompt` string. Reference files with `@path/to/file` when needed.
 - Write a `goals` field as a markdown bullet list of expected outcomes.
 - Choose `terms` for technology concepts users can explore later.
 - Add `related` entries when another showcase is a natural next step or prerequisite; keep captions short and user-facing.
