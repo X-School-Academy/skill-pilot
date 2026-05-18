@@ -364,6 +364,11 @@ export default function ExploreView() {
     setMediaModal({ url, title, type });
   };
 
+  const openTermVideo = (term: string) => {
+    const termName = toKebabCase(term);
+    openMedia(`/showcases/videos/${termName}.mp4`, term, 'video');
+  };
+
   const maybeOpenTutorial = (sample: ShowcaseSample) => {
     if (!sample.tutorial_url) return;
     if (sample.tutorial_is_media) {
@@ -1005,11 +1010,7 @@ export default function ExploreView() {
                       key={term}
                       variant="light"
                       style={{ cursor: 'pointer' }}
-                      onClick={() => window.open(
-                        `https://skill-pilot.ai/explore/terms?slug=${encodeURIComponent(sample.id)}&term=${encodeURIComponent(toKebabCase(term))}`,
-                        '_blank',
-                        'noopener,noreferrer',
-                      )}
+                      onClick={() => openTermVideo(term)}
                     >
                       {term}
                     </Badge>
