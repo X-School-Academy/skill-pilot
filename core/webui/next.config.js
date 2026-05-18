@@ -3,6 +3,7 @@
  */
 const { PHASE_DEVELOPMENT_SERVER } = require('next/constants')
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 const JSON5 = require('json5')
 
@@ -36,6 +37,29 @@ function readEngineBaseUrl(mode) {
   }
 }
 
+function getLocalDevOrigins() {
+  const origins = new Set([
+    'localhost',
+    '*.localhost',
+    '127.0.0.1',
+  ])
+
+  try {
+    const interfaces = os.networkInterfaces()
+    for (const entries of Object.values(interfaces)) {
+      for (const entry of entries || []) {
+        if (entry && entry.family === 'IPv4' && !entry.internal) {
+          origins.add(entry.address)
+        }
+      }
+    }
+  } catch (_) {
+    // Keep the static loopback defaults if local interface detection fails.
+  }
+
+  return Array.from(origins)
+}
+
 module.exports = (phase) => {
   const runtimeMode = normalizeRuntimeMode(
     process.env.SKILL_PILOT_RUNTIME_MODE,
@@ -53,11 +77,7 @@ module.exports = (phase) => {
     outputFileTracingRoot: path.resolve(__dirname, '../..'),
     ...(isStaticExport ? { output: 'export', distDir: 'www' } : {}),
     // Temporarily disable locale-prefixed routing until the WebUI i18n paths are fully supported.
-    allowedDevOrigins: [
-      'localhost',
-      '*.localhost',
-      '127.0.0.1',
-    ],
+    allowedDevOrigins: getLocalDevOrigins(),
     ...(!isStaticExport
       ? {
           async headers() {
