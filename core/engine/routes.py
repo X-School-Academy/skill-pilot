@@ -1013,6 +1013,16 @@ def _normalize_showcase_related(item: Any) -> Dict[str, str]:
     return {"slug": slug, "caption": caption}
 
 
+def _normalize_showcase_variant(item: Any) -> Dict[str, str]:
+    if not isinstance(item, dict):
+        raise ValueError("Showcase variant entries must be objects")
+    slug = str(item.get("slug") or "").strip()
+    caption = str(item.get("caption") or "").strip()
+    if not slug or not caption:
+        raise ValueError("Showcase variant entries require slug and caption")
+    return {"slug": slug, "caption": caption}
+
+
 def _normalize_showcase_repo_paths(items: Any) -> List[str]:
     if items in (None, ""):
         return []
@@ -1076,6 +1086,7 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
     extensions = _normalize_showcase_extensions(sample.get("extensions"))
     links = [_normalize_showcase_link(item) for item in (sample.get("links") or [])]
     related = [_normalize_showcase_related(item) for item in (sample.get("related") or [])]
+    variants = [_normalize_showcase_variant(item) for item in (sample.get("variants") or [])]
 
     goals = str(sample.get("goals") or "").strip() or None
     terms_raw = sample.get("terms")
@@ -1127,6 +1138,7 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
         "file_items": file_items,
         "links": links,
         "related": related,
+        "variants": variants,
         "goals": goals,
         "terms": terms,
         "popularity": popularity,
@@ -1170,7 +1182,7 @@ def _normalize_showcase_category(raw_category: Any) -> Dict[str, Any]:
     }
 
 
-def _validate_showcase_related_targets(categories: List[Dict[str, Any]]) -> None:
+def _validate_showcase_reference_targets(categories: List[Dict[str, Any]], field_name: str) -> None:
     samples: List[Dict[str, Any]] = []
 
     def collect(cat_list: List[Dict[str, Any]]) -> None:
@@ -1182,10 +1194,10 @@ def _validate_showcase_related_targets(categories: List[Dict[str, Any]]) -> None
     sample_ids = {str(sample.get("id") or "") for sample in samples}
     for sample in samples:
         sample_id = str(sample.get("id") or "")
-        for related in sample.get("related", []):
-            slug = str(related.get("slug") or "")
+        for item in sample.get(field_name, []):
+            slug = str(item.get("slug") or "")
             if slug not in sample_ids:
-                raise ValueError(f"Showcase sample '{sample_id}' has unknown related slug '{slug}'")
+                raise ValueError(f"Showcase sample '{sample_id}' has unknown {field_name} slug '{slug}'")
 
 
 def _load_showcases() -> List[Dict[str, Any]]:
@@ -1222,7 +1234,8 @@ def _load_showcases() -> List[Dict[str, Any]]:
     populate_samples(raw, _SHOWCASES_PATH.parent / "showcases")
 
     categories = [_normalize_showcase_category(cat) for cat in raw]
-    _validate_showcase_related_targets(categories)
+    _validate_showcase_reference_targets(categories, "related")
+    _validate_showcase_reference_targets(categories, "variants")
     return categories
 
 

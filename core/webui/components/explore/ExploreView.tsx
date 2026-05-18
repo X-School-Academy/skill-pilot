@@ -43,6 +43,11 @@ interface ShowcaseRelated {
   caption: string;
 }
 
+interface ShowcaseVariant {
+  slug: string;
+  caption: string;
+}
+
 interface ShowcaseResolvedItem {
   label: string;
   path: string | null;
@@ -77,6 +82,7 @@ interface ShowcaseSample {
   file_items?: ShowcaseResolvedItem[];
   links: ShowcaseLink[];
   related: ShowcaseRelated[];
+  variants: ShowcaseVariant[];
   goals: string | null;
   terms: string[];
   popularity: number;
@@ -1016,6 +1022,39 @@ export default function ExploreView() {
                     </Badge>
                   ))}
                 </Group>
+              </>
+            )}
+
+            {sample.variants.length > 0 && (
+              <>
+                <Divider my="md" />
+                <Text size="sm" weight={700} mb={10}>Variants</Text>
+                <Stack spacing={8}>
+                  {sample.variants.map((variant) => (
+                    <button
+                      type="button"
+                      key={`${variant.slug}-${variant.caption}`}
+                      onClick={() => openSampleBySlug(variant.slug)}
+                      style={{
+                        width: '100%',
+                        border: isDark ? `1px solid ${theme.colors.dark[4]}` : '1px solid #ccfbf1',
+                        borderRadius: 10,
+                        background: isDark ? theme.colors.dark[6] : '#f0fdfa',
+                        color: isDark ? theme.colors.teal[2] : '#0f766e',
+                        cursor: 'pointer',
+                        padding: '10px 12px',
+                        textAlign: 'left',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        lineHeight: 1.45,
+                        whiteSpace: 'normal',
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
+                      {variant.caption}
+                    </button>
+                  ))}
+                </Stack>
               </>
             )}
 
