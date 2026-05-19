@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "core/bin/hook session_start"
+            "command": "${CLAUDE_PROJECT_DIR}/core/bin/hook session_start"
           }
         ]
       }
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "core/bin/hook session_end"
+            "command": "${CLAUDE_PROJECT_DIR}/core/bin/hook session_end"
           }
         ]
       }
