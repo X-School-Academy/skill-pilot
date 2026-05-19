@@ -45,23 +45,22 @@ This project serves four audiences:
 
 The concept is **"Do first, learn afterwards."** Showcases give users a ready-made prompt or template to do something with AI first, then explore the underlying knowledge only when they need it.
 
-## Showcase Types
+## Showcase Categories and Types
 
-The thirteen types of showcases users can do with Skill Pilot AI agents:
+Every showcase belongs to exactly one **category**, and within that category to a specific **type**. The category determines the audience focus and subject domain; the type defines the recurring shape of the showcase (what the user starts with, what the agent does, what the user ends up with).
 
-1. **Browser tasks** — search, set up tokens from a website, AWS web console operations, etc.
-2. **MCP / CLI tool tasks** — git operations, AWS, RunPod instance management, etc.
-3. **Content creation** — videos, audio books, educational or social media content (YouTube, TikTok, etc.).
-4. **Document creation** — slides, spreadsheets, documents for work or education.
-5. **Interactive tutorials** — online self-paced learning experiences.
-6. **Vibe coding** — build a small project without coding knowledge: website, game, mobile app, MCP server, agent skill, npm/pip package, etc.
-7. **Research** — technical research, market research, etc.
-8. **Automation tasks** — calendar management, email management, scheduled agents, etc.
-9. **Remote control via Discord bot** — control agents remotely, receive status notifications, human-in-the-loop approvals.
-10. **Skill Pilot development** — create new skills, update UI, add extensions, fix bugs, etc.
-11. **Reverse engineering (Skill Pilot)** — remove a feature or introduce a bug, draft a `requirements.md`, then ask users to implement it.
-12. **Reverse engineering (project / game)** — provide a git URL, draft a `requirements.md`, keep assets, ask users to re-implement from scratch.
-13. **Codeware tasks** — check update, code restore, make contribution, create documentation, learn license and compliance.
+- The canonical category list lives in [references/categories.md](references/categories.md).
+- The types available inside each category live in [references/category-types/{category-id}.md](references/category-types/).
+- The `id` of each category must match an entry in `core/engine/data/showcases.json5`.
+
+When drafting a new showcase:
+
+1. Open `references/categories.md` and pick the best-fitting category.
+2. Open `references/category-types/{category-id}.md` and pick a type within it.
+3. If no category fits, propose a new category — add a row to `references/categories.md` AND create `references/category-types/{new-id}.md` AND add the entry to `showcases.json5`.
+4. If the category fits but no type does, propose a new type inside the matching `category-types/{category-id}.md`.
+
+The published categories at the time of writing are: `basics`, `browser-tasks`, `tutorials`, `slides`, `websites`, `games`, `media-generation`, `ai-agents`, `agent-skills`, `mcp-servers`, `platform-dev`, `cloud-gpu`, and `maths`.
 
 ## Content of Each Showcase
 
