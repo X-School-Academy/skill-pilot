@@ -28,6 +28,8 @@ The `id` column must match an entry in `core/engine/data/showcases.json5`. New c
 | `platform-dev` | Platform Dev | Improve Skill Pilot itself: codeware status, worktrees, features, contributions. | [category-types/platform-dev.md](category-types/platform-dev.md) |
 | `cloud-gpu` | Cloud & GPU | Cloud and GPU infrastructure fluency: AWS EC2, SSH, RunPod GPUs. | [category-types/cloud-gpu.md](category-types/cloud-gpu.md) |
 | `maths` | Maths | Show maths concepts through visible, useful computer-science products (QR codes, Wi-Fi, AI, graphics, encryption). | [category-types/maths.md](category-types/maths.md) |
+| `vibe-coding` | Vibe Coding | Catch-all for coding-related showcases that don't fit a more specific coding category. | [category-types/vibe-coding.md](category-types/vibe-coding.md) |
+| `others` | Others | Catch-all for non-coding showcases that don't fit any other category. | [category-types/others.md](category-types/others.md) |
 
 ## How types relate to categories
 

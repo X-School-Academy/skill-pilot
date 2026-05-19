@@ -60,7 +60,9 @@ When drafting a new showcase:
 3. If no category fits, propose a new category — add a row to `references/categories.md` AND create `references/category-types/{new-id}.md` AND add the entry to `showcases.json5`.
 4. If the category fits but no type does, propose a new type inside the matching `category-types/{category-id}.md`.
 
-The published categories at the time of writing are: `basics`, `browser-tasks`, `tutorials`, `slides`, `websites`, `games`, `media-generation`, `ai-agents`, `agent-skills`, `mcp-servers`, `platform-dev`, `cloud-gpu`, and `maths`.
+The published categories at the time of writing are: `basics`, `browser-tasks`, `tutorials`, `slides`, `websites`, `games`, `media-generation`, `ai-agents`, `agent-skills`, `mcp-servers`, `platform-dev`, `cloud-gpu`, `maths`, `vibe-coding`, and `others`.
+
+`vibe-coding` and `others` are catch-all categories. Only use them when no more specific category fits — `vibe-coding` for coding tasks, `others` for non-coding tasks.
 
 ## Content of Each Showcase
 
