@@ -167,6 +167,10 @@ Commands:
 
 Options:
   --dev   Use development mode for `start`, or stop only development sessions for `stop`.
+  --next-server
+          Production mode only. Serve the WebUI via `next start` (the Next.js production server)
+          instead of the static HTML export served by the engine. For testing the production
+          build of the WebUI. Cannot be combined with `--dev`.
 
 Defaults:
   - Command defaults to: start
@@ -197,6 +201,21 @@ Stop commands:
 
 - `./skillpilot.sh stop` stops production only
 - `./skillpilot.sh stop --dev` stops development only
+
+#### Testing the production WebUI build (`--next-server`)
+
+For testing the production build of the Next.js WebUI without the static export
+served by the engine, start prod mode with `--next-server`:
+
+```bash
+./skillpilot.sh start --next-server
+./skillpilot.sh stop  --next-server
+```
+
+This runs the engine on its prod port and additionally starts `next start`
+(Next.js production server) on the WebUI port (default `127.0.0.1:3003`). Use
+this only for local testing of the production WebUI bundle — normal usage
+should stick with `./skillpilot.sh` (static export served by the engine).
 
 ### Using AI Agent CLIs Directly
 

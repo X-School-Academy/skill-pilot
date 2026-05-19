@@ -35,6 +35,7 @@ ACTION_TARGET=""
 TEST_FILES=()
 DOCTOR_QUESTION=""
 IS_DEV=0
+NEXT_SERVER=0
 SOURCE="manual"
 AVAILABLE_PROVIDERS=()
 LOADED_ENV_KEYS=()
@@ -62,6 +63,9 @@ Commands:
 
 Options:
   --dev   Use development mode for `start`, or stop only development sessions for `stop`.
+  --next-server
+          Production mode only. Serve the WebUI via `next start` (the Next.js production server)
+          instead of the static HTML export served by the engine. Cannot be combined with `--dev`.
   --source <manual|webui>
           Identify the caller. `webui` restarts dev sessions and uses GUI auth for protected env reads when possible.
 
@@ -134,6 +138,9 @@ parse_args() {
       --dev)
         IS_DEV=1
         ;;
+      --next-server)
+        NEXT_SERVER=1
+        ;;
       help|-h|--help|build|start|stop|test|doctor|enable|disable)
         if ((action_set == 1)); then
           echo "Error: multiple commands provided."
@@ -185,6 +192,18 @@ parse_args() {
 
   if ((IS_DEV == 1)) && [[ "${ACTION}" != "start" && "${ACTION}" != "stop" ]]; then
     echo "Error: --dev is only supported with 'start' or 'stop'."
+    print_help
+    exit 1
+  fi
+
+  if ((NEXT_SERVER == 1)) && [[ "${ACTION}" != "start" && "${ACTION}" != "stop" ]]; then
+    echo "Error: --next-server is only supported with 'start' or 'stop'."
+    print_help
+    exit 1
+  fi
+
+  if ((NEXT_SERVER == 1)) && ((IS_DEV == 1)); then
+    echo "Error: --next-server cannot be combined with --dev."
     print_help
     exit 1
   fi
@@ -1520,6 +1539,8 @@ get_webui_base_url() {
   local mode="$1"
   if [[ "${mode}" == "dev" ]]; then
     get_service_base_url "webui" "development"
+  elif ((NEXT_SERVER == 1)); then
+    get_service_base_url "webui" "development"
   else
     get_service_base_url "engine" "production"
   fi
@@ -1748,6 +1769,8 @@ required_sessions_live() {
   local mode="$1"
   if [[ "${mode}" == "dev" ]]; then
     session_exists "sp-webui-dev" && session_exists "sp-engine-dev"
+  elif ((NEXT_SERVER == 1)); then
+    session_exists "sp-engine-prod" && session_exists "sp-webui-prod"
   else
     session_exists "sp-engine-prod"
   fi
@@ -1765,6 +1788,12 @@ print_startup_troubleshooting() {
     echo "  cd ${ROOT_DIR} && SKILL_PILOT_RUNTIME_MODE=development uv --project core/engine run core/engine/main.py --reload --reload-dir core/engine --reload-exclude core/engine/tests"
   else
     echo "  cd ${ROOT_DIR} && SKILL_PILOT_RUNTIME_MODE=production uv --project core/engine run core/engine/main.py"
+    if ((NEXT_SERVER == 1)); then
+      local prod_webui_host prod_webui_port
+      prod_webui_host="$(get_service_host "webui" "development")"
+      prod_webui_port="$(get_service_port "webui" "development")"
+      echo "  cd ${ROOT_DIR}/core/webui && SKILL_PILOT_RUNTIME_MODE=production HOSTNAME=${prod_webui_host} PORT=${prod_webui_port} node scripts/with-timestamp-logs.js start --hostname ${prod_webui_host} --port ${prod_webui_port}"
+    fi
   fi
 }
 
@@ -1907,7 +1936,7 @@ case "${ACTION}" in
         fi
         exit 0
       fi
-    elif [[ "${SOURCE}" != "webui" ]] && engine_socket_running "prod"; then
+    elif [[ "${SOURCE}" != "webui" ]] && ((NEXT_SERVER == 0)) && engine_socket_running "prod"; then
       _running_url="$(get_running_webui_url "prod")"
       echo "Skill Pilot is already running in production mode."
       if [[ -n "${_running_url}" ]]; then
@@ -1941,21 +1970,45 @@ case "${ACTION}" in
       echo ""
       echo "Use 'tmux attach -t sp-webui-dev -r' or 'tmux attach -t sp-engine-dev -r' to view logs."
     else
-      ensure_webui_release_assets
       _replace_existing_prod_sessions=0
       if [[ "${SOURCE}" == "webui" ]]; then
         _replace_existing_prod_sessions=1
       fi
+      if ((NEXT_SERVER == 1)); then
+        require_cmd pnpm
+        echo "Running pnpm install for core/webui..."
+        pnpm -C "${ROOT_DIR}/core/webui" install
+        if [[ ! -f "${ROOT_DIR}/core/webui/.next/BUILD_ID" ]]; then
+          echo "Building Next.js production server bundle (next build)..."
+          pnpm -C "${ROOT_DIR}/core/webui" build
+        fi
+      else
+        ensure_webui_release_assets
+      fi
       start_session "sp-engine-prod" "SKILL_PILOT_RUNTIME_MODE=production uv --project core/engine run core/engine/main.py" "${_replace_existing_prod_sessions}"
-      _engine_url="$(get_webui_base_url "prod")"
-      echo "  Engine + WebUI  ->  ${_engine_url%/}  (production mode)"
-      echo ""
-      echo "Use 'tmux attach -t sp-engine-prod -r' to view logs."
+      _engine_prod_url="$(get_service_base_url "engine" "production")"
+      if ((NEXT_SERVER == 1)); then
+        _prod_webui_host="$(get_service_host "webui" "development")"
+        _prod_webui_port="$(get_service_port "webui" "development")"
+        start_session "sp-webui-prod" "cd core/webui && SKILL_PILOT_RUNTIME_MODE=production HOSTNAME=${_prod_webui_host} PORT=${_prod_webui_port} node scripts/with-timestamp-logs.js start --hostname ${_prod_webui_host} --port ${_prod_webui_port}" "${_replace_existing_prod_sessions}"
+        _webui_url="$(get_webui_base_url "prod")"
+        echo "  Engine  ->  ${_engine_prod_url%/}  (production mode)"
+        echo "  WebUI   ->  ${_webui_url%/}  (production mode, next start)"
+        echo ""
+        echo "Use 'tmux attach -t sp-engine-prod -r' or 'tmux attach -t sp-webui-prod -r' to view logs."
+      else
+        _engine_url="$(get_webui_base_url "prod")"
+        echo "  Engine + WebUI  ->  ${_engine_url%/}  (production mode)"
+        echo ""
+        echo "Use 'tmux attach -t sp-engine-prod -r' to view logs."
+      fi
     fi
     echo ""
     echo "To stop Skill Pilot at any time, run:"
     if ((IS_DEV == 1)); then
       echo "  ./skillpilot.sh stop --dev"
+    elif ((NEXT_SERVER == 1)); then
+      echo "  ./skillpilot.sh stop --next-server"
     else
       echo "  ./skillpilot.sh stop"
     fi
@@ -1972,6 +2025,9 @@ case "${ACTION}" in
       stop_session "sp-engine-dev"
     else
       stop_session "sp-engine-prod"
+      if ((NEXT_SERVER == 1)); then
+        stop_session "sp-webui-prod"
+      fi
     fi
     echo "Done."
     ;;
