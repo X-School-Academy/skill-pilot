@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "name": "session-start",
+            "type": "command",
+            "command": "$GEMINI_PROJECT_DIR/core/bin/hook session_start",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "name": "session-start",
+            "type": "command",
+            "command": "$GEMINI_PROJECT_DIR/core/bin/hook session_end",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}
