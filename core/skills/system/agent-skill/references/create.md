@@ -113,7 +113,7 @@ If the user says the skill is for workflow usage, include this sentence in the s
 
 For workflow usage, also include enough basic context in the plain-text output so downstream agents can understand what the result represents.
 
-### Step 7: Verify
+### Step 7: Verify and install
 
 Run:
 
@@ -122,6 +122,12 @@ core/bin/skill-verify <path-to-skill-directory>
 ```
 
 Fix any errors and rerun until verification passes.
+
+Then install the new skill with `core/bin/skill-install`. Pick the mode that matches the situation:
+
+- `core/bin/skill-install` (or `--all`): default. Installs every discovered skill that is not listed in `config/disabled_skills.json5`. Use after refactors that may have affected many skills.
+- `core/bin/skill-install --add <skill-name>`: install just the newly created skill. Ignores `config/disabled_skills.json5` (so it works even if the name is disabled) and leaves other installed skills untouched. Use this for a single new skill.
+- `core/bin/skill-install --skills s1,s2,...`: install exactly the listed skills, ignoring `config/disabled_skills.json5`. Removes any installed symlink that is not in the list. Use this when you want the active skill set to match an exact list.
 
 ## Key Principles
 

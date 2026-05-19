@@ -93,7 +93,7 @@ Check:
 - scripts remain self-contained if present
 - renamed references or folders have no stale internal links
 
-### Step 7: Verify
+### Step 7: Verify and refresh install
 
 Run:
 
@@ -102,6 +102,12 @@ core/bin/skill-verify <path-to-skill-directory>
 ```
 
 Fix any errors and rerun until verification passes.
+
+Then refresh the installed symlink so the change is active. Pick the mode that matches the situation:
+
+- `core/bin/skill-install` (or `--all`): default. Reconciles every discovered skill against `config/disabled_skills.json5` and cleans broken/excluded/disabled symlinks. Use for broad refactors.
+- `core/bin/skill-install --add <skill-name>`: refresh just the updated skill. Ignores `config/disabled_skills.json5` and leaves other installed skills untouched. Preferred for a single edited skill.
+- `core/bin/skill-install --skills s1,s2,...`: install exactly the listed skills, ignoring `config/disabled_skills.json5`. Removes any installed symlink not in the list. Use when you want the active skill set to match an exact list.
 
 ## Common Issues
 
