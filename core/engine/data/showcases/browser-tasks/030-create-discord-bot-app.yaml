@@ -1,6 +1,6 @@
 id: browser-create-discord-bot-app
 title: Create Discord Bot App
-description: Walk through Discord's developer portal to create a bot application and store its IDs and token via key-safe.
+description: Walk through Discord's developer portal to create a bot application and store its IDs and token via key-safe-sudo.
 thumbnail: /showcases/browser-tasks/browser-create-discord-bot-app.png
 video: null
 tutorial: null

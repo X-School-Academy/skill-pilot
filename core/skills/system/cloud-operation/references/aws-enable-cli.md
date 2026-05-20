@@ -12,7 +12,7 @@ Default behavior: execute each step automatically where possible. Ask the user o
 
 ## Skip Condition
 
-Use skill `key-safe` to get `AWS_ACCESS_KEY_ID` and `AWS_REGION`.
+Use skill `key-safe-sudo` to get `AWS_ACCESS_KEY_ID` and `AWS_REGION`.
 
 If both are non-empty, ask user whether to keep or replace them — replacing live credentials is an important confirmation.
 
@@ -22,7 +22,7 @@ In yolo mode, skip this check and create a new key using default values.
 
 ### Step 1: Check existing credentials
 
-Use skill `key-safe` to get `AWS_ACCESS_KEY_ID` and `AWS_REGION`.
+Use skill `key-safe-sudo` to get `AWS_ACCESS_KEY_ID` and `AWS_REGION`.
 
 If both are set and user confirms to keep them, skip to Step 6 (sync only).
 
@@ -66,7 +66,7 @@ In yolo mode, use the default without asking.
 
 ### Step 6: Save credentials
 
-Use skill `key-safe` to save:
+Use skill `key-safe-sudo` to save:
 
 ```
 AWS_ACCESS_KEY_ID=<access-key-id>

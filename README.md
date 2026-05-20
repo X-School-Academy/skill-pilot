@@ -360,7 +360,7 @@ skill-pilot/
 
 | Feature | Status |
 |---------|--------|
-| KeySafe Guard via `key-safe` skill — protect and manage LLM API keys in `config/.env` | ⭐⭐⭐⭐⭐ |
+| KeySafe Guard via `key-safe-sudo` skill — protect and manage LLM API keys in `config/.env` | ⭐⭐⭐⭐⭐ |
 
 ### AI Media Generation (via `media` MCP)
 

@@ -1,6 +1,6 @@
 ---
 name: create-discord-bot
-description: Create a Discord server and bot application with browser automation, collect the bot token, server ID, and user ID, then save credentials to .env via the key-safe skill. Skip if OPENCLAW_DISCORD_BOT_TOKEN is already set. Use for any project that needs a Discord bot.
+description: Create a Discord server and bot application with browser automation, collect the bot token, server ID, and user ID, then save credentials to .env via the key-safe-sudo skill. Skip if OPENCLAW_DISCORD_BOT_TOKEN is already set. Use for any project that needs a Discord bot.
 ---
 
 # Create Discord Bot
@@ -18,11 +18,11 @@ then securely save the bot token, server ID, and user ID to `config/.env`.
 ## Your Roles in This Skill
 
 - **SysOps Engineer**: Guide browser-based setup and save credentials securely
-- **Security Engineer**: Store token only through skill `key-safe` and never print the full token value
+- **Security Engineer**: Store token only through skill `key-safe-sudo` and never print the full token value
 
 ## Other Agent Skills Required
 
-- `key-safe`
+- `key-safe-sudo`
 - `web browser agent skill`
 
 ## Role Communication
@@ -47,7 +47,7 @@ When this skill is used in a workflow agent node:
 
 Check if the token is already saved:
 
-- Use skill `key-safe` to get `OPENCLAW_DISCORD_BOT_TOKEN`.
+- Use skill `key-safe-sudo` to get `OPENCLAW_DISCORD_BOT_TOKEN`.
 
 If the output shows a non-empty value, ask user whether to skip or replace it.
 
@@ -57,7 +57,7 @@ Only ask the user for manual help if you cannot finish a step or need to verify 
 
 ### Step 1: Check existing token
 
-Use skill `key-safe` to get `OPENCLAW_DISCORD_BOT_TOKEN`.
+Use skill `key-safe-sudo` to get `OPENCLAW_DISCORD_BOT_TOKEN`.
 
 If set and user confirms to keep it, skip.
 
@@ -157,12 +157,12 @@ Right-click server icon → **Privacy Settings** → toggle **Direct Messages** 
 
 ### Step 9: Save credentials to .env
 
-Use skill `key-safe` to save:
+Use skill `key-safe-sudo` to save:
 - `OPENCLAW_DISCORD_BOT_TOKEN=<bot-token>`
 - `OPENCLAW_DISCORD_SERVER_ID=<server-id>`
 - `OPENCLAW_DISCORD_USER_ID=<user-id>`
 
-Then use skill `key-safe` to get:
+Then use skill `key-safe-sudo` to get:
 - `OPENCLAW_DISCORD_SERVER_ID`
 - `OPENCLAW_DISCORD_USER_ID`
 
@@ -173,9 +173,9 @@ Confirm the token is set without printing its value. Report only whether `OPENCL
 When `config/.env` is protected by key safe guard:
 
 - Interactive terminal run:
-  - invoke skill `key-safe`; that skill handles the correct elevation flow
+  - invoke skill `key-safe-sudo`; that skill handles the correct elevation flow
 - Python/background process in a GUI desktop session:
-  - invoke skill `key-safe`; it should use the native GUI permission dialog behavior
+  - invoke skill `key-safe-sudo`; it should use the native GUI permission dialog behavior
 - Python/background process without a GUI desktop session:
   - it cannot prompt for a password interactively
   - tell the user to either:

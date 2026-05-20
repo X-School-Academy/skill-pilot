@@ -11,7 +11,7 @@ Provision all AWS networking and compute resources for a new Ubuntu EC2 server: 
 ## Preconditions
 
 - AWS credentials configured — run `aws-enable-cli` action if needed.
-- Verify: use skill `key-safe` to confirm `AWS_ACCESS_KEY_ID` and `AWS_REGION` are available.
+- Verify: use skill `key-safe-sudo` to confirm `AWS_ACCESS_KEY_ID` and `AWS_REGION` are available.
 
 ## Execution Rule
 
@@ -37,7 +37,7 @@ Ask user to confirm or provide:
 - **Instance name** (default: `app-server`)
 - **Instance type** (default: `t4g.small`; show pricing if unsure)
 - **Root disk size** (default: `20 GiB` gp3)
-- **Region** (read from `.env` via skill `key-safe`)
+- **Region** (read from `.env` via skill `key-safe-sudo`)
 - **VPC name** (default: `vpc-<instance-name>`)
 - **Extra open ports** (default: SSH only)
 
@@ -52,7 +52,7 @@ t4g.small — 2 vCPU, 2 GiB RAM, ARM Graviton2
 
 ### Step 2: Read region
 
-Use skill `key-safe` to get `AWS_REGION`.
+Use skill `key-safe-sudo` to get `AWS_REGION`.
 
 ### Step 3: Find latest Ubuntu 24.04 LTS AMI
 
