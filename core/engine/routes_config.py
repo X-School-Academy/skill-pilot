@@ -188,7 +188,7 @@ def config_mcp_servers_list():
         data = _read_mcp_config()
     except (ValueError, OSError) as exc:
         return JSONResponse(status_code=500, content={"error": str(exc), "servers": []})
-    from mcp_servers.mcp_to_skills.sync import expand_env_placeholders
+    from mcp_servers.mcp_to_skills.sync import expand_env_placeholders, prune_empty_env_values
     expansion_env = dict(os.environ)
     servers_dict = data.get("mcpServers", {})
     servers = []
@@ -212,7 +212,10 @@ def config_mcp_servers_list():
             entry["instructions"] = str(cfg["instructions"])
         for field in ("command", "args", "env", "url", "headers"):
             if field in expanded:
-                entry[field] = expanded[field]
+                if field == "env" and isinstance(expanded[field], dict):
+                    entry[field] = prune_empty_env_values(expanded[field])
+                else:
+                    entry[field] = expanded[field]
         servers.append(entry)
     return {"servers": servers}
 
@@ -839,4 +842,3 @@ def config_schedules_delete(schedule_id: str):
         return JSONResponse(status_code=500, content={"error": str(exc)})
 
     return {"status": "ok"}
-

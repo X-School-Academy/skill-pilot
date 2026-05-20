@@ -9,6 +9,6 @@
     // can have multiple builds; builds are listed as sections inside the
     // version's changelog file, newest build on top.
     version: '1_00_06',
-    workspace_version: '1_00_05',
-    build: 26051501,
+    workspace_version: '1_00_06',
+    build: 26052001,
 }

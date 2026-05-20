@@ -5,6 +5,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mcp_servers.mcp_to_skills.cli import build_parser
 from mcp_servers.mcp_to_skills.service import Bridge
+from mcp_servers.mcp_to_skills.sync import load_mcp_configs
 
 
 def test_create_audio_parser_accepts_text_format_and_voice():
@@ -33,3 +34,36 @@ def test_create_audio_operation_dispatches_to_audio_creator(monkeypatch):
         "result": {"path": "/tmp/test.wav", "provider": "skill-pilot", "format": "wav", "voice": "alloy"},
     }
     assert calls == [("hello", "wav", "alloy")]
+
+
+def test_mcp_env_optional_empty_values_are_removed(tmp_path, monkeypatch):
+    config_path = tmp_path / "mcp.json5"
+    config_path.write_text(
+        """
+        {
+          mcpServers: {
+            demo: {
+              command: "demo",
+              env: {
+                EMPTY_OPTIONAL: "${EMPTY_OPTIONAL:-}",
+                MISSING_OPTIONAL: "${MISSING_OPTIONAL:-}",
+                PRESENT_OPTIONAL: "${PRESENT_OPTIONAL:-}",
+                DEFAULTED_OPTIONAL: "${DEFAULTED_OPTIONAL:-fallback}",
+              },
+            },
+          },
+        }
+        """
+    )
+    monkeypatch.setenv("EMPTY_OPTIONAL", "")
+    monkeypatch.setenv("PRESENT_OPTIONAL", "present")
+    monkeypatch.delenv("MISSING_OPTIONAL", raising=False)
+    monkeypatch.delenv("DEFAULTED_OPTIONAL", raising=False)
+
+    servers, missing_env = load_mcp_configs(config_path)
+
+    assert missing_env == {}
+    assert servers["demo"].env == {
+        "PRESENT_OPTIONAL": "present",
+        "DEFAULTED_OPTIONAL": "fallback",
+    }
