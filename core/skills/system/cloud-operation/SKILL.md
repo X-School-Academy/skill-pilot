@@ -26,7 +26,7 @@ As a {Role}, I will {action description}
 
 | Action | Reference | When to use |
 |--------|-----------|-------------|
-| Set up AWS credentials & MCP | [aws-enable-cli.md](references/aws-enable-cli.md) | No AWS credentials configured yet, or MCP disabled |
+| Choose AWS credential method & sync MCP | [aws-enable-cli.md](references/aws-enable-cli.md) | No AWS credentials configured yet, MCP disabled, or user has not chosen an auth method |
 | Provision EC2 instance (VPC + networking) | [aws-setup-ec2.md](references/aws-setup-ec2.md) | Launching a new EC2 server |
 | Connect to EC2 via SSH | [aws-connect-ec2-ssh.md](references/aws-connect-ec2-ssh.md) | Opening an SSH session to an EC2 instance |
 | Forward a remote EC2 port to localhost | [aws-ec2-tunnel.md](references/aws-ec2-tunnel.md) | Accessing a service running on EC2 from a local browser or tool |
@@ -46,7 +46,7 @@ As a {Role}, I will {action description}
 
 ## Common Preconditions
 
-- **AWS operations**: AWS credentials in `config/.env` — run the `enable-cli` action if missing.
+- **AWS operations**: AWS credentials configured for `aws-api` MCP — run the `aws-enable-cli` action if missing.
 - **RunPod operations**: `runpodctl` installed and API key configured via `runpodctl doctor`.
 
 ## Adding a New Cloud Provider
