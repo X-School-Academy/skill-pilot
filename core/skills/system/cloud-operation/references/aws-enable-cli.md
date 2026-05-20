@@ -77,7 +77,10 @@ DISABLE_AWS_API_MCP_SERVER=false
 
 ### Step 7: Sync MCP
 
+remove `aws-api` from `config/disabled_skills.json5` if present, then run:
+
 ```bash
+# sync-mcp will restart MCP servers to reload env vars in engine os.environ
 core/bin/sync-mcp
 core/bin/skill-install
 ```
