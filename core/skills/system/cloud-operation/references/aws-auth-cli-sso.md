@@ -8,6 +8,17 @@ AWS CLI is used only for authentication setup and verification. After authentica
 
 Follow [aws-cli-install.md](aws-cli-install.md) to confirm AWS CLI v2 is installed.
 
+## Get SSO Start URL
+
+If the user does not already know the SSO start URL (AWS access portal URL), use the `agent-browser` skill to retrieve it from the AWS Console after the user confirms `https://console.aws.amazon.com/` is trusted:
+
+1. Open `https://console.aws.amazon.com/singlesignon/` (IAM Identity Center). Ask the user to complete sign-in only if CAPTCHA or MFA is required.
+2. Make sure the Console region matches the region where IAM Identity Center is enabled (shown in the top-right region selector).
+3. On the **Dashboard**, read the **Settings summary** panel and copy the **AWS access portal URL** (format: `https://<id>.awsapps.com/start`).
+4. Note the **Region** displayed in the same panel; this is the SSO region to use when configuring the profile.
+
+If IAM Identity Center is not yet enabled, ask the user to approve enabling it. On approval, proceed with the Console flow to enable IAM Identity Center (the user may need to complete steps that require MFA or organization-level consent). If the user declines, fall back to [aws-auth-long-term-token.md](aws-auth-long-term-token.md).
+
 ## Configure SSO Profile
 
 For a new SSO profile:
@@ -16,7 +27,7 @@ For a new SSO profile:
 aws configure sso --profile my-sso-profile
 ```
 
-Ask the user for account-specific values when prompted, including the SSO start URL, SSO region, AWS account, permission set/role, default region, and output format.
+Provide the SSO start URL and SSO region from the previous step. Ask the user for the remaining account-specific values when prompted: AWS account, permission set/role, default region, and output format.
 
 Login:
 
