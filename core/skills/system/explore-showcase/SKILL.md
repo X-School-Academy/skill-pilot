@@ -78,21 +78,25 @@ Each showcase entry contains:
    - Files can also be provided as a `zip-files-url` that is auto-unzipped to `workspace/showcases/{showcase_slug_id}/` when the user starts the template.
    - If the prompt content is short enough, there may be no separate file — the prompt includes everything directly.
 4. **Other YAML fields**:
-   - `goals`: expected outcomes after the user completes the task (markdown list)
-   - `request`: a string content which is used to ask user to do a task as user's manager, in this case, leave the `prompt` field as a blank placeholder, asking the user to draft it themselves
-   - `git_tag`: git commit or tag (mostly for reverse-engineering showcases; requires `use_worktree: true`)
-   - `workflow`: agent workflow to use
-   - `skills`: agent skills to use
-   - `extensions`: agent extensions to use
-   - `tools`: additional tools (e.g., ffmpeg)
-   - `in_mode`: `prod` (execute in the stable prod instance) or `dev` (execute in prod, monitor in dev WebUI for live-reload)
-   - `directory`: where the files will be copied to from the showcase files folder `workspace/showcases/{showcase_slug_id}/` when use template
-   - `terms`: technology terms users can explore afterwards
-   - `related`: optional related showcase list, using `{ slug, caption }` entries where `slug` is another showcase id and `caption` explains the connection
-   - `variants`: optional variant showcase list, using `{ slug, caption }` entries where `slug` is another showcase id and `caption` explains how a similar prompt creates a different result
-   - `video_prompt`: prompt used to generate the showcase video
-   - `tutorial_prompt`: prompt used to generate the online interactive tutorial or video
-   - `links[].prompt`: prompt used to generate interactive tutorials or videos
+   - `goals`: expected outcomes after the user completes the task (markdown list).
+   - `request`: a string content which is used to ask user to do a task as user's manager. When `request` is set, leave the `prompt` field as a blank placeholder so the user drafts it themselves.
+   - `git_tag`: git commit or tag (mostly for reverse-engineering showcases; requires `use_worktree: true`).
+   - `workflow`: agent workflow to use.
+   - `skills`: list **every** agent skill that will be invoked or triggered — directly or transitively — when the user runs the showcase prompt. Include skills that are currently **disabled** as well, since the showcase declares the full set of skills required. To compile this list:
+     1. Walk through the prompt mentally and identify each skill the agent must call.
+     2. Open each candidate skill's `SKILL.md` and follow its references to nested skills it invokes.
+     3. Search `core/skills/` and `dev-swarm/skills/` for partial-name matches when the user mentions a skill by short name.
+     4. Add any skill that produces a deliverable named in `goals` or referenced in `tools`.
+   - `extensions`: agent extensions to use.
+   - `tools`: list every shell command, CLI binary, or executable script used either by the showcase prompt directly or by any skill in `skills`. Examples: `ffmpeg`, `ffprobe`, `pnpm`, `uv`, `core/bin/create-image`, `core/bin/create-audio`. Include project-local scripts with their repo-relative path.
+   - `in_mode`: `prod` (execute in the stable prod instance) or `dev` (execute in prod, monitor in dev WebUI for live-reload).
+   - `directory`: where the files will be copied to from the showcase files folder `workspace/showcases/{showcase_slug_id}/` when using the template.
+   - `terms`: every technology, format, protocol, or concept knowledge that is related to the showcase outcome, the listed `tools`, or any skill in `skills`. Cover language/runtime terms (e.g., `python`, `bash`, `uv`, `pip`), formats (`mp3`, `wav`, `png`, `mp4`, `yaml`, `json`, `markdown`), codecs/parameters (`h264`, `x264`, `h264 CRF`, `yuv420p`, `fps`, `bitrate`), tooling concepts (`ffmpeg filter`, `shell command`, `bash script`, `apt-get`, `brew`), and model names used (`gpt-image-2`, `gpt-4o-mini-tts`). Users explore these terms to learn the knowledge behind the showcase.
+   - `related`: optional related showcase list, using `{ slug, caption }` entries where `slug` is another showcase id and `caption` explains the connection.
+   - `variants`: optional variant showcase list, using `{ slug, caption }` entries where `slug` is another showcase id and `caption` explains how a similar prompt creates a different result.
+   - `video_prompt`: a prompt used to generate a short video that either (a) teaches what the user will learn from running the showcase, or (b) demos the final result the showcase produces. Prefer the demo angle for media/visual showcases and the learning angle for skill/concept showcases. Write it as creative direction for a video generator: subject, scenes, pacing, narration tone, and the final takeaway.
+   - `tutorial_prompt`: a prompt used to generate a tutorial video or an online interactive course that walks the user through completing this specific showcase end-to-end. It should describe the audience, the lesson arc (setup → guided steps → final result), the checkpoints, and what the learner can run themselves.
+   - `links[].prompt`: each entry under `links` is a related knowledge topic (e.g., `Bash`, `Python vs uv`, `markdown/yaml/json`) drawn from `terms`. Its `prompt` is used to generate a tutorial video or an online interactive course **about that underlying knowledge**, not about the showcase itself. Scope each prompt to one topic so it stays reusable across showcases that share the same term.
 
 ## Workflow
 
