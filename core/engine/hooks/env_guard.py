@@ -108,6 +108,17 @@ def command_tokens(command: str) -> list[str]:
         return re.split(r"\s+", command)
 
 
+def is_keys_safe_guard_command(command: str, cwd: str | None = None) -> bool:
+    for token in command_tokens(command):
+        token = token.strip("'\"")
+        if token in {"core/bin/keys-safe-guard", "./core/bin/keys-safe-guard"}:
+            return True
+        path = resolve_project_path(token, cwd)
+        if path == REPO_ROOT / "core" / "bin" / "keys-safe-guard":
+            return True
+    return False
+
+
 def find_blocked_env_path(payload: dict[str, Any]) -> str | None:
     tool_name = str(payload.get("tool_name") or payload.get("tool") or "").lower()
     tool_input = payload.get("tool_input")
@@ -122,6 +133,8 @@ def find_blocked_env_path(payload: dict[str, Any]) -> str | None:
 
     command = tool_input.get("command")
     if isinstance(command, str):
+        if is_keys_safe_guard_command(command, cwd):
+            return None
         for token in command_tokens(command):
             token = token.strip("'\"")
             blocked = blocked_project_path(token, cwd)

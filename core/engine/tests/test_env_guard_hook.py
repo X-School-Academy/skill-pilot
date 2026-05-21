@@ -33,6 +33,41 @@ def test_blocks_shell_command_env_tokens(monkeypatch, tmp_path):
     assert guard.find_blocked_env_path({"tool_input": {"command": "cat .env.example"}, "cwd": cwd}) is None
 
 
+def test_allows_keys_safe_guard_as_approved_env_access(monkeypatch, tmp_path):
+    guard = load_guard(monkeypatch, tmp_path)
+    cwd = str(tmp_path)
+
+    assert (
+        guard.find_blocked_env_path(
+            {
+                "tool_input": {
+                    "command": "core/bin/keys-safe-guard --env-file config/.env get_key_value API_KEY"
+                },
+                "cwd": cwd,
+            }
+        )
+        is None
+    )
+    assert (
+        guard.find_blocked_env_path(
+            {
+                "tool_input": {
+                    "command": "./core/bin/keys-safe-guard --env-file .skillpilot/temp/.env.local get_key_value API_KEY"
+                },
+                "cwd": cwd,
+            }
+        )
+        is None
+    )
+
+
+def test_still_blocks_non_guard_commands_with_env(monkeypatch, tmp_path):
+    guard = load_guard(monkeypatch, tmp_path)
+    cwd = str(tmp_path)
+
+    assert guard.find_blocked_env_path({"tool_input": {"command": "python -c 'open(\"config/.env\").read()'"}, "cwd": cwd})
+
+
 def test_ignores_env_paths_outside_project(monkeypatch, tmp_path):
     guard = load_guard(monkeypatch, tmp_path)
 
