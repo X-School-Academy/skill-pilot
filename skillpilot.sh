@@ -1907,6 +1907,15 @@ stop_session() {
   echo "Stopped session '${session_name}'."
 }
 
+stop_session_if_exists() {
+  local session_name="$1"
+
+  if tmux has-session -t "${session_name}" 2>/dev/null; then
+    tmux kill-session -t "${session_name}"
+    echo "Stopped existing session '${session_name}'."
+  fi
+}
+
 parse_args "$@"
 
 case "${ACTION}" in
@@ -1961,7 +1970,8 @@ case "${ACTION}" in
       if [[ "${SOURCE}" == "webui" ]]; then
         _replace_existing_dev_sessions=1
       fi
-      start_session "sp-webui-dev" "cd core/webui && SKILL_PILOT_RUNTIME_MODE=development HOSTNAME=${_dev_webui_host} PORT=${_dev_webui_port} node scripts/with-timestamp-logs.js dev --webpack --hostname ${_dev_webui_host} --port ${_dev_webui_port}" "${_replace_existing_dev_sessions}"
+      stop_session_if_exists "sp-webui-prod"
+      start_session "sp-webui-dev" "cd core/webui && SKILL_PILOT_RUNTIME_MODE=development HOSTNAME=${_dev_webui_host} PORT=${_dev_webui_port} node scripts/with-timestamp-logs.js dev --webpack --hostname ${_dev_webui_host} --port ${_dev_webui_port}" "1"
       start_session "sp-engine-dev" "SKILL_PILOT_RUNTIME_MODE=development uv --project core/engine run core/engine/main.py --reload --reload-dir core/engine --reload-exclude core/engine/tests" "${_replace_existing_dev_sessions}"
       _dev_engine_url="$(get_service_base_url "engine" "development")"
       _webui_url="$(get_webui_base_url "dev")"
@@ -1990,7 +2000,9 @@ case "${ACTION}" in
       if ((NEXT_SERVER == 1)); then
         _prod_webui_host="$(get_service_host "webui" "development")"
         _prod_webui_port="$(get_service_port "webui" "development")"
-        start_session "sp-webui-prod" "cd core/webui && SKILL_PILOT_RUNTIME_MODE=production HOSTNAME=${_prod_webui_host} PORT=${_prod_webui_port} node scripts/with-timestamp-logs.js start --hostname ${_prod_webui_host} --port ${_prod_webui_port}" "${_replace_existing_prod_sessions}"
+        stop_session_if_exists "sp-webui-dev"
+        stop_session_if_exists "sp-engine-dev"
+        start_session "sp-webui-prod" "cd core/webui && SKILL_PILOT_RUNTIME_MODE=production HOSTNAME=${_prod_webui_host} PORT=${_prod_webui_port} node scripts/with-timestamp-logs.js start --hostname ${_prod_webui_host} --port ${_prod_webui_port}" "1"
         _webui_url="$(get_webui_base_url "prod")"
         echo "  Engine  ->  ${_engine_prod_url%/}  (production mode)"
         echo "  WebUI   ->  ${_webui_url%/}  (production mode, next start)"
