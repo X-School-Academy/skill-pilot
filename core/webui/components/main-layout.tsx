@@ -35,6 +35,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { label: 'Vibe Coding',      href: '/vibe-coding',                               icon: <IconBriefcase size="1rem" /> },
   { label: 'Research',         href: '/research',                                  icon: <IconSearch size="1rem" /> },
   { label: 'Tasks',            href: '/tasks',                                    icon: <IconChecklist size="1rem" /> },
+  { label: 'Media',            href: '/media',                                    icon: <IconVideo size="1rem" /> },
   { label: 'File Manager',    href: '/file-manager',                             icon: <IconFolderOpen size="1rem" /> },
   { dividerBefore: 'Skill Pilot', label: 'Development', href: '/skill-pilot-development', icon: <IconCode size="1rem" /> },
   { label: 'Codeware',         href: '/codeware',                                  icon: <IconHammer size="1rem" /> },

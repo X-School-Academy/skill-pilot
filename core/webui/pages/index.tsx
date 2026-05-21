@@ -164,6 +164,7 @@ type ActiveView =
   | 'projects'
   | 'research'
   | 'tasks'
+  | 'media'
   | 'development'
   | 'processes'
   | 'discord-bot'
@@ -830,6 +831,7 @@ export default function HomePage() {
     { label: 'Vibe Coding', href: '/vibe-coding', icon: <IconBriefcase size="1rem" />, action: () => router.push('/vibe-coding') },
     { label: 'Research', href: '/research', icon: <IconSearch size="1rem" />, action: () => router.push('/research') },
     { label: 'Tasks', href: '/tasks', icon: <IconChecklist size="1rem" />, action: () => router.push('/tasks') },
+    { label: 'Media', href: '/media', icon: <IconVideo size="1rem" />, action: () => router.push('/media') },
     { label: 'File Manager', href: '/file-manager', icon: <IconFolderOpen size="1rem" />, action: () => router.push('/file-manager') },
     { dividerBefore: 'Skill Pilot', label: 'Development', href: '/skill-pilot-development', icon: <IconCode size="1rem" />, action: () => router.push('/skill-pilot-development') },
     { label: 'Codeware', href: '/codeware', icon: <IconHammer size="1rem" />, action: () => router.push('/codeware') },
@@ -3703,6 +3705,8 @@ export default function HomePage() {
         return renderPlaceholder('Research');
       case 'tasks':
         return renderPlaceholder('Tasks');
+      case 'media':
+        return renderPlaceholder('Media');
       case 'development':
         return renderPlaceholder('Development');
       case 'processes':

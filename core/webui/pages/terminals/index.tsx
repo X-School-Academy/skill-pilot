@@ -36,6 +36,7 @@ import {
   IconPuzzle,
   IconUser,
   IconVectorBezier2,
+  IconVideo,
   IconFolderOpen,
   IconHistory,
 } from '@tabler/icons-react';
@@ -189,6 +190,7 @@ export default function TerminalsPage() {
     { label: 'Vibe Coding', icon: <IconBriefcase size="1rem" />, action: () => { void router.push('/vibe-coding'); } },
     { label: 'Research', icon: <IconSearch size="1rem" />, action: () => { void router.push('/research'); } },
     { label: 'Tasks', icon: <IconChecklist size="1rem" />, action: () => { void router.push('/tasks'); } },
+    { label: 'Media', icon: <IconVideo size="1rem" />, action: () => { void router.push('/media'); } },
     { label: 'File Manager', icon: <IconFolderOpen size="1rem" />, action: () => { void router.push('/file-manager'); } },
     { dividerBefore: 'Skill Pilot', label: 'Development', icon: <IconCode size="1rem" />, action: () => { void router.push('/skill-pilot-development'); } },
     { label: 'Codeware', icon: <IconHammer size="1rem" />, action: () => { void router.push('/codeware'); } },

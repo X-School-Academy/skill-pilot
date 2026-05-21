@@ -78,6 +78,7 @@ from settings import (
     COURSES_DIR,
     FEATURES_DIR,
     PROJECT_DIR,
+    MEDIA_DIR,
     RESEARCH_DIR,
     SKILL_PILOT_DEVELOPMENT_DIR,
     TASKS_DIR,
