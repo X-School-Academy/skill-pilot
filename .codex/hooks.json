@@ -1,5 +1,17 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|mcp.*|Read|read|read_file|read_many_files|grep|glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "core/bin/hook env_guard --agent codex",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "matcher": "startup|resume|clear",

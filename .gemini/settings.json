@@ -1,5 +1,18 @@
 {
   "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "name": "env-read-guard",
+            "type": "command",
+            "command": "core/bin/hook env_guard --agent gemini",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
