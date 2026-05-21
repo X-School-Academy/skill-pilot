@@ -1783,13 +1783,19 @@ def task_create(payload: Dict[str, Any]):
         raw_folder, raw_file_name = _extract_task_create_parts(payload)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
+    has_requirements_payload = "requirements" in payload
+    requirements = str(payload.get("requirements") or "")
 
     TASKS_DIR.mkdir(parents=True, exist_ok=True)
     folder_name = _normalize_task_folder_name(raw_folder)
     file_name = _normalize_task_file_name(raw_file_name)
+    creates_task_folder = has_requirements_payload and file_name == "requirements.md"
     if folder_name:
         preferred_dir = TASKS_DIR / folder_name
-        if preferred_dir.exists() and preferred_dir.is_dir():
+        if creates_task_folder:
+            parent_dir = preferred_dir if not preferred_dir.exists() else _unique_task_dir_path(folder_name)
+            parent_dir.mkdir(parents=False, exist_ok=False)
+        elif preferred_dir.exists() and preferred_dir.is_dir():
             parent_dir = preferred_dir
         else:
             parent_dir = preferred_dir if not preferred_dir.exists() else _unique_task_dir_path(folder_name)
@@ -1799,7 +1805,7 @@ def task_create(payload: Dict[str, Any]):
         parent_dir.mkdir(parents=True, exist_ok=True)
 
     file_path = _unique_task_file_path(parent_dir, file_name)
-    initial_content = "# New Task\n\n"
+    initial_content = requirements if has_requirements_payload else "# New Task\n\n"
     file_path.write_text(initial_content, encoding="utf-8")
     return {"status": "ok", "path": str(file_path.relative_to(TASKS_DIR))}
 
@@ -1807,6 +1813,7 @@ def task_create(payload: Dict[str, Any]):
 @router.post("/api/tasks/delete")
 def task_delete(payload: Dict[str, Any]):
     raw_path = str(payload.get("path") or "").strip()
+    confirm_text = str(payload.get("confirm_text") or "").strip().lower()
     if not raw_path:
         return JSONResponse(status_code=400, content={"error": "Missing task path"})
 
@@ -1817,9 +1824,17 @@ def task_delete(payload: Dict[str, Any]):
     except FileNotFoundError as exc:
         return JSONResponse(status_code=404, content={"error": str(exc)})
 
+    parent_dir = file_path.parent
+    if file_path.name == "requirements.md":
+        if confirm_text != "delete":
+            return JSONResponse(status_code=400, content={"error": "Type 'delete' to confirm removing the task"})
+        if parent_dir == TASKS_DIR or TASKS_DIR not in parent_dir.parents:
+            return JSONResponse(status_code=400, content={"error": "Invalid task directory"})
+        shutil.rmtree(parent_dir)
+        return {"status": "ok", "deleted": raw_path, "removedFolder": str(parent_dir.relative_to(TASKS_DIR))}
+
     file_path.unlink()
     removed_folder = None
-    parent_dir = file_path.parent
     if parent_dir != TASKS_DIR:
         try:
             parent_dir.rmdir()
