@@ -45,6 +45,34 @@ def test_session_start_creates_expected_file_and_first_record(monkeypatch, tmp_p
     assert records[0]["metadata"]["source"] == "startup"
 
 
+def test_session_start_metadata_includes_extra_fields(monkeypatch, tmp_path):
+    recorder = load_recorder(monkeypatch, tmp_path)
+    payload = {
+        "session_id": "abc-123",
+        "hook_event_name": "SessionStart",
+        "cwd": "/repo",
+    }
+
+    path = recorder.session_file("codex", "abc-123", payload)
+    recorder.append_record(
+        path,
+        {
+            "type": "session_start",
+            "timestamp": recorder.format_timestamp(),
+            "agent": "codex",
+            "session_id": "abc-123",
+            "metadata": recorder.session_start_metadata(
+                payload,
+                {"git_commit": "c0ffee"},
+            ),
+        },
+    )
+
+    records = read_jsonl(path)
+    assert records[0]["metadata"]["hook_event_name"] == "SessionStart"
+    assert records[0]["metadata"]["git_commit"] == "c0ffee"
+
+
 def test_prompt_and_response_extract_visible_text_only(monkeypatch, tmp_path):
     recorder = load_recorder(monkeypatch, tmp_path)
 

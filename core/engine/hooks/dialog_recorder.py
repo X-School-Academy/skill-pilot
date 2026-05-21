@@ -238,7 +238,22 @@ def has_record_type(path: Path, record_type: str) -> bool:
     return any(record.get("type") == record_type for record in iter_records(path))
 
 
-def ensure_start_record(path: Path, agent: str, sid: str, payload: dict[str, Any]) -> None:
+def session_start_metadata(
+    payload: dict[str, Any], extra_metadata: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    metadata = base_metadata(payload)
+    if extra_metadata:
+        metadata.update({key: value for key, value in extra_metadata.items() if value is not None})
+    return metadata
+
+
+def ensure_start_record(
+    path: Path,
+    agent: str,
+    sid: str,
+    payload: dict[str, Any],
+    extra_metadata: dict[str, Any] | None = None,
+) -> None:
     if path.exists() and path.stat().st_size > 0:
         return
     append_record(
@@ -248,7 +263,7 @@ def ensure_start_record(path: Path, agent: str, sid: str, payload: dict[str, Any
             "timestamp": format_timestamp(),
             "agent": agent,
             "session_id": sid,
-            "metadata": base_metadata(payload),
+            "metadata": session_start_metadata(payload, extra_metadata),
             "inferred": True,
         },
     )
@@ -285,7 +300,7 @@ def opencode_has_session(payload: dict[str, Any]) -> bool:
     return bool(event.get("sessionID") or event.get("session_id") or event.get("sessionId"))
 
 
-def record_event(default_event: str) -> None:
+def record_event(default_event: str, extra_metadata: dict[str, Any] | None = None) -> None:
     args = parse_args(default_event)
     payload = read_stdin_json()
     agent = args.agent or infer_agent(payload)
@@ -307,7 +322,7 @@ def record_event(default_event: str) -> None:
                 "timestamp": format_timestamp(),
                 "agent": agent,
                 "session_id": sid,
-                "metadata": base_metadata(payload),
+                "metadata": session_start_metadata(payload, extra_metadata),
             },
         )
         print("{}")
