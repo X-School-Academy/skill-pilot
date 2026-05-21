@@ -1,6 +1,6 @@
 # `keys-safe-guard` Action Reference
 
-Detailed steps for the `core/bin/keys-safe-guard` command set. This is the **specialization** of the [general sudo rule](sudo-rule.md) for `config/.env` operations — the binary handles GUI elevation internally; the agent only has to choose the right action and flag.
+Detailed steps for the `core/bin/keys-safe-guard` command set. This is the **specialization** of the [general sudo rule](sudo-rule.md) for `config/.env` and explicit `.env`/`.env.*` operations — the binary handles GUI elevation internally; the agent only has to choose the right action and flags.
 
 ## Step 1: Identify requested action
 
@@ -9,7 +9,8 @@ Map user intent to exactly one action:
 1. `enable` (default)
 2. `disable`
 3. `get_key_names`
-4. `put_key_values`
+4. `get_key_value`
+5. `put_key_values`
 
 Use one action per user request unless the user explicitly asks for a sequence.
 
@@ -28,6 +29,13 @@ What `--gui` does:
 - **No fallback**: if GUI is unavailable (SSH session, no display, dialog cancelled), the command fails instead of hanging on terminal `sudo`.
 
 `--gui` may be placed before or after the action name.
+`--env-file PATH` may also be placed before or after the action name. Omit it to use the default `config/.env`. Use it only when the user explicitly asks to manage another project env file.
+
+Env file rules:
+
+- Default: `config/.env`.
+- Explicit target must stay inside the project and must be named `.env` or `.env.*`.
+- `.env.example` is intentionally rejected by this skill because it is not a secret file.
 
 Action rules:
 
@@ -36,6 +44,7 @@ Action rules:
 | `enable`          | always required   |
 | `disable`         | always required   |
 | `put_key_values`  | always required   |
+| `get_key_value`   | required if the file may be guarded |
 | `get_key_names`   | optional (no-op)  |
 
 ### Runtime behavior when safe guard is enabled and elevation is required
@@ -66,7 +75,21 @@ core/bin/keys-safe-guard get_key_names
 ```
 
 ```bash
+core/bin/keys-safe-guard --gui get_key_value KEY1 KEY2
+```
+
+```bash
 core/bin/keys-safe-guard --gui put_key_values KEY1=VALUE1 KEY2=VALUE2
+```
+
+For a non-default env file:
+
+```bash
+core/bin/keys-safe-guard --gui --env-file path/to/.env.local get_key_value KEY1
+```
+
+```bash
+core/bin/keys-safe-guard --gui --env-file path/to/.env.local put_key_values KEY1=VALUE1
 ```
 
 `get_key_names` reads from engine memory and does not require elevated privileges, so `--gui` is optional and has no effect for that action.

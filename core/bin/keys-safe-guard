@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 ENV_FILE="${REPO_ROOT}/config/.env"
+ENV_FILE_ARG=""
+DEFAULT_ENV_FILE="${REPO_ROOT}/config/.env"
 PYTHON_BIN="${REPO_ROOT}/core/bin/python"
 MANAGE_SCRIPT="${REPO_ROOT}/core/engine/safe_dotenv/manage.py"
 TOOL_CLI="${REPO_ROOT}/core/bin/tool-cli"
@@ -20,6 +22,18 @@ while [[ $# -gt 0 ]]; do
       USE_GUI=true
       shift
       ;;
+    --env-file)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --env-file requires a path." >&2
+        exit 2
+      fi
+      ENV_FILE_ARG="$2"
+      shift 2
+      ;;
+    --env-file=*)
+      ENV_FILE_ARG="${1#--env-file=}"
+      shift
+      ;;
     *)
       if [[ -z "$action" ]]; then
         action="$1"
@@ -33,24 +47,61 @@ done
 
 action="${action:-enable}"
 
+is_supported_env_file_name() {
+  local name="$1"
+  [[ "$name" == ".env" || ( "$name" == .env.* && "$name" != ".env.example" ) ]]
+}
+
+resolve_env_file() {
+  local requested="$1"
+  if [[ -z "$requested" ]]; then
+    printf '%s\n' "${DEFAULT_ENV_FILE}"
+    return 0
+  fi
+  "${PYTHON_BIN}" - "${REPO_ROOT}" "$requested" <<'PY'
+from pathlib import Path
+import os
+import sys
+
+repo = Path(sys.argv[1]).resolve()
+raw = Path(os.path.expanduser(sys.argv[2]))
+path = (raw if raw.is_absolute() else repo / raw).resolve(strict=False)
+try:
+    path.relative_to(repo)
+except ValueError:
+    print(f"Error: --env-file must stay inside project root: {repo}", file=sys.stderr)
+    raise SystemExit(2)
+print(path)
+PY
+}
+
+ENV_FILE="$(resolve_env_file "${ENV_FILE_ARG}")"
+if ! is_supported_env_file_name "$(basename "${ENV_FILE}")"; then
+  echo "Error: --env-file must target .env or .env.*; .env.example is intentionally not managed as a secret file." >&2
+  exit 2
+fi
+
 usage() {
   cat <<'EOF'
 Usage:
-  core/bin/keys-safe-guard [--gui] [action] [args...]
+  core/bin/keys-safe-guard [--gui] [--env-file PATH] [action] [args...]
 
 Options:
   --gui                       Request privilege elevation via GUI dialog when available.
                               macOS: osascript admin dialog.
                               Linux: pkexec (polkit) or sudo -A with zenity/kdialog askpass.
                               Fails instead of falling back to terminal sudo.
+  --env-file PATH             Env file to manage. Defaults to config/.env.
+                              Must be inside the project and named .env or .env.*.
+                              .env.example is allowed for normal reads but is not managed here.
 
 Actions:
-  enable (default)            Enable key safe guard on config/.env
+  enable (default)            Enable key safe guard on the env file
   disable                     Disable key safe guard and restore current user ownership
   get_key_names               Read loaded key names from engine memory via core/bin/tool-cli
-  get_key_value KEY [KEY...]  Read one or more key values from config/.env
+  get_key_value KEY [KEY...]  Read one or more key values from the env file
                               Requires elevation when the file is root-owned (safe guard active).
-  put_key_values KEY=VALUE... Update or insert one or more keys in config/.env
+  put_key_values KEY=VALUE... Update or insert one or more keys in the env file
                               All pairs are written in one elevated call — password prompt once.
 EOF
 }
@@ -328,7 +379,7 @@ do_put_key_values() {
   fi
 
   local payload response status
-  if [[ -S "${ENGINE_SOCKET}" ]]; then
+  if [[ "${ENV_FILE}" == "${DEFAULT_ENV_FILE}" && -S "${ENGINE_SOCKET}" ]]; then
     payload="$("${PYTHON_BIN}" -c '
 import json, sys
 updates = {}
