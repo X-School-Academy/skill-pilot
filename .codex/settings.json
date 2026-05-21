@@ -1,24 +1,3 @@
 {
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "core/bin/hook session_start"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "core/bin/hook session_end"
-          }
-        ]
-      }
-    ]
-  }
+  "_comment": "Codex CLI hooks are configured in .codex/hooks.json, not settings.json."
 }

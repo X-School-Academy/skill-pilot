@@ -5,7 +5,27 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/core/bin/hook session_start"
+            "command": "${CLAUDE_PROJECT_DIR}/core/bin/hook session_start --agent claude"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/core/bin/hook user_prompt --agent claude"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/core/bin/hook agent_stop --agent claude"
           }
         ]
       }
@@ -15,7 +35,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/core/bin/hook session_end"
+            "command": "${CLAUDE_PROJECT_DIR}/core/bin/hook session_end --agent claude",
+            "timeout": 5
           }
         ]
       }

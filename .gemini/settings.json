@@ -6,7 +6,31 @@
           {
             "name": "session-start",
             "type": "command",
-            "command": "$GEMINI_PROJECT_DIR/core/bin/hook session_start",
+            "command": "core/bin/hook session_start --agent gemini",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "BeforeAgent": [
+      {
+        "hooks": [
+          {
+            "name": "dialog-user-prompt",
+            "type": "command",
+            "command": "core/bin/hook user_prompt --agent gemini",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "AfterAgent": [
+      {
+        "hooks": [
+          {
+            "name": "dialog-agent-response",
+            "type": "command",
+            "command": "core/bin/hook agent_stop --agent gemini",
             "timeout": 5000
           }
         ]
@@ -16,9 +40,9 @@
       {
         "hooks": [
           {
-            "name": "session-start",
+            "name": "session-end",
             "type": "command",
-            "command": "$GEMINI_PROJECT_DIR/core/bin/hook session_end",
+            "command": "core/bin/hook session_end --agent gemini",
             "timeout": 5000
           }
         ]
