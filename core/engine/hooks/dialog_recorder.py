@@ -328,7 +328,7 @@ def record_event(default_event: str, extra_metadata: dict[str, Any] | None = Non
         print("{}")
         return
 
-    ensure_start_record(path, agent, sid, payload)
+    ensure_start_record(path, agent, sid, payload, extra_metadata)
     if agent == "opencode":
         opencode_dialog = extract_opencode_dialog(payload)
         if opencode_dialog:
