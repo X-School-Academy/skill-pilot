@@ -7,6 +7,8 @@ The `prompt` field is the user's starter request to the AI agent. Write it like 
 - Keep the prompt concise, outcome-focused, and runnable.
 - Include user-facing details that shape the desired result: topic, audience, tone, constraints, review checkpoints, output location, and requested deliverables.
 - Reference provided files with `@path/to/file` when the user must supply or use a concrete file.
+- Use the showcase `directory` path for every file reference. Do not reference the packaging source directory `workspace/showcases/{showcase_slug_id}/` from the user-facing prompt.
+- Include the destination directory context whenever the prompt depends on a file. Example: `Use @workspace/tasks/cloud-setup-aws-credentials/requirements.md`.
 - Ask for missing user inputs only when they are part of the natural task request.
 
 ## Do Not Include
@@ -28,7 +30,8 @@ The `prompt` field is the user's starter request to the AI agent. Write it like 
 Good:
 
 ```yaml
-prompt: |
+directory: workspace/tasks/story-video-for-kids
+prompt: |-
   Create a kids audio book video about the story of "The Tortoise and the Hare".
 
   Make it suitable for young children, with warm narration, colorful storybook
@@ -36,10 +39,22 @@ prompt: |
   Show me the planned scenes before creating the final video.
 ```
 
+Good with a copied reference file:
+
+```yaml
+directory: workspace/tasks/cloud-setup-aws-credentials
+prompt: |-
+  Set up my AWS credentials safely.
+
+  Use @workspace/tasks/cloud-setup-aws-credentials/requirements.md as the task
+  requirements and show me the validation result before making any lasting
+  configuration changes.
+```
+
 Avoid:
 
 ```yaml
-prompt: |
+prompt: |-
   Role: You are my video producer.
 
   Skills to use:

@@ -56,7 +56,7 @@ Collect the available reference information:
 
 5. Draft `requirements.md`.
 
-   Place the drafted file under `workspace/showcases/{showcase_slug_id}/requirements.md`.
+   Place the drafted packaging file under `workspace/showcases/{showcase_slug_id}/requirements.md`. Set the showcase `directory` to the type-based destination from the main skill instructions, then write all user-facing prompt references against that destination directory.
 
    Keep it requirement-focused:
 
@@ -72,7 +72,7 @@ Collect the available reference information:
 
 6. Create the showcase build prompt.
 
-   Write a short prompt in `showcase.yaml` that asks the learner or agent to build from `@workspace/showcases/{showcase_slug_id}/requirements.md` and any allowed assets.
+   Write a short prompt in `showcase.yaml` that asks the learner or agent to build from the copied requirements path, for example `@workspace/vibe-coding/{showcase_slug_id}/requirements.md` for coding projects or `@workspace/tasks/{showcase_slug_id}/requirements.md` when the type cannot be detected confidently. Use `prompt: |-` for multi-line prompts.
 
    For games, keep the prompt focused on the core game mechanics. Avoid adding account systems, leaderboards, social sharing, analytics, or unrelated platform features unless the user explicitly requests them.
 
@@ -80,7 +80,7 @@ Collect the available reference information:
 
    Put reusable files under `workspace/showcases/{showcase_slug_id}/assets/` and list them in `files.yaml`.
 
-   If the showcase has a `directory` field, make sure the relevant `requirements.md`, `update.md`, or `issues.md` file can be copied from `workspace/showcases/{showcase_slug_id}/` to that target directory when the user starts the template.
+   Make sure the relevant `requirements.md`, `update.md`, or `issues.md` file can be copied from `workspace/showcases/{showcase_slug_id}/` to the `directory` target when the user starts the template.
 
 ## Recommended `requirements.md` Structure
 

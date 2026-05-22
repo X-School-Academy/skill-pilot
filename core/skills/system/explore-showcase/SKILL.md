@@ -70,13 +70,14 @@ Each showcase entry contains:
 
 1. A **thumbnail image** with a title and short description.
 2. A **prompt string** for users to guide the AI agent.
-3. **Files** referenced in the prompt, placed at `workspace/showcases/{showcase_slug_id}/`:
+3. **Files** packaged for the template, placed at `workspace/showcases/{showcase_slug_id}/`:
    - `requirements.md` (if applicable)
    - `update.md` (if applicable)
    - `issues.md` (if applicable)
    - `assets/` (if applicable)
    - Files can also be provided as a `zip-files-url` that is auto-unzipped to `workspace/showcases/{showcase_slug_id}/` when the user starts the template.
    - If the prompt content is short enough, there may be no separate file — the prompt includes everything directly.
+   - User-facing prompt references must use the final copied location, not the packaging location. For example: `Use @workspace/tasks/cloud-setup-aws-credentials/requirements.md`.
 4. **Other YAML fields**:
    - `goals`: expected outcomes after the user completes the task (markdown list).
    - `request`: a string content which is used to ask user to do a task as user's manager. When `request` is set, leave the `prompt` field as a blank placeholder so the user drafts it themselves.
@@ -90,13 +91,29 @@ Each showcase entry contains:
    - `extensions`: agent extensions to use.
    - `tools`: list every shell command, CLI binary, or executable script used either by the showcase prompt directly or by any skill in `skills`. Examples: `ffmpeg`, `ffprobe`, `pnpm`, `uv`, `core/bin/create-image`, `core/bin/create-audio`. Include project-local scripts with their repo-relative path.
    - `in_mode`: `prod` (execute in the stable prod instance) or `dev` (execute in prod, monitor in dev WebUI for live-reload).
-   - `directory`: where the files will be copied to from the showcase files folder `workspace/showcases/{showcase_slug_id}/` when using the template.
+   - `directory`: where the files will be copied to from the showcase files folder `workspace/showcases/{showcase_slug_id}/` when using the template. Always set it to a type-based directory plus the showcase id/slug, using the rules in "Directory Selection" below.
    - `terms`: every technology, format, protocol, or concept knowledge that is related to the showcase outcome, the listed `tools`, or any skill in `skills`. Cover language/runtime terms (e.g., `python`, `bash`, `uv`, `pip`), formats (`mp3`, `wav`, `png`, `mp4`, `yaml`, `json`, `markdown`), codecs/parameters (`h264`, `x264`, `h264 CRF`, `yuv420p`, `fps`, `bitrate`), tooling concepts (`ffmpeg filter`, `shell command`, `bash script`, `apt-get`, `brew`), and model names used (`gpt-image-2`, `gpt-4o-mini-tts`). Users explore these terms to learn the knowledge behind the showcase.
    - `related`: optional related showcase list, using `{ slug, caption }` entries where `slug` is another showcase id and `caption` explains the connection.
    - `variants`: optional variant showcase list, using `{ slug, caption }` entries where `slug` is another showcase id and `caption` explains how a similar prompt creates a different result.
    - `video_prompt`: a prompt used to generate a short video that either (a) teaches what the user will learn from running the showcase, or (b) demos the final result the showcase produces. Prefer the demo angle for media/visual showcases and the learning angle for skill/concept showcases. Write it as creative direction for a video generator: subject, scenes, pacing, narration tone, and the final takeaway.
    - `tutorial_prompt`: a prompt used to generate a tutorial video or an online interactive course that walks the user through completing this specific showcase end-to-end. It should describe the audience, the lesson arc (setup → guided steps → final result), the checkpoints, and what the learner can run themselves.
-   - `links[].prompt`: each entry under `links` is a related knowledge topic (e.g., `Bash`, `Python vs uv`, `markdown/yaml/json`) drawn from `terms`. Its `prompt` is used to generate a tutorial video or an online interactive course **about that underlying knowledge**, not about the showcase itself. Scope each prompt to one topic so it stays reusable across showcases that share the same term.
+   - `links[].prompt`: each entry under `links` is a related knowledge topic (e.g., `Bash`, `Python vs uv`, `markdown/yaml/json`) drawn from `terms`. Its `prompt` is used to generate a tutorial video or an online interactive course **about that underlying knowledge**, not about the showcase itself. Scope each prompt to one topic so it stays reusable across showcases that share the same term. If the link already has a `url`, omit `prompt`; the URL is enough and no generated tutorial prompt data is needed.
+
+## Directory Selection
+
+Every showcase must set `directory` to one of these base directories plus the showcase id/slug:
+
+| Showcase shape | Directory |
+|---|---|
+| Learning content, tutorials, courses, lesson plans, assignments, slides-as-learning-material | `workspace/learning/{showcase_slug_id}` |
+| Research, analysis, comparison, browser research, notes, reports, source investigation | `workspace/research/{showcase_slug_id}` |
+| Operational tasks, cloud setup, local setup, media-generation tasks, general non-coding tasks | `workspace/tasks/{showcase_slug_id}` |
+| Product/app/site/game/prototype coding work outside Skill Pilot core | `workspace/vibe-coding/{showcase_slug_id}` |
+| Skill Pilot core, codeware, `core/webui`, `core/engine`, system skills, or dev-swarm skill development | `core/development/{showcase_slug_id}` |
+
+If the type cannot be detected confidently, fall back to `workspace/tasks/{showcase_slug_id}`.
+
+Keep `workspace/showcases/{showcase_slug_id}/` as the packaging source for `showcase.yaml`, `files.yaml`, assets, and template files. Write the `prompt` as if the template files have already been copied to `directory`, and reference files with `@{directory}/requirements.md`, `@{directory}/update.md`, `@{directory}/issues.md`, or other concrete copied paths.
 
 ## Workflow
 
@@ -114,8 +131,8 @@ Before writing the `prompt` field, read `references/prompt-writing.md` and follo
 Key decisions to make for each showcase:
 - Choose the correct `in_mode`: `dev` for Skill Pilot development showcases, `prod` for everything else.
 - Set `use_worktree: true` and `git_tag` only for reverse-engineering showcases that need a specific code checkpoint.
-- Set `directory` when the showcase files belong somewhere other than `workspace/showcases/{id}/` (e.g., `core/development/{feature}/` for codeware showcases).
-- Write a clear, runnable, user-facing `prompt` string. Reference files with `@path/to/file` when needed.
+- Set `directory` using the "Directory Selection" table, always ending with `{showcase_slug_id}`.
+- Write a clear, runnable, user-facing `prompt` string. Use YAML block scalar style `prompt: |-` for multi-line prompts. Reference files with their copied destination paths, for example `Use @workspace/tasks/cloud-setup-aws-credentials/requirements.md`.
 - Write a `goals` field as a markdown bullet list of expected outcomes.
 - Choose `terms` for technology concepts users can explore later.
 - Add `related` entries when another showcase is a natural next step or prerequisite; keep captions short and user-facing.
