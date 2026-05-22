@@ -63,6 +63,8 @@ def render(path: Path) -> str:
             git_commit = str(metadata["git_commit"])
         if not model and metadata.get("model"):
             model = str(metadata["model"])
+        if not model and record.get("type") == "model_info" and record.get("model"):
+            model = str(record["model"])
         if not agent and record.get("agent"):
             agent = str(record["agent"])
         if git_commit and model and agent:
@@ -79,7 +81,7 @@ def render(path: Path) -> str:
     lines.append(f"- commit: {git_commit}")
     if agent:
         lines.append(f"- agent: {agent}")
-    if model and agent in {"codex", "claude"}:
+    if model and agent in {"codex", "claude", "opencode"}:
         lines.append(f"- model: {model}")
     lines.append("")
 

@@ -290,6 +290,26 @@ def extract_opencode_dialog(payload: dict[str, Any]) -> tuple[str, str] | None:
     return None
 
 
+def extract_opencode_model(payload: dict[str, Any]) -> str | None:
+    event = payload.get("event")
+    if not isinstance(event, dict):
+        return None
+    properties = event.get("properties")
+    if not isinstance(properties, dict):
+        return None
+    info = properties.get("info")
+    if not isinstance(info, dict):
+        return None
+    model = info.get("model")
+    if isinstance(model, dict):
+        model_id = model.get("id")
+        if model_id:
+            return str(model_id)
+    if isinstance(model, str) and model:
+        return model
+    return None
+
+
 def opencode_has_session(payload: dict[str, Any]) -> bool:
     event = payload.get("event")
     if not isinstance(event, dict):
@@ -330,6 +350,18 @@ def record_event(default_event: str, extra_metadata: dict[str, Any] | None = Non
 
     ensure_start_record(path, agent, sid, payload, extra_metadata)
     if agent == "opencode":
+        model = extract_opencode_model(payload)
+        if model and not has_record_type(path, "model_info"):
+            append_record(
+                path,
+                {
+                    "type": "model_info",
+                    "timestamp": format_timestamp(),
+                    "agent": agent,
+                    "session_id": sid,
+                    "model": model,
+                },
+            )
         opencode_dialog = extract_opencode_dialog(payload)
         if opencode_dialog:
             record_type, content = opencode_dialog
