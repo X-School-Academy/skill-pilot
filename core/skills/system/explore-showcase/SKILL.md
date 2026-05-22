@@ -97,7 +97,7 @@ Each showcase entry contains:
    - `variants`: optional variant showcase list, using `{ slug, caption }` entries where `slug` is another showcase id and `caption` explains how a similar prompt creates a different result.
    - `video_prompt`: a prompt used to generate a short video that either (a) teaches what the user will learn from running the showcase, or (b) demos the final result the showcase produces. Prefer the demo angle for media/visual showcases and the learning angle for skill/concept showcases. Write it as creative direction for a video generator: subject, scenes, pacing, narration tone, and the final takeaway.
    - `tutorial_prompt`: a prompt used to generate a tutorial video or an online interactive course that walks the user through completing this specific showcase end-to-end. It should describe the audience, the lesson arc (setup → guided steps → final result), the checkpoints, and what the learner can run themselves.
-   - `links[].prompt`: each entry under `links` is a related knowledge topic (e.g., `Bash`, `Python vs uv`, `markdown/yaml/json`) drawn from `terms`. Its `prompt` is used to generate a tutorial video or an online interactive course **about that underlying knowledge**, not about the showcase itself. Scope each prompt to one topic so it stays reusable across showcases that share the same term. If the link already has a `url`, omit `prompt`; the URL is enough and no generated tutorial prompt data is needed.
+   - `links`: optional external references or generated-learning prompts for underlying knowledge topics. Use `url` for existing authoritative references. Use `prompt` only when the showcase should generate an extra tutorial video or online interactive course for a single reusable topic. Do not put both `url` and `prompt` on the same link unless there is a specific reason to augment an external reference with generated learning content.
 
 ## Directory Selection
 
@@ -133,11 +133,12 @@ Key decisions to make for each showcase:
 - Choose the correct `in_mode`: `dev` for Skill Pilot development showcases, `prod` for everything else.
 - Set `use_worktree: true` and `git_tag` only for reverse-engineering showcases that need a specific code checkpoint.
 - Set `directory` using the "Directory Selection" table, always ending with `{showcase_slug_id}`.
-- Write a clear, runnable, user-facing `prompt` string. Use YAML block scalar style `prompt: |-` for multi-line prompts. Reference files with their copied destination paths, for example `Use @workspace/tasks/cloud-setup-aws-credentials/requirements.md`.
+- Write a clear, runnable, user-facing `prompt` string. Use YAML block scalar style `prompt: |-` for multi-line prompts. Reference files with their copied destination paths, for example `Use @workspace/tasks/cloud-setup-aws-credentials/requirements.md`. If `requirements.md`, `update.md`, or `issues.md` already defines the details, do not repeat those details in `prompt`; summarize the outcome and point to the file.
 - Write a `goals` field as a markdown bullet list of expected outcomes.
 - Choose `terms` for technology concepts users can explore later.
 - Add `related` entries when another showcase is a natural next step or prerequisite; keep captions short and user-facing.
 - Add `variants` entries when another showcase uses a similar prompt shape but intentionally changes the outcome, implementation language, skill selection, agent setup, or failure/recovery path; keep captions short and user-facing.
+- Add `links` for external references or generated learning content about underlying terms. Prefer external `url` links for canonical documentation; use `prompt` when no URL is provided and the intended output is an extra tutorial video or online interactive course about one reusable topic.
 - Write `video_prompt` and `tutorial_prompt`
 
 Ask the user to review and approve `showcase.yaml` before continuing.
