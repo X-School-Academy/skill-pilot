@@ -1,6 +1,6 @@
 # Category: Browser Tasks — Types
 
-Browser-driven automations using `agent-browser`. **Every showcase in this category must warn the user about prompt-injection risk before navigating to any non-trusted site, and must use headed mode for local development.**
+Browser-driven automations using `agent-browser`. The runtime agent flow must handle remote-site safety through the relevant browser skill behavior, including prompt-injection risk warnings before navigating to non-trusted sites. Do not put those generic warnings into user-authored `requirements.md`, `update.md`, or `issues.md` files. Use headed mode for local development.
 
 Primary audiences: AI agent learners, business owners.
 

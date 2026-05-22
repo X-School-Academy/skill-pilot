@@ -127,7 +127,7 @@ Create the file `workspace/showcases/{showcase_slug_id}/showcase.yaml` with all 
 
 The YAML must follow the schema documented in `core/engine/data/AGENTS.md`.
 Before writing the `prompt` field, read `references/prompt-writing.md` and follow its user-facing prompt rules.
-When writing `requirements.md`, `update.md`, or `issues.md`, do not include much tech detail. Treat the request as coming from a non-tech user — capture what the user wants to do or have, and what problem they have seen from the UI, logs, or unexpected behavior. 
+When writing `requirements.md`, `update.md`, or `issues.md`, do not include much tech detail. Treat the request as coming from a non-tech user — capture what the user wants to do or have, and what problem they have seen from the UI, logs, or unexpected behavior. Do not add generic agent-safety reminders or agent operating policy to these user-authored files, such as prompt-injection warnings before opening websites; those belong in the relevant agent skill behavior and runtime plan.
 
 Key decisions to make for each showcase:
 - Choose the correct `in_mode`: `dev` for Skill Pilot development showcases, `prod` for everything else.
