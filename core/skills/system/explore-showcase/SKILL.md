@@ -138,7 +138,7 @@ Key decisions to make for each showcase:
 - Choose `terms` for technology concepts users can explore later.
 - Add `related` entries when another showcase is a natural next step or prerequisite; keep captions short and user-facing.
 - Add `variants` entries when another showcase uses a similar prompt shape but intentionally changes the outcome, implementation language, skill selection, agent setup, or failure/recovery path; keep captions short and user-facing.
-- Write `video_prompt` and `tutorial_prompt` if you plan to generate media assets in step 2.
+- Write `video_prompt` and `tutorial_prompt`
 
 Ask the user to review and approve `showcase.yaml` before continuing.
 
