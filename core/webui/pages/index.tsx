@@ -46,6 +46,7 @@ import {
   IconCamera,
   IconFolderOpen,
   IconHistory,
+  IconRobot,
 } from '@tabler/icons-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -114,6 +115,19 @@ interface SkillCategory {
   skills: SkillItem[];
 }
 
+interface SubagentItem {
+  name: string;
+  fileName: string;
+  description: string;
+  disabled: boolean;
+}
+
+interface SubagentCategory {
+  id: string;
+  label: string;
+  subagents: SubagentItem[];
+}
+
 interface ScheduleItem {
   id: string;
   name: string;
@@ -169,6 +183,7 @@ type ActiveView =
   | 'processes'
   | 'discord-bot'
   | 'skills'
+  | 'subagents'
   | 'mcp-servers'
   | 'schedule'
   | 'extensions'
@@ -256,6 +271,19 @@ export default function HomePage() {
   const [skillUsePrompt, setSkillUsePrompt] = useState('');
   const [skillEditSaving, setSkillEditSaving] = useState(false);
   const [skillEditOutput, setSkillEditOutput] = useState('');
+  const [subagentCategories, setSubagentCategories] = useState<SubagentCategory[]>([]);
+  const [subagentDisabled, setSubagentDisabled] = useState<Set<string>>(new Set());
+  const [subagentSaving, setSubagentSaving] = useState(false);
+  const [subagentSaveOutput, setSubagentSaveOutput] = useState('');
+  const [subagentActiveTab, setSubagentActiveTab] = useState('all');
+  const [subagentSearchText, setSubagentSearchText] = useState('');
+  const [subagentAppliedSearch, setSubagentAppliedSearch] = useState('');
+  const [subagentSearchFocused, setSubagentSearchFocused] = useState(false);
+  const [subagentSubScreen, setSubagentSubScreen] = useState<null | { mode: 'use' | 'view' | 'edit'; subagentName: string; categoryId: string; createSubagent?: boolean }>(null);
+  const [subagentContent, setSubagentContent] = useState('');
+  const [subagentUsePrompt, setSubagentUsePrompt] = useState('');
+  const [subagentEditSaving, setSubagentEditSaving] = useState(false);
+  const [subagentEditOutput, setSubagentEditOutput] = useState('');
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [scheduleEditing, setScheduleEditing] = useState<null | string>(null);
   const [scheduleForm, setScheduleForm] = useState<ScheduleFormData>({
@@ -385,6 +413,23 @@ export default function HomePage() {
       setSkillDisabled(disabled);
     } catch (err) {
       console.error('Failed to fetch skills:', err);
+    }
+  }, []);
+
+  const fetchSubagents = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/config/subagents`);
+      const cats: SubagentCategory[] = res.data?.categories || [];
+      setSubagentCategories(cats);
+      const disabled = new Set<string>();
+      for (const cat of cats) {
+        for (const subagent of cat.subagents) {
+          if (subagent.disabled) disabled.add(subagent.name);
+        }
+      }
+      setSubagentDisabled(disabled);
+    } catch (err) {
+      console.error('Failed to fetch subagents:', err);
     }
   }, []);
 
@@ -581,6 +626,12 @@ export default function HomePage() {
   }, [activeView, fetchSkills]);
 
   useEffect(() => {
+    if (activeView === 'subagents') {
+      void fetchSubagents();
+    }
+  }, [activeView, fetchSubagents]);
+
+  useEffect(() => {
     if (activeView === 'schedule') {
       void fetchSchedules();
       void fetchSkills();
@@ -766,7 +817,7 @@ export default function HomePage() {
     if (typeof view === 'string' && view) {
       const validViews: ActiveView[] = [
         'explore', 'home', 'live-terminal', 'learning', 'projects', 'research', 'tasks',
-        'development', 'processes', 'discord-bot', 'skills', 'mcp-servers',
+        'development', 'processes', 'discord-bot', 'skills', 'subagents', 'mcp-servers',
         'schedule', 'extensions', 'ai-security', 'profile',
       ];
       if (validViews.includes(view as ActiveView)) {
@@ -841,6 +892,7 @@ export default function HomePage() {
     { label: 'Live Avatar', href: '/live-avatar', icon: <IconVideo size="1rem" />, action: () => router.push('/live-avatar') },
     { label: 'Security Cameras', href: '/cameras', icon: <IconCamera size="1rem" />, action: () => router.push('/cameras') },
     { dividerBefore: '', label: 'Skills', href: '/?view=skills', view: 'skills', icon: <IconWand size="1rem" /> },
+    { label: 'Subagents', href: '/?view=subagents', view: 'subagents', icon: <IconRobot size="1rem" /> },
     { label: 'Workflows', href: '/workflows', icon: <IconVectorBezier2 size="1rem" />, action: () => router.push('/workflows') },
     { label: 'MCP Servers', href: '/?view=mcp-servers', view: 'mcp-servers', icon: <IconServer size="1rem" /> },
     { label: 'Schedules', href: '/?view=schedule', view: 'schedule', icon: <IconCalendar size="1rem" /> },
@@ -2065,6 +2117,520 @@ export default function HomePage() {
               wordBreak: 'break-all',
             }}>
               {skillSaveOutput}
+            </pre>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const subagentToggle = (name: string) => {
+    setSubagentDisabled((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  };
+
+  const runSubagentSearch = (value?: string) => {
+    setSubagentAppliedSearch((value ?? subagentSearchText).trim());
+  };
+
+  const subagentSave = async () => {
+    setSubagentSaving(true);
+    setSubagentSaveOutput('');
+    try {
+      const res = await axios.post(`${API_BASE_URL}/config/subagents/update`, {
+        disabled: Array.from(subagentDisabled),
+      });
+      const results = res.data?.results || [];
+      setSubagentSaveOutput(results.map((r: any) => `[${r.command}] exit=${r.exit_code}\n${r.output}`).join('\n---\n'));
+      await fetchSubagents();
+    } catch (err: any) {
+      const results = err?.response?.data?.results || [];
+      const output = results.map((r: any) => `[${r.command}] exit=${r.exit_code}\n${r.output}`).join('\n---\n');
+      setSubagentSaveOutput(output || err?.response?.data?.error || 'Save failed');
+    } finally {
+      setSubagentSaving(false);
+    }
+  };
+
+  const subagentOpenSubScreen = async (mode: 'use' | 'view' | 'edit', subagentName: string, categoryId: string) => {
+    setSubagentSubScreen({ mode, subagentName, categoryId });
+    setSubagentUsePrompt('');
+    setSubagentEditOutput('');
+    if (mode === 'view' || mode === 'edit') {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/config/subagents/${encodeURIComponent(categoryId)}/${encodeURIComponent(subagentName)}/content`);
+        setSubagentContent(res.data?.content || '');
+      } catch {
+        setSubagentContent('Failed to load subagent content.');
+      }
+    }
+  };
+
+  const subagentEditSave = async () => {
+    if (!subagentSubScreen) return;
+    setSubagentEditSaving(true);
+    setSubagentEditOutput('');
+    try {
+      const res = await axios.post(
+        `${API_BASE_URL}/config/subagents/${encodeURIComponent(subagentSubScreen.categoryId)}/${encodeURIComponent(subagentSubScreen.subagentName)}/content`,
+        { content: subagentContent },
+      );
+      const results = res.data?.results || [];
+      setSubagentEditOutput(results.map((r: any) => `[${r.command}] exit=${r.exit_code}\n${r.output}`).join('\n---\n'));
+      await fetchSubagents();
+    } catch (err: any) {
+      const results = err?.response?.data?.results || [];
+      const output = results.map((r: any) => `[${r.command}] exit=${r.exit_code}\n${r.output}`).join('\n---\n');
+      setSubagentEditOutput(output || err?.response?.data?.error || 'Save failed');
+    } finally {
+      setSubagentEditSaving(false);
+    }
+  };
+
+  const subagentUseSubmit = () => {
+    if (!subagentSubScreen) return;
+    const instruction = subagentUsePrompt.trim();
+    if (subagentSubScreen.createSubagent && !instruction) return;
+    const name = subagentSubScreen.subagentName;
+    let prompt: string;
+    if (subagentSubScreen.createSubagent) {
+      prompt = `Create a Skill Pilot subagent using agent skill \`agent-skill\`, as user's requirement below:\n\n${instruction}`;
+    } else {
+      prompt = `Use Skill Pilot subagent: ${name}.`;
+      if (instruction) {
+        prompt += ` User request: ${instruction}`;
+      }
+    }
+    setSubagentSubScreen(null);
+    void router.push({ pathname: '/', query: { new_session: 'true', prompt } });
+  };
+
+  const parseMarkdownParts = (content: string) => {
+    let frontmatter: Record<string, string> = {};
+    let markdownBody = content;
+    if (content.startsWith('---')) {
+      const endIdx = content.indexOf('---', 3);
+      if (endIdx !== -1) {
+        const block = content.slice(3, endIdx);
+        for (const line of block.split('\n')) {
+          const colonIdx = line.indexOf(':');
+          if (colonIdx > 0) {
+            const key = line.slice(0, colonIdx).trim();
+            const val = line.slice(colonIdx + 1).trim();
+            if (key) frontmatter[key] = val;
+          }
+        }
+        markdownBody = content.slice(endIdx + 3).trim();
+      }
+    }
+    return { frontmatter, markdownBody };
+  };
+
+  const renderSubagentsView = () => {
+    if (subagentSubScreen) {
+      const { mode, subagentName } = subagentSubScreen;
+
+      if (mode === 'use') {
+        const isCreate = subagentSubScreen.createSubagent;
+        return (
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <Group position="apart" mb={16}>
+              <Text size="lg" weight={700}>{isCreate ? 'Create Subagent' : `Use Subagent: ${subagentName}`}</Text>
+              <button
+                type="button"
+                onClick={() => setSubagentSubScreen(null)}
+                style={{
+                  border: `1px solid ${theme.colors.gray[3]}`, borderRadius: 8, padding: '4px 10px',
+                  background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff', fontSize: 12, cursor: 'pointer',
+                }}
+              >
+                Back
+              </button>
+            </Group>
+            {isCreate && (
+              <Text size="sm" color="dimmed" mb={8}>
+                Describe what this subagent should do, when it should be used, and what output it should return.
+              </Text>
+            )}
+            <textarea
+              placeholder={isCreate
+                ? "Describe the subagent: role, triggers, prompt behavior, output format..."
+                : "Write optional instruction for the AI agent..."}
+              value={subagentUsePrompt}
+              onChange={(e) => setSubagentUsePrompt(e.target.value)}
+              rows={6}
+              style={{
+                width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 6, fontFamily: 'inherit',
+                border: `1px solid ${theme.colors.gray[3]}`,
+                background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff',
+                color: 'inherit', resize: 'vertical', marginBottom: 12,
+              }}
+            />
+            <div>
+              <button
+                type="button"
+                onClick={subagentUseSubmit}
+                disabled={isCreate && !subagentUsePrompt.trim()}
+                style={{
+                  padding: '8px 24px', fontSize: 13, fontWeight: 600, borderRadius: 8,
+                  cursor: (isCreate && !subagentUsePrompt.trim()) ? 'not-allowed' : 'pointer',
+                  border: `1px solid ${theme.colors.blue[5]}`, background: theme.colors.blue[6], color: '#fff',
+                  opacity: (isCreate && !subagentUsePrompt.trim()) ? 0.5 : 1,
+                }}
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      if (mode === 'view') {
+        const { frontmatter, markdownBody } = parseMarkdownParts(subagentContent);
+        return (
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <Group position="apart" mb={16}>
+              <Text size="lg" weight={700}>{frontmatter.name || subagentName}</Text>
+              <button
+                type="button"
+                onClick={() => setSubagentSubScreen(null)}
+                style={{
+                  border: `1px solid ${theme.colors.gray[3]}`, borderRadius: 8, padding: '4px 10px',
+                  background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff', fontSize: 12, cursor: 'pointer',
+                }}
+              >
+                Back
+              </button>
+            </Group>
+
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingBottom: 24 }}>
+              {Object.keys(frontmatter).length > 0 && (
+                <table style={{ width: '100%', maxWidth: 600, marginBottom: 24, borderCollapse: 'collapse', fontSize: 13 }}>
+                  <tbody>
+                    {Object.entries(frontmatter).map(([key, val]) => (
+                      <tr key={key}>
+                        <td style={{
+                          padding: '6px 12px', fontWeight: 600, whiteSpace: 'nowrap',
+                          borderBottom: `1px solid ${theme.colors.gray[2]}`,
+                          color: theme.colorScheme === 'dark' ? theme.colors.gray[4] : theme.colors.gray[7],
+                          width: 140, verticalAlign: 'top',
+                        }}>
+                          {key}
+                        </td>
+                        <td style={{ padding: '6px 12px', borderBottom: `1px solid ${theme.colors.gray[2]}` }}>
+                          {val}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              <div className="prose max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownBody}</ReactMarkdown>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (mode === 'edit') {
+        return (
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <Group position="apart" mb={16}>
+              <Text size="lg" weight={700}>Edit: {subagentName}</Text>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => void subagentEditSave()}
+                  disabled={subagentEditSaving}
+                  style={{
+                    padding: '4px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8,
+                    cursor: subagentEditSaving ? 'not-allowed' : 'pointer',
+                    border: `1px solid ${theme.colors.blue[5]}`, background: theme.colors.blue[6], color: '#fff',
+                  }}
+                >
+                  {subagentEditSaving ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubagentSubScreen(null)}
+                  style={{
+                    border: `1px solid ${theme.colors.gray[3]}`, borderRadius: 8, padding: '4px 10px',
+                    background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff', fontSize: 12, cursor: 'pointer',
+                  }}
+                >
+                  Back
+                </button>
+              </div>
+            </Group>
+            <textarea
+              value={subagentContent}
+              onChange={(e) => setSubagentContent(e.target.value)}
+              style={{
+                flex: 1, width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 6,
+                fontFamily: 'monospace', lineHeight: 1.5,
+                border: `1px solid ${theme.colors.gray[3]}`,
+                background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff',
+                color: 'inherit', resize: 'none',
+              }}
+            />
+            {subagentEditOutput && (
+              <pre style={{
+                marginTop: 12, fontSize: 11, padding: 10, borderRadius: 6,
+                maxHeight: 200, overflowY: 'auto', flexShrink: 0,
+                background: theme.colorScheme === 'dark' ? theme.colors.dark[8] : theme.colors.gray[1],
+                border: `1px solid ${theme.colors.gray[3]}`, whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+              }}>
+                {subagentEditOutput}
+              </pre>
+            )}
+          </div>
+        );
+      }
+    }
+
+    const subagentTabs = [
+      { id: 'all', label: 'All', subagents: subagentCategories.flatMap((cat) => cat.subagents.map((subagent) => ({ ...subagent, categoryId: cat.id }))) },
+      ...subagentCategories.map((cat) => ({
+        id: cat.id,
+        label: cat.label,
+        subagents: cat.subagents.map((subagent) => ({ ...subagent, categoryId: cat.id })),
+      })),
+    ];
+    const activeTab = subagentTabs.find((tab) => tab.id === subagentActiveTab) || subagentTabs[0];
+    const normalizedSubagentSearch = subagentSearchText.trim().toLowerCase();
+    const subagentSuggestions = normalizedSubagentSearch
+      ? activeTab.subagents.filter((subagent) => (
+        subagent.name.toLowerCase().includes(normalizedSubagentSearch) ||
+        subagent.description.toLowerCase().includes(normalizedSubagentSearch)
+      ))
+      : activeTab.subagents;
+    const normalizedAppliedSearch = subagentAppliedSearch.trim().toLowerCase();
+    const displayedSubagents = normalizedAppliedSearch
+      ? activeTab.subagents.filter((subagent) => (
+        subagent.name.toLowerCase().includes(normalizedAppliedSearch) ||
+        subagent.description.toLowerCase().includes(normalizedAppliedSearch)
+      ))
+      : activeTab.subagents;
+
+    return (
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        <Group position="apart" mb={12}>
+          <Text size="lg" weight={700}>Subagents</Text>
+          <button
+            type="button"
+            onClick={() => {
+              setSubagentSubScreen({ mode: 'use', subagentName: 'agent-skill', categoryId: 'user', createSubagent: true });
+              setSubagentUsePrompt('');
+            }}
+            style={{
+              padding: '5px 14px', fontSize: 12, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+              border: `1px solid ${theme.colors.blue[5]}`, background: theme.colors.blue[6], color: '#fff',
+            }}
+          >
+            Create Subagent
+          </button>
+        </Group>
+
+        <div style={{ display: 'flex', gap: 0, borderBottom: `2px solid ${theme.colors.gray[3]}`, marginBottom: 16 }}>
+          {subagentTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setSubagentActiveTab(tab.id)}
+              style={{
+                padding: '8px 16px',
+                fontSize: 13,
+                fontWeight: subagentActiveTab === tab.id ? 700 : 400,
+                cursor: 'pointer',
+                border: 'none',
+                borderBottom: subagentActiveTab === tab.id ? `2px solid ${theme.colors.blue[6]}` : '2px solid transparent',
+                marginBottom: -2,
+                background: 'transparent',
+                color: subagentActiveTab === tab.id ? theme.colors.blue[6] : 'inherit',
+              }}
+            >
+              {tab.label} ({tab.subagents.length})
+            </button>
+          ))}
+        </div>
+
+        <div style={{ position: 'relative', marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="text"
+              value={subagentSearchText}
+              onChange={(e) => setSubagentSearchText(e.target.value)}
+              onFocus={() => setSubagentSearchFocused(true)}
+              onBlur={() => setTimeout(() => setSubagentSearchFocused(false), 150)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  runSubagentSearch();
+                }
+              }}
+              placeholder={`Search ${activeTab.label.toLowerCase()} subagents...`}
+              style={{
+                flex: 1,
+                padding: '8px 10px',
+                fontSize: 13,
+                borderRadius: 8,
+                border: `1px solid ${theme.colors.gray[3]}`,
+                background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff',
+                color: 'inherit',
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => runSubagentSearch()}
+              style={{
+                padding: '8px 16px',
+                fontSize: 12,
+                fontWeight: 600,
+                borderRadius: 8,
+                cursor: 'pointer',
+                border: `1px solid ${theme.colors.blue[5]}`,
+                background: theme.colors.blue[6],
+                color: '#fff',
+              }}
+            >
+              Search
+            </button>
+          </div>
+          {subagentSearchFocused && subagentSuggestions.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 88,
+              zIndex: 10,
+              maxHeight: 220,
+              overflowY: 'auto',
+              borderRadius: 8,
+              marginTop: 4,
+              border: `1px solid ${theme.colors.gray[3]}`,
+              background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            }}>
+              {subagentSuggestions.slice(0, 12).map((subagent) => (
+                <div
+                  key={`${subagent.categoryId}:${subagent.name}`}
+                  onMouseDown={() => {
+                    setSubagentSearchText(subagent.name);
+                    runSubagentSearch(subagent.name);
+                  }}
+                  style={{
+                    padding: '8px 10px',
+                    cursor: 'pointer',
+                    borderBottom: `1px solid ${theme.colors.gray[2]}`,
+                  }}
+                >
+                  <Text size="sm" weight={600}>{subagent.name}</Text>
+                  <Text size="xs" color="dimmed" lineClamp={1}>{subagent.description}</Text>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          {activeTab.subagents.length === 0 && (
+            <Text size="sm" color="dimmed">No subagents in this category.</Text>
+          )}
+
+          {activeTab.subagents.length > 0 && displayedSubagents.length === 0 && (
+            <Text size="sm" color="dimmed">No subagents match this search in the current category.</Text>
+          )}
+
+          {displayedSubagents.map((subagent) => (
+            <div
+              key={`${subagent.categoryId}:${subagent.name}`}
+              style={{
+                border: `1px solid ${theme.colors.gray[3]}`,
+                borderRadius: 8,
+                padding: '8px 12px',
+                marginBottom: 6,
+                background: theme.colorScheme === 'dark' ? theme.colors.dark[7] : '#fff',
+                opacity: subagentDisabled.has(subagent.name) ? 0.5 : 1,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Text size="sm" weight={600}>{subagent.name}</Text>
+                  <Text size="xs" color="dimmed" lineClamp={2}>{subagent.description}</Text>
+                  <Text size="xs" color="dimmed">{subagent.fileName}</Text>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', marginLeft: 12, flexShrink: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={!subagentDisabled.has(subagent.name)}
+                    onChange={() => subagentToggle(subagent.name)}
+                    style={{ width: 16, height: 16, cursor: 'pointer' }}
+                  />
+                  <Text size="xs">{subagentDisabled.has(subagent.name) ? 'Disabled' : 'Enabled'}</Text>
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                {(['Use', 'View', 'Edit'] as const).map((action) => (
+                  <button
+                    key={action}
+                    type="button"
+                    onClick={() => void subagentOpenSubScreen(action.toLowerCase() as 'use' | 'view' | 'edit', subagent.name, subagent.categoryId)}
+                    style={{
+                      padding: '5px 14px', fontSize: 12, fontWeight: 500, borderRadius: 6, cursor: 'pointer',
+                      border: `1px solid ${theme.colors.gray[4]}`,
+                      background: theme.colorScheme === 'dark' ? theme.colors.dark[5] : theme.colors.gray[0],
+                      color: 'inherit',
+                    }}
+                  >
+                    {action}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 12, borderTop: `1px solid ${theme.colors.gray[3]}`, paddingTop: 12, flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={() => void subagentSave()}
+            disabled={subagentSaving}
+            style={{
+              padding: '8px 24px',
+              fontSize: 13,
+              fontWeight: 600,
+              borderRadius: 8,
+              cursor: subagentSaving ? 'not-allowed' : 'pointer',
+              border: `1px solid ${theme.colors.blue[5]}`,
+              background: theme.colors.blue[6],
+              color: '#fff',
+            }}
+          >
+            {subagentSaving ? 'Saving...' : 'Save & Update'}
+          </button>
+          {subagentSaveOutput && (
+            <pre style={{
+              marginTop: 12,
+              fontSize: 11,
+              padding: 10,
+              borderRadius: 6,
+              maxHeight: 200,
+              overflowY: 'auto',
+              background: theme.colorScheme === 'dark' ? theme.colors.dark[8] : theme.colors.gray[1],
+              border: `1px solid ${theme.colors.gray[3]}`,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+            }}>
+              {subagentSaveOutput}
             </pre>
           )}
         </div>
@@ -3715,6 +4281,8 @@ export default function HomePage() {
         return renderDiscordBotView();
       case 'skills':
         return renderSkillsView();
+      case 'subagents':
+        return renderSubagentsView();
       case 'mcp-servers':
         return renderMcpServersView();
       case 'schedule':

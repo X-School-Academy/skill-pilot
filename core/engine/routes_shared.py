@@ -126,6 +126,7 @@ _MCP_SERVER_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 _MCP_SKILLS_DIR = _REPO_ROOT / "core" / "skills" / "mcp"
 _SYSTEM_SKILLS_DIR = _REPO_ROOT / "core" / "skills" / "system"
 _DISABLED_SKILLS_PATH = _REPO_ROOT / "config" / "disabled_skills.json5"
+_DISABLED_SUBAGENTS_PATH = _REPO_ROOT / "config" / "disabled_subagents.json5"
 _EXTENSIONS_DIR = _REPO_ROOT / "extensions"
 _SHOWCASES_PATH = _REPO_ROOT / "core" / "engine" / "data" / "showcases.json5"
 _SKILL_CATEGORIES: List[tuple[str, str, Path]] = [
@@ -134,6 +135,10 @@ _SKILL_CATEGORIES: List[tuple[str, str, Path]] = [
     ("mcp", "MCP", _REPO_ROOT / "core" / "skills" / "mcp"),
     ("third-party", "Third Party", _REPO_ROOT / "core" / "skills" / "third-party"),
     ("user", "User", _REPO_ROOT / "core" / "skills" / "user"),
+]
+_SUBAGENT_CATEGORIES: List[tuple[str, str, Path]] = [
+    ("system", "System", _REPO_ROOT / "core" / "subagents" / "system"),
+    ("user", "User", _REPO_ROOT / "core" / "subagents" / "user"),
 ]
 _heartbeat_watcher_started = False
 _last_native_cleanup_time: float = 0.0

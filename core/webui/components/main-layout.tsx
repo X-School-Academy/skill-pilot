@@ -10,7 +10,7 @@ import {
   IconChecklist, IconCode, IconHammer, IconRocket, IconProgress, IconWand,
   IconServer, IconCalendar, IconPuzzle, IconUser, IconShieldLock,
   IconBrandDiscord, IconVectorBezier2, IconVideo, IconCamera, IconFolderOpen,
-  IconHistory,
+  IconHistory, IconRobot,
 } from '@tabler/icons-react';
 import axios from 'axios';
 import { apiUrl } from '../libs/api-base';
@@ -45,6 +45,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { label: 'Live Avatar',      href: '/live-avatar',                               icon: <IconVideo size="1rem" /> },
   { label: 'Security Cameras', href: '/cameras',                                   icon: <IconCamera size="1rem" /> },
   { dividerBefore: '', label: 'Skills',    href: '/?view=skills',      view: 'skills',      icon: <IconWand size="1rem" /> },
+  { label: 'Subagents',      href: '/?view=subagents',   view: 'subagents',   icon: <IconRobot size="1rem" /> },
   { label: 'Workflows',        href: '/workflows',                                 icon: <IconVectorBezier2 size="1rem" /> },
   { label: 'MCP Servers',      href: '/?view=mcp-servers',  view: 'mcp-servers',  icon: <IconServer size="1rem" /> },
   { label: 'Schedules',        href: '/?view=schedule',     view: 'schedule',     icon: <IconCalendar size="1rem" /> },

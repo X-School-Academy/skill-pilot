@@ -39,6 +39,7 @@ import {
   IconVideo,
   IconFolderOpen,
   IconHistory,
+  IconRobot,
 } from '@tabler/icons-react';
 import { apiUrl } from '../../libs/api-base';
 import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
@@ -199,6 +200,7 @@ export default function TerminalsPage() {
     { label: 'Remote Clients', icon: <IconTerminal2 size="1rem" />, action: () => { void router.push('/?view=remote-clients'); } },
     { label: 'Workflows', icon: <IconVectorBezier2 size="1rem" />, action: () => { void router.push('/workflows'); } },
     { dividerBefore: '', label: 'Skills', icon: <IconWand size="1rem" />, action: () => { void router.push('/?view=skills'); } },
+    { label: 'Subagents', icon: <IconRobot size="1rem" />, action: () => { void router.push('/?view=subagents'); } },
     { label: 'MCP Servers', icon: <IconServer size="1rem" />, action: () => { void router.push('/?view=mcp-servers'); } },
     { label: 'Schedule', icon: <IconCalendar size="1rem" />, action: () => { void router.push('/?view=schedule'); } },
     { label: 'Extensions', icon: <IconPuzzle size="1rem" />, action: () => { void router.push('/?view=extensions'); } },

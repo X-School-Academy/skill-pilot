@@ -360,6 +360,18 @@ def _read_disabled_skills() -> List[str]:
     return []
 
 
+def _read_disabled_subagents() -> List[str]:
+    if not _DISABLED_SUBAGENTS_PATH.is_file():
+        return []
+    try:
+        data = json5.loads(_DISABLED_SUBAGENTS_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return [str(s) for s in data]
+    except (ValueError, OSError):
+        pass
+    return []
+
+
 @router.get("/api/config/skills")
 def config_skills_list():
     disabled_set = set(_read_disabled_skills())
@@ -451,6 +463,68 @@ async def config_skills_update(request: Request):
             results.append({"command": cmd_name, "exit_code": -1, "output": "Timed out after 120s"})
         except Exception as exc:
             results.append({"command": cmd_name, "exit_code": -1, "output": str(exc)})
+
+    return {"status": "ok", "results": results}
+
+
+@router.get("/api/config/subagents")
+def config_subagents_list():
+    disabled_set = set(_read_disabled_subagents())
+    categories = []
+    for cat_id, cat_label, cat_dir in _SUBAGENT_CATEGORIES:
+        subagents = []
+        if cat_dir.is_dir():
+            for child in sorted(cat_dir.iterdir()):
+                if child.name.startswith(".") or not child.is_file() or child.suffix != ".md":
+                    continue
+                meta = _parse_skill_frontmatter(child)
+                name = meta.get("name", child.stem)
+                subagents.append({
+                    "name": name,
+                    "fileName": child.name,
+                    "description": meta.get("description", ""),
+                    "disabled": name in disabled_set,
+                })
+        categories.append({"id": cat_id, "label": cat_label, "subagents": subagents})
+    return {"categories": categories}
+
+
+@router.post("/api/config/subagents/update")
+async def config_subagents_update(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
+
+    disabled = body.get("disabled", [])
+    if not isinstance(disabled, list):
+        return JSONResponse(status_code=400, content={"error": "disabled must be an array"})
+
+    from json5_io import write_preserving_comments
+    write_preserving_comments(_DISABLED_SUBAGENTS_PATH, disabled)
+
+    bin_dir = _REPO_ROOT / "core" / "bin"
+    results: List[Dict[str, Any]] = []
+    try:
+        proc = await asyncio.to_thread(
+            subprocess.run,
+            [str(bin_dir / "subagent-install")],
+            capture_output=True,
+            text=True,
+            cwd=str(_REPO_ROOT),
+            timeout=120,
+            shell=False,
+            env=safe_env(),
+        )
+        results.append({
+            "command": "subagent-install",
+            "exit_code": proc.returncode,
+            "output": (proc.stdout or "") + (proc.stderr or ""),
+        })
+    except subprocess.TimeoutExpired:
+        results.append({"command": "subagent-install", "exit_code": -1, "output": "Timed out after 120s"})
+    except Exception as exc:
+        results.append({"command": "subagent-install", "exit_code": -1, "output": str(exc)})
 
     return {"status": "ok", "results": results}
 
@@ -594,6 +668,28 @@ def _find_skill_category_dir(category: str) -> Path | None:
     return None
 
 
+def _find_subagent_category_dir(category: str) -> Path | None:
+    for cat_id, _, cat_dir in _SUBAGENT_CATEGORIES:
+        if cat_id == category:
+            return cat_dir
+    return None
+
+
+def _find_subagent_file(cat_dir: Path, name: str) -> Path | None:
+    direct = cat_dir / f"{name}.md"
+    if direct.is_file():
+        return direct
+    if not cat_dir.is_dir():
+        return None
+    for child in sorted(cat_dir.iterdir()):
+        if child.name.startswith(".") or not child.is_file() or child.suffix != ".md":
+            continue
+        meta = _parse_skill_frontmatter(child)
+        if meta.get("name", child.stem) == name:
+            return child
+    return None
+
+
 @router.get("/api/config/skills/{category}/{name}/content")
 def config_skill_content_read(category: str, name: str):
     cat_dir = _find_skill_category_dir(category)
@@ -649,6 +745,64 @@ async def config_skill_content_write(category: str, name: str, request: Request)
         results.append({"command": "skill-verify", "exit_code": -1, "output": "Timed out after 120s"})
     except Exception as exc:
         results.append({"command": "skill-verify", "exit_code": -1, "output": str(exc)})
+
+    return {"status": "ok", "results": results}
+
+
+@router.get("/api/config/subagents/{category}/{name}/content")
+def config_subagent_content_read(category: str, name: str):
+    cat_dir = _find_subagent_category_dir(category)
+    if cat_dir is None:
+        return JSONResponse(status_code=404, content={"error": f"Unknown category: {category}"})
+    subagent_md = _find_subagent_file(cat_dir, name)
+    if subagent_md is None:
+        return JSONResponse(status_code=404, content={"error": f"Subagent not found: {category}/{name}"})
+    content = subagent_md.read_text(encoding="utf-8", errors="replace")
+    return {"content": content}
+
+
+@router.post("/api/config/subagents/{category}/{name}/content")
+async def config_subagent_content_write(category: str, name: str, request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON body"})
+
+    content = body.get("content")
+    if content is None:
+        return JSONResponse(status_code=400, content={"error": "content is required"})
+
+    cat_dir = _find_subagent_category_dir(category)
+    if cat_dir is None:
+        return JSONResponse(status_code=404, content={"error": f"Unknown category: {category}"})
+    subagent_md = _find_subagent_file(cat_dir, name)
+    if subagent_md is None:
+        return JSONResponse(status_code=404, content={"error": f"Subagent not found: {category}/{name}"})
+
+    subagent_md.write_text(content, encoding="utf-8")
+
+    bin_dir = _REPO_ROOT / "core" / "bin"
+    results: List[Dict[str, Any]] = []
+    try:
+        proc = await asyncio.to_thread(
+            subprocess.run,
+            [str(bin_dir / "subagent-install")],
+            capture_output=True,
+            text=True,
+            cwd=str(_REPO_ROOT),
+            timeout=120,
+            shell=False,
+            env=safe_env(),
+        )
+        results.append({
+            "command": "subagent-install",
+            "exit_code": proc.returncode,
+            "output": (proc.stdout or "") + (proc.stderr or ""),
+        })
+    except subprocess.TimeoutExpired:
+        results.append({"command": "subagent-install", "exit_code": -1, "output": "Timed out after 120s"})
+    except Exception as exc:
+        results.append({"command": "subagent-install", "exit_code": -1, "output": str(exc)})
 
     return {"status": "ok", "results": results}
 
