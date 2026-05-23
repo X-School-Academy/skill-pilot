@@ -1,7 +1,7 @@
 {
   "version": "1.0",
-  "name": "sample-workflow",
-  "updated_at": "2026-03-03T22:45:48Z",
+  "name": "user-subagent-test-workflow",
+  "updated_at": "2026-05-23T01:30:58Z",
   "nodes": [
     {
       "id": 0,
@@ -21,8 +21,8 @@
       "data": {
         "title": "Random Number",
         "provider_id": "claude",
-        "subagent": "",
-        "responsibility": "Use the random number action and return one random integer as plain text."
+        "subagent": "workflow-random-number",
+        "responsibility": "Generate one random integer for this workflow test and write the required node output file."
       }
     },
     {
@@ -35,8 +35,8 @@
       "data": {
         "title": "Random String",
         "provider_id": "claude",
-        "subagent": "",
-        "responsibility": "Use the random string action and return one random alphanumeric string as plain text."
+        "subagent": "workflow-random-string",
+        "responsibility": "Generate one random alphanumeric string for this workflow test and write the required node output file."
       }
     },
     {
@@ -49,8 +49,8 @@
       "data": {
         "title": "Concat Number And String",
         "provider_id": "claude",
-        "subagent": "",
-        "responsibility": "Use the concat number string action. Read upstream random number and random string outputs, concatenate number then string, and return the result as plain text."
+        "subagent": "workflow-concat-number-string",
+        "responsibility": "Read upstream random number and random string outputs, concatenate number then string, and write the required node output file."
       }
     },
     {
@@ -63,8 +63,8 @@
       "data": {
         "title": "Detect Number",
         "provider_id": "claude",
-        "subagent": "",
-        "responsibility": "Use the detect number action. Inspect the upstream concatenated value, return extracted digits in order, or return string if no digits exist."
+        "subagent": "workflow-detect-number",
+        "responsibility": "Read the upstream concatenated value, extract digits in order, and write the required node output file."
       }
     },
     {

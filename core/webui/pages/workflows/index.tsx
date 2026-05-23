@@ -53,7 +53,7 @@ type WorkflowNode = {
   data?: {
     title?: string;
     provider_id?: string;
-    skill?: string;
+    subagent?: string;
     responsibility?: string;
   };
 };
@@ -85,6 +85,19 @@ type FileItem = {
 type LlmProvider = {
   id: string;
   name: string;
+};
+
+type SubagentItem = {
+  name: string;
+  description?: string;
+  fileName?: string;
+  disabled?: boolean;
+};
+
+type SubagentCategory = {
+  id: string;
+  label: string;
+  subagents: SubagentItem[];
 };
 
 type ValidationError = {
@@ -140,7 +153,7 @@ function createDefaultWorkflow(providerId: string): WorkflowDoc {
         data: {
           title: 'Agent 1',
           provider_id: providerId,
-          skill: '',
+          subagent: '',
           responsibility: '',
         },
       },
@@ -254,7 +267,7 @@ export default function WorkflowsPage() {
   const [sortByTime, setSortByTime] = useState(true);
 
   const [providers, setProviders] = useState<LlmProvider[]>([]);
-  const [skills, setSkills] = useState<string[]>([]);
+  const [subagents, setSubagents] = useState<string[]>([]);
   const [defaultProviderId, setDefaultProviderId] = useState('');
 
   const [workflowPath, setWorkflowPath] = useState<string | null>(null);
@@ -400,16 +413,18 @@ export default function WorkflowsPage() {
     }
   }, []);
 
-  const fetchSkills = useCallback(async () => {
+  const fetchSubagents = useCallback(async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/config/skills/installed`);
+      const res = await axios.get(`${API_BASE_URL}/config/subagents`);
       const names: string[] = [];
-      for (const skill of res.data.skills || []) {
-        if (skill?.name) names.push(String(skill.name));
+      for (const category of (res.data.categories || []) as SubagentCategory[]) {
+        for (const subagent of category.subagents || []) {
+          if (subagent?.name) names.push(String(subagent.name));
+        }
       }
-      setSkills(names);
+      setSubagents(Array.from(new Set(names)).sort((a, b) => a.localeCompare(b)));
     } catch (err) {
-      console.error('Failed to fetch skills:', err);
+      console.error('Failed to fetch subagents:', err);
     }
   }, []);
 
@@ -476,8 +491,8 @@ export default function WorkflowsPage() {
   useEffect(() => {
     void fetchTree();
     void fetchProviders();
-    void fetchSkills();
-  }, [fetchTree, fetchProviders, fetchSkills]);
+    void fetchSubagents();
+  }, [fetchTree, fetchProviders, fetchSubagents]);
 
   useWorkspaceWatcher({
     prefix: '/core/workflows',
@@ -531,7 +546,6 @@ export default function WorkflowsPage() {
       if (hasUnsavedChangesRef.current) {
         if (!window.confirm('You have unsaved changes. Leave without saving?')) {
           router.events.emit('routeChangeError');
-          // eslint-disable-next-line @typescript-eslint/no-throw-literal
           throw 'routeChangeAborted';
         }
       }
@@ -623,7 +637,7 @@ export default function WorkflowsPage() {
         data: {
           title: `Agent ${nextId}`,
           provider_id: defaultProviderId,
-          skill: '',
+          subagent: '',
           responsibility: '',
         },
       };
@@ -695,7 +709,7 @@ export default function WorkflowsPage() {
     };
   }, [findNode, getAnchorOffset]);
 
-  const setAgentField = useCallback((nodeId: number, key: 'title' | 'provider_id' | 'skill' | 'responsibility', value: string) => {
+  const setAgentField = useCallback((nodeId: number, key: 'title' | 'provider_id' | 'subagent' | 'responsibility', value: string) => {
     setWorkflow((prev) => ({
       ...prev,
       nodes: prev.nodes.map((node) => {
@@ -904,10 +918,10 @@ export default function WorkflowsPage() {
           edge_ids: [],
         });
       }
-      if (!(node.data?.skill || '').trim() && !(node.data?.responsibility || '').trim()) {
+      if (!(node.data?.subagent || '').trim() && !(node.data?.responsibility || '').trim()) {
         localErrors.push({
           rule: 'SUBAGENT_FIELD',
-          message: 'Agent requires non-empty `skill` or `responsibility`.',
+          message: 'Agent requires non-empty `subagent` or `responsibility`.',
           node_ids: [node.id],
           edge_ids: [],
         });
@@ -999,9 +1013,9 @@ export default function WorkflowsPage() {
   }, [fetchTree, loadLatest, resetToFreshWorkflow, workflowPath]);
 
   const selectedNode = workflow.nodes.find((n) => n.id === selectedNodeId) || null;
-  const selectedNodeHasMissingSkill = Boolean(
+  const selectedNodeHasMissingSubagent = Boolean(
     selectedNode?.type === 'agent' &&
-    !(selectedNode.data?.skill || '').trim() &&
+    !(selectedNode.data?.subagent || '').trim() &&
     !(selectedNode.data?.responsibility || '').trim(),
   );
   const currentWorkflowName = workflowPath ? workflowBaseName(workflowPath) : '';
@@ -1385,10 +1399,10 @@ export default function WorkflowsPage() {
                           >
                             <TextInput
                               size="xs"
-                              value={node.data?.skill || ''}
-                              onChange={(e) => setAgentField(node.id, 'skill', e.currentTarget.value)}
-                              placeholder="Skill"
-                              list="workflow-skills-list"
+                              value={node.data?.subagent || ''}
+                              onChange={(e) => setAgentField(node.id, 'subagent', e.currentTarget.value)}
+                              placeholder="Subagent"
+                              list="workflow-subagents-list"
                             />
                           </div>
                           <div
@@ -1532,11 +1546,11 @@ export default function WorkflowsPage() {
                       searchable
                     />
                     <TextInput
-                      label="Skill"
+                      label="Subagent"
                       size="sm"
-                      value={selectedNode.data?.skill || ''}
-                      onChange={(e) => setAgentField(selectedNode.id, 'skill', e.currentTarget.value)}
-                      list="workflow-skills-list"
+                      value={selectedNode.data?.subagent || ''}
+                      onChange={(e) => setAgentField(selectedNode.id, 'subagent', e.currentTarget.value)}
+                      list="workflow-subagents-list"
                     />
                     <Textarea
                       label="Responsibility"
@@ -1548,9 +1562,9 @@ export default function WorkflowsPage() {
                       autosize
                       style={{ width: '100%' }}
                     />
-                    {selectedNodeHasMissingSkill ? (
+                    {selectedNodeHasMissingSubagent ? (
                       <Paper p="xs" withBorder style={{ borderColor: '#ef4444', background: '#fef2f2' }}>
-                        <Text size="xs" c="red" fw={700}>Validation Error: skill or responsibility is required</Text>
+                        <Text size="xs" c="red" fw={700}>Validation Error: subagent or responsibility is required</Text>
                       </Paper>
                     ) : null}
                     <Button
@@ -1609,8 +1623,8 @@ export default function WorkflowsPage() {
         </main>
       </div>
 
-      <datalist id="workflow-skills-list">
-        {skills.map((s) => (
+      <datalist id="workflow-subagents-list">
+        {subagents.map((s) => (
           <option key={s} value={s} />
         ))}
       </datalist>

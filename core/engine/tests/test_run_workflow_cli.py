@@ -7,6 +7,70 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import routes_shared
 from mcp_servers.mcp_to_skills import cli
+from mcp_servers.mcp_to_skills.workflow_execution import build_node_prompt, load_workflow_graph
+from workflow_editor_utils import validate_workflow_doc
+
+
+def _workflow_doc_with_subagent() -> dict:
+    return {
+        "version": "1.0",
+        "name": "subagent-workflow",
+        "updated_at": "2026-05-23T00:00:00Z",
+        "nodes": [
+            {"id": 0, "type": "start", "position": {"x": 0, "y": 0}},
+            {
+                "id": 1,
+                "type": "agent",
+                "position": {"x": 100, "y": 0},
+                "data": {
+                    "title": "Review",
+                    "provider_id": "codex",
+                    "subagent": "code-reviewer",
+                    "responsibility": "",
+                },
+            },
+            {"id": -1, "type": "end", "position": {"x": 200, "y": 0}},
+        ],
+        "edges": [
+            {"id": "0->1", "source": 0, "target": 1},
+            {"id": "1->-1", "source": 1, "target": -1},
+        ],
+    }
+
+
+def test_validate_workflow_doc_accepts_subagent_field():
+    assert validate_workflow_doc(_workflow_doc_with_subagent()) == []
+
+
+def test_validate_workflow_doc_requires_subagent_or_responsibility():
+    doc = _workflow_doc_with_subagent()
+    doc["nodes"][1]["data"]["subagent"] = ""
+
+    errors = validate_workflow_doc(doc)
+
+    assert any(error["rule"] == "AGENT_FIELD" for error in errors)
+    assert any("`subagent` or `responsibility`" in error["message"] for error in errors)
+
+
+def test_build_node_prompt_uses_subagent_instruction(tmp_path: Path):
+    workflow_dir = tmp_path / "core" / "workflows"
+    workflow_dir.mkdir(parents=True)
+    workflow_file = workflow_dir / "subagent-workflow.json"
+    workflow_file.write_text(json.dumps(_workflow_doc_with_subagent()), encoding="utf-8")
+
+    graph = load_workflow_graph(workflow_file, workflow_dir)
+    prompt = build_node_prompt(
+        graph=graph,
+        current_node=graph.id_to_node[1],
+        workflow_prompt="Review this change",
+        output_root=tmp_path / ".skillpilot" / "temp" / "workflow",
+        upstream_node_ids=[],
+    )
+
+    assert "Skill Pilot subagent" in prompt
+    assert "- Subagent: code-reviewer" in prompt
+    assert "- Use Skill Pilot subagent: code-reviewer." in prompt
+    assert "agent skill" not in prompt
 
 
 def test_resolve_run_workflow_inputs_supports_named_and_none_tmux():
