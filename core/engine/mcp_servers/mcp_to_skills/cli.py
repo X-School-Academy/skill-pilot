@@ -328,9 +328,12 @@ def _resolve_run_workflow_inputs(args: argparse.Namespace) -> tuple[str, str, st
     prompt = prompt_named or prompt_positional
 
     raw_tmux_session = str(getattr(args, "tmux_session", "") or "").strip()
-    normalized_tmux_session = raw_tmux_session or None
-    if normalized_tmux_session and normalized_tmux_session.lower() == "none":
+    if raw_tmux_session.lower() == "none":
         normalized_tmux_session = None
+    elif raw_tmux_session:
+        normalized_tmux_session = raw_tmux_session
+    else:
+        normalized_tmux_session = (os.getenv("TMUX_SESSION_NAME") or "").strip() or None
 
     return workflow, prompt, normalized_tmux_session
 

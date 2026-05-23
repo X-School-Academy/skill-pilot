@@ -98,7 +98,8 @@ def test_build_node_prompt_start_by_prompt_hands_off_to_main_agent(tmp_path: Pat
     assert "Do not inspect the workflow JSON" in prompt
 
 
-def test_resolve_run_workflow_inputs_supports_named_and_none_tmux():
+def test_resolve_run_workflow_inputs_supports_named_and_none_tmux(monkeypatch):
+    monkeypatch.setenv("TMUX_SESSION_NAME", "current-session")
     args = argparse.Namespace(
         workflow="sample",
         workflow_opt=None,
@@ -112,6 +113,23 @@ def test_resolve_run_workflow_inputs_supports_named_and_none_tmux():
     assert workflow == "sample"
     assert prompt == "hello world"
     assert tmux_session is None
+
+
+def test_resolve_run_workflow_inputs_uses_tmux_env_when_flag_omitted(monkeypatch):
+    monkeypatch.setenv("TMUX_SESSION_NAME", "current-session")
+    args = argparse.Namespace(
+        workflow="sample",
+        workflow_opt=None,
+        prompt=["hello"],
+        prompt_opt=None,
+        tmux_session=None,
+    )
+
+    workflow, prompt, tmux_session = cli._resolve_run_workflow_inputs(args)
+
+    assert workflow == "sample"
+    assert prompt == "hello"
+    assert tmux_session == "current-session"
 
 
 def test_resolve_run_workflow_inputs_rejects_conflicting_prompt_values():
@@ -132,6 +150,7 @@ def test_resolve_run_workflow_inputs_rejects_conflicting_prompt_values():
 
 
 def test_run_workflow_rejects_tmux_only_flags_without_tmux_session(monkeypatch, capsys):
+    monkeypatch.delenv("TMUX_SESSION_NAME", raising=False)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -190,6 +209,38 @@ def test_run_workflow_tmux_mode_starts_terminal_monitor(monkeypatch, capsys):
     assert "You are running as an AI agent node inside a multi-step workflow." in captured.out
 
 
+def test_run_workflow_tmux_mode_uses_tmux_env_when_flag_omitted(monkeypatch, capsys):
+    observed: dict[str, object] = {}
+
+    def fake_send_request(json_str: str, timeout: float, socket_path: Path, explicit_socket: bool, socket_candidates=None) -> str:
+        del timeout, socket_path, explicit_socket, socket_candidates
+        observed.update(json.loads(json_str))
+        return json.dumps({"status": "ok", "result": {"startup": {"prompt": "first node prompt"}}})
+
+    monkeypatch.setenv("TMUX_SESSION_NAME", "current-session")
+    monkeypatch.setattr(cli, "send_request_with_runtime_fallback", fake_send_request)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "tool-cli",
+            "run-workflow",
+            "--workflow=core/workflows/test.json",
+            "--prompt=Run this workflow",
+            "--resume",
+        ],
+    )
+
+    exit_code = cli.main()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert observed["operation"] == "start_workflow_terminal"
+    assert observed["tmux_session"] == "current-session"
+    assert observed["resume"] is True
+    assert "first node prompt" in captured.out
+
+
 def test_run_workflow_positional_mode_preserves_legacy_execution(monkeypatch, capsys, tmp_path: Path):
     class FakeResult:
         status = "ok"
@@ -204,6 +255,7 @@ def test_run_workflow_positional_mode_preserves_legacy_execution(monkeypatch, ca
 
     monkeypatch.setattr(cli, "resolve_workflow_file", lambda workflow_arg, workflows_root: workflows_root / workflow_arg)
     monkeypatch.setattr(cli, "run_workflow", lambda **kwargs: FakeResult())
+    monkeypatch.delenv("TMUX_SESSION_NAME", raising=False)
     monkeypatch.setattr(sys, "argv", ["tool-cli", "run-workflow", "sample.json", "Legacy prompt"])
 
     exit_code = cli.main()
