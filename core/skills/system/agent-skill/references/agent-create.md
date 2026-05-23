@@ -47,9 +47,34 @@ Frontmatter rules:
 
 - `name` is required.
 - `description` is required.
-- Only `name` and `description` are supported in the source file.
 - `name` should use lowercase letters, numbers, hyphens, and underscores.
 - Keep `description` useful for selection: triggers, capability, expected output, and task context.
+- Optional per-agent override blocks are supported: `claude`, `codex`, `gemini`, `opencode`. The installer flattens the matching block into that target's native frontmatter. Do not redeclare `name`, `description`, or `mode` inside an override block.
+- Only use keys documented in `references/agent.md` for each agent. Inventing keys can break agent loading.
+
+Example with per-agent overrides (every key shown is documented for that agent):
+
+```markdown
+---
+name: my-subagent
+description: When to use and what it does.
+claude:
+  tools: Read, Grep, Glob
+  model: inherit
+codex:
+  model_reasoning_effort: high
+gemini:
+  model: inherit
+  temperature: 0.2
+opencode:
+  permission:
+    edit: deny
+---
+
+Subagent system prompt body.
+```
+
+See `references/agent.md` for the full per-agent key tables.
 
 ### Step 4: Write the Prompt Body
 

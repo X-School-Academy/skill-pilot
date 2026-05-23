@@ -23,7 +23,9 @@ class SubagentInstallError(RuntimeError):
 
 
 SUPPORTED_TARGETS = ("claude", "codex", "gemini", "opencode")
-SUPPORTED_FRONTMATTER_KEYS = {"name", "description"}
+BASE_FRONTMATTER_KEYS = {"name", "description"}
+SUPPORTED_FRONTMATTER_KEYS = BASE_FRONTMATTER_KEYS | set(SUPPORTED_TARGETS)
+RESERVED_OVERRIDE_KEYS = {"name", "description", "mode"}
 VALID_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
@@ -34,6 +36,7 @@ class SubagentDefinition:
     body: str
     source_path: Path
     level: str
+    target_overrides: dict[str, dict[str, object]]
 
 
 def parse_args() -> argparse.Namespace:
@@ -130,7 +133,8 @@ def parse_subagent(path: Path, source_root: Path) -> SubagentDefinition:
     if unsupported:
         raise SubagentInstallError(
             f"Unsupported frontmatter key(s) in {path}: {', '.join(unsupported)}. "
-            "First-stage subagents only support name and description."
+            f"Supported keys: name, description, and per-agent override blocks "
+            f"({', '.join(SUPPORTED_TARGETS)})."
         )
 
     name = str(meta.get("name", "")).strip()
@@ -144,8 +148,37 @@ def parse_subagent(path: Path, source_root: Path) -> SubagentDefinition:
             f"Invalid subagent name '{name}' in {path}. Use lowercase letters, numbers, hyphens, and underscores."
         )
 
+    target_overrides: dict[str, dict[str, object]] = {}
+    for target in SUPPORTED_TARGETS:
+        if target not in meta:
+            continue
+        override = meta[target]
+        if override is None:
+            continue
+        if not isinstance(override, dict):
+            raise SubagentInstallError(
+                f"Frontmatter key '{target}' in {path} must be a mapping of agent-level params."
+            )
+        cleaned: dict[str, object] = {}
+        for key, value in override.items():
+            key_str = str(key)
+            if key_str in RESERVED_OVERRIDE_KEYS:
+                raise SubagentInstallError(
+                    f"Reserved key '{key_str}' is not allowed under '{target}' in {path}."
+                )
+            cleaned[key_str] = value
+        if cleaned:
+            target_overrides[target] = cleaned
+
     level = source_root.name
-    return SubagentDefinition(name=name, description=description, body=body.rstrip() + "\n", source_path=path, level=level)
+    return SubagentDefinition(
+        name=name,
+        description=description,
+        body=body.rstrip() + "\n",
+        source_path=path,
+        level=level,
+        target_overrides=target_overrides,
+    )
 
 
 def discover_subagents(source_root: Path) -> list[SubagentDefinition]:
@@ -159,38 +192,79 @@ def discover_subagents(source_root: Path) -> list[SubagentDefinition]:
     return definitions
 
 
-def build_claude_or_gemini_markdown(subagent: SubagentDefinition) -> str:
-    return (
-        "---\n"
-        f"name: {subagent.name}\n"
-        f"description: {quote_yaml_scalar(subagent.description)}\n"
-        "---\n"
-        f"{subagent.body}"
-    )
+def build_claude_or_gemini_markdown(subagent: SubagentDefinition, target: str) -> str:
+    lines = [
+        "---",
+        f"name: {subagent.name}",
+        f"description: {quote_yaml_scalar(subagent.description)}",
+    ]
+    lines.extend(render_yaml_overrides(subagent.target_overrides.get(target, {}), subagent.source_path))
+    lines.append("---")
+    return "\n".join(lines) + "\n" + subagent.body
 
 
 def build_opencode_markdown(subagent: SubagentDefinition) -> str:
-    return (
-        "---\n"
-        f"description: {quote_yaml_scalar(subagent.description)}\n"
-        "mode: subagent\n"
-        "---\n"
-        f"{subagent.body}"
-    )
+    lines = [
+        "---",
+        f"description: {quote_yaml_scalar(subagent.description)}",
+        "mode: subagent",
+    ]
+    lines.extend(render_yaml_overrides(subagent.target_overrides.get("opencode", {}), subagent.source_path))
+    lines.append("---")
+    return "\n".join(lines) + "\n" + subagent.body
 
 
 def build_codex_toml(subagent: SubagentDefinition) -> str:
+    lines = [
+        f'name = "{escape_toml_string(subagent.name)}"',
+        f'description = "{escape_toml_string(subagent.description)}"',
+    ]
+    for key, value in subagent.target_overrides.get("codex", {}).items():
+        lines.append(f"{key} = {render_toml_value(value, subagent.source_path, key)}")
+    lines.append("")
+    lines.append('developer_instructions = """')
     return (
-        f'name = "{escape_toml_string(subagent.name)}"\n'
-        f'description = "{escape_toml_string(subagent.description)}"\n\n'
-        'developer_instructions = """\n'
-        f"{escape_toml_multiline(subagent.body)}"
-        '"""\n'
+        "\n".join(lines)
+        + "\n"
+        + escape_toml_multiline(subagent.body)
+        + '"""\n'
     )
 
 
 def quote_yaml_scalar(value: str) -> str:
     return json.dumps(value, ensure_ascii=True)
+
+
+def render_yaml_overrides(overrides: dict[str, object], source_path: Path) -> list[str]:
+    if not overrides:
+        return []
+    try:
+        dumped = yaml.safe_dump(
+            overrides,
+            default_flow_style=False,
+            sort_keys=False,
+            allow_unicode=True,
+        )
+    except yaml.YAMLError as exc:
+        raise SubagentInstallError(f"Cannot serialize agent overrides in {source_path}: {exc}") from exc
+    return [line for line in dumped.rstrip("\n").split("\n") if line]
+
+
+def render_toml_value(value: object, source_path: Path, key: str) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return repr(value)
+    if isinstance(value, str):
+        return f'"{escape_toml_string(value)}"'
+    if isinstance(value, list):
+        parts = [render_toml_value(item, source_path, key) for item in value]
+        return "[" + ", ".join(parts) + "]"
+    raise SubagentInstallError(
+        f"Unsupported value type for codex override '{key}' in {source_path}: {type(value).__name__}"
+    )
 
 
 def escape_toml_string(value: str) -> str:
@@ -215,7 +289,7 @@ def target_file(project_root: Path, target: str, name: str) -> Path:
 
 def render_target(target: str, subagent: SubagentDefinition) -> str:
     if target in {"claude", "gemini"}:
-        return build_claude_or_gemini_markdown(subagent)
+        return build_claude_or_gemini_markdown(subagent, target)
     if target == "codex":
         return build_codex_toml(subagent)
     if target == "opencode":
