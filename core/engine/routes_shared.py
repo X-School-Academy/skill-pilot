@@ -1891,9 +1891,6 @@ def _execute_workflow_in_terminal_thread(
                             _WORKFLOW_EXECUTE_CONTINUE.clear()
                             break
 
-                    if previous_provider is not None:
-                        _maybe_send_exit_session_shortcut_any(session_name, previous_provider)
-                        previous_provider = None
                     if run_is_current():
                         _set_workflow_execute_state(status="running", waiting_for_continue=False)
                 else:

@@ -1,7 +1,9 @@
 import argparse
 import json
 from pathlib import Path
+from types import SimpleNamespace
 import sys
+import threading
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -70,7 +72,30 @@ def test_build_node_prompt_uses_subagent_instruction(tmp_path: Path):
     assert "Skill Pilot subagent" in prompt
     assert "- Subagent: code-reviewer" in prompt
     assert "- Use Skill Pilot subagent: code-reviewer." in prompt
+    assert "Workflow file:" not in prompt
     assert "agent skill" not in prompt
+
+
+def test_build_node_prompt_start_by_prompt_hands_off_to_main_agent(tmp_path: Path):
+    workflow_dir = tmp_path / "core" / "workflows"
+    workflow_dir.mkdir(parents=True)
+    workflow_file = workflow_dir / "subagent-workflow.json"
+    workflow_file.write_text(json.dumps(_workflow_doc_with_subagent()), encoding="utf-8")
+
+    graph = load_workflow_graph(workflow_file, workflow_dir)
+    prompt = build_node_prompt(
+        graph=graph,
+        current_node=graph.id_to_node[1],
+        workflow_prompt="Review this change",
+        output_root=tmp_path / ".skillpilot" / "temp" / "workflow",
+        upstream_node_ids=[],
+        start_by_prompt_mode=True,
+    )
+
+    assert "Workflow file:" not in prompt
+    assert "Ask the user to approve this node's work." in prompt
+    assert "continue-workflow-action" in prompt
+    assert "Do not inspect the workflow JSON" in prompt
 
 
 def test_resolve_run_workflow_inputs_supports_named_and_none_tmux():
@@ -215,3 +240,66 @@ def test_build_provider_command_includes_tmux_and_workflow_env(monkeypatch, tmp_
     assert payload["env"]["SKILL_PILOT_WORKFLOW_NODE"] == "1"
     assert payload["env"]["SKILL_PILOT_WORKFLOW_RUN_ID"] == "run-1"
     assert payload["env"]["OPENAI_BASE_URL"] == "http://example.test"
+
+
+def test_start_by_prompt_preserves_previous_provider_for_next_node(monkeypatch, tmp_path: Path):
+    output_root = tmp_path / "workflow-output"
+    output_root.mkdir()
+    graph = SimpleNamespace(
+        workflow_file=tmp_path / "core" / "workflows" / "sample.json",
+        workflow_name="sample",
+        workflow_relative_path="sample.json",
+        id_to_node={
+            1: {"id": 1, "type": "agent", "data": {"title": "First", "provider_id": "claude"}},
+            2: {"id": 2, "type": "agent", "data": {"title": "Second", "provider_id": "claude"}},
+        },
+        upstream_agents={1: [], 2: [1]},
+        downstream_agents={1: [2], 2: []},
+    )
+    launch_previous_providers: list[object] = []
+
+    def fake_start_workflow_agent_in_session(**kwargs):
+        node_id = int(kwargs["current_node_id"])
+        launch_previous_providers.append(kwargs["previous_provider"])
+        output_file = routes_shared.node_output_path(output_root, node_id, routes_shared.node_name(graph.id_to_node[node_id]))
+        output_file.write_text(f"node {node_id} done", encoding="utf-8")
+        return {"id": f"provider-{node_id}", "bin": "claude"}, "command"
+
+    monkeypatch.setattr(routes_shared, "load_workflow_graph", lambda workflow_file, workflows_root: graph)
+    monkeypatch.setattr(routes_shared, "create_run_output_dir", lambda *args, **kwargs: ("run-1", output_root))
+    monkeypatch.setattr(routes_shared, "parse_task_workspace", lambda prompt: None)
+    monkeypatch.setattr(routes_shared, "parse_instruction_file_path", lambda prompt: None)
+    monkeypatch.setattr(routes_shared, "parse_reference_file_paths", lambda prompt: [])
+    monkeypatch.setattr(routes_shared, "build_node_prompt", lambda **kwargs: "node prompt")
+    monkeypatch.setattr(routes_shared, "_tmux_session_exists", lambda session_name: True)
+    monkeypatch.setattr(routes_shared, "_start_workflow_agent_in_session", fake_start_workflow_agent_in_session)
+    monkeypatch.setattr(routes_shared, "_maybe_send_exit_session_shortcut_any", lambda session_name, provider: "")
+    monkeypatch.setattr(routes_shared, "_send_tmux_command_literal", lambda session_name, message: None)
+
+    routes_shared._WORKFLOW_EXECUTE_STOP.clear()
+    routes_shared._WORKFLOW_EXECUTE_CONTINUE.set()
+    with routes_shared._WORKFLOW_EXECUTE_LOCK:
+        routes_shared._WORKFLOW_EXECUTE_STATE.update(
+            {
+                "thread": threading.current_thread(),
+                "token": "run-token",
+                "status": "starting",
+            }
+        )
+    try:
+        routes_shared._execute_workflow_in_terminal_thread(
+            workflow_file=graph.workflow_file,
+            workflow_prompt="Run sample",
+            session_name="sp-workflow-execute",
+            run_token="run-token",
+            resume=False,
+            sandbox=False,
+            auto=True,
+            network=False,
+            next_node_trigger="start_by_prompt",
+        )
+    finally:
+        routes_shared._WORKFLOW_EXECUTE_CONTINUE.clear()
+        routes_shared._reset_workflow_execute_state()
+
+    assert launch_previous_providers == [None, {"id": "provider-1", "bin": "claude"}]

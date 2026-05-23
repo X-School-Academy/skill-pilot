@@ -76,7 +76,8 @@ If you create any intermediate files, save them inside the task workspace above.
 1. Run the workflow CLI from the repository root.
 2. Capture stdout, stderr, and the exit code.
 3. If tmux mode is used, follow the returned first-node instruction exactly.
-4. If the command fails, report whether the failure is:
+4. In start-by-prompt runs, each node should finish only the current node, ask the user to approve the node output, and then rely on `continue-workflow-action` from the main process/agent after approval.
+5. If the command fails, report whether the failure is:
    - path resolution
    - validation/runtime error
    - missing runner

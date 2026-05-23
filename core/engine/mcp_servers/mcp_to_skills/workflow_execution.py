@@ -307,7 +307,6 @@ def build_node_prompt(
         "You need to use the workflow instruction and the Skill Pilot subagent provided for this node to finish the task.",
         "",
         f"Workflow name: {graph.workflow_name}",
-        f"Workflow file: core/workflows/{graph.workflow_relative_path}",
         f"Current AI agent node UID: {current_node_id}",
         f"Current AI agent node name: {current_node_title}",
         "",
@@ -344,7 +343,7 @@ def build_node_prompt(
         [
             "",
             "When you finish:",
-            "Keep the workflow monitor running and wait for the user to continue the workflow."
+            "After completing this node, inform the user that the current node output is ready for approval. Ask the user to approve this node's work. After the user approves, call the agent-workflow skill's continue-workflow-action so the main process can continue the workflow."
             if start_by_prompt_mode
             else None,
             f"1. Write your final output to {display_repo_relative(node_output_path(output_root, current_node_id, current_node_title), repo_root)}",
@@ -353,6 +352,7 @@ def build_node_prompt(
             "4. Do not return only a bare number, string, or similarly context-free value unless the workflow explicitly requires that exact format",
             "5. If you make assumptions, state them before the final result",
             "6. Do not write output files outside the task workspace or workflow output root unless explicitly required",
+            "7. Do not inspect the workflow JSON or attempt to run any other workflow node",
         ]
     )
     return "\n".join([line for line in lines if line is not None]).strip()
