@@ -52,6 +52,30 @@ core/bin/agent-browser open https://example.com && core/bin/agent-browser wait -
 
 **When to chain:** Use `&&` when you don't need to read the output of an intermediate command before proceeding (e.g., open + wait + screenshot). Run commands separately when you need to parse the output first (e.g., snapshot to discover refs, then interact using those refs).
 
+## Demo Mode (Showing the User How to Use a Website)
+
+When the task is to demo a website or show the user how to use one, decide the browser mode based on whether the target site requires a password:
+
+**Local development or any site that does NOT need a password** — just run in headed mode with a fresh session. Do NOT use the user's daily browser.
+
+```bash
+core/bin/agent-browser --headed open <url>
+```
+
+**Third-party sites that require login** (AWS, GitHub, Google, banks, SaaS dashboards, etc.) — **ask the user first** which browser to use:
+
+1. **Open a new browser session** — clean profile, no saved logins. The user will need to enter credentials manually.
+2. **Use the user's daily Chrome browser** — reuses existing logins/saved passwords, so the user does not need to re-enter credentials.
+
+If the user chooses option 2, instruct them: "Please make sure your daily Chrome is open and signed in with the Google account you normally use. Let me know once it's ready." Then connect with `--auto-connect`:
+
+```bash
+core/bin/agent-browser --auto-connect open <url>
+core/bin/agent-browser --auto-connect snapshot -i
+```
+
+If `--auto-connect` fails, Chrome may not have remote debugging enabled. See [references/init.md](references/init.md) for setup.
+
 ## Handling Authentication
 
 When automating a site that requires login, choose the approach that fits:

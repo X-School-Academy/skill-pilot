@@ -46,14 +46,33 @@ State the assumed level briefly. Adjust if the user corrects it.
 
 ## Step 4: Create the Learning Folder
 
-Once the project or task directory is known, create:
+### Detect the task or project root directory
+
+Before creating the learning folder, determine the root directory that owns this task. Apply these rules in order:
+
+1. **Anchor file rule**: If the user references a file such as `requirements.md`, `update.md`, `issues.md`, `plan.md`, or `implementation.md`, treat its containing directory as the root.
+   - Example: `workspace/tasks/aws-setup-task/requirements.md` → root is `workspace/tasks/aws-setup-task/`.
+   - Example: `workspace/vibe-coding/my-app/plan.md` → root is `workspace/vibe-coding/my-app/`.
+2. **Known location patterns**: When no anchor file is given, infer from the task type using these conventional roots:
+   - Tasks: `workspace/tasks/{task-name}/`
+   - Vibe coding projects: `workspace/vibe-coding/{project-name}/`
+   - Learning-only items without a project: `workspace/learning/{topic-name}/`
+3. **Highest-owning directory**: If the task spans multiple files or folders, pick the highest-level directory that exclusively owns the task. Do not go up into a shared parent like `workspace/tasks/`.
+4. **Confirm with the user** when ambiguous (e.g., two candidate roots, or the referenced file is at a shared parent level) before creating files.
+5. **No directory yet**: If the project directory does not exist, create it first using the appropriate pattern above, then create `learning/` inside it.
+
+State the detected root directory before creating files, e.g. *"Detected task root: `workspace/tasks/aws-setup-task/`. I will create `workspace/tasks/aws-setup-task/learning/`."*
+
+### Create the folder
+
+Inside the detected root, create:
 
 ```text
-learning/
+{task-root}/learning/
 └── README.md
 ```
 
-Use the task/project directory, not a global location. If the task spans multiple directories, choose the highest-level directory that owns the task. If no directory exists yet, create `learning/` after the project directory is created.
+Use the task/project root, never a global or shared location.
 
 The README should include:
 
