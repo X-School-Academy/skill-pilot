@@ -12,7 +12,7 @@ The CLI uses Chrome/Chromium via CDP directly through the local wrapper script. 
 
 Use the init action before browser automation when `core/bin/agent-browser` may not be ready, Chrome may be missing, the environment connection method is unknown, or the user asks to initialize or verify browser automation.
 
-Follow [references/init.md](references/init.md) for environment detection, Chrome connection setup, verification, and workflow output requirements.
+Follow [references/init.md](references/init.md) for environment detection, Chrome connection setup, verification, and workflow output requirements. Follow [references/troubleshooting.md](references/troubleshooting.md) for known browser setup and connection failures.
 
 ## Core Workflow
 
@@ -74,7 +74,7 @@ core/bin/agent-browser --auto-connect open <url>
 core/bin/agent-browser --auto-connect snapshot -i
 ```
 
-If `--auto-connect` fails, Chrome may not have remote debugging enabled. See [references/init.md](references/init.md) for setup.
+If `--auto-connect` fails, Chrome may not have remote debugging enabled. See [references/init.md](references/init.md) for setup and [references/troubleshooting.md](references/troubleshooting.md) for known connection failures.
 
 ## Handling Authentication
 
@@ -679,6 +679,7 @@ Priority (lowest to highest): `~/.agent-browser/config.json` < `./agent-browser.
 | [references/profiling.md](references/profiling.md)                   | Chrome DevTools profiling for performance analysis        |
 | [references/proxy-support.md](references/proxy-support.md)           | Proxy configuration, geo-testing, rotating proxies        |
 | [references/init.md](references/init.md)                             | Initialize and verify browser automation setup            |
+| [references/troubleshooting.md](references/troubleshooting.md)       | Known setup, connection, navigation, and snapshot failures |
 
 ## Browser Engine Selection
 
