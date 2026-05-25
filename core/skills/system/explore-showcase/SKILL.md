@@ -93,6 +93,8 @@ Each showcase entry contains:
    - `in_mode`: `prod` (execute in the stable prod instance) or `dev` (execute in prod, monitor in dev WebUI for live-reload).
    - `directory`: where the files will be copied to from the showcase files folder `workspace/showcases/{showcase_slug_id}/` when using the template. Always set it to a type-based directory plus the showcase id/slug, using the rules in "Directory Selection" below.
    - `terms`: every technology, format, protocol, or concept knowledge that is related to the showcase outcome, the listed `tools`, or any skill in `skills`. Cover language/runtime terms (e.g., `python`, `bash`, `uv`, `pip`), formats (`mp3`, `wav`, `png`, `mp4`, `yaml`, `json`, `markdown`), codecs/parameters (`h264`, `x264`, `h264 CRF`, `yuv420p`, `fps`, `bitrate`), tooling concepts (`ffmpeg filter`, `shell command`, `bash script`, `apt-get`, `brew`), and model names used (`gpt-image-2`, `gpt-4o-mini-tts`). Users explore these terms to learn the knowledge behind the showcase.
+   - `previous_showcase`: optional `{ slug_id, title }` object for the immediate prerequisite or previous step in a serial showcase. Use it only when the current showcase may depend on the previous showcase's result.
+   - `next_showcase`: optional `{ slug_id, title }` object for the immediate follow-up or next step in a serial showcase.
    - `related`: optional related showcase list, using `{ slug, caption }` entries where `slug` is another showcase id and `caption` explains the connection.
    - `variants`: optional variant showcase list, using `{ slug, caption }` entries where `slug` is another showcase id and `caption` explains how a similar prompt creates a different result.
    - `video_prompt`: a prompt used to generate a short video that either (a) teaches what the user will learn from running the showcase, or (b) demos the final result the showcase produces. Prefer the demo angle for media/visual showcases and the learning angle for skill/concept showcases. Write it as creative direction for a video generator: subject, scenes, pacing, narration tone, and the final takeaway.
@@ -138,6 +140,7 @@ Key decisions to make for each showcase:
 - Choose `terms` for technology concepts users can explore later.
 - Add `related` entries when another showcase is a natural next step or prerequisite; keep captions short and user-facing.
 - Add `variants` entries when another showcase uses a similar prompt shape but intentionally changes the outcome, implementation language, skill selection, agent setup, or failure/recovery path; keep captions short and user-facing.
+- Add `previous_showcase` and `next_showcase` only for ordered serial showcases where the previous or next item is part of a sequence. Prefer these fields over `related` when the order matters.
 - Add `links` for external references or generated learning content about underlying terms. Prefer external `url` links for canonical documentation; use `prompt` when no URL is provided and the intended output is an extra tutorial video or online interactive course about one reusable topic.
 - Write `video_prompt` and `tutorial_prompt`
 

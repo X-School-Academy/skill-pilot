@@ -1048,6 +1048,18 @@ def _normalize_showcase_variant(item: Any) -> Dict[str, str]:
     return {"slug": slug, "caption": caption}
 
 
+def _normalize_showcase_sequence_link(item: Any, field_name: str) -> Dict[str, str] | None:
+    if item in (None, ""):
+        return None
+    if not isinstance(item, dict):
+        raise ValueError(f"Showcase {field_name} must be an object")
+    slug_id = str(item.get("slug_id") or "").strip()
+    title = str(item.get("title") or "").strip()
+    if not slug_id or not title:
+        raise ValueError(f"Showcase {field_name} requires slug_id and title")
+    return {"slug_id": slug_id, "title": title}
+
+
 def _normalize_showcase_repo_paths(items: Any) -> List[str]:
     if items in (None, ""):
         return []
@@ -1112,6 +1124,8 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
     links = [_normalize_showcase_link(item) for item in (sample.get("links") or [])]
     related = [_normalize_showcase_related(item) for item in (sample.get("related") or [])]
     variants = [_normalize_showcase_variant(item) for item in (sample.get("variants") or [])]
+    previous_showcase = _normalize_showcase_sequence_link(sample.get("previous_showcase"), "previous_showcase")
+    next_showcase = _normalize_showcase_sequence_link(sample.get("next_showcase"), "next_showcase")
 
     goals = str(sample.get("goals") or "").strip() or None
     terms_raw = sample.get("terms")
@@ -1164,6 +1178,8 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
         "links": links,
         "related": related,
         "variants": variants,
+        "previous_showcase": previous_showcase,
+        "next_showcase": next_showcase,
         "goals": goals,
         "terms": terms,
         "popularity": popularity,
@@ -1225,6 +1241,27 @@ def _validate_showcase_reference_targets(categories: List[Dict[str, Any]], field
                 raise ValueError(f"Showcase sample '{sample_id}' has unknown {field_name} slug '{slug}'")
 
 
+def _validate_showcase_sequence_targets(categories: List[Dict[str, Any]]) -> None:
+    samples: List[Dict[str, Any]] = []
+
+    def collect(cat_list: List[Dict[str, Any]]) -> None:
+        for category in cat_list:
+            samples.extend(category.get("samples", []))
+            collect(category.get("subcategories") or [])
+
+    collect(categories)
+    sample_ids = {str(sample.get("id") or "") for sample in samples}
+    for sample in samples:
+        sample_id = str(sample.get("id") or "")
+        for field_name in ("previous_showcase", "next_showcase"):
+            item = sample.get(field_name)
+            if not item:
+                continue
+            slug_id = str(item.get("slug_id") or "")
+            if slug_id not in sample_ids:
+                raise ValueError(f"Showcase sample '{sample_id}' has unknown {field_name} slug_id '{slug_id}'")
+
+
 def _load_showcases() -> List[Dict[str, Any]]:
     if not _SHOWCASES_PATH.is_file():
         raise FileNotFoundError(f"Showcases file not found: {_SHOWCASES_PATH}")
@@ -1261,6 +1298,7 @@ def _load_showcases() -> List[Dict[str, Any]]:
     categories = [_normalize_showcase_category(cat) for cat in raw]
     _validate_showcase_reference_targets(categories, "related")
     _validate_showcase_reference_targets(categories, "variants")
+    _validate_showcase_sequence_targets(categories)
     return categories
 
 

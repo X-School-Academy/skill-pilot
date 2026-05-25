@@ -18,6 +18,7 @@ import {
   useMantineTheme,
 } from '@mantine/core';
 import {
+  IconArrowRight,
   IconArrowLeft,
   IconCopy,
   IconExternalLink,
@@ -46,6 +47,11 @@ interface ShowcaseRelated {
 interface ShowcaseVariant {
   slug: string;
   caption: string;
+}
+
+interface ShowcaseSequenceLink {
+  slug_id: string;
+  title: string;
 }
 
 interface ShowcaseResolvedItem {
@@ -83,6 +89,8 @@ interface ShowcaseSample {
   links: ShowcaseLink[];
   related: ShowcaseRelated[];
   variants: ShowcaseVariant[];
+  previous_showcase: ShowcaseSequenceLink | null;
+  next_showcase: ShowcaseSequenceLink | null;
   goals: string | null;
   terms: string[];
   popularity: number;
@@ -622,6 +630,38 @@ export default function ExploreView() {
     );
   };
 
+  const renderSequenceLink = (label: string, link: ShowcaseSequenceLink, direction: 'previous' | 'next') => (
+    <button
+      type="button"
+      onClick={() => openSampleBySlug(link.slug_id)}
+      style={{
+        flex: 1,
+        minWidth: 220,
+        border: isDark ? `1px solid ${theme.colors.dark[4]}` : '1px solid #bfdbfe',
+        borderRadius: 10,
+        background: isDark ? theme.colors.dark[6] : '#eff6ff',
+        color: isDark ? theme.colors.blue[2] : '#1d4ed8',
+        cursor: 'pointer',
+        padding: '10px 12px',
+        textAlign: 'left',
+        fontSize: 13,
+        fontWeight: 600,
+        lineHeight: 1.45,
+        whiteSpace: 'normal',
+        overflowWrap: 'anywhere',
+      }}
+    >
+      <Group spacing={8} noWrap>
+        {direction === 'previous' && <IconArrowLeft size="0.9rem" />}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <Text size="xs" weight={700} color={isDark ? 'blue.2' : 'blue.7'}>{label}</Text>
+          <Text size="sm" weight={700} style={{ lineHeight: 1.35 }}>{link.title}</Text>
+        </div>
+        {direction === 'next' && <IconArrowRight size="0.9rem" />}
+      </Group>
+    </button>
+  );
+
   const renderSampleActions = (sample: ShowcaseSample) => {
     const pathGroups: Array<{ title: string; items: ShowcaseResolvedItem[]; icon: React.ReactNode }> = [
       ...(sample.workflow ? [{
@@ -985,6 +1025,16 @@ export default function ExploreView() {
                 {linkedPrompt}
               </ReactMarkdown>
             </Box>
+
+            {(sample.previous_showcase || sample.next_showcase) && (
+              <>
+                <Divider my="md" />
+                <Group spacing={10} align="stretch">
+                  {sample.previous_showcase && renderSequenceLink('Previous showcase', sample.previous_showcase, 'previous')}
+                  {sample.next_showcase && renderSequenceLink('Next showcase', sample.next_showcase, 'next')}
+                </Group>
+              </>
+            )}
 
             {sample.goals && (
               <>

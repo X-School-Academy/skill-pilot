@@ -47,6 +47,8 @@ Supported sample fields:
 
 
 - `terms`: optional string array of technology terms related to this showcase; users can click each term to learn more
+- `previous_showcase`: optional `{ slug_id, title }` object for the immediate prerequisite or previous step in a serial showcase
+- `next_showcase`: optional `{ slug_id, title }` object for the immediate follow-up or next step in a serial showcase
 - `related`: optional array of `{ slug, caption }` entries where `slug` references another showcase `id` and `caption` explains why it is related
 - `variants`: optional array of `{ slug, caption }` entries where `slug` references another showcase `id` and `caption` explains how a similar prompt produces a meaningfully different result
 - `links`: array of `{ name, url, prompt }` where `prompt` is optional and used by the explore-showcase skill to generate linked resource content (not shown in UI)
