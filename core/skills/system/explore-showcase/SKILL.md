@@ -88,11 +88,16 @@ Each showcase entry contains:
      2. Open each candidate skill's `SKILL.md` and follow its references to nested skills it invokes.
      3. Search `core/skills/` and `dev-swarm/skills/` for partial-name matches when the user mentions a skill by short name.
      4. Add any skill that produces a deliverable named in `goals` or referenced in `tools`.
+   - `subagents`: optional list of Skill Pilot subagents that should be available or intentionally used when the user runs the showcase prompt. Use this for role-specialized reviewers, researchers, writers, implementation agents, or workflow agents that are not agent skills. To compile this list:
+     1. Walk through the prompt and expected workflow to identify role-specialized agents the task naturally needs.
+     2. Search `core/subagents/system/` and `core/subagents/user/` for partial-name matches when the user mentions a subagent by short name.
+     3. Include disabled subagents too, because the showcase declares the full set of subagents required.
+     4. Do not duplicate agent skills here; keep agent skills in `skills` and subagents in `subagents`.
    - `extensions`: agent extensions to use.
-   - `tools`: list every shell command, CLI binary, or executable script used either by the showcase prompt directly or by any skill in `skills`. Examples: `ffmpeg`, `ffprobe`, `pnpm`, `uv`, `core/bin/create-image`, `core/bin/create-audio`. Include project-local scripts with their repo-relative path.
+   - `tools`: list every shell command, CLI binary, or executable script used either by the showcase prompt directly, by any skill in `skills`, or by any subagent in `subagents`. Examples: `ffmpeg`, `ffprobe`, `pnpm`, `uv`, `core/bin/create-image`, `core/bin/create-audio`. Include project-local scripts with their repo-relative path.
    - `in_mode`: `prod` (execute in the stable prod instance) or `dev` (execute in prod, monitor in dev WebUI for live-reload).
    - `directory`: where the files will be copied to from the showcase files folder `workspace/showcases/{showcase_slug_id}/` when using the template. Always set it to a type-based directory plus the showcase id/slug, using the rules in "Directory Selection" below.
-   - `terms`: every technology, format, protocol, or concept knowledge that is related to the showcase outcome, the listed `tools`, or any skill in `skills`. Cover language/runtime terms (e.g., `python`, `bash`, `uv`, `pip`), formats (`mp3`, `wav`, `png`, `mp4`, `yaml`, `json`, `markdown`), codecs/parameters (`h264`, `x264`, `h264 CRF`, `yuv420p`, `fps`, `bitrate`), tooling concepts (`ffmpeg filter`, `shell command`, `bash script`, `apt-get`, `brew`), and model names used (`gpt-image-2`, `gpt-4o-mini-tts`). Users explore these terms to learn the knowledge behind the showcase.
+   - `terms`: every technology, format, protocol, agent pattern, or concept knowledge that is related to the showcase outcome, the listed `tools`, any skill in `skills`, or any subagent in `subagents`. Cover language/runtime terms (e.g., `python`, `bash`, `uv`, `pip`), formats (`mp3`, `wav`, `png`, `mp4`, `yaml`, `json`, `markdown`), codecs/parameters (`h264`, `x264`, `h264 CRF`, `yuv420p`, `fps`, `bitrate`), tooling concepts (`ffmpeg filter`, `shell command`, `bash script`, `apt-get`, `brew`), agent concepts (`subagent`, `code review`, `multi-agent workflow`), and model names used (`gpt-image-2`, `gpt-4o-mini-tts`). Users explore these terms to learn the knowledge behind the showcase.
    - `previous_showcase`: optional `{ slug_id, title }` object for the immediate prerequisite or previous step in a serial showcase. Use it only when the current showcase may depend on the previous showcase's result.
    - `next_showcase`: optional `{ slug_id, title }` object for the immediate follow-up or next step in a serial showcase.
    - `related`: optional related showcase list, using `{ slug, caption }` entries where `slug` is another showcase id and `caption` explains the connection.
@@ -136,6 +141,7 @@ Key decisions to make for each showcase:
 - Set `use_worktree: true` and `git_tag` only for reverse-engineering showcases that need a specific code checkpoint.
 - Set `directory` using the "Directory Selection" table, always ending with `{showcase_slug_id}`.
 - Write a clear, runnable, user-facing `prompt` string. Use YAML block scalar style `prompt: |-` for multi-line prompts. Reference files with their copied destination paths, for example `Use @workspace/tasks/cloud-setup-aws-credentials/requirements.md`. If `requirements.md`, `update.md`, or `issues.md` already defines the details, do not repeat those details in `prompt`; summarize the outcome and point to the file.
+- Populate `skills` and optional `subagents` separately. Use `skills` for reusable agent capabilities and `subagents` for role-specialized agents such as `code-reviewer`; include a `subagents: []` field only when explicit emptiness improves readability.
 - Write a `goals` field as a markdown bullet list of expected outcomes.
 - Choose `terms` for technology concepts users can explore later.
 - Add `related` entries when another showcase is a natural next step or prerequisite; keep captions short and user-facing.

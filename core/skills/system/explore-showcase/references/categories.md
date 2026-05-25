@@ -35,4 +35,4 @@ The `id` column must match an entry in `core/engine/data/showcases.json5`. New c
 
 - A **type** is a recurring shape of showcase within a category — defined by what the user starts with, what the agent does, and what the user ends up with.
 - Types are not global. The same surface activity (for example, "generate an image") can be a different type under different categories because the audience and learning goal differ.
-- A type entry should include: a one-line definition, the primary audience, a short list of example showcase ideas, and the key skills/extensions/tools used.
+- A type entry should include: a one-line definition, the primary audience, a short list of example showcase ideas, and the key skills/subagents/extensions/tools used.

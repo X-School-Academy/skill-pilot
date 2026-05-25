@@ -970,6 +970,27 @@ def _resolve_showcase_skill_path(name: str) -> str | None:
     return None
 
 
+def _resolve_showcase_subagent_path(name: str) -> str | None:
+    value = str(name or "").strip().strip("/")
+    if not value:
+        return None
+
+    direct = (_REPO_ROOT / value).resolve()
+    if direct.is_file() and direct.suffix.lower() == ".md":
+        rel = _repo_relative_if_inside(direct)
+        if rel and rel.startswith("core/subagents/"):
+            return rel
+
+    subagent_name = value.split("/")[-1]
+    if subagent_name.endswith(".md"):
+        subagent_name = subagent_name[:-3]
+    for parent in (_REPO_ROOT / "core" / "subagents").glob("*"):
+        candidate = parent / f"{subagent_name}.md"
+        if candidate.is_file():
+            return candidate.relative_to(_REPO_ROOT).as_posix()
+    return None
+
+
 _SHOWCASE_TEXT_EXTENSIONS = {
     ".bash",
     ".cjs",
@@ -1115,9 +1136,11 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
     use_worktree = _bool_with_default(sample.get("use_worktree"), False)
 
     skills = _normalize_showcase_repo_paths(sample.get("skills"))
+    subagents = _normalize_showcase_repo_paths(sample.get("subagents"))
     tools = _normalize_showcase_repo_paths(sample.get("tools"))
     files = _normalize_showcase_repo_paths(sample.get("files"))
     skill_items = [_showcase_item(skill, _resolve_showcase_skill_path(skill)) for skill in skills]
+    subagent_items = [_showcase_item(subagent, _resolve_showcase_subagent_path(subagent)) for subagent in subagents]
     tool_items = [_showcase_item(tool, _resolve_showcase_text_path(tool)) for tool in tools]
     file_items = [_showcase_item(file_path, _resolve_showcase_text_path(file_path)) for file_path in files]
     extensions = _normalize_showcase_extensions(sample.get("extensions"))
@@ -1170,6 +1193,8 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
         "use_worktree": use_worktree,
         "skills": skills,
         "skill_items": skill_items,
+        "subagents": subagents,
+        "subagent_items": subagent_items,
         "extensions": extensions,
         "tools": tools,
         "tool_items": tool_items,

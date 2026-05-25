@@ -22,7 +22,7 @@ The `prompt` field is the user's starter request to the AI agent. Write it like 
 
 ## Put Metadata Elsewhere
 
-- Use `skills`, `tools`, `workflow`, and `extensions` for agent routing.
+- Use `skills`, `subagents`, `tools`, `workflow`, and `extensions` for agent routing.
 - Use `terms` for technology concepts users can explore afterwards.
 - Use `goals` for learning outcomes.
 - Use `requirements.md`, `update.md`, or `issues.md` for detailed product, engineering, or reverse-engineering requirements.

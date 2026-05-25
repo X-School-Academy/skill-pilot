@@ -25,6 +25,7 @@ import {
   IconFile,
   IconFolderOpen,
   IconPlayerPlay,
+  IconRobot,
   IconSparkles,
   IconStar,
   IconTrendingUp,
@@ -81,6 +82,8 @@ interface ShowcaseSample {
   use_worktree: boolean;
   skills: string[];
   skill_items?: ShowcaseResolvedItem[];
+  subagents?: string[];
+  subagent_items?: ShowcaseResolvedItem[];
   extensions: string[];
   tools: string[];
   tool_items?: ShowcaseResolvedItem[];
@@ -663,6 +666,7 @@ export default function ExploreView() {
   );
 
   const renderSampleActions = (sample: ShowcaseSample) => {
+    const subagents = sample.subagents || [];
     const pathGroups: Array<{ title: string; items: ShowcaseResolvedItem[]; icon: React.ReactNode }> = [
       ...(sample.workflow ? [{
         title: 'Workflow',
@@ -678,6 +682,11 @@ export default function ExploreView() {
         title: 'Skills',
         items: sample.skill_items || sample.skills.map((skill) => ({ label: skill, path: null })),
         icon: <IconFolderOpen size="0.9rem" />,
+      }] : []),
+      ...(subagents.length > 0 ? [{
+        title: 'Subagents',
+        items: sample.subagent_items || subagents.map((subagent) => ({ label: subagent, path: null })),
+        icon: <IconRobot size="0.9rem" />,
       }] : []),
       ...(sample.tools.length > 0 ? [{
         title: 'Tools',

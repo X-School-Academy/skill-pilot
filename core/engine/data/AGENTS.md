@@ -39,6 +39,7 @@ Supported sample fields:
 - `use_worktree`: boolean
 - `in_mode`: `dev` or `prod`
 - `skills`: array
+- `subagents`: optional array
 - `extensions`: optional array
 - `tools`: array
 - `files`: array
