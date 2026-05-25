@@ -33,7 +33,7 @@ Security note before any remote website opens:
 
 ## Shared Preflight Checks
 
-Use skill `key-safe-sudo` to get:
+Use skill `keys-safe-guard` to get:
 
 ```
 AWS_ACCESS_KEY_ID

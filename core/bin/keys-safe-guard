@@ -6,6 +6,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 ENV_FILE="${REPO_ROOT}/config/.env"
 ENV_FILE_ARG=""
 DEFAULT_ENV_FILE="${REPO_ROOT}/config/.env"
+AUTO_CREATE=false
 PYTHON_BIN="${REPO_ROOT}/core/bin/python"
 MANAGE_SCRIPT="${REPO_ROOT}/core/engine/safe_dotenv/manage.py"
 TOOL_CLI="${REPO_ROOT}/core/bin/tool-cli"
@@ -20,6 +21,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --gui)
       USE_GUI=true
+      shift
+      ;;
+    --auto-create)
+      AUTO_CREATE=true
       shift
       ;;
     --env-file)
@@ -84,13 +89,15 @@ fi
 usage() {
   cat <<'EOF'
 Usage:
-  core/bin/keys-safe-guard [--gui] [--env-file PATH] [action] [args...]
+  core/bin/keys-safe-guard [--gui] [--auto-create] [--env-file PATH] [action] [args...]
 
 Options:
   --gui                       Request privilege elevation via GUI dialog when available.
                               macOS: osascript admin dialog.
                               Linux: pkexec (polkit) or sudo -A with zenity/kdialog askpass.
                               Fails instead of falling back to terminal sudo.
+  --auto-create               Create the target env file with 600 permissions if it is missing.
+                              Only applies to enable and put_key_values.
   --env-file PATH             Env file to manage. Defaults to config/.env.
                               Must be inside the project and named .env or .env.*.
                               .env.example is allowed for normal reads but is not managed here.
@@ -265,15 +272,27 @@ run_elevated_script() {
 # ---------------------------------------------------------------------------
 
 require_env_file() {
+  local allow_auto_create="${1:-false}"
   if [[ ! -f "${ENV_FILE}" ]]; then
+    if [[ "${AUTO_CREATE}" == "true" && "${allow_auto_create}" == "true" ]]; then
+      mkdir -p "$(dirname "${ENV_FILE}")"
+      : > "${ENV_FILE}"
+      chmod 600 "${ENV_FILE}"
+      echo "Created env file at ${ENV_FILE}."
+      return 0
+    fi
     echo "No env file found at ${ENV_FILE}."
-    echo "Create config/.env first, then run this command again."
+    if [[ "${AUTO_CREATE}" == "true" ]]; then
+      echo "--auto-create can only create missing env files for enable and put_key_values."
+    else
+      echo "Create the env file first, or pass --auto-create for enable or put_key_values."
+    fi
     exit 1
   fi
 }
 
 do_enable() {
-  require_env_file
+  require_env_file true
   echo "Applying key safe guard to ${ENV_FILE}"
 
   local tmp_script rc=0
@@ -371,7 +390,7 @@ SCRIPT
 }
 
 do_put_key_values() {
-  require_env_file
+  require_env_file true
   if [[ ${#remaining_args[@]} -lt 1 ]]; then
     echo "put_key_values requires one or more KEY=VALUE arguments."
     usage

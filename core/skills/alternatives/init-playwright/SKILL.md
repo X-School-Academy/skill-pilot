@@ -27,7 +27,7 @@ As a {Role, and Role-XYZ if you have more roles}, I will {action description}
 
 ## Other Agent Skills Required
 
-- `key-safe-sudo`
+- `keys-safe-guard`
 - `playwright-cli`
 
 ## Workflow Usage Requirement
@@ -112,7 +112,7 @@ The verification is successful only if the command responds immediately with tex
 Browser `default` opened with pid 44554.
 ```
 
-If verification succeeds, use the `key-safe-sudo` skill to save `PLAYWRIGHT_MCP_EXTENSION_TOKEN` into `config/.env`.
+If verification succeeds, use the `keys-safe-guard` skill to save `PLAYWRIGHT_MCP_EXTENSION_TOKEN` into `config/.env`.
 
 Otherwise, the command will return `Extension connection timeout. Make sure the "Playwright MCP Bridge" extension is installed.`, but the user sees `Invalid token provided` in the web browser.
 
@@ -163,7 +163,7 @@ Plain text result shown to user (example):
 Playwright CLI: ready
 Chrome: Opened and ready to use
 MCP Bridge extension: connected
-Token setup: verified and saved with key-safe-sudo, or manual approval required
+Token setup: verified and saved with keys-safe-guard, or manual approval required
 Open any web URL using: `playwright-cli goto URL` by agent skill `playwright-cli`
 ```
 

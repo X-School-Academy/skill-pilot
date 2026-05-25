@@ -12,7 +12,7 @@ Generate a temporary ed25519 SSH key, push it to an EC2 instance via EC2 Instanc
 
 - AWS credentials configured — run `aws-enable-cli` action if needed.
 - EC2 instance is running — have instance ID, public IP, and region ready (from `aws-setup-ec2` output or provided by user).
-- Verify: use skill `key-safe-sudo` to confirm `AWS_ACCESS_KEY_ID` and `AWS_REGION`.
+- Verify: use skill `keys-safe-guard` to confirm `AWS_ACCESS_KEY_ID` and `AWS_REGION`.
 
 ## Execution Rule
 
@@ -30,7 +30,7 @@ Ask user (or read from previous output) for:
 
 - **Instance ID** (e.g. `i-xxxxxxxxxxxx`)
 - **Public IP** (e.g. `x.x.x.x`)
-- **Region** (default: read from `.env` via `key-safe-sudo`)
+- **Region** (default: read from `.env` via `keys-safe-guard`)
 - **OS user** (default: `ubuntu`)
 - **SSH profile name** (default: `ec2-tmp`)
 

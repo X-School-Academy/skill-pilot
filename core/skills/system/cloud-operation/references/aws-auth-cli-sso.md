@@ -43,7 +43,7 @@ aws sts get-caller-identity --profile my-sso-profile
 
 ## Configure MCP Environment
 
-Use skill `key-safe-sudo` to save empty long-term keys, enable MCP, and point MCP at the SSO profile:
+Use skill `keys-safe-guard` to save empty long-term keys, enable MCP, and point MCP at the SSO profile:
 
 ```
 AWS_ACCESS_KEY_ID=

@@ -30,12 +30,14 @@ What `--gui` does:
 
 `--gui` may be placed before or after the action name.
 `--env-file PATH` may also be placed before or after the action name. Omit it to use the default `config/.env`. Use it only when the user explicitly asks to manage another project env file.
+`--auto-create` may also be placed before or after the action name. Use it only when the requested operation should create a missing env file.
 
 Env file rules:
 
 - Default: `config/.env`.
 - Explicit target must stay inside the project and must be named `.env` or `.env.*`.
 - `.env.example` is intentionally rejected by this skill because it is not a secret file.
+- Missing files are not created by default. `--auto-create` creates the target env file with `600` permissions for `enable` and `put_key_values`; it does not apply to `disable`, `get_key_value`, or `get_key_names`.
 
 Action rules:
 
@@ -82,6 +84,12 @@ core/bin/keys-safe-guard --gui get_key_value KEY1 KEY2
 core/bin/keys-safe-guard --gui put_key_values KEY1=VALUE1 KEY2=VALUE2
 ```
 
+Create the default env file if it is missing, then write keys:
+
+```bash
+core/bin/keys-safe-guard --gui --auto-create put_key_values KEY1=VALUE1
+```
+
 For a non-default env file:
 
 ```bash
@@ -90,6 +98,10 @@ core/bin/keys-safe-guard --gui --env-file path/to/.env.local get_key_value KEY1
 
 ```bash
 core/bin/keys-safe-guard --gui --env-file path/to/.env.local put_key_values KEY1=VALUE1
+```
+
+```bash
+core/bin/keys-safe-guard --gui --auto-create --env-file path/to/.env.local put_key_values KEY1=VALUE1
 ```
 
 `get_key_names` reads from engine memory and does not require elevated privileges, so `--gui` is optional and has no effect for that action.

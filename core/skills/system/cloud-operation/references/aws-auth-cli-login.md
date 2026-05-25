@@ -55,7 +55,7 @@ AWS CLI caches temporary login credentials under `~/.aws/login/cache` on Linux a
 
 ## Configure MCP Environment
 
-Use skill `key-safe-sudo` to save empty long-term keys and enable MCP:
+Use skill `keys-safe-guard` to save empty long-term keys and enable MCP:
 
 ```
 AWS_ACCESS_KEY_ID=

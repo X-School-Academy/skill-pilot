@@ -1,9 +1,9 @@
 ---
-name: key-safe-sudo
+name: keys-safe-guard
 description: Manage LLM security key protection for config/.env or an explicit .env/.env.* file using core/bin/keys-safe-guard actions (enable, disable, get_key_names, get_key_value, put_key_values), and govern all other agent-invoked sudo commands (software installs, system config) via the general sudo rule. Prefers native GUI elevation; never relies on hidden terminal password prompts.
 ---
 
-# AI Builder - Key Safe
+# AI Builder - Keys Safe Guard
 
 Manage secure key operations for `config/.env` by default, or another explicit `.env`/`.env.*` file via `--env-file`, and govern any privileged (`sudo`) action an agent needs to run.
 
@@ -48,6 +48,7 @@ For env actions — `enable`, `disable`, `get_key_names`, `get_key_value`, `put_
 - Use **`--gui`** for `enable`, `disable`, `put_key_values` (mandatory for agent-invoked runs).
 - `--gui` is optional for `get_key_names` (read-only, in-memory).
 - Use `--env-file PATH` when the user explicitly targets a non-default `.env`/`.env.*` file; omit it for `config/.env`.
+- Use `--auto-create` with `enable` or `put_key_values` when the target env file should be created if missing.
 - `.env.example` is not managed by this skill because it should not contain secrets.
 - In a non-GUI environment, do not retry — tell the user to configure passwordless sudo or disable safe guard from a GUI-capable session.
 

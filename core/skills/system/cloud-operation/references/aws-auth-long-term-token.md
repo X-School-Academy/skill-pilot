@@ -4,7 +4,7 @@ Use long-term credentials when the user explicitly chooses the existing access-k
 
 ## Check Existing Credentials
 
-Use skill `key-safe-sudo` to get `AWS_ACCESS_KEY_ID` and `AWS_REGION`.
+Use skill `keys-safe-guard` to get `AWS_ACCESS_KEY_ID` and `AWS_REGION`.
 
 If both are set and the user confirms keeping them, skip to **Finalize**.
 
@@ -45,7 +45,7 @@ In yolo mode, use the default without asking.
 
 ## Save Credentials
 
-Use skill `key-safe-sudo` to save:
+Use skill `keys-safe-guard` to save:
 
 ```
 AWS_ACCESS_KEY_ID=<access-key-id>
