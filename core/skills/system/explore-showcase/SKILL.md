@@ -74,6 +74,7 @@ Each showcase entry contains:
    - `requirements.md` (if applicable)
    - `update.md` (if applicable)
    - `issues.md` (if applicable)
+   - `output.md` (when this showcase creates information that a later serial showcase should reuse)
    - `assets/` (if applicable)
    - Files can also be provided as a `zip-files-url` that is auto-unzipped to `workspace/showcases/{showcase_slug_id}/` when the user starts the template.
    - If the prompt content is short enough, there may be no separate file — the prompt includes everything directly.
@@ -141,6 +142,11 @@ Key decisions to make for each showcase:
 - Set `use_worktree: true` and `git_tag` only for reverse-engineering showcases that need a specific code checkpoint.
 - Set `directory` using the "Directory Selection" table, always ending with `{showcase_slug_id}`.
 - Write a clear, runnable, user-facing `prompt` string. Use YAML block scalar style `prompt: |-` for multi-line prompts. Reference files with their copied destination paths, for example `Use @workspace/tasks/cloud-setup-aws-credentials/requirements.md`. If `requirements.md`, `update.md`, or `issues.md` already defines the details, do not repeat those details in `prompt`; summarize the outcome and point to the file.
+- For ordered serial showcases with dependencies:
+  - If the current showcase produces information, configuration, credentials metadata, file paths, decisions, or results that the next showcase needs, write the prompt or `requirements.md` so the agent records the reusable handoff information in `@{directory}/output.md`.
+  - Keep `output.md` practical for the next task: include only the values, paths, decisions, commands run, result summaries, and warnings the next showcase needs. Do not ask for secret values to be written into `output.md`; use safe references such as profile names, key names, resource ids, or where the user should retrieve a secret.
+  - If the current showcase depends on `previous_showcase`, write the prompt or `requirements.md` so the agent reads the previous showcase's copied destination output file, for example `Refer to @workspace/tasks/cloud-setup-aws-credentials/output.md for the AWS profile, region, resource names, and setup notes created by the previous task.`
+  - Use copied destination paths, not `workspace/showcases/{showcase_slug_id}/`, for every `output.md` reference.
 - Populate `skills` and optional `subagents` separately. Use `skills` for reusable agent capabilities and `subagents` for role-specialized agents such as `code-reviewer`; include a `subagents: []` field only when explicit emptiness improves readability.
 - Write a `goals` field as a markdown bullet list of expected outcomes.
 - Choose `terms` for technology concepts users can explore later.
