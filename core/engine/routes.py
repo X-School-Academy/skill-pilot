@@ -2,6 +2,7 @@ from routes_shared import *
 
 import yaml
 import zipfile
+from fastapi import HTTPException
 import routes_config  # noqa: F401
 import routes_codeware  # noqa: F401
 import routes_integrations  # noqa: F401
@@ -2705,8 +2706,62 @@ def courses_latest():
     return {"path": latest[0]}
 
 
+def _is_remote_course(course: str) -> bool:
+    return isinstance(course, str) and course.lower().startswith("https://")
+
+
+def _validate_remote_course_url(course: str) -> str:
+    parsed = urllib.parse.urlparse(course)
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise HTTPException(status_code=400, detail="Remote courses must use an https:// URL")
+
+    try:
+        addresses = socket.getaddrinfo(parsed.hostname, parsed.port or 443, type=socket.SOCK_STREAM)
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"Unable to resolve remote course host: {exc}") from exc
+
+    for address in addresses:
+        ip = ipaddress.ip_address(address[4][0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
+            raise HTTPException(status_code=400, detail="Remote course host is not allowed")
+
+    return course
+
+
+def _fetch_remote_course_content(course: str) -> str:
+    url = _validate_remote_course_url(course)
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "text/markdown,text/plain,text/*,*/*;q=0.5",
+            "User-Agent": "SkillPilotCourseLoader/1.0",
+        },
+    )
+    max_bytes = 2 * 1024 * 1024
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            final_url = response.geturl()
+            if not final_url.lower().startswith("https://"):
+                raise HTTPException(status_code=400, detail="Remote course redirects must stay on https:// URLs")
+            _validate_remote_course_url(final_url)
+            data = response.read(max_bytes + 1)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch remote course: {exc}") from exc
+
+    if len(data) > max_bytes:
+        raise HTTPException(status_code=413, detail="Remote course is too large")
+    return data.decode("utf-8", errors="replace")
+
+
 @router.get("/api/courses/content")
 def course_content(course: str):
+    if _is_remote_course(course):
+        content = _fetch_remote_course_content(course)
+        meta = read_course_meta(content)
+        return {"path": course, "content": content, "meta": meta, "remote": True}
+
     file_path = safe_course_path(course)
     content = file_path.read_text(encoding="utf-8", errors="replace")
     meta = read_course_meta(content)
