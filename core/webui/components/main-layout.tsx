@@ -10,7 +10,7 @@ import {
   IconChecklist, IconCode, IconHammer, IconRocket, IconProgress, IconWand,
   IconServer, IconCalendar, IconPuzzle, IconUser, IconShieldLock,
   IconBrandDiscord, IconVectorBezier2, IconVideo, IconCamera, IconFolderOpen,
-  IconHistory,
+  IconHistory, IconSend,
 } from '@tabler/icons-react';
 import axios from 'axios';
 import { apiUrl } from '../libs/api-base';
@@ -34,6 +34,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { dividerBefore: 'Workspace', label: 'Learning', href: '/courses',                icon: <IconSchool size="1rem" /> },
   { label: 'Vibe Coding',      href: '/vibe-coding',                               icon: <IconBriefcase size="1rem" /> },
   { label: 'Research',         href: '/research',                                  icon: <IconSearch size="1rem" /> },
+  { label: 'Social Media',     href: '/social-media',                              icon: <IconSend size="1rem" /> },
   { label: 'Tasks',            href: '/tasks',                                    icon: <IconChecklist size="1rem" /> },
   { label: 'Media',            href: '/media',                                    icon: <IconVideo size="1rem" /> },
   { label: 'File Manager',    href: '/file-manager',                             icon: <IconFolderOpen size="1rem" /> },

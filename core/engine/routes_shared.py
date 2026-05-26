@@ -80,6 +80,7 @@ from settings import (
     PROJECT_DIR,
     MEDIA_DIR,
     RESEARCH_DIR,
+    SOCIAL_MEDIA_DIR,
     SKILL_PILOT_DEVELOPMENT_DIR,
     TASKS_DIR,
     VIBE_CODING_DIR,

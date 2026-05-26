@@ -2,29 +2,33 @@
   "evals": [
     {
       "prompt": "Write a Twitter thread about lessons learned bootstrapping a SaaS to $10k MRR.",
-      "expected_output": "A thread with a strong hook, 3+ lessons, and a CTA.",
-      "assertions": [
-        "Hook",
-        "lesson",
-        "CTA"
-      ]
+      "expected_output": "A thread with a strong hook, 3+ specific lessons with real numbers, and a CTA. No Tier 1 AI words. No chatbot artifacts.",
+      "assertions": ["Hook", "lesson", "CTA", "!leverage", "!robust", "!seamless", "!delve", "!game-changer", "!I hope this helps", "!Let me know if"]
     },
     {
       "prompt": "Write a LinkedIn post about why AI won't replace developers.",
-      "expected_output": "A professional post with white space and a CTA.",
-      "assertions": [
-        "AI",
-        "developer",
-        "CTA"
-      ]
+      "expected_output": "A professional post with varied sentence length, white space, and a genuine question CTA. Reads like a human wrote it.",
+      "assertions": ["AI", "developer", "CTA", "!Moreover", "!Furthermore", "!landscape", "!ever-evolving", "!Certainly", "!Let's explore"]
     },
     {
       "prompt": "Write an email sequence for a new product launch.",
       "expected_output": "Agent should refuse or defer to email-sequence skill.",
-      "assertions": [
-        "cannot",
-        "defer"
-      ]
+      "assertions": ["cannot", "defer"]
+    },
+    {
+      "prompt": "Write a LinkedIn post about a failed startup and what you learned.",
+      "expected_output": "A raw, honest post with specific numbers/dates, concrete mistakes, and no AI vocabulary. Should feel personal.",
+      "assertions": ["failure", "learned", "!leverage", "!pivotal", "!utilize", "!holistic", "!actionable", "!learnings", "!I hope this helps", "!embark"]
+    },
+    {
+      "prompt": "Write a Xiaohongshu post reviewing a coding bootcamp experience.",
+      "expected_output": "A personal, helpful post with 【title】, emojis, 5-10 tags, and concrete details. Reads like a real student's review.",
+      "assertions": ["【", "tag", "!delve", "!comprehensive", "!robust", "!Certainly", "!transformative", "!synergy"]
+    },
+    {
+      "prompt": "Write an X thread about why most developer tools fail in the first year.",
+      "expected_output": "A punchy, opinionated thread. Each tweet stands alone. No filler. No AI transitions.",
+      "assertions": ["1/", "!Moreover", "!Furthermore", "!It's worth noting", "!landscape", "!tapestry", "!burgeoning"]
     }
   ]
 }
