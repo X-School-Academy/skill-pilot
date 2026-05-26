@@ -74,11 +74,11 @@ Each showcase entry contains:
    - `requirements.md` (if applicable)
    - `update.md` (if applicable)
    - `issues.md` (if applicable)
-   - `output.md` (when this showcase creates information that a later serial showcase should reuse)
    - `assets/` (if applicable)
    - Files can also be provided as a `zip-files-url` that is auto-unzipped to `workspace/showcases/{showcase_slug_id}/` when the user starts the template.
    - If the prompt content is short enough, there may be no separate file — the prompt includes everything directly.
    - User-facing prompt references must use the final copied location, not the packaging location. For example: `Use @workspace/tasks/cloud-setup-aws-credentials/requirements.md`.
+   - Runtime deliverables such as `output.md`, `user-manual.md`, reports, or generated docs should usually be named in the prompt or requirements file, but not pre-created as packaged template files. Only include a prefilled template for those deliverables when the user explicitly asks for one or the starter content is genuinely necessary.
 4. **Other YAML fields**:
    - `goals`: expected outcomes after the user completes the task (markdown list).
    - `request`: a string content which is used to ask user to do a task as user's manager. When `request` is set, leave the `prompt` field as a blank placeholder so the user drafts it themselves.
@@ -145,8 +145,10 @@ Key decisions to make for each showcase:
 - For ordered serial showcases with dependencies:
   - If the current showcase produces information, configuration, credentials metadata, file paths, decisions, or results that the next showcase needs, write the prompt or `requirements.md` so the agent records the reusable handoff information in `@{directory}/output.md`.
   - Keep `output.md` practical for the next task: include only the values, paths, decisions, commands run, result summaries, and warnings the next showcase needs. Do not ask for secret values to be written into `output.md`; use safe references such as profile names, key names, resource ids, or where the user should retrieve a secret.
-  - If the current showcase depends on `previous_showcase`, write the prompt or `requirements.md` so the agent reads the previous showcase's copied destination output file, for example `Refer to @workspace/tasks/cloud-setup-aws-credentials/output.md for the AWS profile, region, resource names, and setup notes created by the previous task.`
+  - Do not create a starter `output.md` template when the needed output details are already described in `requirements.md`; let the runtime agent decide the final structure from the completed work.
+  - If the current showcase depends on `previous_showcase`, write the prompt or `requirements.md` so the agent reads the previous showcase's copied destination output file. Do not say only "previous task" or "previous showcase" because the runtime agent may not have that memory; state what has already been set up and give the exact path. For example: `The AWS credentials profile has been set up; refer to @workspace/tasks/cloud-setup-aws-credentials/output.md for the AWS profile, region, resource names, and setup notes.`
   - Use copied destination paths, not `workspace/showcases/{showcase_slug_id}/`, for every `output.md` reference.
+- For other runtime documentation deliverables such as a user manual, name the required filename and expected purpose in `requirements.md` or the prompt. Do not create a starter manual file unless the user asks for a template.
 - Populate `skills` and optional `subagents` separately. Use `skills` for reusable agent capabilities and `subagents` for role-specialized agents such as `code-reviewer`; include a `subagents: []` field only when explicit emptiness improves readability.
 - Write a `goals` field as a markdown bullet list of expected outcomes.
 - Choose `terms` for technology concepts users can explore later.

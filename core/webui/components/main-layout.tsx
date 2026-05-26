@@ -10,7 +10,7 @@ import {
   IconChecklist, IconCode, IconHammer, IconRocket, IconProgress, IconWand,
   IconServer, IconCalendar, IconPuzzle, IconUser, IconShieldLock,
   IconBrandDiscord, IconVectorBezier2, IconVideo, IconCamera, IconFolderOpen,
-  IconHistory, IconRobot,
+  IconHistory, IconRobot, IconFileText,
 } from '@tabler/icons-react';
 import axios from 'axios';
 import { apiUrl } from '../libs/api-base';
@@ -36,6 +36,7 @@ const NAV_ITEMS: NavItemDef[] = [
   { label: 'Research',         href: '/research',                                  icon: <IconSearch size="1rem" /> },
   { label: 'Tasks',            href: '/tasks',                                    icon: <IconChecklist size="1rem" /> },
   { label: 'Media',            href: '/media',                                    icon: <IconVideo size="1rem" /> },
+  { label: 'Documents',        href: '/documents',                                icon: <IconFileText size="1rem" /> },
   { label: 'File Manager',    href: '/file-manager',                             icon: <IconFolderOpen size="1rem" /> },
   { dividerBefore: 'Skill Pilot', label: 'Development', href: '/skill-pilot-development', icon: <IconCode size="1rem" /> },
   { label: 'Codeware',         href: '/codeware',                                  icon: <IconHammer size="1rem" /> },
