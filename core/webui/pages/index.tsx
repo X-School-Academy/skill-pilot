@@ -23,31 +23,7 @@ import {
   Checkbox,
 } from '@mantine/core';
 import {
-  IconTerminal2,
   IconPlus,
-  IconSparkles,
-  IconSchool,
-  IconBriefcase,
-  IconSearch,
-  IconChecklist,
-  IconCode,
-  IconHammer,
-  IconRocket,
-  IconProgress,
-  IconWand,
-  IconServer,
-  IconCalendar,
-  IconPuzzle,
-  IconUser,
-  IconShieldLock,
-  IconBrandDiscord,
-  IconVectorBezier2,
-  IconVideo,
-  IconCamera,
-  IconFileText,
-  IconFolderOpen,
-  IconHistory,
-  IconRobot,
 } from '@tabler/icons-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -55,6 +31,7 @@ import { apiUrl } from '../libs/api-base';
 import { resolveSelectedProvider, setSelectedProvider } from '../libs/llm';
 import { useSessionRoots } from '../libs/session-roots';
 import ExploreView from '../components/explore/ExploreView';
+import { MAIN_NAV_ITEMS, type MainNavItem } from '../libs/main-nav';
 
 const API_BASE_URL = apiUrl('/api');
 axios.defaults.withCredentials = true;
@@ -854,54 +831,28 @@ export default function HomePage() {
     }
   };
 
-  const navItems: { label: string; view?: ActiveView; href?: string; icon: React.ReactNode; action?: () => void; dividerBefore?: string; disabled?: boolean; active?: boolean }[] = [
-    {
-      label: 'Explore',
-      href: '/?view=explore',
-      view: 'explore',
-      icon: <IconSparkles size="1rem" />,
-    },
-    {
-      label: 'New Session',
-      dividerBefore: '',
-      href: '/?view=home',
-      view: 'home',
-      icon: <IconPlus size="1rem" />,
-      action: () => {
-        if (activeView === 'live-terminal') {
-          handleDetachSession();
-        } else if (activeView !== 'home') {
-          setActiveView('home');
-        }
-        void router.push('/?view=home');
-      },
-      disabled: activeView === 'home',
-    },
-    { label: 'Live Sessions', href: '/terminals', icon: <IconTerminal2 size="1rem" />, action: () => { void router.push('/terminals'); } },
-    { label: 'Session Histories', href: '/terminal-histories', icon: <IconHistory size="1rem" />, action: () => { void router.push('/terminal-histories'); } },
-    { dividerBefore: 'Workspace', label: 'Learning', href: '/courses', icon: <IconSchool size="1rem" />, action: () => router.push('/courses') },
-    { label: 'Vibe Coding', href: '/vibe-coding', icon: <IconBriefcase size="1rem" />, action: () => router.push('/vibe-coding') },
-    { label: 'Research', href: '/research', icon: <IconSearch size="1rem" />, action: () => router.push('/research') },
-    { label: 'Tasks', href: '/tasks', icon: <IconChecklist size="1rem" />, action: () => router.push('/tasks') },
-    { label: 'Media', href: '/media', icon: <IconVideo size="1rem" />, action: () => router.push('/media') },
-    { label: 'Documents', href: '/documents', icon: <IconFileText size="1rem" />, action: () => router.push('/documents') },
-    { label: 'File Manager', href: '/file-manager', icon: <IconFolderOpen size="1rem" />, action: () => router.push('/file-manager') },
-    { dividerBefore: 'Skill Pilot', label: 'Development', href: '/skill-pilot-development', icon: <IconCode size="1rem" />, action: () => router.push('/skill-pilot-development') },
-    { label: 'Codeware', href: '/codeware', icon: <IconHammer size="1rem" />, action: () => router.push('/codeware') },
-    { dividerBefore: 'Commercial Project', label: 'Dev Swarm', href: '/dev-swarm', icon: <IconRocket size="1rem" />, action: () => router.push('/dev-swarm') },
-    { dividerBefore: '', label: 'Processes', href: '/?view=processes', view: 'processes', icon: <IconProgress size="1rem" /> },
-    { label: 'Discord Bot', href: '/?view=discord-bot', view: 'discord-bot', icon: <IconBrandDiscord size="1rem" /> },
-    { label: 'Live Avatar', href: '/live-avatar', icon: <IconVideo size="1rem" />, action: () => router.push('/live-avatar') },
-    { label: 'Security Cameras', href: '/cameras', icon: <IconCamera size="1rem" />, action: () => router.push('/cameras') },
-    { dividerBefore: '', label: 'Skills', href: '/?view=skills', view: 'skills', icon: <IconWand size="1rem" /> },
-    { label: 'Subagents', href: '/?view=subagents', view: 'subagents', icon: <IconRobot size="1rem" /> },
-    { label: 'Workflows', href: '/workflows', icon: <IconVectorBezier2 size="1rem" />, action: () => router.push('/workflows') },
-    { label: 'MCP Servers', href: '/?view=mcp-servers', view: 'mcp-servers', icon: <IconServer size="1rem" /> },
-    { label: 'Schedules', href: '/?view=schedule', view: 'schedule', icon: <IconCalendar size="1rem" /> },
-    { label: 'Extensions', href: '/?view=extensions', view: 'extensions', icon: <IconPuzzle size="1rem" /> },
-    { label: 'AI & Security', href: '/?view=ai-security', view: 'ai-security', icon: <IconShieldLock size="1rem" /> },
-    { label: 'Profile', href: '/?view=profile', view: 'profile', icon: <IconUser size="1rem" /> },
-  ];
+  type HomeNavItem = MainNavItem & { action?: () => void; disabled?: boolean; active?: boolean };
+  const navItems: HomeNavItem[] = MAIN_NAV_ITEMS.map((item) => {
+    if (item.view === 'home') {
+      return {
+        ...item,
+        action: () => {
+          if (activeView === 'live-terminal') {
+            handleDetachSession();
+          } else if (activeView !== 'home') {
+            setActiveView('home');
+          }
+          void router.push('/?view=home');
+        },
+        disabled: activeView === 'home',
+      };
+    }
+
+    return {
+      ...item,
+      action: () => { void router.push(item.href); },
+    };
+  });
 
   const handleNavItemClick = (event: React.MouseEvent, item: typeof navItems[number]) => {
     if (item.disabled) return;
@@ -916,7 +867,7 @@ export default function HomePage() {
     if (item.action) {
       item.action();
     } else if (item.view) {
-      setActiveView(item.view);
+      setActiveView(item.view as ActiveView);
     }
     setOpened(false);
   };

@@ -18,32 +18,9 @@ import {
   Burger,
   ScrollArea,
 } from '@mantine/core';
-import {
-  IconTerminal2,
-  IconPlus,
-  IconSparkles,
-  IconSchool,
-  IconBriefcase,
-  IconSearch,
-  IconChecklist,
-  IconCode,
-  IconHammer,
-  IconRocket,
-  IconProgress,
-  IconWand,
-  IconServer,
-  IconCalendar,
-  IconPuzzle,
-  IconUser,
-  IconVectorBezier2,
-  IconVideo,
-  IconFileText,
-  IconFolderOpen,
-  IconHistory,
-  IconRobot,
-} from '@tabler/icons-react';
 import { apiUrl } from '../../libs/api-base';
 import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
+import { MAIN_NAV_ITEMS } from '../../libs/main-nav';
 
 const API_BASE_URL = apiUrl('/api');
 
@@ -174,40 +151,24 @@ export default function TerminalsPage() {
     }
   }, [createTmuxSession, router.isReady, router.query.command]);
 
-  const navItems: NavItem[] = [
-    { label: 'Explore', icon: <IconSparkles size="1rem" />, action: () => { void router.push('/?view=explore'); } },
-    { dividerBefore: '', label: 'New Session', icon: <IconPlus size="1rem" />, action: () => { void router.push('/?view=home'); } },
-    {
-      label: 'Live Sessions',
-      icon: <IconTerminal2 size="1rem" />,
-      active: true,
-      action: () => {
-        if (activeSessionName) {
-          setActiveSessionName(null);
-        }
-      },
-    },
-    { label: 'Session Histories', icon: <IconHistory size="1rem" />, action: () => { void router.push('/terminal-histories'); } },
-    { dividerBefore: 'Workspace', label: 'Learning', icon: <IconSchool size="1rem" />, action: () => { void router.push('/courses'); } },
-    { label: 'Vibe Coding', icon: <IconBriefcase size="1rem" />, action: () => { void router.push('/vibe-coding'); } },
-    { label: 'Research', icon: <IconSearch size="1rem" />, action: () => { void router.push('/research'); } },
-    { label: 'Tasks', icon: <IconChecklist size="1rem" />, action: () => { void router.push('/tasks'); } },
-    { label: 'Media', icon: <IconVideo size="1rem" />, action: () => { void router.push('/media'); } },
-    { label: 'Documents', icon: <IconFileText size="1rem" />, action: () => { void router.push('/documents'); } },
-    { label: 'File Manager', icon: <IconFolderOpen size="1rem" />, action: () => { void router.push('/file-manager'); } },
-    { dividerBefore: 'Skill Pilot', label: 'Development', icon: <IconCode size="1rem" />, action: () => { void router.push('/skill-pilot-development'); } },
-    { label: 'Codeware', icon: <IconHammer size="1rem" />, action: () => { void router.push('/codeware'); } },
-    { dividerBefore: 'Commercial Project', label: 'Dev Swarm', icon: <IconRocket size="1rem" />, action: () => { void router.push('/dev-swarm'); } },
-    { dividerBefore: '', label: 'Processes', icon: <IconProgress size="1rem" />, action: () => { void router.push('/?view=processes'); } },
-    { label: 'Remote Clients', icon: <IconTerminal2 size="1rem" />, action: () => { void router.push('/?view=remote-clients'); } },
-    { label: 'Workflows', icon: <IconVectorBezier2 size="1rem" />, action: () => { void router.push('/workflows'); } },
-    { dividerBefore: '', label: 'Skills', icon: <IconWand size="1rem" />, action: () => { void router.push('/?view=skills'); } },
-    { label: 'Subagents', icon: <IconRobot size="1rem" />, action: () => { void router.push('/?view=subagents'); } },
-    { label: 'MCP Servers', icon: <IconServer size="1rem" />, action: () => { void router.push('/?view=mcp-servers'); } },
-    { label: 'Schedule', icon: <IconCalendar size="1rem" />, action: () => { void router.push('/?view=schedule'); } },
-    { label: 'Extensions', icon: <IconPuzzle size="1rem" />, action: () => { void router.push('/?view=extensions'); } },
-    { label: 'Profile', icon: <IconUser size="1rem" />, action: () => { void router.push('/?view=profile'); } },
-  ];
+  const navItems: NavItem[] = MAIN_NAV_ITEMS.map((item) => {
+    if (item.href === '/terminals') {
+      return {
+        ...item,
+        active: true,
+        action: () => {
+          if (activeSessionName) {
+            setActiveSessionName(null);
+          }
+        },
+      };
+    }
+
+    return {
+      ...item,
+      action: () => { void router.push(item.href); },
+    };
+  });
 
   const renderNavItems = () => navItems.map((item, idx) => {
     const elements: React.ReactNode[] = [];
