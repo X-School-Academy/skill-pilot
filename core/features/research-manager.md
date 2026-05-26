@@ -45,7 +45,7 @@ rg "research" core/webui/pages/research/ -l
 
 - `core/features/task-manager.md`
 - `core/features/workflow-runner-editor.md`
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 
 ## Update Notes
 

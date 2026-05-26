@@ -3897,11 +3897,11 @@ export default function HomePage() {
                 ))}
               </div>
               <div>
-                <Text size="xs" weight={600} color="dimmed" mb={4}>Skill Agent</Text>
+                <Text size="xs" weight={600} color="dimmed" mb={4}>Agent CLI</Text>
                 <Group spacing="md">
                   {flagLabels.map((f) => (
                     <Checkbox
-                      key={`skill-agent-${provider.id}-${f.key}`}
+                      key={`agent-cli-${provider.id}-${f.key}`}
                       label={f.label}
                       checked={getSkillAgentFlags(provider.id)[f.key]}
                       onChange={(e) => updateSkillAgent(provider.id, f.key, e.currentTarget.checked)}

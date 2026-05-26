@@ -1,13 +1,13 @@
-# Feature Retrieval Index: Skill Agent System
+# Feature Retrieval Index: Agent CLI System
 
 ## Retrieval Keywords
 
-skill agent, skill-agent, skill install, skill-install, skill eval, skill-eval, skill verify, skill-verify, use-skill-agent, agent skill, skill runner, skill execution, SKILL.md, skill category, system skill, user skill, mcp_to_skills, skill service, skill install from git, install-third-party-agent-skill-from-git, skill_pilot_agent, skills.py, agents_md.py, bash_tool.py, ignore_rules, cli.py
+agent cli, agent-cli, skill install, skill-install, skill eval, skill-eval, skill verify, skill-verify, use-agent-cli, agent skill, skill runner, skill execution, SKILL.md, skill category, system skill, user skill, mcp_to_skills, skill service, skill install from git, install-third-party-agent-skill-from-git, skill_pilot_agent, skills.py, agents_md.py, bash_tool.py, ignore_rules, cli.py
 
 ## Scope
 
 - Skill definition format (`SKILL.md`) and discovery
-- Skill execution via the skill-agent CLI
+- Prompt inference via the agent-cli CLI
 - Skill installation from git or local sources
 - Skill evaluation and verification
 - MCP-to-skills bridge for AI agent tool access
@@ -15,7 +15,7 @@ skill agent, skill-agent, skill install, skill-install, skill eval, skill-eval, 
 
 ## Main Behavior
 
-- `core/bin/skill-agent` runs a skill by category/name with an agent
+- `core/bin/agent-cli` runs prompt inference through the core engine default or selected LLM provider
 - `core/bin/skill-install` installs a skill from git
 - `core/bin/skill-eval` evaluates a skill's output
 - `core/bin/skill-verify` verifies a skill definition
@@ -25,7 +25,7 @@ skill agent, skill-agent, skill install, skill-install, skill eval, skill-eval, 
 
 ## Code Map
 
-- `core/bin/skill-agent` — skill runner CLI
+- `core/bin/agent-cli` — prompt inference CLI
 - `core/bin/skill-install` — skill installer CLI
 - `core/bin/skill-eval` — skill evaluator CLI
 - `core/bin/skill-verify` — skill verifier CLI

@@ -36,7 +36,7 @@ find core/skills/system/schedule-course/ -type f
 
 - `core/features/course-creator.md`
 - `core/features/workflow-runner-editor.md`
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 
 ## Update Notes
 

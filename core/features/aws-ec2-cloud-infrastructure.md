@@ -40,7 +40,7 @@ cat core/skills/system/cloud-operation/SKILL.md
 ## Related Features
 
 - `core/features/mcp-terminal-server.md`
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 
 ## Update Notes
 

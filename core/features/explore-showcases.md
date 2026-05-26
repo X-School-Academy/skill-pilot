@@ -33,7 +33,7 @@ find core/skills/system/new-agent-session/ -type f
 
 ## Related Features
 
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 - `core/features/vibe-coding-project-manager.md`
 
 ## Update Notes

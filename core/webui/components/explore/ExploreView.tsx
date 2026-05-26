@@ -77,6 +77,7 @@ interface ShowcaseSample {
   prompt: string;
   workflow: string | null;
   directory: string | null;
+  'zip-files-url'?: string | null;
   in_mode: 'dev' | 'prod';
   git_tag: string | null;
   use_worktree: boolean;
@@ -1511,7 +1512,7 @@ export default function ExploreView() {
               label="Using worktree"
               checked={templateUseWorktree}
               onChange={(event) => setTemplateUseWorktree(event.currentTarget.checked)}
-              disabled={templateSample.git_tag !== null || runtimeMode === 'development'}
+              disabled={templateSample.use_worktree || templateSample.git_tag !== null || runtimeMode === 'development'}
             />
             {templateSample.git_tag && (
               <Checkbox

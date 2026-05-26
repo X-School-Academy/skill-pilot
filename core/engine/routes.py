@@ -1,6 +1,7 @@
 from routes_shared import *
 
 import yaml
+import zipfile
 import routes_config  # noqa: F401
 import routes_codeware  # noqa: F401
 import routes_integrations  # noqa: F401
@@ -1133,6 +1134,7 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
     in_mode = _normalize_showcase_in_mode(sample.get("in_mode"))
     workflow = str(sample.get("workflow") or "").strip() or None
     directory = str(sample.get("directory") or "").strip() or None
+    zip_files_url = str(sample.get("zip-files-url") or "").strip() or None
     use_worktree = _bool_with_default(sample.get("use_worktree"), False)
 
     skills = _normalize_showcase_repo_paths(sample.get("skills"))
@@ -1188,6 +1190,7 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
         "prompt": prompt,
         "workflow": workflow,
         "directory": directory,
+        "zip-files-url": zip_files_url,
         "in_mode": in_mode,
         "git_tag": git_tag,
         "use_worktree": use_worktree,
@@ -1542,6 +1545,96 @@ def _ensure_explore_worktree(path: Path, *, sample_id: str, existing_action: str
     return None
 
 
+def _safe_template_directory(root: Path, raw_directory: str | None) -> Path | None:
+    value = str(raw_directory or "").strip()
+    if not value:
+        return None
+    candidate = Path(value)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        raise ValueError(f"Invalid showcase directory: {value}")
+    root_resolved = root.resolve()
+    target = (root_resolved / candidate).resolve()
+    try:
+        target.relative_to(root_resolved)
+    except ValueError as exc:
+        raise ValueError(f"Showcase directory escapes the project root: {value}") from exc
+    return target
+
+
+def _validate_template_zip_url(raw_url: str | None) -> str | None:
+    value = str(raw_url or "").strip()
+    if not value:
+        return None
+    parsed = urllib.parse.urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("Showcase zip-files-url must be an HTTP(S) URL")
+    return value
+
+
+def _download_template_zip(url: str, destination: Path, *, max_bytes: int = 500 * 1024 * 1024) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    request = urllib.request.Request(url, headers={"Accept": "application/zip,application/octet-stream,*/*"})
+    total = 0
+    with urllib.request.urlopen(request, timeout=60) as response, destination.open("wb") as handle:
+        while True:
+            chunk = response.read(1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise ValueError("Showcase zip file is too large")
+            handle.write(chunk)
+
+
+def _safe_extract_zip(zip_path: Path, extract_dir: Path) -> None:
+    extract_root = extract_dir.resolve()
+    with zipfile.ZipFile(zip_path) as archive:
+        for info in archive.infolist():
+            name = info.filename
+            path = Path(name)
+            if path.is_absolute() or ".." in path.parts:
+                raise ValueError(f"Unsafe path in showcase zip: {name}")
+            target = (extract_root / path).resolve()
+            try:
+                target.relative_to(extract_root)
+            except ValueError as exc:
+                raise ValueError(f"Unsafe path in showcase zip: {name}") from exc
+        archive.extractall(extract_root)
+
+
+def _move_template_files(extract_dir: Path, target_dir: Path) -> None:
+    target_dir.parent.mkdir(parents=True, exist_ok=True)
+    target_dir.mkdir()
+    for child in extract_dir.iterdir():
+        shutil.move(str(child), str(target_dir / child.name))
+
+
+def _prepare_showcase_template_files(sample: Dict[str, Any], target_root: Path) -> Dict[str, Any]:
+    target_dir = _safe_template_directory(target_root, sample.get("directory"))
+    if target_dir is None:
+        return {"status": "skipped", "reason": "no_directory"}
+    if target_dir.exists():
+        return {"status": "skipped", "reason": "directory_exists", "directory": str(target_dir)}
+
+    zip_url = _validate_template_zip_url(sample.get("zip-files-url"))
+    if not zip_url:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        return {"status": "created_directory", "directory": str(target_dir)}
+
+    temp_root = target_root.resolve() / ".skillpilot" / "temp" / "explore-templates"
+    run_dir = temp_root / f"{sample.get('id') or 'showcase'}-{uuid4().hex}"
+    zip_path = run_dir / "template.zip"
+    extract_dir = run_dir / "extracted"
+    extract_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        _download_template_zip(zip_url, zip_path)
+        _safe_extract_zip(zip_path, extract_dir)
+        _move_template_files(extract_dir, target_dir)
+    finally:
+        shutil.rmtree(run_dir, ignore_errors=True)
+    return {"status": "extracted_zip", "directory": str(target_dir), "zip_url": zip_url}
+
+
 def _build_prompt_target_url(base_url: str, prompt: str, path: str | None = None) -> str:
     encoded_prompt = quote(prompt, safe="")
     if path:
@@ -1604,6 +1697,8 @@ def explore_template_start(payload: Dict[str, Any]):
     runtime_mode = get_runtime_mode()
     current_runtime_root = _REPO_ROOT.resolve()
     dev_runtime_target_root = current_runtime_root
+    sample_use_worktree = _bool_with_default(sample.get("use_worktree"), False)
+    use_worktree = use_worktree or sample_use_worktree
     if runtime_mode == "development":
         use_worktree = False
         checkout_tag = False
@@ -1615,6 +1710,12 @@ def explore_template_start(payload: Dict[str, Any]):
         return JSONResponse(status_code=400, content={"status": "error", "error": "Dev-mode samples cannot be started in prod mode"})
 
     if runtime_mode == "development":
+        try:
+            template_files = _prepare_showcase_template_files(sample, dev_runtime_target_root)
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"status": "error", "error": str(exc)})
+        except Exception as exc:
+            return JSONResponse(status_code=500, content={"status": "error", "error": str(exc)})
         if dev_runtime_target_root != current_runtime_root:
             try:
                 _spawn_skillpilot_dev_start(dev_runtime_target_root)
@@ -1625,20 +1726,29 @@ def explore_template_start(payload: Dict[str, Any]):
                 "target_url": _build_prompt_target_url("", prompt),
                 "sample_id": sample_id,
                 "use_worktree": False,
+                "template_files": template_files,
             }
         return {
             "status": "launched",
             "target_url": _build_prompt_target_url("", prompt),
             "sample_id": sample_id,
             "use_worktree": False,
+            "template_files": template_files,
         }
 
     if not use_worktree and sample_in_mode != "dev":
+        try:
+            template_files = _prepare_showcase_template_files(sample, _REPO_ROOT)
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"status": "error", "error": str(exc)})
+        except Exception as exc:
+            return JSONResponse(status_code=500, content={"status": "error", "error": str(exc)})
         return {
             "status": "launched",
             "target_url": _build_prompt_target_url("", prompt),
             "sample_id": sample_id,
             "use_worktree": False,
+            "template_files": template_files,
         }
 
     git_tag = sample.get("git_tag")
@@ -1660,6 +1770,12 @@ def explore_template_start(payload: Dict[str, Any]):
         _stop_managed_explore_dev_if_running()
 
     if same_managed_worktree and _explore_tmux_session_exists():
+        try:
+            template_files = _prepare_showcase_template_files(sample, worktree_path)
+        except ValueError as exc:
+            return JSONResponse(status_code=400, content={"status": "error", "error": str(exc)})
+        except Exception as exc:
+            return JSONResponse(status_code=500, content={"status": "error", "error": str(exc)})
         if _probe_explore_dev_ready():
             return {
                 "status": "monitor_dev_and_continue" if needs_prod_dev_monitor_step else "launched",
@@ -1669,6 +1785,7 @@ def explore_template_start(payload: Dict[str, Any]):
                 "use_worktree": use_worktree,
                 "worktree_path": str(worktree_path),
                 "reused_running_dev": True,
+                "template_files": template_files,
             }
         if needs_prod_dev_monitor_step:
             existing_launch_id = str(snapshot.get("launch_id") or "").strip()
@@ -1691,6 +1808,7 @@ def explore_template_start(payload: Dict[str, Any]):
                 "use_worktree": use_worktree,
                 "worktree_path": str(worktree_path),
                 "reused_running_dev": False,
+                "template_files": template_files,
             }
             if existing_launch_id:
                 response["launch_id"] = existing_launch_id
@@ -1710,12 +1828,16 @@ def explore_template_start(payload: Dict[str, Any]):
                 result.update({"sample_id": sample_id})
                 return result
 
+        template_files = _prepare_showcase_template_files(sample, worktree_path)
+
         try:
             _run_skillpilot_command(["stop", "--dev"], cwd=worktree_path, timeout=90.0)
         except Exception:
             pass
 
         _start_explore_dev_session(worktree_path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"status": "error", "error": str(exc)})
     except Exception as exc:
         return JSONResponse(status_code=500, content={"status": "error", "error": str(exc)})
 
@@ -1740,6 +1862,7 @@ def explore_template_start(payload: Dict[str, Any]):
             "sample_id": sample_id,
             "use_worktree": use_worktree,
             "worktree_path": str(worktree_path),
+            "template_files": template_files,
         }
 
     target_url = current_instance_target_url
@@ -1754,6 +1877,7 @@ def explore_template_start(payload: Dict[str, Any]):
         ),
     )
     _set_managed_explore_dev(worktree_path=str(worktree_path), launch_id=launch_id, started_at=time.time())
+    launch["template_files"] = template_files
     return launch
 
 

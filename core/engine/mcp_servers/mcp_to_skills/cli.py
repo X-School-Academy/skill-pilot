@@ -169,7 +169,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Force development mode and use the dev engine socket",
     )
     skill_agent_parser = subparsers.add_parser(
-        "skill-agent",
+        "agent-cli",
         help="Run prompt inference through core engine default LLM provider and print plain text output",
     )
     skill_agent_parser.add_argument("prompt", nargs="+", help="Prompt text")
@@ -451,7 +451,7 @@ def main() -> int:
         print(response_raw)
         return 0
 
-    if args.command == "skill-agent":
+    if args.command == "agent-cli":
         payload = {
             "operation": "skill_agent_infer",
             "prompt": " ".join(args.prompt).strip(),
@@ -476,7 +476,7 @@ def main() -> int:
             print(str(exc), file=sys.stderr)
             return 2
         except Exception as exc:
-            print(f"skill-agent request failed: {exc}", file=sys.stderr)
+            print(f"agent-cli request failed: {exc}", file=sys.stderr)
             return 2
         try:
             response = json.loads(response_raw)
@@ -488,7 +488,7 @@ def main() -> int:
             print(response_raw)
             return 0
         if response.get("status") != "ok":
-            detail = response.get("detail") or "skill-agent request failed"
+            detail = response.get("detail") or "agent-cli request failed"
             print(str(detail), file=sys.stderr)
             return 2
 
@@ -776,15 +776,15 @@ def main() -> int:
             print(f"[run-workflow] infer_response_raw\n{response_raw}", file=sys.stderr)
             response = json.loads(response_raw)
             if not isinstance(response, dict):
-                raise RuntimeError("invalid skill-agent response")
+                raise RuntimeError("invalid agent-cli response")
             if response.get("status") != "ok":
-                raise RuntimeError(str(response.get("detail") or "skill-agent request failed"))
+                raise RuntimeError(str(response.get("detail") or "agent-cli request failed"))
             result = response.get("result") or {}
             if not isinstance(result, dict):
-                raise RuntimeError("invalid skill-agent result payload")
+                raise RuntimeError("invalid agent-cli result payload")
             text = result.get("text")
             if text is None:
-                raise RuntimeError("skill-agent response missing `text`")
+                raise RuntimeError("agent-cli response missing `text`")
             return str(text)
 
         requested_workers = max(1, int(args.max_workers))

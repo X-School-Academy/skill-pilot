@@ -44,7 +44,7 @@ find extensions/chrome-devtool-proxy/ -type f
 ## Related Features
 
 - `core/features/mac-screen-drawing-recording.md`
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 
 ## Update Notes
 

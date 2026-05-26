@@ -17,7 +17,7 @@ Use the `codeware` skill for lifecycle work:
 - **Plan**: `plan.md`
 - **Frozen Feature Index**: `core/features/workflow-runner-editor.md`
 - **Related Features**:
-  - `core/features/skill-agent-system.md`
+  - `core/features/agent-cli.md`
   - `core/features/web-terminal-tmux-sessions.md`
   - `core/features/course-creator.md`
   - `core/features/vibe-coding-project-manager.md`

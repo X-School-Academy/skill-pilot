@@ -13,7 +13,7 @@ config, settings, settings.json5, env safeguard, profile, timezones, MCP servers
 - Skill content viewing and editing, installed skills listing
 - Extension management (list, action)
 - AI provider default configuration
-- Excludes: LLM provider runtime (see llm-ai-chat feature), skill execution (see skill-agent-system)
+- Excludes: LLM provider runtime (see llm-ai-chat feature), prompt inference (see agent-cli feature)
 
 ## Main Behavior
 
@@ -50,7 +50,7 @@ find core/bin/sync-mcp -o -find core/bin/skill-install 2>/dev/null
 
 ## Related Features
 
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 - `core/features/llm-ai-chat.md`
 - `core/features/mcp-terminal-server.md`
 

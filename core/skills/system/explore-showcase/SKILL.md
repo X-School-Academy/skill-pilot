@@ -164,27 +164,24 @@ Ask the user to review and approve `showcase.yaml` before continuing.
 
 ### Step 2 — Generate assets
 
-After approval, generate the showcase assets using the appropriate agent skills:
+After approval, generate the showcase assets with the helper script:
 
-| Asset | Skill |
-|---|---|
-| Thumbnail image | `create-image-audio` |
-| Video | `multiple-scene-video` |
-| Online interactive tutorial | `course-creator` |
+```bash
+core/engine/.venv/bin/python core/skills/system/explore-showcase/scripts/create-assets.py workspace/showcases/{showcase_slug_id}
+```
 
-Save all generated files to `workspace/showcases/{showcase_slug_id}/assets/`.
+The script can also be run from an installed skill copy such as `.agent/skills/explore-showcase/scripts/create-assets.py`. It discovers the Skill Pilot repo root from the current directory, the showcase path, or the script location, so pass either an absolute showcase path or a repo-relative path such as `workspace/showcases/{showcase_slug_id}`.
 
-Upload generated public assets with `core/bin/aws-s3` and use the returned CloudFront URLs in `showcase.yaml`:
-- Upload videos with `core/bin/aws-s3 upload <video-file> --folder video`.
-- Upload images, including thumbnails, with `core/bin/aws-s3 upload <image-file> --folder image`.
-- Upload zip packages with `core/bin/aws-s3 upload <zip-file> --folder zip`.
-- Keep the local asset files under `workspace/showcases/{showcase_slug_id}/assets/` as the review and packaging source even after uploading.
+Use `--dry-run` when you want to preview and improve generation prompts before publishing. Dry-run still creates the local thumbnail, videos, and zip file, then prints their file locations. It skips S3 uploads and does not update `showcase.yaml`, `files.yaml`, or `core/engine/data/terms.json`.
 
-Update `showcase.yaml` with the path or URL for each generated asset:
-- `thumbnail`: CloudFront URL returned from uploading the generated image to `image/`
-- `video`: CloudFront URL returned from uploading the generated video to `video/`
-- `tutorial`: path or URL to the generated tutorial
-- `zip-files-url`: CloudFront URL returned from uploading the generated zip package to `zip/`, when template files are distributed as a zip
+The script:
+- Fails if the showcase folder or `showcase.yaml` is missing.
+- Generates a landscape thumbnail from `title`, `description`, and `goals` with `core/bin/create-image`, uploads it with `core/bin/aws-s3 upload ... --folder image`, and updates `thumbnail`.
+- Generates a 5 minute, 1080p landscape showcase video from `title`, `description`, `goals`, and `video_prompt` with `core/bin/api-invoke create_multiple_scene_video`, uploads it with `core/bin/aws-s3 upload ... --folder video`, and updates `video`.
+- Checks each `terms` entry against `core/engine/data/terms.json`, creating that file if needed. For missing terms, it generates an independent 3 minute, 1080p landscape learning video, uploads it to the `video` folder, and records the URL under the lowercase URL-safe term slug.
+- Zips the showcase folder contents, uploads the zip with `core/bin/aws-s3 upload ... --folder zip`, and updates `zip-files-url`.
+
+Keep generated local files under `workspace/showcases/{showcase_slug_id}/assets/` as the review and packaging source even after uploading.
 
 Maintain `workspace/showcases/{showcase_slug_id}/files.yaml` listing all files created for this showcase. This list will be used to zip the assets for distribution.
 
@@ -209,7 +206,7 @@ After user approval:
 
 1. Determine the showcase category folder under `core/engine/data/showcases/`. Create the folder if it does not exist and add it to `core/engine/data/showcases.json5`.
 2. Write the final `core/engine/data/showcases/{category}/{showcase_slug_id}.yaml` with the approved content.
-3. Ensure any public image, video, or zip asset fields use the CloudFront URLs returned by `core/bin/aws-s3`; do not replace them with `core/webui/public/showcases/` paths.
+3. Ensure any public image, video, or zip asset fields use the CloudFront URLs returned by `core/bin/aws-s3`.
 4. Run a quick validation check: ensure the YAML parses cleanly and any `git_tag` + `use_worktree` + `in_mode` constraints are satisfied (see `core/engine/data/AGENTS.md`).
 5. Report what was created or updated, and what the user can do next.
 

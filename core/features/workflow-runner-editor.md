@@ -12,7 +12,7 @@ workflow, workflow runner, workflow editor, workflow execution, workflow monitor
 - Terminal workflow monitor modes: `auto_continue` and `start_by_prompt`
 - Non-tmux/background workflow execution through `skill_agent_infer`
 - Predefined workflow templates under `core/workflows/`
-- Excludes: individual skill execution (see skill agent feature)
+- Excludes: individual skill execution (see agent cli feature)
 
 ## Main Behavior
 
@@ -68,7 +68,7 @@ core/bin/run-workflow --tmux-session=none core/workflows/user-subagent-test-work
 
 ## Related Features
 
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 - `core/features/web-terminal-tmux-sessions.md`
 - `core/features/vibe-coding-project-manager.md`
 - `core/features/course-creator.md`

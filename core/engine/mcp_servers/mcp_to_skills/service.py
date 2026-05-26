@@ -640,7 +640,7 @@ class Bridge:
             text = llm_get_text(
                 messages=[{"role": "user", "content": prompt}],
                 provider_id=provider_id,
-                client_id="skill-agent",
+                client_id="agent-cli",
                 auto_allow=auto,
                 network_allow=network,
                 sandbox_mode=sandbox,

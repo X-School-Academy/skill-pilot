@@ -17,6 +17,15 @@ def test_create_audio_parser_accepts_text_format_and_voice():
     assert args.voice == "alloy"
 
 
+def test_agent_cli_parser_accepts_prompt_and_flags():
+    args = build_parser().parse_args(["agent-cli", "--provider", "openai", "--no-network", "hello"])
+
+    assert args.command == "agent-cli"
+    assert args.provider == "openai"
+    assert args.network is False
+    assert args.prompt == ["hello"]
+
+
 def test_create_audio_operation_dispatches_to_audio_creator(monkeypatch):
     calls = []
 
