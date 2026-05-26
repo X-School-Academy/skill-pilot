@@ -251,7 +251,7 @@ def _resolve_arg(arg: str) -> str:
     return arg
 
 
-def _build_codex_terminal_args(provider: Dict[str, Any], prompt: str) -> List[str]:
+def _build_codex_terminal_args(provider: Dict[str, Any], prompt: str, model: str | None = None, effort: str | None = None) -> List[str]:
     """Reuse Codex provider config for terminal mode without non-interactive flags."""
     derived_args: List[str] = []
     for raw_arg in _string_list(provider, "args"):
@@ -261,6 +261,10 @@ def _build_codex_terminal_args(provider: Dict[str, Any], prompt: str) -> List[st
         if "{{prompt}}" in arg:
             continue
         derived_args.append(arg)
+    if model:
+        derived_args.extend(["--model", model])
+    if effort:
+        derived_args.extend(["--effort", effort])
     derived_args.append(prompt)
     return derived_args
 
@@ -271,6 +275,8 @@ def build_llm_command(
     auto_allow: Optional[bool] = None,
     network_allow: Optional[bool] = None,
     sandbox_mode: Optional[bool] = None,
+    model: Optional[str] = None,
+    effort: Optional[str] = None,
 ) -> List[str]:
     args: List[str] = []
     provider_args = _string_list(provider, "args")
@@ -288,12 +294,23 @@ def build_llm_command(
     if use_network_allow:
         args.extend(_resolve_arg(arg) for arg in network_args)
 
-    model = provider.get("model")
-    if model:
-        if isinstance(model, list):
-            args.extend(str(m) for m in model)
+    # Resolve model: CLI override > provider config > None
+    resolved_model = model or provider.get("model")
+
+    # Only prepend --model / --effort when the provider's arg template
+    # doesn't already contain the placeholder.  Otherwise we double-emit
+    # the flag, and for uv-based providers it lands before 'run' (fatal).
+    template_has_model = any("{{model}}" in str(a) for a in provider_args)
+    template_has_effort = any("{{effort}}" in str(a) for a in provider_args)
+
+    if resolved_model and not template_has_model:
+        if isinstance(resolved_model, list):
+            args.extend(str(m) for m in resolved_model)
         else:
-            args.extend(["--model", str(model)])
+            args.extend(["--model", str(resolved_model)])
+
+    if effort and not template_has_effort:
+        args.extend(["--effort", effort])
 
     if provider.get("bin") == "gemini":
         if os.name == "nt":
@@ -301,6 +318,16 @@ def build_llm_command(
 
     for arg in provider_args:
         arg = _resolve_arg(arg)
+        if "{{model}}" in arg:
+            if resolved_model:
+                arg = arg.replace("{{model}}", str(resolved_model))
+            else:
+                continue  # skip arg if no model available
+        if "{{effort}}" in arg:
+            if effort:
+                arg = arg.replace("{{effort}}", str(effort))
+            else:
+                continue  # skip arg if no effort specified
         if "{{prompt}}" in arg:
             args.append(arg.replace("{{prompt}}", prompt))
         else:
@@ -314,6 +341,8 @@ def build_terminal_command(
     auto_allow: Optional[bool] = None,
     network_allow: Optional[bool] = None,
     sandbox_mode: Optional[bool] = None,
+    model: Optional[str] = None,
+    effort: Optional[str] = None,
 ) -> List[str]:
     """Build a command for interactive terminal use (tmux sessions).
 
@@ -337,26 +366,44 @@ def build_terminal_command(
     if use_network_allow:
         args.extend(_resolve_arg(arg) for arg in network_args)
 
-    model = provider.get("model")
-    if model:
-        if isinstance(model, list):
-            args.extend(str(m) for m in model)
+    # Resolve model: CLI override > provider config > None
+    resolved_model = model or provider.get("model")
+
+    terminal_args = _string_list(provider, "terminal-args")
+    template_has_model = any("{{model}}" in str(a) for a in terminal_args)
+    template_has_effort = any("{{effort}}" in str(a) for a in terminal_args)
+
+    if resolved_model and not template_has_model:
+        if isinstance(resolved_model, list):
+            args.extend(str(m) for m in resolved_model)
         else:
-            args.extend(["--model", str(model)])
+            args.extend(["--model", str(resolved_model)])
+
+    if effort and not template_has_effort:
+        args.extend(["--effort", effort])
 
     if provider.get("bin") == "gemini" and os.name == "nt":
         prompt = prompt.replace("\r\n", "\\n").replace("\n", "\\n")
 
-    terminal_args = _string_list(provider, "terminal-args")
     if terminal_args:
         for arg in terminal_args:
             arg = _resolve_arg(arg)
+            if "{{model}}" in arg:
+                if resolved_model:
+                    arg = arg.replace("{{model}}", str(resolved_model))
+                else:
+                    continue
+            if "{{effort}}" in arg:
+                if effort:
+                    arg = arg.replace("{{effort}}", str(effort))
+                else:
+                    continue
             if "{{prompt}}" in arg:
                 args.append(arg.replace("{{prompt}}", prompt))
             else:
                 args.append(arg)
     elif str(provider.get("bin") or "").strip().lower() == "codex":
-        args.extend(_build_codex_terminal_args(provider, prompt))
+        args.extend(_build_codex_terminal_args(provider, prompt, model=model, effort=effort))
     else:
         args.append(prompt)
     return [provider.get("bin", ""), *args]
@@ -466,8 +513,8 @@ def format_command_for_log(cmd: List[str], env: Optional[Dict[str, str]] = None)
     index = 0
     while index < len(cmd):
         current = cmd[index]
-        if current == "--model" and index + 1 < len(cmd):
-            rendered_cmd.append(f"--model={shlex.quote(cmd[index + 1])}")
+        if current in ("--model", "--effort") and index + 1 < len(cmd):
+            rendered_cmd.append(f"{current}={shlex.quote(cmd[index + 1])}")
             index += 2
             continue
         rendered_cmd.append(shlex.quote(current))

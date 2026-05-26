@@ -1224,6 +1224,8 @@ def _build_provider_command(
     sandbox: Any,
     auto: Any,
     network: Any,
+    model: str | None = None,
+    effort: str | None = None,
     extra_env: Dict[str, str] | None = None,
 ) -> tuple[Dict[str, Any], str, str]:
     provider = get_provider(provider_id)
@@ -1233,6 +1235,8 @@ def _build_provider_command(
         auto_allow=auto,
         network_allow=network,
         sandbox_mode=sandbox,
+        model=model,
+        effort=effort,
     )
     env_overrides: Dict[str, str] = _resolve_provider_env(provider)
     if extra_env:

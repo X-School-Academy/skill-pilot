@@ -6,7 +6,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from agents import Agent, OpenAIChatCompletionsModel, Runner, set_tracing_disabled
+from agents import Agent, OpenAIChatCompletionsModel, RunConfig, Runner, set_tracing_disabled
+from agents.model_settings import ModelSettings
 from openai import AsyncOpenAI
 
 from logger import get_logger
@@ -27,6 +28,7 @@ class SkillPilotAgentConfig:
     skills_dir: Path
     skills: str | None
     model: str
+    effort: str | None
     base_url: str
     api_key: str
     sandbox: bool
@@ -127,8 +129,11 @@ async def run_agent_async(config: SkillPilotAgentConfig) -> str:
     last_exc: Exception | None = None
     for attempt in range(attempts):
         try:
+            run_config = None
+            if config.effort:
+                run_config = RunConfig(model_settings=ModelSettings(reasoning={"effort": config.effort}))
             result = await asyncio.wait_for(
-                Runner.run(agent, config.prompt),
+                Runner.run(agent, config.prompt, run_config=run_config),
                 timeout=config.timeout_seconds,
             )
             if _prompt_requires_bash(config.prompt) and not executed_commands:
@@ -163,6 +168,7 @@ def config_from_env(
     skills_dir: Path,
     skills: str | None,
     model: str | None,
+    effort: str | None,
     sandbox: bool,
     auto: bool,
     network: bool,
@@ -177,6 +183,7 @@ def config_from_env(
         skills_dir=skills_dir,
         skills=skills,
         model=(model or os.environ.get("SKILL_PILOT_MODEL") or "").strip(),
+        effort=effort,
         base_url=(os.environ.get("SKILL_PILOT_BASE_URL") or "").strip(),
         api_key=(os.environ.get("SKILL_PILOT_API_KEY") or "").strip(),
         sandbox=sandbox,

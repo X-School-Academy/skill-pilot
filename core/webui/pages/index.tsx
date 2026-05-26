@@ -65,6 +65,8 @@ const isProtectedProcessSession = (sessionName: string): boolean => (
 interface LlmProvider {
   id: string;
   name: string;
+  models: string[];
+  effort_levels: string[];
 }
 
 interface ExternalTmuxSession {
@@ -228,6 +230,8 @@ export default function HomePage() {
   const [newSessionWorkflow, setNewSessionWorkflow] = useState<string | null>(null);
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
   const [llmProvider, setLlmProvider] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [selectedEffort, setSelectedEffort] = useState<string | null>(null);
   const [liveSessionName, setLiveSessionName] = useState<string | null>(null);
   const [liveSessionMode, setLiveSessionMode] = useState<LiveSessionMode>('llm');
   const [liveSessionPath, setLiveSessionPath] = useState<string>('');
@@ -339,6 +343,9 @@ export default function HomePage() {
         setSelectedProvider(defaultId);
       }
       setLlmProvider(defaultId);
+      const defaultProvider = providers.find((p) => p.id === defaultId);
+      setSelectedModel(defaultProvider?.models?.[0] || null);
+      setSelectedEffort(null);
     } catch (err) {
       console.error('Failed to fetch LLM providers:', err);
     }
@@ -649,6 +656,8 @@ export default function HomePage() {
             auto: newSessionAuto,
             network: newSessionNetwork,
             native_terminal: newSessionNativeTerminal,
+            model: selectedModel || undefined,
+            effort: selectedEffort || undefined,
           };
       const res = await axios.post(endpoint, payload);
       const sessionName: string | undefined = res.data?.session?.name;
@@ -693,6 +702,8 @@ export default function HomePage() {
     newSessionWorkflow,
     newSessionWorkflowResume,
     promptText,
+    selectedModel,
+    selectedEffort,
     selectedSessionPath,
     startingSession,
   ]);
@@ -948,6 +959,29 @@ export default function HomePage() {
           maxRows={10}
           size="md"
         />
+        {!newSessionWorkflow && (
+          <Group spacing="md" grow>
+            <Select
+              label="Model"
+              placeholder="Default model"
+              value={selectedModel}
+              onChange={(value) => setSelectedModel(value || null)}
+              data={(llmProviders.find((p) => p.id === llmProvider)?.models || []).map((m) => ({ value: m, label: m }))}
+              size="sm"
+              clearable
+            />
+            <Select
+              label="Effort"
+              placeholder="Default effort"
+              value={selectedEffort}
+              onChange={(value) => setSelectedEffort(value || null)}
+              data={(llmProviders.find((p) => p.id === llmProvider)?.effort_levels || []).map((e) => ({ value: e, label: e }))}
+              size="sm"
+              clearable
+              disabled={!llmProvider || (llmProviders.find((p) => p.id === llmProvider)?.effort_levels || []).length === 0}
+            />
+          </Group>
+        )}
         {newSessionWorkflow && (
           <>
             <Text size="sm" color="dimmed" align="center">
@@ -3784,6 +3818,9 @@ export default function HomePage() {
                   if (!value) return;
                   setLlmProvider(value);
                   setSelectedProvider(value);
+                  const provider = llmProviders.find((p) => p.id === value);
+                  setSelectedModel(provider?.models?.[0] || null);
+                  setSelectedEffort(null);
                 }}
                 data={llmProviders.map((p) => ({ value: p.id, label: p.name }))}
                 size="xs"

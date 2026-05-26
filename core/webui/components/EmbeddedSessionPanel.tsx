@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActionIcon, Button, Select, Text, Textarea } from '@mantine/core';
+import { ActionIcon, Button, Group, Select, Text, Textarea } from '@mantine/core';
 import { IconX } from '@tabler/icons-react';
 import { useSessionRoots } from '../libs/session-roots';
 
@@ -37,6 +37,12 @@ interface EmbeddedSessionPanelProps {
   continuingWorkflow: boolean;
   onContinueWorkflow: () => void;
   hideSessionRootSelect?: boolean;
+  availableModels?: string[];
+  selectedModel?: string | null;
+  onModelChange?: (value: string | null) => void;
+  availableEffortLevels?: string[];
+  selectedEffort?: string | null;
+  onEffortChange?: (value: string | null) => void;
 }
 
 export default function EmbeddedSessionPanel({
@@ -64,6 +70,12 @@ export default function EmbeddedSessionPanel({
   continuingWorkflow,
   onContinueWorkflow,
   hideSessionRootSelect = false,
+  availableModels,
+  selectedModel,
+  onModelChange,
+  availableEffortLevels,
+  selectedEffort,
+  onEffortChange,
 }: EmbeddedSessionPanelProps) {
   const {
     sessionRootOptions,
@@ -158,6 +170,30 @@ export default function EmbeddedSessionPanel({
                 size="xs"
                 mb={8}
               />
+            )}
+            {availableModels && availableModels.length > 0 && onModelChange && (
+              <Group spacing="xs" mb={8} grow>
+                <Select
+                  label="Model"
+                  placeholder="Default model"
+                  value={selectedModel || null}
+                  onChange={(value) => onModelChange(value || null)}
+                  data={availableModels.map((m) => ({ value: m, label: m }))}
+                  size="xs"
+                  clearable
+                />
+                {availableEffortLevels && availableEffortLevels.length > 0 && onEffortChange && (
+                  <Select
+                    label="Effort"
+                    placeholder="Default effort"
+                    value={selectedEffort || null}
+                    onChange={(value) => onEffortChange(value || null)}
+                    data={availableEffortLevels.map((e) => ({ value: e, label: e }))}
+                    size="xs"
+                    clearable
+                  />
+                )}
+              </Group>
             )}
           </div>
           <div style={{ flex: 1, minHeight: 0, padding: '0 14px 14px 14px' }}>

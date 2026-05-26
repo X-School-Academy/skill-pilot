@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--auto", type=yes_no, metavar="yes|no", default=True)
     parser.add_argument("--network", type=yes_no, metavar="yes|no", default=False)
     parser.add_argument("--model", default=None)
+    parser.add_argument("--effort", default=None, help="Reasoning effort level: low, medium, high, xhigh")
     parser.add_argument("--agent-dir", type=Path, default=REPO_ROOT)
     parser.add_argument(
         "--agent-file",
@@ -79,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
         skills_dir=skills_dir,
         skills=args.skills,
         model=args.model,
+        effort=args.effort,
         sandbox=args.sandbox,
         auto=args.auto,
         network=args.network,

@@ -120,6 +120,8 @@ def terminal_tmux_create(payload: Dict[str, Any]):
     sandbox = payload.get("sandbox")
     auto = payload.get("auto")
     network = payload.get("network")
+    model = (str(payload.get("model") or "")).strip() or None
+    effort = (str(payload.get("effort") or "")).strip() or None
     requested_start_path = payload.get("path")
     requested_path_mode = (str(payload.get("path_mode") or "").strip().lower() or None)
 
@@ -135,6 +137,8 @@ def terminal_tmux_create(payload: Dict[str, Any]):
             sandbox=sandbox,
             auto=auto,
             network=network,
+            model=model,
+            effort=effort,
         )
         logger.info("[tmux-create] provider=%s command=%s", provider.get("id"), command)
     else:
