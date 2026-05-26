@@ -1,7 +1,7 @@
 id: basics-install-gh-cli
 title: Install GitHub CLI
 description: Install the `gh` CLI for the current OS, authenticate, and verify with `gh auth status`.
-thumbnail: /showcases/basics/basics-install-gh-cli.png
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/8692440d-62d3-4445-b8f9-cdc35e9a7bbd.png
 video: null
 tutorial: null
 request: null

@@ -1,7 +1,7 @@
 id: agent-skills-create-slide-show-video
 title: Create a Slide Show Video Skill
 description: Package an image-and-audio slideshow pipeline as a reusable Skill Pilot agent skill.
-thumbnail: /showcases/agent-skills/agent-skills-create-slide-show-video.png
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/ad1ded59-d1dc-4ed2-b613-1fee7a70958e.png
 video: null
 tutorial: null
 request: null

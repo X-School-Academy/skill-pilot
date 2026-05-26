@@ -1,7 +1,7 @@
 id: cloud-query-ec2-status
 title: Query EC2 Status
 description: Use the `aws-api` MCP tool to read the state of EC2 instances in the configured account.
-thumbnail: /showcases/cloud-gpu/cloud-query-ec2-status.png
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/1eca718a-0ebf-4669-a7bf-7fccb66b1ff2.png
 video: null
 tutorial: null
 request: null

@@ -1,7 +1,7 @@
 id: agent-skills-create-new
 title: Create a New Skill
 description: Scaffold a Skill Pilot agent skill with metadata, prompts, tools, and a smoke test.
-thumbnail: /showcases/agent-skills/agent-skills-create-new.png
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/0cb8093e-d007-45f4-925e-6922de12f889.png
 video: null
 tutorial: null
 request: null

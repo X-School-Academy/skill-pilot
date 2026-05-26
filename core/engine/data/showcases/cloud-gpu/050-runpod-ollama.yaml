@@ -1,7 +1,7 @@
 id: cloud-runpod-ollama
 title: RunPod + Ollama
 description: Provision a RunPod GPU pod, deploy a text model with Ollama, and document access.
-thumbnail: /showcases/cloud-gpu/cloud-runpod-ollama.png
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/6c90e261-ade3-4fae-80d5-4d5a9449ad5f.png
 video: null
 tutorial: null
 request: null

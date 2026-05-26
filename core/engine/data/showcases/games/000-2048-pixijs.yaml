@@ -1,7 +1,7 @@
 id: games-2048-pixijs
 title: 2048
 description: Remake the classic 2048 puzzle with PixiJS, using gabrielecirulli/2048 as reference.
-thumbnail: /showcases/games/games-2048-pixijs.png
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/2a427298-09c1-4472-92f3-8433ceb7a514.png
 video: null
 tutorial: null
 request: null

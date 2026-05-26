@@ -1,7 +1,7 @@
 id: mcp-file-manager
 title: File Manager MCP
 description: An MCP server that performs CRUD on files in a sandboxed directory with safety checks.
-thumbnail: /showcases/mcp-servers/mcp-file-manager.png
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/19e9280d-68ad-4e6b-9a46-fd7bce2c3ced.png
 video: null
 tutorial: null
 request: null

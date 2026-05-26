@@ -1,7 +1,7 @@
 id: media-tts-cli
 title: Create a TTS Shell CLI
 description: Build a small shell command that turns text into MP3 or WAV narration using gpt-4o-mini-tts.
-thumbnail: /showcases/media-generation/media-tts-cli.png
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/fd1ac4c4-0db3-46f1-a8ac-97afbf5a3250.png
 video: null
 tutorial: null
 request: null

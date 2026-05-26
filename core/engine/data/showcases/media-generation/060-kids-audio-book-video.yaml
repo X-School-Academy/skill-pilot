@@ -1,8 +1,8 @@
 id: media-kids-audio-book-video
 title: Kids Audio Book Video
 description: Create a narrated children's audio-book video for The Tortoise and the Hare with generated scenes, voiceover, and FFmpeg assembly.
-thumbnail: /showcases/media-generation/media-kids-audio-book-video.png
-video: /showcases/videos/media-kids-audio-book-video.mp4
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/2e13f52b-da41-46f5-b677-769b4065a1bb.png
+video: https://d2ixgzr3ewt3zn.cloudfront.net/video/047adf9f-d10d-44e2-bdb1-723809c2551e.mp4
 tutorial: null
 request: null
 prompt: |

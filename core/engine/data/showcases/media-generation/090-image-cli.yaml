@@ -1,7 +1,7 @@
 id: media-image-cli
 title: Create an Image Generation Shell CLI
 description: Build a small shell command that generates PNG, JPG, or WebP images from prompts using gpt-image-2.
-thumbnail: /showcases/media-generation/media-image-cli.png
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/db9bba0a-c293-4aed-8d0d-3ece05f26f23.png
 video: null
 tutorial: null
 request: null

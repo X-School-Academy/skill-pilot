@@ -1,7 +1,7 @@
 id: cloud-ssh-tunnel-task
 title: SSH Tunnel Task
 description: Open an SSH tunnel to a remote service, verify it locally, and document a safe stop procedure.
-thumbnail: /showcases/cloud-gpu/cloud-ssh-tunnel-task.png
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/ebfd1068-a6ea-4d79-9bb7-4c08795466ec.png
 video: null
 tutorial: null
 request: null

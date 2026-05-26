@@ -1,7 +1,7 @@
 id: agent-skills-create-video-with-html
 title: Create a Video with HTML Skill
 description: Build an agent skill that renders HTML/CSS scenes in a browser and records them into video.
-thumbnail: /showcases/agent-skills/agent-skills-create-video-with-html.png
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/ae9ed7b0-7fe3-495e-9781-47d2cb37de2e.png
 video: null
 tutorial: null
 request: null

@@ -1,7 +1,7 @@
 id: browser-daily-gmail-skill
 title: Daily Gmail Skill
 description: Build a `check-gmail-daily` skill that summarizes Gmail and pings a Discord channel with the result.
-thumbnail: /showcases/browser-tasks/browser-daily-gmail-skill.png
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/8b682254-8732-4b62-b6ee-4678dce52ce8.png
 video: null
 tutorial: null
 request: null

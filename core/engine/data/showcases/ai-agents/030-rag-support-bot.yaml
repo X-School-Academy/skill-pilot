@@ -1,7 +1,7 @@
 id: ai-agents-rag-support-bot
 title: RAG Support Bot
 description: Customer-support bot backed by local LanceDB retrieval over a docs corpus.
-thumbnail: /showcases/ai-agents/ai-agents-rag-support-bot.png
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/37e39507-9676-4172-9082-a8dfba9e1c1a.png
 video: null
 tutorial: null
 request: null

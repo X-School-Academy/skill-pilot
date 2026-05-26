@@ -1,7 +1,7 @@
 id: platform-check-codeware-status
 title: Check Codeware Status
 description: Inspect whether the local codeware branch is up to date with upstream before changing anything.
-thumbnail: /showcases/platform-dev/platform-check-codeware-status.png
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/08dcf250-87be-4b85-8e16-9b9cea99763d.png
 video: null
 tutorial: null
 request: null
