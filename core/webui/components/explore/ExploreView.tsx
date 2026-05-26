@@ -175,13 +175,87 @@ function isAudioLike(value: string | null | undefined): boolean {
   return ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'].some((suffix) => lower.includes(suffix));
 }
 
+function LoadingThumbnailImage({
+  src,
+  alt,
+  isDark,
+  style,
+}: {
+  src: string;
+  alt: string;
+  isDark?: boolean;
+  style?: React.CSSProperties;
+}) {
+  const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
+
+  useEffect(() => {
+    setStatus('loading');
+  }, [src]);
+
+  return (
+    <>
+      <img
+        src={src}
+        alt={alt}
+        onLoad={() => setStatus('loaded')}
+        onError={() => setStatus('error')}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          display: 'block',
+          opacity: status === 'loaded' ? 1 : 0,
+          transition: 'opacity 0.18s ease',
+          ...style,
+        }}
+      />
+      {status === 'loading' && (
+        <div
+          aria-label={`Loading ${alt} thumbnail`}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: isDark ? 'rgba(15, 23, 42, 0.72)' : 'rgba(248, 250, 252, 0.72)',
+            color: isDark ? '#cbd5e1' : '#475569',
+            pointerEvents: 'none',
+          }}
+        >
+          <Loader size="sm" />
+        </div>
+      )}
+      {status === 'error' && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 10,
+            background: isDark ? '#111827' : '#f1f5f9',
+            color: isDark ? '#cbd5e1' : '#64748b',
+            fontSize: 12,
+            fontWeight: 700,
+            textAlign: 'center',
+          }}
+        >
+          Thumbnail unavailable
+        </div>
+      )}
+    </>
+  );
+}
+
 function TileThumb({ label, src, seed, isDark, size = 64 }: { label: string; src?: string | null; seed: string; isDark?: boolean; size?: number }) {
   const [bg, fg] = pickColor(seed);
   const radius = Math.round(size * 0.22);
   if (src) {
     return (
-      <div style={{ width: size, height: size, borderRadius: radius, overflow: 'hidden', background: isDark ? '#374151' : '#e5e7eb', flexShrink: 0 }}>
-        <img src={src} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      <div style={{ position: 'relative', width: size, height: size, borderRadius: radius, overflow: 'hidden', background: isDark ? '#374151' : '#e5e7eb', flexShrink: 0 }}>
+        <LoadingThumbnailImage src={src} alt={label} isDark={isDark} />
       </div>
     );
   }
@@ -845,11 +919,7 @@ export default function ExploreView() {
                   overflow: 'hidden',
                 }}
               >
-                <img
-                  src={sample.thumbnail_url}
-                  alt={sample.title}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                />
+                <LoadingThumbnailImage src={sample.thumbnail_url} alt={sample.title} isDark={isDark} />
                 <div
                   style={{
                     position: 'absolute',
@@ -858,6 +928,7 @@ export default function ExploreView() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     pointerEvents: 'none',
+                    zIndex: 1,
                   }}
                 >
                   <div
@@ -1204,9 +1275,9 @@ export default function ExploreView() {
         >
           {landscape ? (
             <>
-              <div style={{ width: '100%', aspectRatio: '16 / 9', background: src ? (isDark ? '#0f172a' : '#e5e7eb') : `linear-gradient(135deg, ${bg}, ${isDark ? bg : fg})`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+              <div style={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', background: src ? (isDark ? '#0f172a' : '#e5e7eb') : `linear-gradient(135deg, ${bg}, ${isDark ? bg : fg})`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
                 {src ? (
-                  <img src={src} alt={title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  <LoadingThumbnailImage src={src} alt={title} isDark={isDark} />
                 ) : (
                   <span style={{ color: '#fff', fontSize: 36, fontWeight: 800, letterSpacing: 1 }}>{initialsFromText(title)}</span>
                 )}
