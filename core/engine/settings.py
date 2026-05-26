@@ -162,6 +162,7 @@ COURSES_DIR = Path(os.getenv("COURSES_DIR", PROJECT_DIR / "workspace" / "learnin
 TASKS_DIR = Path(os.getenv("TASKS_DIR", PROJECT_DIR / "workspace" / "tasks")).resolve()
 VIBE_CODING_DIR = Path(os.getenv("VIBE_CODING_DIR", PROJECT_DIR / "workspace" / "vibe-coding")).resolve()
 RESEARCH_DIR = Path(os.getenv("RESEARCH_DIR", PROJECT_DIR / "workspace" / "research")).resolve()
+SOCIAL_MEDIA_DIR = Path(os.getenv("SOCIAL_MEDIA_DIR", PROJECT_DIR / "workspace" / "social-media")).resolve()
 SKILL_PILOT_DEVELOPMENT_DIR = Path(os.getenv("SKILL_PILOT_DEVELOPMENT_DIR", PROJECT_DIR / "core" / "development")).resolve()
 FEATURES_DIR = Path(os.getenv("FEATURES_DIR", PROJECT_DIR / "core" / "features")).resolve()
 WORKFLOWS_DIR = Path(os.getenv("WORKFLOWS_DIR", PROJECT_DIR / "core" / "workflows")).resolve()

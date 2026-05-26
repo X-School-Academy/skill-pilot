@@ -2005,6 +2005,141 @@ def research_file(path: str):
     return FileResponse(file_path, media_type=media_type, filename=file_path.name)
 
 
+# ---------------------------------------------------------------------------
+# Social Media routes
+# ---------------------------------------------------------------------------
+
+_SOCIAL_HISTORY_PATH = _REPO_ROOT / ".skillpilot" / "social-marketing-history.json"
+
+
+def _safe_social_path(task_path: str, *, must_exist: bool = True) -> Path:
+    if not task_path:
+        raise ValueError("Missing social media path")
+    candidate = (SOCIAL_MEDIA_DIR / task_path).resolve()
+    if candidate != SOCIAL_MEDIA_DIR and SOCIAL_MEDIA_DIR not in candidate.parents:
+        raise ValueError("Invalid social media path")
+    if must_exist and (not candidate.exists() or not candidate.is_file()):
+        raise FileNotFoundError("Social media file not found")
+    return candidate
+
+
+def _social_history() -> dict:
+    if not _SOCIAL_HISTORY_PATH.exists():
+        return {"posts": [], "next_scheduled": {}}
+    try:
+        import json as _json
+        return _json.loads(_SOCIAL_HISTORY_PATH.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return {"posts": [], "next_scheduled": {}}
+
+
+@router.get("/api/social/tree")
+def social_tree():
+    if not SOCIAL_MEDIA_DIR.exists():
+        return {"items": []}
+    return {"items": build_tree(SOCIAL_MEDIA_DIR, SOCIAL_MEDIA_DIR)}
+
+
+@router.get("/api/social/latest")
+def social_latest():
+    if not SOCIAL_MEDIA_DIR.exists():
+        return {"path": None}
+    latest = find_latest_course(SOCIAL_MEDIA_DIR, SOCIAL_MEDIA_DIR)
+    if not latest:
+        return {"path": None}
+    return {"path": latest[0]}
+
+
+@router.get("/api/social/content")
+def social_content(path: str):
+    try:
+        file_path = _safe_social_path(path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    raw = file_path.read_bytes()
+    if not _is_text_bytes(raw):
+        return JSONResponse(status_code=400, content={"error": "Binary files are not editable"})
+
+    return {
+        "path": path,
+        "kind": _task_type_from_path(path),
+        "content": raw.decode("utf-8", errors="replace"),
+    }
+
+
+@router.post("/api/social/save")
+def social_save(payload: Dict[str, Any]):
+    raw_path = str(payload.get("path") or "").strip()
+    content = payload.get("content")
+    if not raw_path:
+        return JSONResponse(status_code=400, content={"error": "Missing social media path"})
+    if not isinstance(content, str):
+        return JSONResponse(status_code=400, content={"error": "Invalid content"})
+
+    try:
+        file_path = _safe_social_path(raw_path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    file_path.write_text(content, encoding="utf-8")
+    return {"status": "ok"}
+
+
+@router.post("/api/social/create")
+def social_create(payload: Dict[str, Any]):
+    platform = str(payload.get("platform") or "").strip().lower()
+    title = str(payload.get("title") or "draft").strip()
+    if not platform:
+        return JSONResponse(status_code=400, content={"error": "Platform is required"})
+    if platform not in ("linkedin", "x", "xiaohongshu"):
+        return JSONResponse(status_code=400, content={"error": "Invalid platform"})
+
+    SOCIAL_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    platform_dir = SOCIAL_MEDIA_DIR / platform
+    platform_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_name = title.lower().replace(" ", "-")
+    safe_name = "".join(c for c in safe_name if c.isalnum() or c == "-").strip("-") or "draft"
+
+    index = 1
+    while True:
+        file_name = f"{safe_name}-{index:03d}.md"
+        candidate = platform_dir / file_name
+        if not candidate.exists():
+            break
+        index += 1
+
+    candidate.write_text("", encoding="utf-8")
+    return {"status": "ok", "path": str(candidate.relative_to(SOCIAL_MEDIA_DIR))}
+
+
+@router.post("/api/social/delete")
+def social_delete(payload: Dict[str, Any]):
+    raw_path = str(payload.get("path") or "").strip()
+    if not raw_path:
+        return JSONResponse(status_code=400, content={"error": "Missing social media path"})
+
+    try:
+        file_path = _safe_social_path(raw_path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    file_path.unlink()
+    return {"status": "ok", "deleted": raw_path}
+
+
+@router.get("/api/social/history")
+def social_history():
+    return _social_history()
+
+
 @router.get("/api/skill-pilot-development/features")
 def skill_pilot_development_features():
     return {"items": _skill_pilot_feature_catalog()}
