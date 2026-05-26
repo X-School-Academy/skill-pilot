@@ -142,6 +142,38 @@ object_key_to_url() {
   printf '%s/%s\n' "${CLOUDFRONT_BASE_URL}" "$(url_encode_key "${key}")"
 }
 
+content_type_for_file() {
+  local file="$1"
+  local ext="${file##*.}"
+  ext="$(printf '%s\n' "${ext}" | tr '[:upper:]' '[:lower:]')"
+
+  case "${ext}" in
+    mp4) printf '%s\n' "video/mp4" ;;
+    webm) printf '%s\n' "video/webm" ;;
+    mov) printf '%s\n' "video/quicktime" ;;
+    m4v) printf '%s\n' "video/x-m4v" ;;
+    m3u8) printf '%s\n' "application/vnd.apple.mpegurl" ;;
+    ts) printf '%s\n' "video/mp2t" ;;
+    m4s) printf '%s\n' "video/iso.segment" ;;
+    mp3) printf '%s\n' "audio/mpeg" ;;
+    m4a) printf '%s\n' "audio/mp4" ;;
+    wav) printf '%s\n' "audio/wav" ;;
+    ogg) printf '%s\n' "audio/ogg" ;;
+    jpg|jpeg) printf '%s\n' "image/jpeg" ;;
+    png) printf '%s\n' "image/png" ;;
+    gif) printf '%s\n' "image/gif" ;;
+    webp) printf '%s\n' "image/webp" ;;
+    svg) printf '%s\n' "image/svg+xml" ;;
+    pdf) printf '%s\n' "application/pdf" ;;
+    json) printf '%s\n' "application/json" ;;
+    txt) printf '%s\n' "text/plain; charset=utf-8" ;;
+    html) printf '%s\n' "text/html; charset=utf-8" ;;
+    css) printf '%s\n' "text/css; charset=utf-8" ;;
+    js|mjs) printf '%s\n' "text/javascript; charset=utf-8" ;;
+    *) printf '%s\n' "application/octet-stream" ;;
+  esac
+}
+
 normalize_delete_key() {
   local raw="$1"
   local folder="$2"
@@ -213,7 +245,12 @@ upload_file() {
   key="$(join_key "${folder}" "${name}")"
   validate_key_part "Object key" "${key}"
 
-  aws --profile "${AWS_S3_PROFILE}" s3 cp "${file}" "s3://${AWS_S3_BUCKET}/${key}" >/dev/null
+  aws \
+    --profile "${AWS_S3_PROFILE}" \
+    s3 cp "${file}" "s3://${AWS_S3_BUCKET}/${key}" \
+    --content-type "$(content_type_for_file "${file}")" \
+    --content-disposition inline \
+    >/dev/null
   object_key_to_url "${key}"
 }
 
