@@ -11,7 +11,7 @@ Create and publish Skill Pilot showcase entries — from concept to published da
 
 - The user wants to draft a new Explore showcase entry from an idea or a reference project.
 - The user wants to generate the thumbnail, video, or interactive tutorial assets for a showcase.
-- The user wants to publish an approved showcase to `core/engine/data/showcases/` and copy its assets to `core/webui/public/showcases/`.
+- The user wants to publish an approved showcase to `core/engine/data/showcases/` and publish its public assets through the S3/CloudFront CLI.
 - The user wants to create a reverse-engineering showcase (Skill Pilot feature, project, or game) tied to a `git_tag` if needed.
 
 ## Your Roles in This Skill
@@ -94,7 +94,7 @@ Each showcase entry contains:
      3. Include disabled subagents too, because the showcase declares the full set of subagents required.
      4. Do not duplicate agent skills here; keep agent skills in `skills` and subagents in `subagents`.
    - `extensions`: agent extensions to use.
-   - `tools`: list every shell command, CLI binary, or executable script used either by the showcase prompt directly, by any skill in `skills`, or by any subagent in `subagents`. Examples: `ffmpeg`, `ffprobe`, `pnpm`, `uv`, `core/bin/create-image`, `core/bin/create-audio`. Include project-local scripts with their repo-relative path.
+   - `tools`: list every shell command, CLI binary, or executable script used either by the showcase prompt directly, by any skill in `skills`, or by any subagent in `subagents`. Examples: `ffmpeg`, `ffprobe`, `pnpm`, `uv`, `core/bin/create-image`, `core/bin/create-audio`, `core/bin/aws-s3`. Include project-local scripts with their repo-relative path.
    - `in_mode`: `prod` (execute in the stable prod instance) or `dev` (execute in prod, monitor in dev WebUI for live-reload).
    - `directory`: where the files will be copied to from the showcase files folder `workspace/showcases/{showcase_slug_id}/` when using the template. Always set it to a type-based directory plus the showcase id/slug, using the rules in "Directory Selection" below.
    - `terms`: every technology, format, protocol, agent pattern, or concept knowledge that is related to the showcase outcome, the listed `tools`, any skill in `skills`, or any subagent in `subagents`. Cover language/runtime terms (e.g., `python`, `bash`, `uv`, `pip`), formats (`mp3`, `wav`, `png`, `mp4`, `yaml`, `json`, `markdown`), codecs/parameters (`h264`, `x264`, `h264 CRF`, `yuv420p`, `fps`, `bitrate`), tooling concepts (`ffmpeg filter`, `shell command`, `bash script`, `apt-get`, `brew`), agent concepts (`subagent`, `code review`, `multi-agent workflow`), and model names used (`gpt-image-2`, `gpt-4o-mini-tts`). Users explore these terms to learn the knowledge behind the showcase.
@@ -166,10 +166,17 @@ After approval, generate the showcase assets using the appropriate agent skills:
 
 Save all generated files to `workspace/showcases/{showcase_slug_id}/assets/`.
 
+Upload generated public assets with `core/bin/aws-s3` and use the returned CloudFront URLs in `showcase.yaml`:
+- Upload videos with `core/bin/aws-s3 upload <video-file> --folder video`.
+- Upload images, including thumbnails, with `core/bin/aws-s3 upload <image-file> --folder image`.
+- Upload zip packages with `core/bin/aws-s3 upload <zip-file> --folder zip`.
+- Keep the local asset files under `workspace/showcases/{showcase_slug_id}/assets/` as the review and packaging source even after uploading.
+
 Update `showcase.yaml` with the path or URL for each generated asset:
-- `thumbnail`: path to the generated image
-- `video`: path to the generated video
+- `thumbnail`: CloudFront URL returned from uploading the generated image to `image/`
+- `video`: CloudFront URL returned from uploading the generated video to `video/`
 - `tutorial`: path or URL to the generated tutorial
+- `zip-files-url`: CloudFront URL returned from uploading the generated zip package to `zip/`, when template files are distributed as a zip
 
 Maintain `workspace/showcases/{showcase_slug_id}/files.yaml` listing all files created for this showcase. This list will be used to zip the assets for distribution.
 
@@ -194,7 +201,7 @@ After user approval:
 
 1. Determine the showcase category folder under `core/engine/data/showcases/`. Create the folder if it does not exist and add it to `core/engine/data/showcases.json5`.
 2. Write the final `core/engine/data/showcases/{category}/{showcase_slug_id}.yaml` with the approved content.
-3. Copy any asset files (thumbnail, video, tutorial) to `core/webui/public/showcases/{category}/` and update the YAML paths to use the `/showcases/{category}/...` webui public path.
+3. Ensure any public image, video, or zip asset fields use the CloudFront URLs returned by `core/bin/aws-s3`; do not replace them with `core/webui/public/showcases/` paths.
 4. Run a quick validation check: ensure the YAML parses cleanly and any `git_tag` + `use_worktree` + `in_mode` constraints are satisfied (see `core/engine/data/AGENTS.md`).
 5. Report what was created or updated, and what the user can do next.
 
