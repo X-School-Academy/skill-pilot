@@ -1858,6 +1858,17 @@ required_sessions_live() {
 print_startup_troubleshooting() {
   local mode="$1"
   echo "A startup tmux session exited before Skill Pilot became reachable."
+  echo "Check captured error logs:"
+  if [[ "${mode}" == "dev" ]]; then
+    echo "  cat ${ROOT_DIR}/.skillpilot/logs/sp-webui-dev.err"
+    echo "  cat ${ROOT_DIR}/.skillpilot/logs/sp-engine-dev.err"
+  else
+    echo "  cat ${ROOT_DIR}/.skillpilot/logs/sp-engine-prod.err"
+    if ((NEXT_SERVER == 1)); then
+      echo "  cat ${ROOT_DIR}/.skillpilot/logs/sp-webui-prod.err"
+    fi
+  fi
+  echo ""
   echo "Run the raw command(s) below for troubleshooting:"
   if [[ "${mode}" == "dev" ]]; then
     local dev_webui_host dev_webui_port
@@ -1958,6 +1969,11 @@ start_session() {
   local session_name="$1"
   local command="$2"
   local replace_existing="${3:-0}"
+  local log_dir="${ROOT_DIR}/.skillpilot/logs"
+  local stdout_log="${log_dir}/${session_name}.log"
+  local stderr_log="${log_dir}/${session_name}.err"
+  local escaped_root escaped_stdout_log escaped_stderr_log
+  local wrapped_command tmux_command
 
   if tmux has-session -t "${session_name}" 2>/dev/null; then
     if [[ "${replace_existing}" == "1" ]]; then
@@ -1969,8 +1985,18 @@ start_session() {
     fi
   fi
 
+  mkdir -p "${log_dir}"
+  : > "${stdout_log}"
+  : > "${stderr_log}"
+
+  printf -v escaped_root "%q" "${ROOT_DIR}"
+  printf -v escaped_stdout_log "%q" "${stdout_log}"
+  printf -v escaped_stderr_log "%q" "${stderr_log}"
+  wrapped_command="cd ${escaped_root} && { ${command}; } > >(tee -a ${escaped_stdout_log}) 2> >(tee -a ${escaped_stderr_log} >&2)"
+  printf -v tmux_command "bash -lc %q" "${wrapped_command}"
+
   sync_tmux_environment
-  tmux new-session -d -s "${session_name}" "cd '${ROOT_DIR}' && ${command}" \; set -g status off
+  tmux new-session -d -s "${session_name}" "${tmux_command}" \; set -g status off
   echo "Started session '${session_name}'."
 }
 
@@ -2058,6 +2084,9 @@ case "${ACTION}" in
       echo "  WebUI   ->  ${_webui_url%/}  (dev mode)"
       echo ""
       echo "Use 'tmux attach -t sp-webui-dev -r' or 'tmux attach -t sp-engine-dev -r' to view logs."
+      echo "For startup errors:"
+      echo "  cat .skillpilot/logs/sp-webui-dev.err"
+      echo "  cat .skillpilot/logs/sp-engine-dev.err"
     else
       _replace_existing_prod_sessions=0
       if [[ "${SOURCE}" == "webui" ]]; then
@@ -2087,11 +2116,16 @@ case "${ACTION}" in
         echo "  WebUI   ->  ${_webui_url%/}  (production mode, next start)"
         echo ""
         echo "Use 'tmux attach -t sp-engine-prod -r' or 'tmux attach -t sp-webui-prod -r' to view logs."
+        echo "For startup errors:"
+        echo "  cat .skillpilot/logs/sp-engine-prod.err"
+        echo "  cat .skillpilot/logs/sp-webui-prod.err"
       else
         _engine_url="$(get_webui_base_url "prod")"
         echo "  Engine + WebUI  ->  ${_engine_url%/}  (production mode)"
         echo ""
         echo "Use 'tmux attach -t sp-engine-prod -r' to view logs."
+        echo "For startup errors:"
+        echo "  cat .skillpilot/logs/sp-engine-prod.err"
       fi
     fi
     echo ""
