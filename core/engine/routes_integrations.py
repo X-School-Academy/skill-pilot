@@ -1,6 +1,12 @@
 from routes_shared import *
 
 
+def _parse_bool_value(value: Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes")
+    return bool(value)
+
+
 @router.get("/api/llm/providers")
 def llm_providers():
     providers = load_llm_providers()
@@ -673,6 +679,7 @@ def create_multiple_scene_video(payload: Dict[str, Any]):
     output_path = str(payload.get("output_path") or "/tmp").strip() or "/tmp"
     voice_name = str(payload.get("voice_name") or "").strip() or None
     theme = str(payload.get("theme") or "").strip() or None
+    create_thumbnail = _parse_bool_value(payload.get("create_thumbnail"))
     result = VIDEO_CREATOR.create_multiple_scene_video(
         requirement=requirement,
         target_duration=target_duration,
@@ -680,6 +687,7 @@ def create_multiple_scene_video(payload: Dict[str, Any]):
         output_path=output_path,
         voice_name=voice_name,
         theme=theme,
+        create_thumbnail=create_thumbnail,
     )
     return result
 
@@ -688,8 +696,10 @@ def create_multiple_scene_video(payload: Dict[str, Any]):
 @router.post("/resume_multiple_scene_video")
 def resume_multiple_scene_video(payload: Dict[str, Any]):
     output_path = str(payload.get("output_path") or "/tmp").strip() or "/tmp"
-    result = VIDEO_CREATOR.resume_multiple_scene_video(output_path=output_path)
+    create_thumbnail = _parse_bool_value(payload.get("create_thumbnail"))
+    result = VIDEO_CREATOR.resume_multiple_scene_video(
+        output_path=output_path,
+        create_thumbnail=create_thumbnail,
+    )
     return result
-
-
 

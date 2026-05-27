@@ -5,10 +5,10 @@ import html
 import os
 import subprocess
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 import uuid
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from logger import log, error
 from ..VideoStyle import VideoStyle
@@ -124,7 +124,11 @@ def _set_svg_root_background(svg_output: str, background_color: str) -> str:
     )
 
 
-async def create_mermaid_diagram_scene(scene: Dict[str, Any], style: VideoStyle) -> str:
+async def create_mermaid_diagram_scene(
+    scene: Dict[str, Any],
+    style: VideoStyle,
+    llm: Optional[WorkflowLLMAdapter] = None,
+) -> str:
     """
     Create a mermaid diagram scene video.
 
@@ -160,7 +164,12 @@ async def create_mermaid_diagram_scene(scene: Dict[str, Any], style: VideoStyle)
     mermaid_cli = os.environ.get("MERMAID_CLI", DEFAULT_MERMAID_CLI)
 
     # Generate mermaid diagram code using LLM with retry logic for syntax errors
-    svg_content = await generate_mermaid_image_with_retry(diagram_type, description, mermaid_cli)
+    svg_content = await generate_mermaid_image_with_retry(
+        diagram_type,
+        description,
+        mermaid_cli,
+        llm=llm,
+    )
     
     
     # Create HTML content with SVG diagram
@@ -364,7 +373,13 @@ async def create_mermaid_diagram_scene(scene: Dict[str, Any], style: VideoStyle)
     return video_path
 
 
-async def generate_mermaid_image_with_retry(diagram_type: str, description: str, mermaid_cli: str, max_retries: int = 3) -> str:
+async def generate_mermaid_image_with_retry(
+    diagram_type: str,
+    description: str,
+    mermaid_cli: str,
+    max_retries: int = 3,
+    llm: Optional[WorkflowLLMAdapter] = None,
+) -> str:
     """
     Generate Mermaid code and retry only when Mermaid CLI reports the code
     is invalid and can be repaired by the LLM.
@@ -379,7 +394,7 @@ async def generate_mermaid_image_with_retry(diagram_type: str, description: str,
         SVG content as string
     """
     
-    llm = WorkflowLLMAdapter()
+    llm = llm or WorkflowLLMAdapter()
     
     diagram_prompt = f"""
     Create a {diagram_type} diagram using Mermaid syntax for the following description:
@@ -414,6 +429,7 @@ async def generate_mermaid_image_with_retry(diagram_type: str, description: str,
                     f"Failed to generate mermaid diagram after {max_retries} repair attempts: {str(e)}"
                 ) from e
 
+            messages.append(AIMessage(content=e.mermaid_code))
             messages.append(
                 HumanMessage(
                     content=_build_mermaid_fix_prompt(diagram_type, e.mermaid_code, e.cli_error)
