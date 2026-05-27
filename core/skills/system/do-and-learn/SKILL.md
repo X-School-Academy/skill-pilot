@@ -5,7 +5,7 @@ description: Guide users who lack task background through a task-first learning 
 
 # AI Builder - Do and Learn
 
-Complete practical tasks while turning the work into a structured learning path for users who are still building the related knowledge.
+Complete practical tasks while turning the work into a structured learning path for users who are still building the related knowledge, then help them convert the finished work into resume or interview preparation when requested.
 
 ## When to Use This Skill
 
@@ -13,7 +13,7 @@ Complete practical tasks while turning the work into a structured learning path 
 - The user has limited related knowledge or asks for beginner-friendly guidance
 - The task needs requirements discovery, knowledge explanation, and teach-back checks
 - A project or task should produce a `learning/` folder with an index and linked learning notes
-- The finished work may become an online interactive tutorial
+- The finished work may become resume points, an online interactive course, or a mock interview
 
 ## Your Roles in This Skill
 
@@ -42,8 +42,9 @@ Follow `references/workflow.md` for the detailed workflow.
 4. Create a `learning/` folder in the project or task directory once the task location is known.
 5. Create `learning/README.md` as the learning index and link any additional knowledge files from it.
 6. Keep learning notes tied to the actual task decisions, implementation, verification, and tradeoffs.
-7. When the task is finished, ask whether the user wants an online interactive tutorial for deeper learning.
-8. If the user says yes, use the `course-creator` skill, save the tutorial artifact in `learning/`, and update `learning/README.md` to link it.
+7. When the task is finished, offer the three completion options defined in `references/workflow.md`.
+8. If the user chooses resume points or hiring-manager interview practice, use the `resume-interview` skill.
+9. If the user chooses an online interactive course, use the `course-creator` skill, save the course artifact in `learning/`, and update `learning/README.md` to link it.
 
 ## Expected Output
 
@@ -51,7 +52,8 @@ Follow `references/workflow.md` for the detailed workflow.
 - A `learning/README.md` index in the project or task directory
 - Linked learning files for the main knowledge areas when useful
 - A final task report that separates delivered work, verification, and learning resources
-- If requested, an interactive tutorial created with `course-creator` and linked from the learning index
+- If requested, resume points or interview practice created with `resume-interview` agent skill
+- If requested, an interactive course created with `course-creator` and linked from the learning index
 
 ## Key Principles
 

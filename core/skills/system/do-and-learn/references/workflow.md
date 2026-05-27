@@ -129,18 +129,40 @@ In the final report, include:
 - where the learning folder is
 - any assumptions or remaining risks
 
-## Step 8: Offer an Interactive Tutorial
+## Step 8: Offer Completion Options
 
 After the task is finished, ask:
 
-`Do you want me to create an online interactive tutorial for this task so you can learn it more deeply?`
+```text
+You finished this task. What would you like to do next?
 
-If the user says yes:
+1. Get the key points for how to add this skill or task experience to your resume.
+2. Take an online interactive course for the skills you learned by doing this task before a mock interview.
+3. If you have learned the materials and mastered the skills, start a hiring-manager-style interview for this task.
+```
+
+If the user chooses option 1:
+
+1. Use the `resume-interview` skill.
+2. Turn the completed task, implementation choices, tradeoffs, and verification results into resume-ready points.
+3. Keep claims credible. Do not invent metrics, scale, production usage, or business impact.
+4. Include short interview-defense notes when useful so the user can explain the resume claims.
+
+If the user chooses option 2:
 
 1. Use the `course-creator` skill.
-2. Create the tutorial in the task's `learning/` folder.
+2. Create the interactive course in the task's `learning/` folder.
 3. Base the tutorial on the completed task, the user's level, and the knowledge notes.
-4. Update `learning/README.md` to link to the tutorial file.
-5. Verify the tutorial file exists and is linked.
+4. Update `learning/README.md` to link to the course file.
+5. Verify the course file exists and is linked.
+6. After the course is complete, offer option 3 again if the user wants to practice the interview.
 
-If the user says no, leave the learning folder as the durable learning artifact.
+If the user chooses option 3:
+
+1. Use the `resume-interview` skill.
+2. Act as the hiring manager interviewing the user as the candidate.
+3. Ask one question at a time, listen to the user's answer, and probe with realistic follow-ups.
+4. Ground questions in the completed task, the learning notes, implementation decisions, verification, and tradeoffs.
+5. Delay detailed scoring until the interview segment ends unless the user asks for immediate feedback.
+
+If the user declines all options, leave the learning folder as the durable learning artifact.
