@@ -124,14 +124,20 @@ def send_request_with_runtime_fallback(
         try:
             return send_request(json_str, candidate, timeout)
         except Exception as exc:
-            errors.append(f"{candidate.name}: {exc}")
+            errors.append(f"{candidate}: {type(exc).__name__}: {exc}")
 
     runtime_mode = runtime_mode_env()
     if runtime_mode is None:
-        raise EngineNotStartedError("your Skill Pilot Engine (Prod or Dev) is not started")
-    if runtime_mode in {"dev", "development"}:
-        raise EngineNotStartedError("your Skill Pilot Engine (Dev) is not started")
-    raise EngineNotStartedError("your Skill Pilot Engine (Prod) is not started")
+        message = "your Skill Pilot Engine (Prod or Dev) is not started"
+    elif runtime_mode in {"dev", "development"}:
+        message = "your Skill Pilot Engine (Dev) is not started"
+    else:
+        message = "your Skill Pilot Engine (Prod) is not started"
+
+    if errors:
+        detail = "; ".join(errors)
+        message = f"{message}. Socket connection attempts failed: {detail}"
+    raise EngineNotStartedError(message)
 
 
 def build_parser() -> argparse.ArgumentParser:
