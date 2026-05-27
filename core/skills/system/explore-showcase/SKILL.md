@@ -182,6 +182,14 @@ The script:
 - Checks each `terms` entry against `core/engine/data/terms.json`, creating that file if needed. For missing terms, it generates an independent 3 minute, 1080p landscape learning video, uploads it to the `video` folder, and records the URL under the lowercase URL-safe term slug.
 - Zips the showcase folder contents, uploads the zip with `core/bin/aws-s3 upload ... --folder zip`, and updates `zip-files-url`.
 
+Video generation is expected to be long-running. `core/bin/api-invoke create_multiple_scene_video` can take many minutes and may take over an hour for longer videos or slow media providers. Do not treat a quiet terminal as a hang. While it runs:
+
+1. Monitor the asset-generation command session periodically.
+2. Check the engine tmux terminal, usually `sp-engine-dev` or `sp-engine-prod`, with a pane capture such as `tmux capture-pane -t sp-engine-dev -p -S -120` or `tmux capture-pane -t sp-engine-prod -p -S -120` when permitted.
+3. Look for active progress logs such as scene planning, image generation, TTS, rendering, or muxing. If those logs are advancing, keep waiting.
+4. Only report an error when the command exits non-zero, the tmux logs show a concrete failure, or the underlying process is no longer running.
+5. If sandboxing blocks tmux or process inspection, ask for permission rather than assuming the generation failed.
+
 Keep generated local files under `workspace/showcases/{showcase_slug_id}/assets/` as the review and packaging source even after uploading.
 
 Maintain `workspace/showcases/{showcase_slug_id}/files.yaml` listing all files created for this showcase. This list will be used to zip the assets for distribution.
