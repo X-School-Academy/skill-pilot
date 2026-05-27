@@ -172,15 +172,15 @@ core/engine/.venv/bin/python core/skills/system/explore-showcase/scripts/create-
 
 The script can also be run from an installed skill copy such as `.agent/skills/explore-showcase/scripts/create-assets.py`. It discovers the Skill Pilot repo root from the current directory, the showcase path, or the script location, so pass either an absolute showcase path or a repo-relative path such as `workspace/showcases/{showcase_slug_id}`.
 
-Use `--dry-run` when you want to preview and improve generation prompts before publishing. Dry-run still creates the local thumbnail, videos, and zip file, runs generated tutorial/link prompts, then prints their file locations. It skips S3 uploads and does not update `showcase.yaml`, `files.yaml`, or `core/engine/data/terms.json`.
+Use `--dry-run` when you want to preview and improve generation prompts before publishing. Dry-run still creates local generated media and the zip file, runs generated tutorial/link prompts, then prints their file locations. It skips S3 uploads and does not update `showcase.yaml`, `files.yaml`, or `core/engine/data/terms.json`.
 
 The script:
 - Fails if the showcase folder or `showcase.yaml` is missing.
-- Generates a landscape thumbnail from `title`, `description`, and `goals` with `core/bin/create-image`, uploads it with `core/bin/aws-s3 upload ... --folder image`, and updates `thumbnail`.
-- Generates a 5 minute, 1080p landscape showcase video from `title`, `description`, `goals`, and `video_prompt` with `core/bin/api-invoke create_multiple_scene_video`, uploads it with `core/bin/aws-s3 upload ... --folder video`, and updates `video`.
+- Generates a landscape thumbnail from `title`, `description`, and `goals` with `core/bin/create-image`, uploads the generated file directly with `core/bin/aws-s3 upload ... --folder image`, and updates `thumbnail`. The thumbnail is not copied into `assets/` for zip packaging.
+- Generates a 5 minute, 1080p landscape showcase video from `title`, `description`, `goals`, and `video_prompt` with `core/bin/api-invoke create_multiple_scene_video`, using `.skillpilot/temp/showcases-{uuid}/` as the video workflow output folder. It uploads the generated video directly with `core/bin/aws-s3 upload ... --folder video` and updates `video`; it does not copy the video into the showcase `assets/` folder.
 - Generates `tutorial_prompt` and any `links[].prompt` values by calling `core/bin/agent-cli` with this wrapper prompt: `Use agent skill multiple-scene-video or course-creator to create a video or online course for {context - similar to video and thumbnail}, then output the file absolute path in format<output-file-path>file path<output-file-path>`. The script parses the tagged absolute file path, uploads video files with `core/bin/aws-s3 upload ... --folder video`, uploads markdown course files with `core/bin/aws-s3 upload ... --folder course`, updates `tutorial` or `links[].url`, and removes consumed `links[].prompt` values once a URL exists. Generated tutorial/link files are uploaded from their original absolute path and are not copied into `assets/`.
-- Checks each `terms` entry against `core/engine/data/terms.json`, creating that file if needed. For missing terms, it generates an independent 3 minute, 1080p landscape learning video, uploads it to the `video` folder, and records the URL under the lowercase URL-safe term slug.
-- Zips the showcase folder contents, uploads the zip with `core/bin/aws-s3 upload ... --folder zip`, and updates `zip-files-url`.
+- Checks each `terms` entry against `core/engine/data/terms.json`, creating that file if needed. For missing terms, it generates an independent 3 minute, 1080p landscape learning video under `.skillpilot/temp/showcases-{uuid}/`, uploads it to the `video` folder, and records the URL under the lowercase URL-safe term slug. Term videos are not copied into `assets/`.
+- Zips the showcase folder contents, uploads the zip with `core/bin/aws-s3 upload ... --folder zip`, and updates `zip-files-url`. Already-uploaded generated media should stay out of the showcase folder so it is not zipped and uploaded again.
 
 Video generation is expected to be long-running. `core/bin/api-invoke create_multiple_scene_video` can take many minutes and may take over an hour for longer videos or slow media providers. Do not treat a quiet terminal as a hang. While it runs:
 
@@ -190,19 +190,17 @@ Video generation is expected to be long-running. `core/bin/api-invoke create_mul
 4. Only report an error when the command exits non-zero, the tmux logs show a concrete failure, or the underlying process is no longer running.
 5. If sandboxing blocks tmux or process inspection, ask for permission rather than assuming the generation failed.
 
-Keep generated local files under `workspace/showcases/{showcase_slug_id}/assets/` as the review and packaging source even after uploading.
+Keep only template/source files that should be distributed to the user's workspace under `workspace/showcases/{showcase_slug_id}/`, including `assets/` when the template genuinely needs local source assets. Generated thumbnail, showcase video, tutorial/link media, and term videos are uploaded directly from their generated paths and should not be copied into the showcase folder just for review or packaging.
 
-Maintain `workspace/showcases/{showcase_slug_id}/files.yaml` listing all files created for this showcase. This list will be used to zip the assets for distribution.
+Maintain `workspace/showcases/{showcase_slug_id}/files.yaml` listing only the packaged files that should be included in the showcase zip. Do not list generated media that already has a public S3/CloudFront URL in `thumbnail`, `video`, `tutorial`, `links[].url`, or `core/engine/data/terms.json`.
 
 Example `files.yaml`:
 ```yaml
 showcase_id: {showcase_slug_id}
 files:
   - path: showcase.yaml
-  - path: assets/thumbnail.png
-  - path: assets/video.mp4
-  - path: assets/tutorial.md
   - path: requirements.md
+  - path: assets/source-image.png
 ```
 
 Ask the user to review the generated assets and approve before continuing.

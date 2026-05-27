@@ -7,9 +7,9 @@ import argparse
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -170,15 +170,6 @@ def upload_generated_learning(repo_root: Path, file_path: Path, dry_run: bool) -
     )
 
 
-def copy_asset(source: Path, destination: Path) -> Path:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    if not source.exists():
-        raise SystemExit(f"Generated file does not exist: {source}")
-    if source.resolve() != destination.resolve():
-        shutil.copy2(source, destination)
-    return destination
-
-
 def goals_text(showcase: dict[str, Any]) -> str:
     goals = showcase.get("goals")
     if isinstance(goals, list):
@@ -230,7 +221,7 @@ def run_agent_cli(repo_root: Path, prompt: str) -> str:
     return run_command([str(repo_root / "core/bin/agent-cli"), prompt], repo_root)
 
 
-def create_thumbnail(repo_root: Path, showcase_dir: Path, showcase: dict[str, Any], dry_run: bool) -> str:
+def create_thumbnail(repo_root: Path, showcase: dict[str, Any], dry_run: bool) -> str:
     prompt = (
         "Create a polished landscape thumbnail for a Skill Pilot Explore showcase.\n"
         "Use clear product-style composition, readable visual hierarchy, and no tiny text.\n\n"
@@ -241,20 +232,19 @@ def create_thumbnail(repo_root: Path, showcase_dir: Path, showcase: dict[str, An
         repo_root,
     )
     source = Path(first_output_line(output)).expanduser()
-    suffix = source.suffix or ".png"
-    local_asset = copy_asset(source, showcase_dir / "assets" / f"thumbnail{suffix}")
-    print(f"Thumbnail file: {local_asset}")
-    return upload_file(repo_root, local_asset, "image", dry_run)
+    if not source.exists():
+        raise SystemExit(f"Generated thumbnail file does not exist: {source}")
+    print(f"Thumbnail file: {source}")
+    return upload_file(repo_root, source, "image", dry_run)
 
 
 def create_video(
     repo_root: Path,
     requirement: str,
-    output_dir: Path,
-    local_name: str,
     duration_seconds: int,
     dry_run: bool,
 ) -> tuple[Path, str]:
+    output_dir = repo_root / ".skillpilot" / "temp" / f"showcases-{uuid.uuid4()}"
     output_dir.mkdir(parents=True, exist_ok=True)
     payload = {
         "requirement": requirement,
@@ -280,10 +270,10 @@ def create_video(
     if not video_path:
         raise SystemExit(f"Missing video_file_path in response: {output}")
     source = Path(str(video_path)).expanduser()
-
-    destination = copy_asset(source, output_dir / f"{local_name}{source.suffix or '.mp4'}")
-    print(f"Video file: {destination}")
-    return destination, upload_file(repo_root, destination, "video", dry_run)
+    if not source.exists():
+        raise SystemExit(f"Generated video file does not exist: {source}")
+    print(f"Video file: {source}")
+    return source, upload_file(repo_root, source, "video", dry_run)
 
 
 def create_showcase_video(
@@ -301,7 +291,7 @@ def create_showcase_video(
     )
     if extra:
         requirement += f"\n\nExtra video direction:\n{extra}"
-    _, url = create_video(repo_root, requirement, showcase_dir / "assets", "video", 300, dry_run)
+    _, url = create_video(repo_root, requirement, 300, dry_run)
     return url
 
 
@@ -379,7 +369,6 @@ def save_terms(path: Path, terms: dict[str, str]) -> None:
 
 def update_term_videos(
     repo_root: Path,
-    showcase_dir: Path,
     showcase: dict[str, Any],
     dry_run: bool,
 ) -> None:
@@ -408,8 +397,6 @@ def update_term_videos(
         _, url = create_video(
             repo_root,
             requirement,
-            showcase_dir / "assets" / "terms",
-            slug,
             180,
             dry_run,
         )
@@ -480,10 +467,10 @@ def main() -> int:
         raise SystemExit(f"Missing required file: {showcase_yaml}")
 
     showcase = load_yaml(showcase_yaml)
-    showcase["thumbnail"] = create_thumbnail(repo_root, showcase_dir, showcase, args.dry_run)
+    showcase["thumbnail"] = create_thumbnail(repo_root, showcase, args.dry_run)
     showcase["video"] = create_showcase_video(repo_root, showcase_dir, showcase, args.dry_run)
     update_generated_learning(repo_root, showcase_dir, showcase, args.dry_run)
-    update_term_videos(repo_root, showcase_dir, showcase, args.dry_run)
+    update_term_videos(repo_root, showcase, args.dry_run)
     update_files_yaml(showcase_dir, args.dry_run)
     zip_path = create_zip(showcase_dir, args.dry_run)
     showcase["zip-files-url"] = upload_file(repo_root, zip_path, "zip", args.dry_run)
