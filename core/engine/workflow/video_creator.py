@@ -669,7 +669,7 @@ This scene type is ideal for emphasizing titles, key points, or important concep
 }}
 ```
 
-* Host Speech Clip – Talking head or lipsynced host scene driven by a host image or source video.
+* Host Speech Clip – Talking head or lipsynced host scene driven by a host image or source video. Only use this scene type if user asks to use
 ```json
 {{
   "scene_type": "host_speech_clip",
@@ -683,7 +683,7 @@ This scene type is ideal for emphasizing titles, key points, or important concep
 }}
 ```
 
-* Video Clip – Existing video clip combined with scene narration.
+* Video Clip – Existing video clip combined with scene narration. Only use this scene type if user asks to use
 ```json
 {{
   "scene_type": "video_clip",
