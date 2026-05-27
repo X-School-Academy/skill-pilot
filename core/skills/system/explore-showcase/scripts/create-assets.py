@@ -16,6 +16,9 @@ from typing import Any
 
 
 ROOT_MARKERS = ("core/bin", "core/engine", "core/skills")
+OUTPUT_PATH_TAG = "output-file-path"
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
+MARKDOWN_EXTENSIONS = {".md", ".markdown"}
 
 
 def is_repo_root(path: Path) -> bool:
@@ -155,11 +158,24 @@ def upload_file(repo_root: Path, file_path: Path, folder: str, dry_run: bool) ->
     return first_output_line(output)
 
 
+def upload_generated_learning(repo_root: Path, file_path: Path, dry_run: bool) -> str:
+    suffix = file_path.suffix.lower()
+    if suffix in MARKDOWN_EXTENSIONS:
+        return upload_file(repo_root, file_path, "course", dry_run)
+    if suffix in VIDEO_EXTENSIONS:
+        return upload_file(repo_root, file_path, "video", dry_run)
+    raise SystemExit(
+        "Generated learning output must be a markdown course or video file. "
+        f"Got: {file_path}"
+    )
+
+
 def copy_asset(source: Path, destination: Path) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
     if not source.exists():
         raise SystemExit(f"Generated file does not exist: {source}")
-    shutil.copy2(source, destination)
+    if source.resolve() != destination.resolve():
+        shutil.copy2(source, destination)
     return destination
 
 
@@ -180,6 +196,38 @@ def base_context(showcase: dict[str, Any]) -> str:
         ]
         if part
     )
+
+
+def generated_learning_prompt(context: str) -> str:
+    return (
+        "Use agent skill multiple-scene-video or course-creator to create a video or online course "
+        f"for {context}, then output the file absolute path in format"
+        f"<{OUTPUT_PATH_TAG}>file path<{OUTPUT_PATH_TAG}>"
+    )
+
+
+def parse_output_file_path(output: str) -> Path:
+    marker = re.escape(OUTPUT_PATH_TAG)
+    pattern = rf"<{marker}>\s*(.*?)\s*<{marker}>"
+    match = re.search(pattern, output, flags=re.DOTALL)
+    if not match:
+        raise SystemExit(
+            f"Could not find <{OUTPUT_PATH_TAG}>...<{OUTPUT_PATH_TAG}> in agent-cli output:\n"
+            f"{output}"
+        )
+    raw_path = match.group(1).strip()
+    if not raw_path:
+        raise SystemExit(f"Empty path inside <{OUTPUT_PATH_TAG}> marker.")
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        raise SystemExit(f"Generated learning output path must be absolute: {raw_path}")
+    if not path.exists() or not path.is_file():
+        raise SystemExit(f"Generated learning output file does not exist: {path}")
+    return path
+
+
+def run_agent_cli(repo_root: Path, prompt: str) -> str:
+    return run_command([str(repo_root / "core/bin/agent-cli"), prompt], repo_root)
 
 
 def create_thumbnail(repo_root: Path, showcase_dir: Path, showcase: dict[str, Any], dry_run: bool) -> str:
@@ -255,6 +303,51 @@ def create_showcase_video(
         requirement += f"\n\nExtra video direction:\n{extra}"
     _, url = create_video(repo_root, requirement, showcase_dir / "assets", "video", 300, dry_run)
     return url
+
+
+def update_generated_learning(
+    repo_root: Path,
+    showcase_dir: Path,
+    showcase: dict[str, Any],
+    dry_run: bool,
+) -> None:
+    tutorial_prompt = str(showcase.get("tutorial_prompt") or "").strip()
+    if tutorial_prompt and not showcase.get("tutorial"):
+        context = (
+            "this Skill Pilot Explore showcase tutorial. Use the showcase title, description, "
+            "goals, thumbnail direction, and video direction as context; create a course or video "
+            "that teaches the user how to complete the showcase end-to-end. If creating an online "
+            "course and the course type is not stated, default to guided_challenge.\n\n"
+            f"{base_context(showcase)}\n\nTutorial direction:\n{tutorial_prompt}"
+        )
+        output = run_agent_cli(repo_root, generated_learning_prompt(context))
+        generated_path = parse_output_file_path(output)
+        print(f"Tutorial file: {generated_path}")
+        showcase["tutorial"] = upload_generated_learning(repo_root, generated_path, dry_run)
+
+    links = showcase.get("links") or []
+    if not isinstance(links, list):
+        raise SystemExit("Expected showcase.yaml field 'links' to be a list when present.")
+
+    for link in links:
+        if not isinstance(link, dict):
+            continue
+        link_prompt = str(link.get("prompt") or "").strip()
+        if not link_prompt or link.get("url"):
+            continue
+        link_name = str(link.get("name") or "generated learning resource").strip()
+        context = (
+            f"the reusable learning topic '{link_name}'. Use the surrounding showcase context "
+            "only to choose relevant examples. Create either a standalone tutorial video or an "
+            "online course. If creating an online course and the course type is not stated, "
+            "default to guided_challenge.\n\n"
+            f"Showcase context:\n{base_context(showcase)}\n\nLearning prompt:\n{link_prompt}"
+        )
+        output = run_agent_cli(repo_root, generated_learning_prompt(context))
+        generated_path = parse_output_file_path(output)
+        print(f"Link learning file: {generated_path}")
+        link["url"] = upload_generated_learning(repo_root, generated_path, dry_run)
+        link.pop("prompt", None)
 
 
 def term_slug(term: str) -> str:
@@ -389,6 +482,7 @@ def main() -> int:
     showcase = load_yaml(showcase_yaml)
     showcase["thumbnail"] = create_thumbnail(repo_root, showcase_dir, showcase, args.dry_run)
     showcase["video"] = create_showcase_video(repo_root, showcase_dir, showcase, args.dry_run)
+    update_generated_learning(repo_root, showcase_dir, showcase, args.dry_run)
     update_term_videos(repo_root, showcase_dir, showcase, args.dry_run)
     update_files_yaml(showcase_dir, args.dry_run)
     zip_path = create_zip(showcase_dir, args.dry_run)

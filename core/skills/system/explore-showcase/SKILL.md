@@ -95,7 +95,7 @@ Each showcase entry contains:
      3. Include disabled subagents too, because the showcase declares the full set of subagents required.
      4. Do not duplicate agent skills here; keep agent skills in `skills` and subagents in `subagents`.
    - `extensions`: agent extensions to use.
-   - `tools`: list every shell command, CLI binary, or executable script used either by the showcase prompt directly, by any skill in `skills`, or by any subagent in `subagents`. Examples: `ffmpeg`, `ffprobe`, `pnpm`, `uv`, `core/bin/create-image`, `core/bin/create-audio`, `core/bin/aws-s3`. Include project-local scripts with their repo-relative path.
+   - `tools`: list every shell command, CLI binary, or executable script used either by the showcase prompt directly, by any skill in `skills`, or by any subagent in `subagents`. Examples: `ffmpeg`, `ffprobe`, `pnpm`, `uv`, `core/bin/create-image`, `core/bin/create-audio`, `core/bin/agent-cli`, `core/bin/aws-s3`. Include project-local scripts with their repo-relative path.
    - `in_mode`: `prod` (execute in the stable prod instance) or `dev` (execute in prod, monitor in dev WebUI for live-reload).
    - `directory`: where the files will be copied to from the showcase files folder `workspace/showcases/{showcase_slug_id}/` when using the template. Always set it to a type-based directory plus the showcase id/slug, using the rules in "Directory Selection" below.
    - `terms`: every technology, format, protocol, agent pattern, or concept knowledge that is related to the showcase outcome, the listed `tools`, any skill in `skills`, or any subagent in `subagents`. Cover language/runtime terms (e.g., `python`, `bash`, `uv`, `pip`), formats (`mp3`, `wav`, `png`, `mp4`, `yaml`, `json`, `markdown`), codecs/parameters (`h264`, `x264`, `h264 CRF`, `yuv420p`, `fps`, `bitrate`), tooling concepts (`ffmpeg filter`, `shell command`, `bash script`, `apt-get`, `brew`), agent concepts (`subagent`, `code review`, `multi-agent workflow`), and model names used (`gpt-image-2`, `gpt-4o-mini-tts`). Users explore these terms to learn the knowledge behind the showcase.
@@ -104,8 +104,8 @@ Each showcase entry contains:
    - `related`: optional related showcase list, using `{ slug, caption }` entries where `slug` is another showcase id and `caption` explains the connection.
    - `variants`: optional variant showcase list, using `{ slug, caption }` entries where `slug` is another showcase id and `caption` explains how a similar prompt creates a different result.
    - `video_prompt`: a prompt used to generate a short video that either (a) teaches what the user will learn from running the showcase, or (b) demos the final result the showcase produces. Prefer the demo angle for media/visual showcases and the learning angle for skill/concept showcases. Write it as creative direction for a video generator: subject, scenes, pacing, narration tone, and the final takeaway.
-   - `tutorial_prompt`: a prompt used to generate a tutorial video or an online interactive course that walks the user through completing this specific showcase end-to-end. It should describe the audience, the lesson arc (setup → guided steps → final result), the checkpoints, and what the learner can run themselves.
-   - `links`: optional external references or generated-learning prompts for underlying knowledge topics. Use `url` for existing authoritative references. Use `prompt` only when the showcase should generate an extra tutorial video or online interactive course for a single reusable topic. Do not put both `url` and `prompt` on the same link unless there is a specific reason to augment an external reference with generated learning content.
+   - `tutorial_prompt`: a prompt used to generate a tutorial video or an online interactive course that walks the user through completing this specific showcase end-to-end. It should describe the audience, the lesson arc (setup -> guided steps -> final result), the checkpoints, what the learner can run themselves, and the intended course type when it matters (`guided_challenge` or `interactive_tutorial`). If the course type cannot be detected, the course generator defaults to `guided_challenge`.
+   - `links`: optional external references or generated-learning prompts for underlying knowledge topics. Use `url` for existing authoritative references. Use `prompt` only when the showcase should generate an extra tutorial video or online interactive course for a single reusable topic. Link prompts may request either a tutorial video or a markdown course; for markdown courses, state the course type when it matters. Do not put both `url` and `prompt` on the same link unless there is a specific reason to augment an external reference with generated learning content.
 
 ## Directory Selection
 
@@ -156,7 +156,7 @@ Key decisions to make for each showcase:
 - Add `variants` entries when another showcase uses a similar prompt shape but intentionally changes the outcome, implementation language, skill selection, agent setup, or failure/recovery path; keep captions short and user-facing.
 - Add `previous_showcase` and `next_showcase` only for ordered serial showcases where the previous or next item is part of a sequence. Prefer these fields over `related` when the order matters.
 - Add `links` for external references or generated learning content about underlying terms. Prefer external `url` links for canonical documentation; use `prompt` when no URL is provided and the intended output is an extra tutorial video or online interactive course about one reusable topic.
-- Write `video_prompt` and `tutorial_prompt`
+- Write `video_prompt` and `tutorial_prompt`. When writing `tutorial_prompt` or `links[].prompt`, include the course type only when the target format is important; otherwise leave it to `course-creator`, which defaults unknown online interactive tutorial courses to `guided_challenge`.
 
 Ask the user to review and approve `showcase.yaml` before continuing.
 
@@ -172,12 +172,13 @@ core/engine/.venv/bin/python core/skills/system/explore-showcase/scripts/create-
 
 The script can also be run from an installed skill copy such as `.agent/skills/explore-showcase/scripts/create-assets.py`. It discovers the Skill Pilot repo root from the current directory, the showcase path, or the script location, so pass either an absolute showcase path or a repo-relative path such as `workspace/showcases/{showcase_slug_id}`.
 
-Use `--dry-run` when you want to preview and improve generation prompts before publishing. Dry-run still creates the local thumbnail, videos, and zip file, then prints their file locations. It skips S3 uploads and does not update `showcase.yaml`, `files.yaml`, or `core/engine/data/terms.json`.
+Use `--dry-run` when you want to preview and improve generation prompts before publishing. Dry-run still creates the local thumbnail, videos, and zip file, runs generated tutorial/link prompts, then prints their file locations. It skips S3 uploads and does not update `showcase.yaml`, `files.yaml`, or `core/engine/data/terms.json`.
 
 The script:
 - Fails if the showcase folder or `showcase.yaml` is missing.
 - Generates a landscape thumbnail from `title`, `description`, and `goals` with `core/bin/create-image`, uploads it with `core/bin/aws-s3 upload ... --folder image`, and updates `thumbnail`.
 - Generates a 5 minute, 1080p landscape showcase video from `title`, `description`, `goals`, and `video_prompt` with `core/bin/api-invoke create_multiple_scene_video`, uploads it with `core/bin/aws-s3 upload ... --folder video`, and updates `video`.
+- Generates `tutorial_prompt` and any `links[].prompt` values by calling `core/bin/agent-cli` with this wrapper prompt: `Use agent skill multiple-scene-video or course-creator to create a video or online course for {context - similar to video and thumbnail}, then output the file absolute path in format<output-file-path>file path<output-file-path>`. The script parses the tagged absolute file path, uploads video files with `core/bin/aws-s3 upload ... --folder video`, uploads markdown course files with `core/bin/aws-s3 upload ... --folder course`, updates `tutorial` or `links[].url`, and removes consumed `links[].prompt` values once a URL exists. Generated tutorial/link files are uploaded from their original absolute path and are not copied into `assets/`.
 - Checks each `terms` entry against `core/engine/data/terms.json`, creating that file if needed. For missing terms, it generates an independent 3 minute, 1080p landscape learning video, uploads it to the `video` folder, and records the URL under the lowercase URL-safe term slug.
 - Zips the showcase folder contents, uploads the zip with `core/bin/aws-s3 upload ... --folder zip`, and updates `zip-files-url`.
 

@@ -5,7 +5,7 @@ description: Create interactive courses and assignments for students in the proj
 
 # AI Builder - Course Creator
 
-This skill creates structured, engaging educational content using the project's specialized markdown block system. It supports two distinct course formats. Always confirm with the user which format to use before authoring.
+This skill creates structured, engaging educational content using the project's specialized markdown block system. It supports two distinct course formats. If the requested format is unclear, default to `guided_challenge` for online interactive tutorial courses.
 
 ## When to Use This Skill
 
@@ -29,7 +29,7 @@ Announce your actions before performing them using:
 
 ## Two Supported Course Types
 
-The first decision is which format fits the task. **Always ask the user which type they want** when it is not stated.
+The first decision is which format fits the task. Use an explicit user request when one is provided. If the user asks for an online interactive tutorial course but does not state a type, default to `guided_challenge`.
 
 ### Type 1: `guided_challenge` (step-gated assignment)
 
@@ -111,7 +111,7 @@ For every supported block (meta fields, optional flags, language list, VS Code e
 ### Step 1 — Define the Foundation
 
 As a **Product Manager**:
-1. Confirm the **course type** (`guided_challenge` vs `interactive_tutorial`). If the user did not specify, ask.
+1. Determine the **course type** (`guided_challenge` vs `interactive_tutorial`). If the user did not specify one, default online interactive tutorial courses to `guided_challenge`.
 2. Define the **goal**: what should the student be able to DO afterward?
 3. Identify the **audience** (e.g., high-schooler, beginner dev, professional).
 4. Set a realistic **duration** (20–30 min minimum for a guided challenge; tutorials can be longer).

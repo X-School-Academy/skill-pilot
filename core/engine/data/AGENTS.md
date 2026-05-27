@@ -29,8 +29,8 @@ Supported sample fields:
 - `thumbnail`: optional image path/url or `null`
 - `video`: optional video path/url or `null`
 - `video_prompt`: optional prompt string used by the explore-showcase skill to generate a video for this showcase (not shown in UI)
-- `tutorial`: optional media path/url or webpage url
-- `tutorial_prompt`: optional prompt string used by the explore-showcase skill to generate an online interactive tutorial (not shown in UI)
+- `tutorial`: optional media path/url or webpage url. Generated markdown course tutorials should be uploaded under the S3 `course/` prefix.
+- `tutorial_prompt`: optional prompt string used by the explore-showcase skill to generate an online interactive tutorial or tutorial video (not shown in UI)
 - `request`: optional requirement/reference media or webpage url
 - `prompt`: starter prompt text
 - `workflow`: optional workflow path
@@ -52,7 +52,7 @@ Supported sample fields:
 - `next_showcase`: optional `{ slug_id, title }` object for the immediate follow-up or next step in a serial showcase
 - `related`: optional array of `{ slug, caption }` entries where `slug` references another showcase `id` and `caption` explains why it is related
 - `variants`: optional array of `{ slug, caption }` entries where `slug` references another showcase `id` and `caption` explains how a similar prompt produces a meaningfully different result
-- `links`: array of `{ name, url, prompt }` where `prompt` is optional and used by the explore-showcase skill to generate linked resource content (not shown in UI)
+- `links`: array of `{ name, url, prompt }` where `prompt` is optional and used to generate linked resource content, which can be video or online interactive course
 - `popularity`: numeric score
 - `level`: numeric difficulty
 - `rate`: numeric rating
