@@ -37,7 +37,7 @@ A staged, app-driven assignment rendered by `course.block.tsx`. Every visible pi
 
 Use this when the learner should be walked through a sequence with checkpoints (interactive coding, terminal validation, forms, container provisioning, etc.).
 
-**File location:** `workspace/learning/{slug}.md`
+**File location:** `workspace/learning/{slug}.md` by default. If the user or calling tool provides an explicit output file path, write the course to that exact path instead.
 
 **Required first block** — a yaml meta fence. Add `type: guided_challenge` to declare the course type:
 
@@ -76,7 +76,7 @@ A flowing, readable article rendered as normal markdown, with **inline interacti
 
 Use this when the goal is to teach or showcase concepts in a narrative, encyclopedic, or comparative way (e.g., "Hello World in 12 languages", "Syntax differences across languages", reference material with runnable examples).
 
-**File location:** `workspace/learning/{slug}.md`
+**File location:** `workspace/learning/{slug}.md` by default. If the user or calling tool provides an explicit output file path, write the tutorial to that exact path instead, including paths under `.skillpilot/temp/` for generated intermediate artifacts.
 
 **Required header** — a YAML **frontmatter** block delimited by `---` (NOT a fenced `yaml` code block). It must be the very first content in the file:
 
@@ -131,7 +131,7 @@ As a **Project Manager**:
 
 ### Step 4 — Author the File
 
-As a **Backend Developer**, write the file at `workspace/learning/{slug}.md` using the format for the chosen type.
+As a **Backend Developer**, write the file at the explicit output path if one was provided; otherwise write it at `workspace/learning/{slug}.md` using the format for the chosen type.
 
 Required header rules:
 - `guided_challenge` → first fenced block: ` ```yaml {"type":"meta"} ` ... ` ``` ` with `type: guided_challenge`.

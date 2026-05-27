@@ -189,29 +189,42 @@ def base_context(showcase: dict[str, Any]) -> str:
     )
 
 
-def generated_learning_prompt(context: str) -> str:
+def create_course_output_path(repo_root: Path) -> Path:
+    output_dir = repo_root / ".skillpilot" / "temp" / "showcases-courses"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir / f"{uuid.uuid4()}.md"
+
+
+def generated_learning_prompt(context: str, output_path: Path) -> str:
     return (
-        "Use agent skill multiple-scene-video or course-creator to create a video or online course "
-        f"for {context}, then output the file absolute path in format"
-        f"<{OUTPUT_PATH_TAG}>file path<{OUTPUT_PATH_TAG}>"
+        "Use agent skill course-creator to create an online course "
+        f"for {context}. Write the course markdown file exactly to this absolute path: "
+        f"{output_path}. Do not choose a different path. Then output only the file absolute "
+        f"path in format <{OUTPUT_PATH_TAG}>{output_path}</{OUTPUT_PATH_TAG}>"
     )
 
 
-def parse_output_file_path(output: str) -> Path:
+def parse_output_file_path(output: str, expected_path: Path | None = None) -> Path:
     marker = re.escape(OUTPUT_PATH_TAG)
-    pattern = rf"<{marker}>\s*(.*?)\s*<{marker}>"
+    pattern = rf"<{marker}>\s*(.*?)\s*</{marker}>"
     match = re.search(pattern, output, flags=re.DOTALL)
     if not match:
         raise SystemExit(
-            f"Could not find <{OUTPUT_PATH_TAG}>...<{OUTPUT_PATH_TAG}> in agent-cli output:\n"
+            f"Could not find <{OUTPUT_PATH_TAG}>...</{OUTPUT_PATH_TAG}> in agent-cli output:\n"
             f"{output}"
         )
-    raw_path = match.group(1).strip()
+    raw_path = match.group(1).strip().splitlines()[0].strip()
     if not raw_path:
         raise SystemExit(f"Empty path inside <{OUTPUT_PATH_TAG}> marker.")
     path = Path(raw_path).expanduser()
     if not path.is_absolute():
         raise SystemExit(f"Generated learning output path must be absolute: {raw_path}")
+    if expected_path and path.resolve() != expected_path.resolve():
+        raise SystemExit(
+            "Generated learning output path did not match the requested path.\n"
+            f"Expected: {expected_path}\n"
+            f"Got: {path}"
+        )
     if not path.exists() or not path.is_file():
         raise SystemExit(f"Generated learning output file does not exist: {path}")
     return path
@@ -310,8 +323,9 @@ def update_generated_learning(
             "course and the course type is not stated, default to guided_challenge.\n\n"
             f"{base_context(showcase)}\n\nTutorial direction:\n{tutorial_prompt}"
         )
-        output = run_agent_cli(repo_root, generated_learning_prompt(context))
-        generated_path = parse_output_file_path(output)
+        output_path = create_course_output_path(repo_root)
+        output = run_agent_cli(repo_root, generated_learning_prompt(context, output_path))
+        generated_path = parse_output_file_path(output, output_path)
         print(f"Tutorial file: {generated_path}")
         showcase["tutorial"] = upload_generated_learning(repo_root, generated_path, dry_run)
 
@@ -333,8 +347,9 @@ def update_generated_learning(
             "default to guided_challenge.\n\n"
             f"Showcase context:\n{base_context(showcase)}\n\nLearning prompt:\n{link_prompt}"
         )
-        output = run_agent_cli(repo_root, generated_learning_prompt(context))
-        generated_path = parse_output_file_path(output)
+        output_path = create_course_output_path(repo_root)
+        output = run_agent_cli(repo_root, generated_learning_prompt(context, output_path))
+        generated_path = parse_output_file_path(output, output_path)
         print(f"Link learning file: {generated_path}")
         link["url"] = upload_generated_learning(repo_root, generated_path, dry_run)
         link.pop("prompt", None)
