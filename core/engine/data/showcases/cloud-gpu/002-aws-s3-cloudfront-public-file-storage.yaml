@@ -1,9 +1,9 @@
 id: aws-s3-cloudfront-public-file-storage
 title: Public File Storage on S3 + CloudFront
 description: Create an S3-backed public file storage bucket with CloudFront links.
-thumbnail: null
-video: null
-tutorial: null
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/221d6935-c932-4370-a2ec-4471d31f9eb9.png
+video: https://d2ixgzr3ewt3zn.cloudfront.net/video/fac0c52c-6efb-4b01-8f1f-58b7963d8465.mp4
+tutorial: https://d2ixgzr3ewt3zn.cloudfront.net/course/19270cd7-2074-491d-a351-0e55c04b54c7.md
 request: null
 prompt: |-
   Help me create public file storage on AWS using S3 and CloudFront.
@@ -21,31 +21,31 @@ git_tag: null
 use_worktree: false
 in_mode: prod
 skills:
-  - cloud-operation
-  - aws-api
-  - agent-browser
-  - terminal
+- cloud-operation
+- aws-api
+- agent-browser
+- terminal
 subagents: []
 extensions: []
 tools:
-  - core/bin/agent-browser
-  - aws
+- core/bin/agent-browser
+- aws
 files:
-  - requirements.md
+- requirements.md
 goals: |-
   - Create an S3 bucket for file storage.
   - Configure CloudFront so uploaded files can be shared through public links.
   - Verify upload, access, and delete behavior with the configured AWS profile.
   - Produce a practical `output.md` handoff file for the local file-manager showcase.
 terms:
-  - Amazon S3 bucket
-  - S3 object key
-  - CloudFront distribution
-  - CloudFront origin
-  - origin access control
-  - bucket policy
-  - public file URL
-  - AWS CLI profile
+- Amazon S3 bucket
+- S3 object key
+- CloudFront distribution
+- CloudFront origin
+- origin access control
+- bucket policy
+- public file URL
+- AWS CLI profile
 previous_showcase:
   slug_id: aws-credentials-s3-cloudfront
   title: AWS Credentials Setup for Skill Pilot
@@ -53,16 +53,16 @@ next_showcase:
   slug_id: local-s3-cloudfront-file-manager
   title: Local AWS S3 + CloudFront File Manager
 related:
-  - slug: aws-credentials-s3-cloudfront
-    caption: Required credential setup before provisioning storage.
+- slug: aws-credentials-s3-cloudfront
+  caption: Required credential setup before provisioning storage.
 variants: []
 links:
-  - name: Hosting files with Amazon S3
-    url: https://docs.aws.amazon.com/AmazonS3/latest/userguide/WebsiteHosting.html
-  - name: Restricting access to an S3 origin
-    url: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html
-  - name: CloudFront distributions
-    url: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/distribution-working-with.html
+- name: Hosting files with Amazon S3
+  url: https://docs.aws.amazon.com/AmazonS3/latest/userguide/WebsiteHosting.html
+- name: Restricting access to an S3 origin
+  url: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html
+- name: CloudFront distributions
+  url: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/distribution-working-with.html
 video_prompt: |-
   Create a concise demo video showing a user turning an empty AWS account setup into
   S3-backed public file storage. Show bucket creation, CloudFront distribution setup,
@@ -76,3 +76,4 @@ tutorial_prompt: |-
 popularity: 72
 level: 4
 rate: 4.6
+zip-files-url: https://d2ixgzr3ewt3zn.cloudfront.net/zip/6c3725eb-16ed-42e1-bb0a-22537645839f.zip
