@@ -1,0 +1,78 @@
+id: aws-s3-cloudfront-public-file-storage
+title: Public File Storage on S3 + CloudFront
+description: Create an S3-backed public file storage bucket with CloudFront links.
+thumbnail: null
+video: null
+tutorial: null
+request: null
+prompt: |-
+  Help me create public file storage on AWS using S3 and CloudFront.
+
+  Use @workspace/tasks/aws-s3-cloudfront-public-file-storage/requirements.md as the task brief.
+  The AWS credentials profile has been set up; refer to
+  @workspace/tasks/aws-credentials-s3-cloudfront/output.md for the AWS profile,
+  region, and credential setup notes. Show me the plan before making changes,
+  create and verify the AWS resources, show me the result in the AWS console,
+  and write the non-secret resource details to
+  @workspace/tasks/aws-s3-cloudfront-public-file-storage/output.md.
+workflow: null
+directory: workspace/tasks/aws-s3-cloudfront-public-file-storage
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills:
+  - cloud-operation
+  - aws-api
+  - agent-browser
+  - terminal
+subagents: []
+extensions: []
+tools:
+  - core/bin/agent-browser
+  - aws
+files:
+  - requirements.md
+goals: |-
+  - Create an S3 bucket for file storage.
+  - Configure CloudFront so uploaded files can be shared through public links.
+  - Verify upload, access, and delete behavior with the configured AWS profile.
+  - Produce a practical `output.md` handoff file for the local file-manager showcase.
+terms:
+  - Amazon S3 bucket
+  - S3 object key
+  - CloudFront distribution
+  - CloudFront origin
+  - origin access control
+  - bucket policy
+  - public file URL
+  - AWS CLI profile
+previous_showcase:
+  slug_id: aws-credentials-s3-cloudfront
+  title: AWS Credentials Setup for Skill Pilot
+next_showcase:
+  slug_id: local-s3-cloudfront-file-manager
+  title: Local AWS S3 + CloudFront File Manager
+related:
+  - slug: aws-credentials-s3-cloudfront
+    caption: Required credential setup before provisioning storage.
+variants: []
+links:
+  - name: Hosting files with Amazon S3
+    url: https://docs.aws.amazon.com/AmazonS3/latest/userguide/WebsiteHosting.html
+  - name: Restricting access to an S3 origin
+    url: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html
+  - name: CloudFront distributions
+    url: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/distribution-working-with.html
+video_prompt: |-
+  Create a concise demo video showing a user turning an empty AWS account setup into
+  S3-backed public file storage. Show bucket creation, CloudFront distribution setup,
+  a test upload, a public CloudFront link opening successfully, and the final
+  `output.md` handoff for app development.
+tutorial_prompt: |-
+  Create an interactive tutorial for users who want to create S3 and CloudFront file
+  storage with Skill Pilot. Teach the purpose of the bucket, CloudFront distribution,
+  origin access, public links, verification steps, and what resource details must be
+  recorded for later automation.
+popularity: 72
+level: 4
+rate: 4.6
