@@ -15,6 +15,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SESSION_DIR = Path(
     os.environ.get("SKILLPILOT_AGENT_SESSION_DIR", REPO_ROOT / ".skillpilot" / "agent-sessions")
 )
+CLI_SESSION_DIR = Path(
+    os.environ.get("SKILLPILOT_CLI_SESSION_DIR", REPO_ROOT / ".skillpilot" / "cli-sessions")
+)
 TIMESTAMP_FORMAT = "%Y%m%dT%H%M%SZ"
 
 
@@ -127,6 +130,17 @@ def session_file(agent: str, sid: str, payload: dict[str, Any]) -> Path:
     return SESSION_DIR / f"{stamp}-{sanitize_component(agent, 'agent')}-{sid}.jsonl"
 
 
+def cli_session_id() -> str | None:
+    value = os.environ.get("LLM_CLI_SESSION_ID")
+    if not value:
+        return None
+    return sanitize_component(value, "unknown-cli-session")
+
+
+def cli_session_file(cli_sid: str) -> Path:
+    return CLI_SESSION_DIR / f"{sanitize_component(cli_sid, 'unknown-cli-session')}.jsonl"
+
+
 def text_from_content(value: Any) -> str | None:
     if value is None:
         return None
@@ -213,7 +227,7 @@ def base_metadata(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def append_record(path: Path, record: dict[str, Any]) -> None:
-    SESSION_DIR.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
 
@@ -328,7 +342,8 @@ def record_event(default_event: str, extra_metadata: dict[str, Any] | None = Non
         print("{}")
         return
     sid = session_id(payload)
-    path = session_file(agent, sid, payload)
+    workflow_cli_sid = cli_session_id()
+    path = cli_session_file(workflow_cli_sid) if workflow_cli_sid else session_file(agent, sid, payload)
 
     event = args.event
     if event == "session_start":

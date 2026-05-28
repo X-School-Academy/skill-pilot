@@ -1,5 +1,7 @@
 import importlib
+import io
 import json
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -9,6 +11,7 @@ def load_recorder(monkeypatch, tmp_path):
     monkeypatch.syspath_prepend(str(engine_path))
     module = importlib.import_module("hooks.dialog_recorder")
     monkeypatch.setattr(module, "SESSION_DIR", tmp_path / "agent-sessions")
+    monkeypatch.setattr(module, "CLI_SESSION_DIR", tmp_path / "cli-sessions")
     monkeypatch.setattr(module, "utc_now", lambda: datetime(2026, 4, 30, 6, 11, 13, tzinfo=UTC))
     return module
 
@@ -43,6 +46,29 @@ def test_session_start_creates_expected_file_and_first_record(monkeypatch, tmp_p
     records = read_jsonl(path)
     assert records[0]["type"] == "session_start"
     assert records[0]["metadata"]["source"] == "startup"
+
+
+def test_cli_session_env_routes_history_only_to_cli_sessions(monkeypatch, tmp_path, capsys):
+    recorder = load_recorder(monkeypatch, tmp_path)
+    payload = {
+        "session_id": "codex-session-123",
+        "hook_event_name": "SessionStart",
+        "cwd": "/repo",
+    }
+
+    monkeypatch.setenv("LLM_CLI_SESSION_ID", "workflow-abc")
+    monkeypatch.setattr(sys, "argv", ["session_start.py", "--agent", "codex"])
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+
+    recorder.record_event("session_start")
+
+    assert capsys.readouterr().out.strip() == "{}"
+    cli_path = tmp_path / "cli-sessions" / "workflow-abc.jsonl"
+    assert cli_path.is_file()
+    assert not (tmp_path / "agent-sessions").exists()
+    records = read_jsonl(cli_path)
+    assert records[0]["agent"] == "codex"
+    assert records[0]["session_id"] == "codex-session-123"
 
 
 def test_session_start_metadata_includes_extra_fields(monkeypatch, tmp_path):

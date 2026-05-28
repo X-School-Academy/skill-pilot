@@ -12,7 +12,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from logger import log, error
 from ..VideoStyle import VideoStyle
-from ..llm_adapter import WorkflowLLMAdapter
+from ..llm_adapter import AgentCliLLMAdapter
 from .shared import get_or_create_voice_audio, render_markdown_html
 
 # Import utility functions
@@ -127,7 +127,7 @@ def _set_svg_root_background(svg_output: str, background_color: str) -> str:
 async def create_mermaid_diagram_scene(
     scene: Dict[str, Any],
     style: VideoStyle,
-    llm: Optional[WorkflowLLMAdapter] = None,
+    llm: Optional[AgentCliLLMAdapter] = None,
 ) -> str:
     """
     Create a mermaid diagram scene video.
@@ -378,7 +378,7 @@ async def generate_mermaid_image_with_retry(
     description: str,
     mermaid_cli: str,
     max_retries: int = 3,
-    llm: Optional[WorkflowLLMAdapter] = None,
+    llm: Optional[AgentCliLLMAdapter] = None,
 ) -> str:
     """
     Generate Mermaid code and retry only when Mermaid CLI reports the code
@@ -394,7 +394,7 @@ async def generate_mermaid_image_with_retry(
         SVG content as string
     """
     
-    llm = llm or WorkflowLLMAdapter()
+    llm = llm or AgentCliLLMAdapter()
     
     diagram_prompt = f"""
     Create a {diagram_type} diagram using Mermaid syntax for the following description:

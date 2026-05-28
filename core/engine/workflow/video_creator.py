@@ -23,7 +23,7 @@ import yaml
 
 from image_service import generate_image_from_prompt
 from llm_service import get_tts_provider
-from .llm_adapter import WorkflowLLMAdapter
+from .llm_adapter import AgentCliLLMAdapter
 
 # Import VideoStyle from separate module to avoid circular imports
 from .VideoStyle import VideoStyle
@@ -217,7 +217,7 @@ class VideoCreatorWorkflow:
     
     def _init_llm(self):
         """Initialize the LLM model based on environment configuration"""
-        return WorkflowLLMAdapter()
+        return AgentCliLLMAdapter(cli_session_id=str(uuid.uuid4()))
     
     def _build_graph(self) -> StateGraph:
         """Build the workflow graph with nodes and edges"""

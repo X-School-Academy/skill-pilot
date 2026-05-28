@@ -4,6 +4,7 @@ import re
 import shlex
 import subprocess
 import threading
+from datetime import UTC, datetime
 from json import JSONDecodeError
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -20,6 +21,8 @@ RUNNING_LOCK = threading.Lock()
 WEBUI_DIR = os.path.dirname(os.path.abspath(__file__))
 _ENV_VAR_PATTERN = re.compile(r"\$\{([A-Za-z0-9_]+)\}")
 _WARNED_CONFIG_PLACEHOLDERS: set[tuple[str, str]] = set()
+CLI_SESSION_DIR = PROJECT_DIR / ".skillpilot" / "cli-sessions"
+SESSION_RESUME_AGENT_BINS = {"codex", "claude", "gemini", "opencode"}
 
 
 def _resolve_config_placeholders(raw: str, config_path: Path) -> str:
@@ -308,6 +311,56 @@ def build_llm_command(
     return [provider.get("bin", ""), *args]
 
 
+def _strip_prompt_arg(args: List[str], prompt: str) -> List[str]:
+    if args and args[-1] == prompt:
+        return args[:-1]
+    return args
+
+
+def build_llm_resume_command(
+    provider: Dict[str, Any],
+    prompt: str,
+    agent_session_id: str,
+    auto_allow: Optional[bool] = None,
+    network_allow: Optional[bool] = None,
+    sandbox_mode: Optional[bool] = None,
+) -> List[str]:
+    cmd = build_llm_command(
+        provider,
+        prompt,
+        auto_allow=auto_allow,
+        network_allow=network_allow,
+        sandbox_mode=sandbox_mode,
+    )
+    provider_bin = str(provider.get("bin") or "").strip().lower()
+    if provider_bin not in SESSION_RESUME_AGENT_BINS:
+        raise RuntimeError(f"LLM CLI session resume is not supported for provider binary: {provider.get('bin')}")
+
+    if provider_bin == "codex":
+        try:
+            exec_index = cmd.index("exec")
+        except ValueError as exc:
+            raise RuntimeError("Codex session resume requires provider args to include 'exec'") from exc
+        resume_args = _strip_prompt_arg(cmd[exec_index + 1 :], prompt)
+        return [*cmd[: exec_index + 1], "resume", *resume_args, agent_session_id, prompt]
+
+    if provider_bin == "claude":
+        resume_args = _strip_prompt_arg(cmd[1:], prompt)
+        return [cmd[0], *resume_args, "--resume", agent_session_id, prompt]
+
+    if provider_bin == "gemini":
+        return [*cmd, "--resume", agent_session_id]
+
+    if provider_bin == "opencode":
+        try:
+            run_index = cmd.index("run")
+        except ValueError as exc:
+            raise RuntimeError("OpenCode session resume requires provider args to include 'run'") from exc
+        return [*cmd[: run_index + 1], "--session", agent_session_id, *cmd[run_index + 1 :]]
+
+    raise RuntimeError(f"Unsupported LLM CLI resume provider: {provider_bin}")
+
+
 def build_terminal_command(
     provider: Dict[str, Any],
     prompt: str,
@@ -380,7 +433,7 @@ def _resolve_provider_env(provider: Dict[str, Any]) -> Dict[str, str]:
     return resolved
 
 
-def _llm_subprocess_env(provider_env: Dict[str, str]) -> Dict[str, str]:
+def _llm_subprocess_env(provider_env: Dict[str, str], cli_session_id: Optional[str] = None) -> Dict[str, str]:
     """Build the exact environment for LLM CLI subprocesses.
 
     LLM CLIs receive the regular process environment except keys loaded from
@@ -392,7 +445,196 @@ def _llm_subprocess_env(provider_env: Dict[str, str]) -> Dict[str, str]:
         if key not in provider_env:
             env.pop(key, None)
     env.update(provider_env)
+    if cli_session_id:
+        env["LLM_CLI_SESSION_ID"] = cli_session_id
     return env
+
+
+def _cli_session_path(cli_session_id: str) -> Path:
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(cli_session_id).strip()).strip("-._")
+    return CLI_SESSION_DIR / f"{safe_id}.jsonl"
+
+
+def _read_jsonl_records(path: Path) -> List[Dict[str, Any]]:
+    if not path.is_file():
+        return []
+    records: List[Dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            records.append(payload)
+    return records
+
+
+def _latest_cli_session_agent_session_id(cli_session_id: Optional[str], provider: Dict[str, Any]) -> Optional[str]:
+    if not cli_session_id:
+        return None
+    provider_bin = str(provider.get("bin") or "").strip().lower()
+    if provider_bin not in SESSION_RESUME_AGENT_BINS:
+        raise RuntimeError(f"LLM CLI sessions only support codex, claude, gemini, and opencode providers: {provider_bin}")
+    for record in reversed(_read_jsonl_records(_cli_session_path(cli_session_id))):
+        if str(record.get("agent") or "").strip().lower() != provider_bin:
+            continue
+        session_id = record.get("session_id")
+        if session_id:
+            return str(session_id)
+    return None
+
+
+def _append_cli_session_record(cli_session_id: str, record: Dict[str, Any]) -> None:
+    path = _cli_session_path(cli_session_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+
+def _has_cli_session_record(
+    records: List[Dict[str, Any]],
+    *,
+    record_type: str,
+    agent: str,
+    session_id: str,
+    content: Optional[str] = None,
+) -> bool:
+    for record in records:
+        if record.get("type") != record_type:
+            continue
+        if str(record.get("agent") or "").strip().lower() != agent:
+            continue
+        if str(record.get("session_id") or "") != session_id:
+            continue
+        if content is not None and str(record.get("content") or "") != content:
+            continue
+        return True
+    return False
+
+
+def _extract_cli_output_session_id(provider: Dict[str, Any], output: str) -> Optional[str]:
+    provider_bin = str(provider.get("bin") or "").strip().lower()
+    fallback_session_id: Optional[str] = None
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            payload = json.loads(line)
+        except JSONDecodeError:
+            continue
+
+        payload_type = str(payload.get("type") or "")
+        if payload_type == "result" and payload.get("session_id"):
+            return str(payload["session_id"])
+        if payload_type == "system" and payload.get("subtype") == "init" and payload.get("session_id"):
+            return str(payload["session_id"])
+        if payload_type == "init" and payload.get("session_id"):
+            return str(payload["session_id"])
+
+        candidates = [
+            payload.get("session_id"),
+            payload.get("sessionId"),
+            payload.get("sessionID"),
+            payload.get("thread_id"),
+        ]
+        event = payload.get("event")
+        if isinstance(event, dict):
+            candidates.extend(
+                [
+                    event.get("session_id"),
+                    event.get("sessionId"),
+                    event.get("sessionID"),
+                    event.get("thread_id"),
+                ]
+            )
+        if provider_bin == "opencode":
+            properties = (event or {}).get("properties") if isinstance(event, dict) else None
+            if isinstance(properties, dict):
+                candidates.append(properties.get("sessionID"))
+
+        for candidate in candidates:
+            if candidate and fallback_session_id is None:
+                fallback_session_id = str(candidate)
+    return fallback_session_id
+
+
+def _record_cli_session_fallback(
+    provider: Dict[str, Any],
+    cli_session_id: Optional[str],
+    prompt: str,
+    output: str,
+    response_text: str,
+) -> None:
+    if not cli_session_id:
+        return
+    provider_bin = str(provider.get("bin") or "").strip().lower()
+    if provider_bin not in SESSION_RESUME_AGENT_BINS:
+        return
+    agent_session_id = _extract_cli_output_session_id(provider, output)
+    if not agent_session_id:
+        return
+
+    existing_records = _read_jsonl_records(_cli_session_path(cli_session_id))
+    has_session_start = _has_cli_session_record(
+        existing_records,
+        record_type="session_start",
+        agent=provider_bin,
+        session_id=agent_session_id,
+    )
+
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    metadata = {"source": "llm_service", "provider_id": provider.get("id")}
+    records = []
+    if not has_session_start:
+        records.append(
+            {
+                "type": "session_start",
+                "timestamp": timestamp,
+                "agent": provider_bin,
+                "session_id": agent_session_id,
+                "metadata": metadata,
+                "inferred": True,
+            }
+        )
+    if not _has_cli_session_record(
+        existing_records,
+        record_type="user_prompt",
+        agent=provider_bin,
+        session_id=agent_session_id,
+        content=prompt,
+    ):
+        records.append(
+            {
+                "type": "user_prompt",
+                "timestamp": timestamp,
+                "agent": provider_bin,
+                "session_id": agent_session_id,
+                "content": prompt,
+                "metadata": metadata,
+            }
+        )
+    if not _has_cli_session_record(
+        existing_records,
+        record_type="agent_response",
+        agent=provider_bin,
+        session_id=agent_session_id,
+        content=response_text,
+    ):
+        records.append(
+            {
+                "type": "agent_response",
+                "timestamp": timestamp,
+                "agent": provider_bin,
+                "session_id": agent_session_id,
+                "content": response_text,
+                "metadata": metadata,
+            }
+        )
+    for record in records:
+        _append_cli_session_record(cli_session_id, record)
 
 
 def _provider_uses_codex_json(provider: Dict[str, Any]) -> bool:
@@ -531,11 +773,14 @@ def _parse_stream_json_text(provider: Dict[str, Any], output: str) -> str:
     is_codex_json = _provider_uses_codex_json(provider)
     is_gemini_json = _provider_uses_gemini_json(provider)
     is_claude_json = _provider_uses_claude_json(provider)
+    is_opencode_json = _provider_uses_opencode_json(provider)
 
-    if not (is_codex_json or is_gemini_json or is_claude_json):
+    if not (is_codex_json or is_gemini_json or is_claude_json or is_opencode_json):
         return output.strip()
 
     chunks: List[str] = []
+    final_chunks: List[str] = []
+    result_text: Optional[str] = None
     for raw_line in output.splitlines():
         line = raw_line.strip()
         if not line.startswith("{"):
@@ -556,8 +801,23 @@ def _parse_stream_json_text(provider: Dict[str, Any], output: str) -> str:
                 if text:
                     chunks.append(str(text))
         elif is_claude_json:
+            if payload.get("type") == "result" and payload.get("result"):
+                result_text = str(payload["result"])
+                continue
+            if payload.get("type") == "assistant":
+                final_chunks.extend(_extract_claude_stream_text(payload))
+                continue
             chunks.extend(_extract_claude_stream_text(payload))
+        elif is_opencode_json:
+            if payload.get("type") == "text":
+                part = payload.get("part") or {}
+                if isinstance(part, dict) and part.get("type") == "text" and part.get("text"):
+                    chunks.append(str(part["text"]))
 
+    if result_text is not None:
+        return result_text.strip()
+    if final_chunks:
+        return "".join(final_chunks).strip()
     if chunks:
         return "".join(chunks).strip()
     return output.strip()
@@ -690,36 +950,51 @@ def llm_get_text(
     auto_allow: Optional[bool] = None,
     network_allow: Optional[bool] = None,
     sandbox_mode: Optional[bool] = None,
+    cli_session_id: Optional[str] = None,
+    cwd: Optional[str | Path] = None,
 ) -> str:
     _ = client_id
     provider = get_background_provider(provider_id)
     prompt = _messages_to_prompt(messages)
-    cmd = build_llm_command(
-        provider,
-        prompt,
-        auto_allow=auto_allow,
-        network_allow=network_allow,
-        sandbox_mode=sandbox_mode,
-    )
+    agent_session_id = _latest_cli_session_agent_session_id(cli_session_id, provider)
+    if agent_session_id:
+        cmd = build_llm_resume_command(
+            provider,
+            prompt,
+            agent_session_id,
+            auto_allow=auto_allow,
+            network_allow=network_allow,
+            sandbox_mode=sandbox_mode,
+        )
+    else:
+        cmd = build_llm_command(
+            provider,
+            prompt,
+            auto_allow=auto_allow,
+            network_allow=network_allow,
+            sandbox_mode=sandbox_mode,
+        )
     if not cmd[0]:
         raise RuntimeError("No LLM binary configured")
 
+    provider_env = _resolve_provider_env(provider)
     logger.info(
         "[llm] invoke client_id=%s provider_id=%s command=%s",
         client_id,
         provider.get("id"),
-        format_command_for_log(cmd, _resolve_provider_env(provider)),
+        format_command_for_log(cmd, provider_env),
     )
     logger.info("[llm] prompt client_id=%s provider_id=%s\n%s", client_id, provider.get("id"), prompt)
 
-    provider_env = _resolve_provider_env(provider)
     try:
         proc = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             shell=False,
-            env=_llm_subprocess_env(provider_env),
+            stdin=subprocess.DEVNULL,
+            env=_llm_subprocess_env(provider_env, cli_session_id=cli_session_id),
+            cwd=str(cwd or PROJECT_DIR),
             **_popen_kwargs(),
         )
     except FileNotFoundError as exc:
@@ -740,6 +1015,7 @@ def llm_get_text(
 
     output_source = stdout or stderr
     parsed = _parse_stream_json_text(provider, output_source)
+    _record_cli_session_fallback(provider, cli_session_id, prompt, output_source, parsed or output)
     return parsed or output
 
 
@@ -750,6 +1026,8 @@ def llm_get_json(
     auto_allow: Optional[bool] = None,
     network_allow: Optional[bool] = None,
     sandbox_mode: Optional[bool] = None,
+    cli_session_id: Optional[str] = None,
+    cwd: Optional[str | Path] = None,
 ) -> Dict[str, Any]:
     text = llm_get_text(
         messages,
@@ -758,6 +1036,8 @@ def llm_get_json(
         auto_allow=auto_allow,
         network_allow=network_allow,
         sandbox_mode=sandbox_mode,
+        cli_session_id=cli_session_id,
+        cwd=cwd,
     )
     return _extract_json_payload(text)
 
@@ -796,6 +1076,7 @@ def llm_stream(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=False,
+            stdin=subprocess.DEVNULL,
             env=_llm_subprocess_env(provider_env),
             **_popen_kwargs(),
         )
