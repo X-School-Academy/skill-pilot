@@ -29,6 +29,21 @@
       "prompt": "Write an X thread about why most developer tools fail in the first year.",
       "expected_output": "A punchy, opinionated thread. Each tweet stands alone. No filler. No AI transitions.",
       "assertions": ["1/", "!Moreover", "!Furthermore", "!It's worth noting", "!landscape", "!tapestry", "!burgeoning"]
+    },
+    {
+      "prompt": "用中文写一篇小红书笔记，分享你学习编程三个月的经验和踩过的坑。要求图文格式，包含标题和每页要点。",
+      "expected_output": "A colloquial Chinese XHS post with 【title】, image slide structure (title + body per slide), 5-10 tags. Zero Tier 1 Chinese AI phrases. Personal experience tone.",
+      "assertions": ["【", "tag", "!总而言之", "!综上所述", "!值得注意的是", "!在当今时代", "!希望对你有所帮助", "!让我们一起", "!赋能", "!抓手", "!底层逻辑"]
+    },
+    {
+      "prompt": "用中文写一篇小红书笔记，推荐一个你用了很久的效率工具。要真实、口语化，不要像广告。",
+      "expected_output": "A genuine, colloquial recommendation. Uses 我, specific timeframes (用了X个月), concrete numbers. No corporate buzzwords.",
+      "assertions": ["我", "!总而言之", "!值得注意的是", "!不可或缺", "!赋能", "!抓手", "!闭环", "!众所周知", "!深入探讨"]
+    },
+    {
+      "prompt": "用中文写一篇关于AI工具实际使用感受的小红书笔记。要求接地气，说真话，不吹不黑。",
+      "expected_output": "A balanced, honest XHS post. Colloquial register (是不是 not 是否, 怎么 not 如何). No 书面语 overload. Emojis scattered naturally.",
+      "assertions": ["我", "!总而言之", "!值得注意的是", "!在当今时代", "!希望对你有所帮助", "!如有疑问", "!众所周知", "!极大的", "!不可或缺", "!通过...实现"]
     }
   ]
 }
