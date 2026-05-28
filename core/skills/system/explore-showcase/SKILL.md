@@ -167,7 +167,7 @@ Ask the user to review and approve `showcase.yaml` before continuing.
 After approval, generate the showcase assets with the helper script:
 
 ```bash
-core/engine/.venv/bin/python core/skills/system/explore-showcase/scripts/create-assets.py workspace/showcases/{showcase_slug_id}
+core/skills/system/explore-showcase/scripts/create-assets.py workspace/showcases/{showcase_slug_id}
 ```
 
 The script can also be run from an installed skill copy such as `.agent/skills/explore-showcase/scripts/create-assets.py`. It discovers the Skill Pilot repo root from the current directory, the showcase path, or the script location, so pass either an absolute showcase path or a repo-relative path such as `workspace/showcases/{showcase_slug_id}`.

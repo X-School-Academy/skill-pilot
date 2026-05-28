@@ -1,7 +1,13 @@
-#!/usr/bin/env python3
+#!/bin/sh
+""":"
+if [ ! -x core/engine/.venv/bin/python ]; then
+    echo "Run this script from the Skill Pilot project root." >&2
+    echo "Expected executable: core/engine/.venv/bin/python" >&2
+    exit 1
+fi
+exec core/engine/.venv/bin/python "$0" "$@"
+":"""
 """Create and upload generated assets for an Explore showcase."""
-
-from __future__ import annotations
 
 import argparse
 import json
@@ -170,6 +176,10 @@ def upload_generated_learning(repo_root: Path, file_path: Path, dry_run: bool) -
     )
 
 
+def has_resource_url(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
 def goals_text(showcase: dict[str, Any]) -> str:
     goals = showcase.get("goals")
     if isinstance(goals, list):
@@ -315,7 +325,7 @@ def update_generated_learning(
     dry_run: bool,
 ) -> None:
     tutorial_prompt = str(showcase.get("tutorial_prompt") or "").strip()
-    if tutorial_prompt and not showcase.get("tutorial"):
+    if tutorial_prompt and not has_resource_url(showcase.get("tutorial")):
         context = (
             "this Skill Pilot Explore showcase tutorial. Use the showcase title, description, "
             "goals, thumbnail direction, and video direction as context; create a course or video "
@@ -328,6 +338,8 @@ def update_generated_learning(
         generated_path = parse_output_file_path(output, output_path)
         print(f"Tutorial file: {generated_path}")
         showcase["tutorial"] = upload_generated_learning(repo_root, generated_path, dry_run)
+    elif has_resource_url(showcase.get("tutorial")):
+        print("Tutorial already has URL, skipping.")
 
     links = showcase.get("links") or []
     if not isinstance(links, list):
@@ -337,7 +349,10 @@ def update_generated_learning(
         if not isinstance(link, dict):
             continue
         link_prompt = str(link.get("prompt") or "").strip()
-        if not link_prompt or link.get("url"):
+        if has_resource_url(link.get("url")):
+            print(f"Link already has URL, skipping: {link.get('name') or link.get('url')}")
+            continue
+        if not link_prompt:
             continue
         link_name = str(link.get("name") or "generated learning resource").strip()
         context = (
@@ -399,7 +414,7 @@ def update_term_videos(
         if not term:
             continue
         slug = term_slug(term)
-        if term_urls.get(slug):
+        if has_resource_url(term_urls.get(slug)):
             print(f"Term already has video, skipping: {slug}")
             continue
         requirement = (
@@ -471,6 +486,33 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def update_showcase_assets(
+    repo_root: Path,
+    showcase_dir: Path,
+    showcase: dict[str, Any],
+    dry_run: bool,
+) -> None:
+    if has_resource_url(showcase.get("thumbnail")):
+        print("Thumbnail already has URL, skipping.")
+    else:
+        showcase["thumbnail"] = create_thumbnail(repo_root, showcase, dry_run)
+
+    if has_resource_url(showcase.get("video")):
+        print("Video already has URL, skipping.")
+    else:
+        showcase["video"] = create_showcase_video(repo_root, showcase_dir, showcase, dry_run)
+
+    update_generated_learning(repo_root, showcase_dir, showcase, dry_run)
+    update_term_videos(repo_root, showcase, dry_run)
+
+    if has_resource_url(showcase.get("zip-files-url")):
+        print("Zip files already has URL, skipping.")
+    else:
+        update_files_yaml(showcase_dir, dry_run)
+        zip_path = create_zip(showcase_dir, dry_run)
+        showcase["zip-files-url"] = upload_file(repo_root, zip_path, "zip", dry_run)
+
+
 def main() -> int:
     args = parse_args()
     repo_root = find_repo_root(args.showcase_dir)
@@ -482,13 +524,7 @@ def main() -> int:
         raise SystemExit(f"Missing required file: {showcase_yaml}")
 
     showcase = load_yaml(showcase_yaml)
-    showcase["thumbnail"] = create_thumbnail(repo_root, showcase, args.dry_run)
-    showcase["video"] = create_showcase_video(repo_root, showcase_dir, showcase, args.dry_run)
-    update_generated_learning(repo_root, showcase_dir, showcase, args.dry_run)
-    update_term_videos(repo_root, showcase, args.dry_run)
-    update_files_yaml(showcase_dir, args.dry_run)
-    zip_path = create_zip(showcase_dir, args.dry_run)
-    showcase["zip-files-url"] = upload_file(repo_root, zip_path, "zip", args.dry_run)
+    update_showcase_assets(repo_root, showcase_dir, showcase, args.dry_run)
 
     if args.dry_run:
         print(f"[dry-run] skip showcase.yaml update: {showcase_yaml}")

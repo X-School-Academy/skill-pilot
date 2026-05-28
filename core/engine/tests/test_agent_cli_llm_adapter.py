@@ -1,5 +1,6 @@
 import asyncio
 import sys
+import uuid
 from pathlib import Path
 from unittest.mock import patch
 
@@ -9,6 +10,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from workflow.llm_adapter import AgentCliLLMAdapter
 from workflow.llm_adapter import PROJECT_ROOT
+
+
+def test_agent_cli_llm_adapter_defaults_to_uuid_session_id():
+    adapter = AgentCliLLMAdapter()
+
+    parsed = uuid.UUID(adapter.cli_session_id)
+    assert str(parsed) == adapter.cli_session_id
 
 
 def test_agent_cli_llm_adapter_sends_only_appended_messages_after_first_invoke():
