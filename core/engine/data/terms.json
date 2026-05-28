@@ -1,0 +1,12 @@
+{
+  "cloudfront-url": "https://d2ixgzr3ewt3zn.cloudfront.net/video/c9f24a00-823e-4899-a387-cc0eed19b319.mp4",
+  "command-line-tool": "https://d2ixgzr3ewt3zn.cloudfront.net/video/d8c45b85-6001-4b43-b85a-8a98930bc73b.mp4",
+  "drag-and-drop-upload": "https://d2ixgzr3ewt3zn.cloudfront.net/video/b4563505-cc35-430a-9730-dfa73690faf2.mp4",
+  "environment-variables": "https://d2ixgzr3ewt3zn.cloudfront.net/video/615cecf5-f782-4499-b0ff-9890cacb941f.mp4",
+  "local-web-app": "https://d2ixgzr3ewt3zn.cloudfront.net/video/51cf5c47-9e21-44b9-859e-9258c2991c34.mp4",
+  "media-preview": "https://d2ixgzr3ewt3zn.cloudfront.net/video/1ea123c8-e486-49a5-817f-0010be3ce203.mp4",
+  "metadata-sync": "https://d2ixgzr3ewt3zn.cloudfront.net/video/06333adf-4aa3-4d1b-86d5-a6587eafc32a.mp4",
+  "s3-object-key": "https://d2ixgzr3ewt3zn.cloudfront.net/video/5cde59ef-1eb4-41bc-b204-31ebcfb4a1e6.mp4",
+  "sqlite": "https://d2ixgzr3ewt3zn.cloudfront.net/video/f85476fb-a6f7-4281-b8f2-854130583553.mp4",
+  "uuid": "https://d2ixgzr3ewt3zn.cloudfront.net/video/2761a8e6-6bce-4181-aeb6-ae307ca2954f.mp4"
+}

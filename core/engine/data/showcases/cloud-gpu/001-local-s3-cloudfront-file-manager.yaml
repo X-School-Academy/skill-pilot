@@ -1,0 +1,85 @@
+id: local-s3-cloudfront-file-manager
+title: Local AWS S3 + CloudFront File Manager
+description: Build a local website and CLI for uploading, listing, previewing, syncing, and deleting CloudFront-backed
+  S3 files.
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/357a30f2-d8fc-4f86-ae4c-1a9c65aed8e7.png
+video: https://d2ixgzr3ewt3zn.cloudfront.net/video/4f43b1a8-6ad9-49a1-aaa0-f7c4bc962c29.mp4
+tutorial: https://d2ixgzr3ewt3zn.cloudfront.net/course/65e6fa0c-8deb-4464-a716-a4cdaa3dc7ef.md
+request: null
+prompt: |-
+  Build a local AWS S3 and CloudFront file manager.
+
+  Use @workspace/vibe-coding/local-s3-cloudfront-file-manager/requirements.md as
+  the product brief. The AWS credentials profile, S3 bucket, and CloudFront
+  distribution have been set up; refer to
+  @workspace/tasks/aws-credentials-s3-cloudfront/output.md and
+  @workspace/tasks/aws-s3-cloudfront-public-file-storage/output.md for the AWS
+  profile, bucket, and CloudFront setup details. Show me the
+  implementation plan before coding, then build, run, test, and create the user
+  manual requested in the brief.
+workflow: null
+directory: workspace/vibe-coding/local-s3-cloudfront-file-manager
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills:
+- vibe-coding
+- cloud-operation
+- aws-api
+- agent-browser
+- terminal
+subagents: []
+extensions: []
+tools:
+- core/bin/agent-browser
+- aws
+- sqlite3
+files:
+- requirements.md
+goals: |-
+  - Build a local browser-based file manager for S3 files served through CloudFront.
+  - Build an independent command-line tool for upload and delete automation.
+  - Store local metadata in SQLite and reconcile it with S3 through a Sync action.
+  - Document setup, configuration, and day-to-day use in a user manual.
+terms:
+- local web app
+- command-line tool
+- SQLite
+- S3 object key
+- UUID
+- CloudFront URL
+- environment variables
+- drag and drop upload
+- media preview
+- metadata sync
+previous_showcase:
+  slug_id: aws-s3-cloudfront-public-file-storage
+  title: Public File Storage on S3 + CloudFront
+next_showcase: null
+related:
+- slug: aws-s3-cloudfront-public-file-storage
+  caption: Provides the bucket and CloudFront distribution this tool manages.
+variants:
+- slug: websites-working-website-from-idea
+  caption: A simpler local website build without AWS storage automation.
+links:
+- name: SQLite
+  url: https://www.sqlite.org/docs.html
+- name: Environment variables
+  url: https://d2ixgzr3ewt3zn.cloudfront.net/course/9cb4b828-bd3d-42d0-8b89-386ca1bbf420.md
+- name: Amazon S3 object keys
+  url: https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
+video_prompt: |-
+  Create a product demo video for a local S3 and CloudFront file manager. Show a user
+  opening the local website, dragging in an image, seeing it appear with a CloudFront
+  link and preview, uploading through the CLI, pressing Sync, and deleting a file.
+  End with the user manual and `.env` configuration summary.
+tutorial_prompt: |-
+  Create an interactive coding tutorial for building a local S3 and CloudFront file
+  manager. The learner should start from the product brief, configure `.env`, design
+  the SQLite metadata model, implement independent website and CLI flows, test upload,
+  preview, sync, and delete, then write a user manual.
+popularity: 74
+level: 5
+rate: 4.7
+zip-files-url: https://d2ixgzr3ewt3zn.cloudfront.net/zip/d8d78080-980b-477e-943f-6e08128c0667.zip

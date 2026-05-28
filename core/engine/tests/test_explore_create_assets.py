@@ -21,6 +21,7 @@ def test_update_showcase_assets_skips_existing_resource_urls(monkeypatch, tmp_pa
     create_assets = _load_create_assets_module()
     showcase_dir = tmp_path / "showcase"
     showcase_dir.mkdir()
+    showcase_yaml = showcase_dir / "showcase.yaml"
     repo_root = tmp_path
     calls: list[str] = []
 
@@ -40,6 +41,7 @@ def test_update_showcase_assets_skips_existing_resource_urls(monkeypatch, tmp_pa
     monkeypatch.setattr(create_assets, "update_files_yaml", fail_call("update_files_yaml"))
     monkeypatch.setattr(create_assets, "create_zip", fail_call("create_zip"))
     monkeypatch.setattr(create_assets, "upload_file", fail_call("upload_file"))
+    monkeypatch.setattr(create_assets, "dump_yaml", fail_call("dump_yaml"))
     monkeypatch.setattr(
         create_assets,
         "update_term_videos",
@@ -61,7 +63,13 @@ def test_update_showcase_assets_skips_existing_resource_urls(monkeypatch, tmp_pa
         "zip-files-url": "https://cdn.example.test/files.zip",
     }
 
-    create_assets.update_showcase_assets(repo_root, showcase_dir, showcase, dry_run=False)
+    create_assets.update_showcase_assets(
+        repo_root,
+        showcase_dir,
+        showcase_yaml,
+        showcase,
+        dry_run=False,
+    )
 
     assert calls == ["terms"]
     assert showcase["thumbnail"] == "https://cdn.example.test/image.png"
@@ -75,12 +83,16 @@ def test_update_showcase_assets_creates_only_missing_resource_urls(monkeypatch, 
     create_assets = _load_create_assets_module()
     showcase_dir = tmp_path / "showcase"
     showcase_dir.mkdir()
+    showcase_yaml = showcase_dir / "showcase.yaml"
     repo_root = tmp_path
     calls: list[str] = []
     generated_course = tmp_path / "course.md"
     generated_course.write_text("# Course\n", encoding="utf-8")
     zip_path = tmp_path / "showcase.zip"
     zip_path.write_text("zip", encoding="utf-8")
+
+    def record_dump(path: Path, data: dict, **kwargs):
+        calls.append(f"save:{','.join(key for key, value in data.items() if value)}")
 
     monkeypatch.setattr(
         create_assets,
@@ -132,6 +144,7 @@ def test_update_showcase_assets_creates_only_missing_resource_urls(monkeypatch, 
         lambda *args, **kwargs: calls.append("zip-upload")
         or "https://cdn.example.test/files.zip",
     )
+    monkeypatch.setattr(create_assets, "dump_yaml", record_dump)
 
     showcase = {
         "thumbnail": None,
@@ -148,12 +161,103 @@ def test_update_showcase_assets_creates_only_missing_resource_urls(monkeypatch, 
         "zip-files-url": None,
     }
 
-    create_assets.update_showcase_assets(repo_root, showcase_dir, showcase, dry_run=False)
+    create_assets.update_showcase_assets(
+        repo_root,
+        showcase_dir,
+        showcase_yaml,
+        showcase,
+        dry_run=False,
+    )
 
-    assert calls == ["thumbnail", "learning", "learning", "terms", "files", "zip", "zip-upload"]
+    assert calls == [
+        "thumbnail",
+        "save:thumbnail,video,tutorial_prompt,links",
+        "learning",
+        "save:thumbnail,video,tutorial_prompt,tutorial,links",
+        "learning",
+        "save:thumbnail,video,tutorial_prompt,tutorial,links",
+        "terms",
+        "files",
+        "zip",
+        "zip-upload",
+        "save:thumbnail,video,tutorial_prompt,tutorial,links,zip-files-url",
+    ]
     assert showcase["thumbnail"] == "https://cdn.example.test/new-image.png"
     assert showcase["video"] == "https://cdn.example.test/existing-video.mp4"
     assert showcase["tutorial"] == "https://cdn.example.test/course.md"
     assert showcase["links"][0]["url"] == "https://cdn.example.test/course.md"
     assert "prompt" not in showcase["links"][0]
     assert showcase["zip-files-url"] == "https://cdn.example.test/files.zip"
+
+
+def test_create_zip_writes_to_temp_showcases_zip(tmp_path: Path):
+    create_assets = _load_create_assets_module()
+    repo_root = tmp_path
+    showcase_dir = repo_root / "workspace/showcases/sample-showcase"
+    assets_dir = showcase_dir / "assets"
+    assets_dir.mkdir(parents=True)
+    (showcase_dir / "showcase.yaml").write_text("title: Sample\n", encoding="utf-8")
+    (showcase_dir / ".DS_Store").write_text("finder metadata\n", encoding="utf-8")
+    (assets_dir / "source.txt").write_text("source\n", encoding="utf-8")
+    (assets_dir / ".DS_Store").write_text("finder metadata\n", encoding="utf-8")
+    (assets_dir / "old.zip").write_text("old zip should not be repackaged\n", encoding="utf-8")
+
+    zip_path = create_assets.create_zip(repo_root, showcase_dir, dry_run=False)
+
+    assert zip_path == repo_root / ".skillpilot/temp/showcases-zip/sample-showcase.zip"
+    assert not (assets_dir / "sample-showcase.zip").exists()
+
+    import zipfile
+
+    with zipfile.ZipFile(zip_path) as archive:
+        assert sorted(archive.namelist()) == ["assets/source.txt", "showcase.yaml"]
+
+
+def test_update_files_yaml_ignores_ds_store(tmp_path: Path):
+    create_assets = _load_create_assets_module()
+    showcase_dir = tmp_path / "showcase"
+    assets_dir = showcase_dir / "assets"
+    assets_dir.mkdir(parents=True)
+    (showcase_dir / "showcase.yaml").write_text("title: Sample\n", encoding="utf-8")
+    (showcase_dir / ".DS_Store").write_text("finder metadata\n", encoding="utf-8")
+    (assets_dir / "source.txt").write_text("source\n", encoding="utf-8")
+    (assets_dir / ".DS_Store").write_text("finder metadata\n", encoding="utf-8")
+
+    create_assets.update_files_yaml(showcase_dir, dry_run=False)
+
+    assert (showcase_dir / "files.yaml").read_text(encoding="utf-8") == (
+        "showcase_id: showcase\n"
+        "files:\n"
+        "- path: assets/source.txt\n"
+        "- path: showcase.yaml\n"
+    )
+
+
+def test_update_term_videos_saves_terms_json_after_each_created_resource(
+    monkeypatch,
+    tmp_path: Path,
+):
+    create_assets = _load_create_assets_module()
+    repo_root = tmp_path
+    terms_path = repo_root / "core/engine/data/terms.json"
+    calls: list[str] = []
+
+    def fake_create_video(*args, **kwargs):
+        url = f"https://cdn.example.test/{len([c for c in calls if c == 'video'])}.mp4"
+        calls.append("video")
+        return tmp_path / "video.mp4", url
+
+    def fake_save_terms(path: Path, terms: dict[str, str]):
+        assert path == terms_path
+        calls.append(f"save:{','.join(sorted(terms))}")
+
+    monkeypatch.setattr(create_assets, "create_video", fake_create_video)
+    monkeypatch.setattr(create_assets, "save_terms", fake_save_terms)
+
+    create_assets.update_term_videos(
+        repo_root,
+        {"terms": ["Python", "YAML"]},
+        dry_run=False,
+    )
+
+    assert calls == ["video", "save:python", "video", "save:python,yaml"]

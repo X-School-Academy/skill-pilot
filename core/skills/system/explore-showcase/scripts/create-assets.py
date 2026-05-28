@@ -180,6 +180,13 @@ def has_resource_url(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def save_showcase(path: Path, showcase: dict[str, Any], dry_run: bool) -> None:
+    if dry_run:
+        print(f"[dry-run] skip showcase.yaml update: {path}")
+        return
+    dump_yaml(path, showcase)
+
+
 def goals_text(showcase: dict[str, Any]) -> str:
     goals = showcase.get("goals")
     if isinstance(goals, list):
@@ -321,6 +328,7 @@ def create_showcase_video(
 def update_generated_learning(
     repo_root: Path,
     showcase_dir: Path,
+    showcase_yaml: Path,
     showcase: dict[str, Any],
     dry_run: bool,
 ) -> None:
@@ -338,6 +346,7 @@ def update_generated_learning(
         generated_path = parse_output_file_path(output, output_path)
         print(f"Tutorial file: {generated_path}")
         showcase["tutorial"] = upload_generated_learning(repo_root, generated_path, dry_run)
+        save_showcase(showcase_yaml, showcase, dry_run)
     elif has_resource_url(showcase.get("tutorial")):
         print("Tutorial already has URL, skipping.")
 
@@ -368,6 +377,7 @@ def update_generated_learning(
         print(f"Link learning file: {generated_path}")
         link["url"] = upload_generated_learning(repo_root, generated_path, dry_run)
         link.pop("prompt", None)
+        save_showcase(showcase_yaml, showcase, dry_run)
 
 
 def term_slug(term: str) -> str:
@@ -431,23 +441,38 @@ def update_term_videos(
             dry_run,
         )
         term_urls[slug] = url
+        if dry_run:
+            print(f"[dry-run] skip terms.json update: {terms_path}")
+        else:
+            save_terms(terms_path, term_urls)
         changed = True
 
-    if changed or (terms and not terms_path.exists()):
+    if not changed and terms and not terms_path.exists():
         if dry_run:
             print(f"[dry-run] skip terms.json update: {terms_path}")
         else:
             save_terms(terms_path, term_urls)
 
 
-def create_zip(showcase_dir: Path, dry_run: bool) -> Path:
-    zip_path = showcase_dir / "assets" / f"{showcase_dir.name}.zip"
-    zip_path.parent.mkdir(parents=True, exist_ok=True)
+def should_package_path(path: Path, showcase_dir: Path, files_yaml: Path | None = None) -> bool:
+    if path.is_dir():
+        return False
+    if files_yaml is not None and path == files_yaml:
+        return False
+    if path.name == ".DS_Store":
+        return False
+    if path.suffix == ".zip" and path.parent == showcase_dir / "assets":
+        return False
+    return True
+
+
+def create_zip(repo_root: Path, showcase_dir: Path, dry_run: bool) -> Path:
+    zip_dir = repo_root / ".skillpilot" / "temp" / "showcases-zip"
+    zip_dir.mkdir(parents=True, exist_ok=True)
+    zip_path = zip_dir / f"{showcase_dir.name}.zip"
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(showcase_dir.rglob("*")):
-            if path == zip_path or path.is_dir():
-                continue
-            if path.suffix == ".zip" and path.parent == zip_path.parent:
+            if not should_package_path(path, showcase_dir):
                 continue
             archive.write(path, path.relative_to(showcase_dir))
     print(f"Zip file: {zip_path}")
@@ -456,12 +481,9 @@ def create_zip(showcase_dir: Path, dry_run: bool) -> Path:
 
 def update_files_yaml(showcase_dir: Path, dry_run: bool) -> None:
     files_yaml = showcase_dir / "files.yaml"
-    zip_dir = showcase_dir / "assets"
     paths: list[str] = []
     for path in sorted(showcase_dir.rglob("*")):
-        if path.is_dir() or path == files_yaml:
-            continue
-        if path.suffix == ".zip" and path.parent == zip_dir:
+        if not should_package_path(path, showcase_dir, files_yaml):
             continue
         paths.append(path.relative_to(showcase_dir).as_posix())
 
@@ -489,6 +511,7 @@ def parse_args() -> argparse.Namespace:
 def update_showcase_assets(
     repo_root: Path,
     showcase_dir: Path,
+    showcase_yaml: Path,
     showcase: dict[str, Any],
     dry_run: bool,
 ) -> None:
@@ -496,21 +519,24 @@ def update_showcase_assets(
         print("Thumbnail already has URL, skipping.")
     else:
         showcase["thumbnail"] = create_thumbnail(repo_root, showcase, dry_run)
+        save_showcase(showcase_yaml, showcase, dry_run)
 
     if has_resource_url(showcase.get("video")):
         print("Video already has URL, skipping.")
     else:
         showcase["video"] = create_showcase_video(repo_root, showcase_dir, showcase, dry_run)
+        save_showcase(showcase_yaml, showcase, dry_run)
 
-    update_generated_learning(repo_root, showcase_dir, showcase, dry_run)
+    update_generated_learning(repo_root, showcase_dir, showcase_yaml, showcase, dry_run)
     update_term_videos(repo_root, showcase, dry_run)
 
     if has_resource_url(showcase.get("zip-files-url")):
         print("Zip files already has URL, skipping.")
     else:
         update_files_yaml(showcase_dir, dry_run)
-        zip_path = create_zip(showcase_dir, dry_run)
+        zip_path = create_zip(repo_root, showcase_dir, dry_run)
         showcase["zip-files-url"] = upload_file(repo_root, zip_path, "zip", dry_run)
+        save_showcase(showcase_yaml, showcase, dry_run)
 
 
 def main() -> int:
@@ -524,12 +550,7 @@ def main() -> int:
         raise SystemExit(f"Missing required file: {showcase_yaml}")
 
     showcase = load_yaml(showcase_yaml)
-    update_showcase_assets(repo_root, showcase_dir, showcase, args.dry_run)
-
-    if args.dry_run:
-        print(f"[dry-run] skip showcase.yaml update: {showcase_yaml}")
-    else:
-        dump_yaml(showcase_yaml, showcase)
+    update_showcase_assets(repo_root, showcase_dir, showcase_yaml, showcase, args.dry_run)
     print(f"Updated assets for showcase: {showcase_dir}")
     return 0
 
