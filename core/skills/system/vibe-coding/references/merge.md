@@ -12,7 +12,7 @@ Merge the update or bug fix branch back to the main branch after review passes.
 
 ### Step 1: Confirm Review Passed
 
-Verify that the `review` stage completed without unresolved findings. If `design-docs/reviewed.md` still has open issues, resolve them before merging.
+Verify that the `review` stage completed without unresolved findings. If `reviewed.md` still has open issues, resolve them before merging.
 
 ### Step 2: Merge the Branch
 
@@ -30,9 +30,9 @@ Append a new versioned entry to `CHANGELOG.md` describing what changed in this u
 
 Update the living design docs to reflect the merged state:
 
-- `design-docs/requirements.md` — if scope changed
-- `design-docs/implementation.md` — to reflect the merged implementation
-- `design-docs/deployment.md` — if deployment configuration changed
+- `requirements.md` — if scope changed
+- `implementation.md` — to reflect the merged implementation
+- `deployment.md` — if deployment configuration changed
 
 ### Step 5: Archive the Consumed Intermediate Files
 
@@ -40,7 +40,8 @@ Archive `reviewed.md` if it has not already been archived:
 
 ```bash
 timestamp=$(date +"%Y-%m-%d-%H%M")
-mv design-docs/reviewed.md "design-docs/archive/reviewed.$timestamp.md"
+mkdir -p design-archive
+mv reviewed.md "design-archive/reviewed.$timestamp.md"
 ```
 
 ### Step 6: Report

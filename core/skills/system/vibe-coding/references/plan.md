@@ -17,9 +17,9 @@ Use `uv` for Python projects and `pnpm` for Node.js projects unless the user ask
 ### Step 1: Read the Context
 
 Detect the active flow and read the appropriate docs:
-- New project: read `design-docs/requirements.md`
-- Update flow (`update.md` present): read `design-docs/requirements.md`, `design-docs/implementation.md`, and `design-docs/update.md`
-- Fix flow (`issues.md` present): read `design-docs/requirements.md`, `design-docs/implementation.md`, and `design-docs/issues.md`
+- New project: read `requirements.md`
+- Update flow (`update.md` present): read `requirements.md`, `implementation.md`, and `update.md`
+- Fix flow (`issues.md` present): read `requirements.md`, `implementation.md`, and `issues.md`
 
 ### Step 2: Review the Current Codebase
 
@@ -33,16 +33,17 @@ Ask the questions one at a time. If there are no real ambiguities, skip this ste
 
 ### Step 4: Archive the Existing Plan
 
-If `design-docs/plan.md` already exists, archive it before writing the new one:
+If `plan.md` already exists, archive it before writing the new one:
 
 ```bash
 timestamp=$(date +"%Y-%m-%d-%H%M")
-mv design-docs/plan.md "design-docs/archive/plan.$timestamp.md"
+mkdir -p design-archive
+mv plan.md "design-archive/plan.$timestamp.md"
 ```
 
 ### Step 5: Write the Plan
 
-Create `design-docs/plan.md`. Include:
+Create `plan.md`. Include:
 
 - Scope
 - Current-state analysis

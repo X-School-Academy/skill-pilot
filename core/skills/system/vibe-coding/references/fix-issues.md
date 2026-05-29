@@ -11,14 +11,15 @@ Set up the trigger doc for a fix cycle. Planning and implementation follow as se
 
 ### Step 1: Prepare the Trigger Doc
 
-If `design-docs/issues.md` already exists from a previous cycle, archive it first:
+If `issues.md` already exists from a previous cycle, archive it first:
 
 ```bash
 timestamp=$(date +"%Y-%m-%d-%H%M")
-mv design-docs/issues.md "design-docs/archive/issues.$timestamp.md"
+mkdir -p design-archive
+mv issues.md "design-archive/issues.$timestamp.md"
 ```
 
-If `design-docs/issues.md` does not exist, create it from the user's bug descriptions or issue notes.
+If `issues.md` does not exist, create it from the user's bug descriptions or issue notes.
 
 ### Step 2: Report
 

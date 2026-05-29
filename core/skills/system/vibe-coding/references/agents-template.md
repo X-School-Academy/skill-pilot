@@ -10,9 +10,9 @@ Use the `vibe-coding` skill for all development work:
 
 ## Project Context
 
-- **Requirements**: `design-docs/requirements.md`
-- **Implementation**: `design-docs/implementation.md`
-- **Deployment**: `design-docs/deployment.md`
+- **Requirements**: `requirements.md`
+- **Implementation**: `implementation.md`
+- **Deployment**: `deployment.md`
 
 ## Key Facts for AI Agents
 

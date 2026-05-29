@@ -11,14 +11,15 @@ Set up the trigger doc for an update cycle. Planning and implementation follow a
 
 ### Step 1: Prepare the Trigger Doc
 
-If `design-docs/update.md` already exists from a previous cycle, archive it first:
+If `update.md` already exists from a previous cycle, archive it first:
 
 ```bash
 timestamp=$(date +"%Y-%m-%d-%H%M")
-mv design-docs/update.md "design-docs/archive/update.$timestamp.md"
+mkdir -p design-archive
+mv update.md "design-archive/update.$timestamp.md"
 ```
 
-If `design-docs/update.md` does not exist, create it from the user's description of the requested changes.
+If `update.md` does not exist, create it from the user's description of the requested changes.
 
 ### Step 2: Report
 

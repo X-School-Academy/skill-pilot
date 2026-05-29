@@ -12,7 +12,7 @@ Deploy a Vibe Coding project locally as launchable software, and deploy to a rem
 
 ### Step 1: Read the Implementation Context
 
-Read `design-docs/implementation.md` and identify deployment target, runtime, and dependencies.
+Read `implementation.md` and identify deployment target, runtime, and dependencies.
 
 ### Step 2: Determine Local and Remote Targets
 
@@ -72,7 +72,7 @@ Remote production deployment is separate from local deployment. Even when the ta
 
 ### Step 6: Update the Deployment Record
 
-Write `design-docs/deployment.md` (overwrite — it is a living doc):
+Write `deployment.md` (overwrite — it is a living doc):
 
 - What was deployed
 - Local deployment commands and launch instructions

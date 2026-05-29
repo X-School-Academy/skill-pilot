@@ -5,14 +5,14 @@ Test a Vibe Coding project implementation and report the results.
 ## When to Use
 
 - The user asks to test the implementation
-- `design-docs/implementation.md` exists
+- `implementation.md` exists
 - Goal is validation, bug discovery, or coverage analysis
 
 ## Steps
 
 ### Step 1: Read the Implementation Context
 
-Read `design-docs/implementation.md` and identify the affected flows.
+Read `implementation.md` and identify the affected flows.
 
 ### Step 2: Run Relevant Checks
 
@@ -31,9 +31,9 @@ If any checks fail, fix the code immediately and rerun the relevant checks. Repe
 
 ### Step 4: Save the Test Report
 
-Write results to `design-docs/tested.md` (created fresh per test pass): passed checks, fixed issues, remaining risks, coverage gaps.
+Write results to `tested.md` (created fresh per test pass): passed checks, fixed issues, remaining risks, coverage gaps.
 
-Update `design-docs/implementation.md` if the fixes changed what was implemented.
+Update `implementation.md` if the fixes changed what was implemented.
 
 ### Step 5: Hand off
 
@@ -41,7 +41,8 @@ Once the user has decided what to do with the results (or when running in the de
 
 ```bash
 timestamp=$(date +"%Y-%m-%d-%H%M")
-mv design-docs/tested.md "design-docs/archive/tested.$timestamp.md"
+mkdir -p design-archive
+mv tested.md "design-archive/tested.$timestamp.md"
 ```
 
 If the next stage runs in the same turn, archive at that point. Otherwise leave `tested.md` in place for human review.

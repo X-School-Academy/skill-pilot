@@ -24,17 +24,16 @@ workspace/vibe-coding/{project-name}/
 ├── README.md                 # overview and usage guide
 ├── CHANGELOG.md              # change log per update/fix cycle
 ├── AGENTS.md                 # AI-agent instructions for this project
-├── design-docs/
-│   ├── requirements.md       # living — scope and intent
-│   ├── plan.md               # living — current implementation plan
-│   ├── implementation.md     # living — current implementation summary
-│   ├── deployment.md         # living — deployment record
-│   ├── initialized.md        # write-once — init completed mark
-│   └── archive/              # timestamped snapshots
+├── requirements.md           # living — scope and intent
+├── plan.md                   # living — current implementation plan
+├── implementation.md         # living — current implementation summary
+├── deployment.md             # living — deployment record
+├── initialized.md            # write-once — init completed mark
+├── design-archive/           # timestamped snapshots, created only when needed
 └── (project source code)
 ```
 
-`create` bootstraps all folders and top-level files. `deploy` creates `assets/` when missing.
+`create` bootstraps the project folder, root design docs, and top-level files. It does not create `design-archive/`; archive stages create it when needed. `deploy` creates `assets/` when missing.
 
 ## File Lifecycle Rules
 
@@ -48,7 +47,8 @@ workspace/vibe-coding/{project-name}/
 **Plan archiving** — before writing a new `plan.md`, archive the old one:
 ```bash
 timestamp=$(date +"%Y-%m-%d-%H%M")
-mv design-docs/plan.md "design-docs/archive/plan.$timestamp.md"
+mkdir -p design-archive
+mv plan.md "design-archive/plan.$timestamp.md"
 ```
 
 **Intermediates** — archive after consumption using `{basename}.{YYYY-MM-DD-HHMM}.md`:

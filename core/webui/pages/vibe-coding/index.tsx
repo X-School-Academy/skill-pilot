@@ -34,8 +34,11 @@ import {
   IconBug,
   IconClock,
   IconCode,
+  IconFilePlus,
   IconFileText,
+  IconFileUpload,
   IconFolder,
+  IconFolderPlus,
   IconHierarchy,
   IconMessageCirclePlus,
   IconPackage,
@@ -111,7 +114,27 @@ const vibeProjectPath = (path: string): string => {
   return trimmed ? `workspace/vibe-coding/${trimmed}` : 'workspace/vibe-coding';
 };
 
-const VIBE_DESIGN_DOCS_DIR = 'design-docs';
+const vibeRelativePath = (projectPath: string): string => {
+  const normalized = projectPath.replace(/^\/+/, '');
+  return normalized
+    .replace(/^\$project\/workspace\/vibe-coding\/?/, '')
+    .replace(/^workspace\/vibe-coding\/?/, '');
+};
+
+const VIBE_ROOT_DESIGN_DOCS = new Set([
+  'requirements.md',
+  'plan.md',
+  'implement.md',
+  'implementation.md',
+  'brainstorm.md',
+  'update.md',
+  'issues.md',
+  'reviewed.md',
+  'tested.md',
+  'deployment.md',
+  'initialized.md',
+  'prompt.md',
+]);
 
 const getVibeProjectName = (path: string): string => {
   const segments = path.split('/').filter(Boolean);
@@ -120,13 +143,13 @@ const getVibeProjectName = (path: string): string => {
 
 const isVibeDesignDocPath = (path: string, fileName?: string): boolean => {
   const segments = path.split('/').filter(Boolean);
-  if (segments.length !== 3) return false;
-  if (segments[1] !== VIBE_DESIGN_DOCS_DIR) return false;
-  return fileName ? segments[2] === fileName : true;
+  if (segments.length !== 2) return false;
+  if (!VIBE_ROOT_DESIGN_DOCS.has(segments[1])) return false;
+  return fileName ? segments[1] === fileName : true;
 };
 
 const vibeProjectDesignDocsPath = (project: string): string => (
-  project ? `workspace/vibe-coding/${project}/${VIBE_DESIGN_DOCS_DIR}` : 'workspace/vibe-coding'
+  project ? `workspace/vibe-coding/${project}` : 'workspace/vibe-coding'
 );
 
 const getAncestorDirectoryPaths = (path: string): string[] => {
@@ -172,6 +195,37 @@ const PAGE_ACTION_BAR_STYLE: React.CSSProperties = {
 };
 
 const PAGE_EDITOR_FONT = "'JetBrains Mono', 'Fira Mono', 'Cascadia Code', 'Consolas', monospace";
+const PAGE_EDITOR_DARK_INPUT_STYLE = {
+  height: '100%',
+  minHeight: '100%',
+  resize: 'none',
+  border: 'none',
+  borderRadius: 0,
+  padding: '18px 20px',
+  fontFamily: PAGE_EDITOR_FONT,
+  fontSize: 13,
+  lineHeight: 1.65,
+  background: '#0f172a',
+  color: '#e5e7eb',
+  caretColor: '#93c5fd',
+} as const;
+const CONTEXT_MENU_BUTTON_STYLE: React.CSSProperties = {
+  width: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '8px 10px',
+  border: 'none',
+  borderRadius: 6,
+  background: 'transparent',
+  color: '#1f2937',
+  cursor: 'pointer',
+  textAlign: 'left',
+};
+const CONTEXT_MENU_DANGER_BUTTON_STYLE: React.CSSProperties = {
+  ...CONTEXT_MENU_BUTTON_STYLE,
+  color: '#dc2626',
+};
 
 export default function VibeCodingPage() {
   const router = useRouter();
@@ -211,6 +265,7 @@ export default function VibeCodingPage() {
   const [selectedSkill, setSelectedSkill] = useState<string | null>(AUTO_EXECUTE_OPTION);
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(AUTO_EXECUTE_OPTION);
   const [pendingAction, setPendingAction] = useState<VibeAction | null>(null);
+  const [fileContextMenu, setFileContextMenu] = useState<{ x: number; y: number; item: FileItem } | null>(null);
   const [navbarWidth, setNavbarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false);
@@ -230,8 +285,12 @@ export default function VibeCodingPage() {
   const [workflowExecuteStatus, setWorkflowExecuteStatus] = useState<WorkflowExecuteStatus | null>(null);
   const [continuingWorkflow, setContinuingWorkflow] = useState(false);
   const rightPaneRef = useRef<HTMLDivElement | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadTargetRef = useRef<string>('workspace/vibe-coding');
   const lastLoadedContentRef = useRef<string>('');
   const editorContentRef = useRef<string>('');
+  const autoSaveTimerRef = useRef<number | null>(null);
+  const pendingSelfSaveRef = useRef<Record<string, string>>({});
   useEffect(() => { editorContentRef.current = editorContent; }, [editorContent]);
 
   const currentTask = typeof task === 'string' ? task : '';
@@ -411,17 +470,19 @@ export default function VibeCodingPage() {
     if (!currentTask || selectedKind === 'image' || selectedKind === 'audio' || selectedKind === 'video') {
       return true;
     }
+    const nextContent = editorContentRef.current;
     setEditorSaving(true);
     setEditorError('');
     setNotice('');
     try {
       await axios.post(`${API_BASE_URL}/vibe-coding/save`, {
         path: currentTask,
-        content: editorContent,
+        content: nextContent,
       });
-      setNotice('Saved.');
+      lastLoadedContentRef.current = nextContent;
+      pendingSelfSaveRef.current[currentTask] = nextContent;
+      setNotice('Saved automatically.');
       await fetchTree();
-      await fetchContent(currentTask);
       return true;
     } catch (err: any) {
       console.error('Failed to save vibe coding content:', err);
@@ -532,6 +593,195 @@ export default function VibeCodingPage() {
     } finally {
       setDeletingFile(false);
     }
+  };
+
+  const deleteVibeFile = async (item: FileItem) => {
+    let confirmText = '';
+    if (isVibeDesignDocPath(item.path, 'requirements.md')) {
+      const typed = window.prompt(`Deleting ${item.path} will remove the full project folder. Type delete to confirm.`);
+      if (typed === null) return;
+      confirmText = typed;
+    } else if (!window.confirm(`Delete ${item.path}?`)) {
+      return;
+    }
+
+    setDeletingFile(true);
+    setEditorError('');
+    setNotice('');
+    try {
+      await axios.post(`${API_BASE_URL}/vibe-coding/delete`, {
+        path: item.path,
+        confirm_text: confirmText,
+      });
+      setFileContextMenu(null);
+      await fetchTree();
+      await fetchProjects();
+      if (currentTask === item.path) {
+        router.push('/vibe-coding', undefined, { shallow: true });
+      }
+    } catch (err: any) {
+      console.error('Failed to delete vibe coding file:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to delete file.');
+    } finally {
+      setDeletingFile(false);
+    }
+  };
+
+  const createFileInVibeFolder = async (folderPath: string) => {
+    setFileContextMenu(null);
+    const name = window.prompt('File name');
+    if (!name) return;
+    const parentPath = vibeProjectPath(folderPath);
+    const projectPath = `${parentPath}/${name}`.replace(/\/+/g, '/');
+    setEditorError('');
+    setNotice('');
+    try {
+      await axios.post(apiUrl('/api/files/write'), {
+        path: projectPath,
+        content: '',
+      });
+      const nextPath = vibeRelativePath(projectPath);
+      setExpandedFolders((prev) => Array.from(new Set([...prev, folderPath])));
+      await fetchTree();
+      await fetchProjects();
+      router.push(`/vibe-coding?view=explorer&task=${encodeURIComponent(nextPath)}`, undefined, { shallow: true });
+    } catch (err: any) {
+      console.error('Failed to create vibe coding file:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to create file.');
+    }
+  };
+
+  const createFolderInVibeFolder = async (folderPath: string) => {
+    setFileContextMenu(null);
+    const name = window.prompt('Folder name');
+    if (!name) return;
+    setEditorError('');
+    setNotice('');
+    try {
+      await axios.post(apiUrl('/api/files/mkdir'), {
+        parent: vibeProjectPath(folderPath),
+        name,
+      });
+      setExpandedFolders((prev) => Array.from(new Set([...prev, folderPath])));
+      await fetchTree();
+      await fetchProjects();
+    } catch (err: any) {
+      console.error('Failed to create vibe coding folder:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to create folder.');
+    }
+  };
+
+  const openUploadForVibeFolder = (folderPath: string) => {
+    setFileContextMenu(null);
+    uploadTargetRef.current = vibeProjectPath(folderPath);
+    uploadInputRef.current?.click();
+  };
+
+  const uploadFilesToVibeFolder = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setEditorError('');
+    setNotice('');
+    try {
+      for (const file of Array.from(files)) {
+        const formData = new FormData();
+        formData.append('path', uploadTargetRef.current);
+        formData.append('file', file);
+        await axios.post(apiUrl('/api/files/upload'), formData);
+      }
+      const folderPath = vibeRelativePath(uploadTargetRef.current);
+      if (folderPath) {
+        setExpandedFolders((prev) => Array.from(new Set([...prev, folderPath])));
+      }
+      await fetchTree();
+      await fetchProjects();
+    } catch (err: any) {
+      console.error('Failed to upload vibe coding file:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to upload file.');
+    }
+  };
+
+  const renameVibePath = async (item: FileItem) => {
+    const nextName = window.prompt('Rename', item.name);
+    if (!nextName || nextName === item.name) return;
+    setEditorError('');
+    setNotice('');
+    try {
+      const res = await axios.post(apiUrl('/api/files/rename'), {
+        id: vibeProjectPath(item.path),
+        name: nextName,
+      });
+      const nextPath = vibeRelativePath(String(res.data?.newId || ''));
+      setFileContextMenu(null);
+      await fetchTree();
+      await fetchProjects();
+      if (currentTask === item.path && nextPath) {
+        router.push(`/vibe-coding?view=explorer&task=${encodeURIComponent(nextPath)}`, undefined, { shallow: true });
+      } else if (currentTask.startsWith(`${item.path}/`) && nextPath) {
+        const suffix = currentTask.slice(item.path.length);
+        router.push(`/vibe-coding?view=explorer&task=${encodeURIComponent(`${nextPath}${suffix}`)}`, undefined, { shallow: true });
+      }
+    } catch (err: any) {
+      console.error('Failed to rename vibe coding path:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to rename path.');
+    }
+  };
+
+  const deleteVibeFolder = async (item: FileItem) => {
+    const typed = window.prompt(`Deleting ${item.path} will remove this folder and every file inside it. Type delete to confirm.`);
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== 'delete') {
+      setEditorError("Type 'delete' to confirm removing the folder.");
+      return;
+    }
+
+    setEditorError('');
+    setNotice('');
+    setDeletingFile(true);
+    try {
+      await axios.post(apiUrl('/api/files/delete'), {
+        ids: [vibeProjectPath(item.path)],
+      });
+      setFileContextMenu(null);
+      setExpandedFolders((prev) => prev.filter((path) => path !== item.path && !path.startsWith(`${item.path}/`)));
+      await fetchTree();
+      await fetchProjects();
+      if (currentTask === item.path || currentTask.startsWith(`${item.path}/`)) {
+        router.push('/vibe-coding', undefined, { shallow: true });
+      }
+    } catch (err: any) {
+      console.error('Failed to delete vibe coding folder:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to delete folder.');
+    } finally {
+      setDeletingFile(false);
+    }
+  };
+
+  const copyVibePath = async (item: FileItem) => {
+    setFileContextMenu(null);
+    try {
+      await navigator.clipboard.writeText(vibeProjectPath(item.path));
+      setNotice('Path copied.');
+      setEditorError('');
+    } catch (err) {
+      console.error('Failed to copy vibe coding path:', err);
+      setEditorError('Failed to copy path.');
+    }
+  };
+
+  const openPromptRunSession = async () => {
+    if (!currentTask || currentFileName !== 'prompt.md') return;
+    const saved = await saveCurrentContent();
+    if (!saved) return;
+    setSessionPromptText(editorContentRef.current);
+    setNewSessionWorkflow(null);
+    setNewSessionNextNodeTrigger('auto_continue');
+    setNewSessionWorkflowResumeAvailable(false);
+    setNewSessionWorkflowResume(false);
+    setLiveSessionName(null);
+    setWorkflowSessionActive(false);
+    setWorkflowExecuteStatus(null);
+    setSessionPanelHeight(50);
+    setSessionPanelOpen(true);
   };
 
   const openExecuteModal = (action: VibeAction) => {
@@ -738,6 +988,10 @@ export default function VibeCodingPage() {
     currentFilePath: currentTask ? `/workspace/vibe-coding/${currentTask}` : null,
     onCurrentFileChange: () => {
       if (!currentTask) return;
+      if (pendingSelfSaveRef.current[currentTask] === editorContentRef.current) {
+        delete pendingSelfSaveRef.current[currentTask];
+        return;
+      }
       if (editorContentRef.current === lastLoadedContentRef.current) {
         setNotice('File updated on disk.');
         void fetchContent(currentTask);
@@ -746,6 +1000,39 @@ export default function VibeCodingPage() {
       }
     },
   });
+
+  useEffect(() => {
+    if (autoSaveTimerRef.current) {
+      window.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    if (
+      !currentTask
+      || loading
+      || (selectedKind !== 'markdown' && selectedKind !== 'text')
+      || editorContent === lastLoadedContentRef.current
+    ) {
+      return undefined;
+    }
+
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      autoSaveTimerRef.current = null;
+      void saveCurrentContent();
+    }, 900);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        window.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    };
+  }, [currentTask, editorContent, loading, selectedKind]);
+
+  useEffect(() => {
+    const closeFileContextMenu = () => setFileContextMenu(null);
+    window.addEventListener('pointerdown', closeFileContextMenu);
+    return () => window.removeEventListener('pointerdown', closeFileContextMenu);
+  }, []);
 
   useEffect(() => {
     fetchTree();
@@ -834,6 +1121,11 @@ export default function VibeCodingPage() {
           icon={<IconFolder size="1.2rem" stroke={1.5} color={theme.colors.blue[6]} />}
           childrenOffset={16}
           opened={expandedFolders.includes(item.path)}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setFileContextMenu({ x: event.clientX, y: event.clientY, item });
+          }}
           onChange={(nextOpened) => {
             setExpandedFolders((prev) => (
               nextOpened
@@ -853,6 +1145,11 @@ export default function VibeCodingPage() {
         label={item.name}
         icon={<IconFileText size="1.2rem" stroke={1.5} color={theme.colors.gray[6]} />}
         active={isSelected}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setFileContextMenu({ x: event.clientX, y: event.clientY, item });
+        }}
         onClick={() => {
           router.push(`/vibe-coding?view=explorer&task=${encodeURIComponent(item.path)}`, undefined, { shallow: true });
           setOpened(false);
@@ -897,7 +1194,7 @@ export default function VibeCodingPage() {
         },
       ];
     }
-    if (currentDesignDocName === 'implement.md') {
+    if (currentDesignDocName === 'implement.md' || currentDesignDocName === 'implementation.md') {
       return [
         {
           label: 'Review',
@@ -949,6 +1246,7 @@ export default function VibeCodingPage() {
   const mediaUrl = currentTask ? `${API_BASE_URL}/vibe-coding/file?path=${encodeURIComponent(currentTask)}` : '';
   const isMarkdownEditor = selectedKind === 'markdown';
   const isTextEditor = selectedKind === 'text';
+  const headerStatus = editorSaving ? 'Saving...' : notice;
   const renderHeaderActions = () => {
     if (!currentTask) return null;
     return (
@@ -968,6 +1266,11 @@ export default function VibeCodingPage() {
             {action.label}
           </Button>
         ))}
+        {currentFileName === 'prompt.md' && (isMarkdownEditor || isTextEditor) && (
+          <Button size="xs" variant="default" onClick={() => void openPromptRunSession()}>
+            Run
+          </Button>
+        )}
       </div>
     );
   };
@@ -1086,23 +1389,9 @@ export default function VibeCodingPage() {
                   styles={{
                     root: { height: '100%' },
                     wrapper: { height: '100%' },
-                    input: {
-                      height: '100%',
-                      minHeight: '100%',
-                      resize: 'none',
-                      border: 'none',
-                      borderRadius: 0,
-                      padding: '18px 20px',
-                      fontFamily: PAGE_EDITOR_FONT,
-                      fontSize: 13,
-                      lineHeight: 1.65,
-                    },
+                    input: PAGE_EDITOR_DARK_INPUT_STYLE,
                   }}
                 />
-              </div>
-              <div style={PAGE_ACTION_BAR_STYLE}>
-                <Button size="xs" onClick={() => void saveCurrentContent()} loading={editorSaving}>Save</Button>
-                <Button size="xs" color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
               </div>
             </>
           ) : (
@@ -1111,9 +1400,6 @@ export default function VibeCodingPage() {
                 <div className="doc-markdown" style={{ maxWidth: 'none', margin: 0, minHeight: '100%', padding: '18px 20px 24px', border: 'none', borderRadius: 0, boxShadow: 'none', background: '#ffffff' }}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
                 </div>
-              </div>
-              <div style={PAGE_ACTION_BAR_STYLE}>
-                <Button size="xs" color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
               </div>
             </>
           )}
@@ -1137,23 +1423,9 @@ export default function VibeCodingPage() {
               styles={{
                 root: { height: '100%' },
                 wrapper: { height: '100%' },
-                input: {
-                  height: '100%',
-                  minHeight: '100%',
-                  resize: 'none',
-                  border: 'none',
-                  borderRadius: 0,
-                  padding: '18px 20px',
-                  fontFamily: PAGE_EDITOR_FONT,
-                  fontSize: 13,
-                  lineHeight: 1.65,
-                },
+                input: PAGE_EDITOR_DARK_INPUT_STYLE,
               }}
             />
-          </div>
-          <div style={PAGE_ACTION_BAR_STYLE}>
-            <Button size="xs" onClick={() => void saveCurrentContent()} loading={editorSaving}>Save</Button>
-            <Button size="xs" color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
           </div>
         </div>
       );
@@ -1491,6 +1763,95 @@ export default function VibeCodingPage() {
         <title>Skill Pilot - Vibe Coding</title>
       </Head>
 
+      <input
+        ref={uploadInputRef}
+        type="file"
+        multiple
+        style={{ display: 'none' }}
+        onChange={(event) => {
+          void uploadFilesToVibeFolder(event.currentTarget.files);
+          event.currentTarget.value = '';
+        }}
+      />
+
+      {fileContextMenu && (
+        <div
+          style={{
+            position: 'fixed',
+            top: fileContextMenu.y,
+            left: fileContextMenu.x,
+            zIndex: 1000,
+            minWidth: 150,
+            padding: 6,
+            borderRadius: 8,
+            border: '1px solid #dbe3ef',
+            background: '#ffffff',
+            boxShadow: '0 18px 40px rgba(15, 23, 42, 0.16)',
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          {fileContextMenu.item.type === 'dir' && (
+            <>
+              <button
+                type="button"
+                onClick={() => { void createFileInVibeFolder(fileContextMenu.item.path); }}
+                style={CONTEXT_MENU_BUTTON_STYLE}
+              >
+                <IconFilePlus size="0.95rem" />
+                Add File
+              </button>
+              <button
+                type="button"
+                onClick={() => { void createFolderInVibeFolder(fileContextMenu.item.path); }}
+                style={CONTEXT_MENU_BUTTON_STYLE}
+              >
+                <IconFolderPlus size="0.95rem" />
+                Add Folder
+              </button>
+              <button
+                type="button"
+                onClick={() => openUploadForVibeFolder(fileContextMenu.item.path)}
+                style={CONTEXT_MENU_BUTTON_STYLE}
+              >
+                <IconFileUpload size="0.95rem" />
+                Upload File
+              </button>
+              <div style={{ height: 1, margin: '6px 4px', background: '#e5e7eb' }} />
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => { void renameVibePath(fileContextMenu.item); }}
+            style={CONTEXT_MENU_BUTTON_STYLE}
+          >
+            Rename
+          </button>
+          {fileContextMenu.item.type === 'file' && (
+            <button
+              type="button"
+              onClick={() => { void copyVibePath(fileContextMenu.item); }}
+              style={CONTEXT_MENU_BUTTON_STYLE}
+            >
+              Copy Path
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (fileContextMenu.item.type === 'dir') {
+                void deleteVibeFolder(fileContextMenu.item);
+              } else {
+                void deleteVibeFile(fileContextMenu.item);
+              }
+            }}
+            style={CONTEXT_MENU_DANGER_BUTTON_STYLE}
+          >
+            Delete
+          </button>
+        </div>
+      )}
+
       <Modal opened={projectModalOpened} onClose={() => setProjectModalOpened(false)} title="New Project" centered>
         <Stack spacing="md">
           <div>
@@ -1499,7 +1860,7 @@ export default function VibeCodingPage() {
               placeholder="project-name"
               value={projectNameInput}
               onChange={(e) => setProjectNameInput(e.currentTarget.value)}
-              description="Creates workspace/vibe-coding/{project-name}/design-docs/requirements.md. Duplicates get _1, _2, and so on."
+              description="Creates workspace/vibe-coding/{project-name}/requirements.md. Duplicates get _1, _2, and so on."
             />
           </div>
           <div>
@@ -1730,15 +2091,21 @@ export default function VibeCodingPage() {
           <div style={{ minHeight: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#ffffff', borderLeft: '1px solid #d6def8' }}>
               <div style={PAGE_HEADER_BAR_STYLE}>
-                <div style={{ fontSize: 12, color: '#64748b', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 240px' }}>
-                  {currentTask || 'Select a project file from the sidebar'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 240px' }}>
+                  <span style={{ fontSize: 12, color: '#64748b', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {currentTask || 'Select a project file from the sidebar'}
+                  </span>
+                  {headerStatus && (
+                    <span style={{ fontSize: 12, color: editorSaving ? '#64748b' : '#16a34a', flex: '0 0 auto', whiteSpace: 'nowrap' }}>
+                      {headerStatus}
+                    </span>
+                  )}
                 </div>
                 {renderHeaderActions()}
               </div>
-              {(editorError || notice) && (
+              {editorError && (
                 <div style={{ flexShrink: 0 }}>
                   {editorError && <Text color="red" size="sm" px={18} py={10}>{editorError}</Text>}
-                  {!editorError && notice && <Text color="green" size="sm" px={18} py={10}>{notice}</Text>}
                 </div>
               )}
               <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>

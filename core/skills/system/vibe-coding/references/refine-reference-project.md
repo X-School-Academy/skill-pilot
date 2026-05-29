@@ -83,7 +83,7 @@ If the user chooses Emscripten, verify whether the toolchain is installed before
 
 ### Step 7: Refine `requirements.md`
 
-Rewrite `design-docs/requirements.md` as user-level requirements:
+Rewrite `requirements.md` as user-level requirements:
 
 - Product or game goal
 - User-facing features, screens, scenes, controls, and flows

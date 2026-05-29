@@ -675,8 +675,7 @@ def _normalize_vibe_project_name(value: str) -> str:
     return _normalize_task_slug(value, default="project")
 
 
-VIBE_CODING_DESIGN_DOCS_DIR = "design-docs"
-VIBE_CODING_ARCHIVE_DIR = "archive"
+VIBE_CODING_ARCHIVE_DIR = "design-archive"
 VIBE_CODING_ASSETS_DIR = "assets"
 VIBE_CODING_ICON_FILE = "icon.png"
 VIBE_CODING_INFO_FILE = "info.yaml"
@@ -703,10 +702,7 @@ def _ensure_vibe_project_file(project_name: str, file_name: str) -> tuple[Path, 
         raise ValueError("Project name is required")
     project_dir = VIBE_CODING_DIR / normalized_project
     project_dir.mkdir(parents=True, exist_ok=True)
-    design_docs_dir = project_dir / VIBE_CODING_DESIGN_DOCS_DIR
-    design_docs_dir.mkdir(parents=True, exist_ok=True)
-    (design_docs_dir / VIBE_CODING_ARCHIVE_DIR).mkdir(parents=True, exist_ok=True)
-    file_path = design_docs_dir / file_name
+    file_path = project_dir / file_name
     return project_dir, file_path, normalized_project
 
 
@@ -726,9 +722,8 @@ def _is_vibe_project_requirements_file(file_path: Path) -> bool:
     except ValueError:
         return False
     return (
-        len(relative_parts) == 3
-        and relative_parts[1] == VIBE_CODING_DESIGN_DOCS_DIR
-        and relative_parts[2] == "requirements.md"
+        len(relative_parts) == 2
+        and relative_parts[1] == "requirements.md"
     )
 
 
@@ -2294,10 +2289,7 @@ def vibe_coding_create_project(payload: Dict[str, Any]):
     normalized_project = _normalize_vibe_project_name(project_name)
     project_dir = _unique_vibe_project_dir_path(normalized_project)
     project_dir.mkdir(parents=False, exist_ok=False)
-    design_docs_dir = project_dir / VIBE_CODING_DESIGN_DOCS_DIR
-    design_docs_dir.mkdir(parents=True, exist_ok=True)
-    (design_docs_dir / VIBE_CODING_ARCHIVE_DIR).mkdir(parents=True, exist_ok=True)
-    file_path = design_docs_dir / "requirements.md"
+    file_path = project_dir / "requirements.md"
     file_path.write_text(requirements, encoding="utf-8")
     return {
         "status": "ok",
@@ -2371,9 +2363,8 @@ def vibe_coding_delete(payload: Dict[str, Any]):
     file_path.unlink()
     removed_folder = None
     parent_dir = file_path.parent
-    design_docs_dir = project_dir / VIBE_CODING_DESIGN_DOCS_DIR
     cleanup_dir = project_dir if parent_dir == project_dir else parent_dir
-    if cleanup_dir != design_docs_dir:
+    if cleanup_dir != project_dir:
         try:
             cleanup_dir.rmdir()
             removed_folder = str(cleanup_dir.relative_to(VIBE_CODING_DIR))

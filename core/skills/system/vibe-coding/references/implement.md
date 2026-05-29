@@ -4,7 +4,7 @@ Implement the project according to `plan.md`.
 
 ## When to Use
 
-- The user wants code written from `design-docs/plan.md`
+- The user wants code written from `plan.md`
 - The plan is approved
 - Works for all flows: new project, update, and fix
 
@@ -20,7 +20,7 @@ Skip this step if the project was not launched from an Explore showcase.
 
 ### Step 1: Read the Plan
 
-Read `design-docs/plan.md` and identify implementation steps in order.
+Read `plan.md` and identify implementation steps in order.
 
 ### Step 2: Implement
 
@@ -32,7 +32,7 @@ Run the most relevant tests or static checks for the changed code.
 
 ### Step 4: Update the Implementation Record
 
-Write the implementation summary to `design-docs/implementation.md` (overwrite — it is a living doc):
+Write the implementation summary to `implementation.md` (overwrite — it is a living doc):
 
 - What was implemented
 - What was verified

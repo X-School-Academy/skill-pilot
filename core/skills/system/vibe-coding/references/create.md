@@ -18,12 +18,12 @@ Derive a concise kebab-case project name from the user's request if none is prov
 Create:
 
 - `workspace/vibe-coding/{project-name}/`
-- `workspace/vibe-coding/{project-name}/design-docs/`
-- `workspace/vibe-coding/{project-name}/design-docs/archive/`
+
+Do not create `design-archive/` during project creation. Archive stages create it only when they need to move an older design file.
 
 ### Step 3: Write the Requirement
 
-Create `workspace/vibe-coding/{project-name}/design-docs/requirements.md` from the user's prompt in clear English. Keep it requirement-focused; avoid implementation details.
+Create `workspace/vibe-coding/{project-name}/requirements.md` from the user's prompt in clear English. Keep it requirement-focused; avoid implementation details.
 
 ### Step 4: Create Top-Level Project Files
 
@@ -35,4 +35,4 @@ Create stub versions of the three top-level project files:
 
 ### Step 5: Report
 
-Report the project folder path, `design-docs/requirements.md`, and the three top-level files created.
+Report the project folder path, `requirements.md`, and the three top-level files created.
