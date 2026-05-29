@@ -152,6 +152,11 @@ const vibeProjectDesignDocsPath = (project: string): string => (
   project ? `workspace/vibe-coding/${project}` : 'workspace/vibe-coding'
 );
 
+const vibeReadmeTitle = (projectName: string): string => {
+  const title = projectName.replace(/-/g, ' ').trim();
+  return title || 'Project';
+};
+
 const getAncestorDirectoryPaths = (path: string): string[] => {
   const segments = path.split('/').filter(Boolean);
   if (segments.length <= 1) return [];
@@ -295,12 +300,23 @@ export default function VibeCodingPage() {
 
   const currentTask = typeof task === 'string' ? task : '';
   const currentView = router.query.view === 'explorer' || typeof task === 'string' ? 'explorer' : 'dashboard';
-  const selectedProjectName = typeof router.query.project === 'string' ? router.query.project : '';
-  const selectedProject = useMemo(
-    () => projects.find((project) => project.name === selectedProjectName) || null,
-    [projects, selectedProjectName],
-  );
   const currentProject = getVibeProjectName(currentTask);
+  const currentProjectSummary = useMemo(
+    () => {
+      const project = projects.find((item) => item.name === currentProject);
+      if (project || !currentProject) return project || null;
+      return {
+        name: currentProject,
+        path: currentProject,
+        display_name: vibeReadmeTitle(currentProject),
+        initials: currentProject.slice(0, 1).toUpperCase() || '?',
+        icon_path: null,
+        commands: { start: '', dev: '', build: '', stop: '' },
+        mtime: 0,
+      };
+    },
+    [projects, currentProject],
+  );
   const currentFileName = currentTask.split('/').pop() || '';
   const currentDesignDocName = isVibeDesignDocPath(currentTask) ? currentFileName : '';
   const skillSelectOptions = useMemo(() => buildExecuteSelectOptions(skillOptions), [skillOptions]);
@@ -392,7 +408,7 @@ export default function VibeCodingPage() {
     setEditorError('');
     setNotice('');
     setSelectedKind(nextKind);
-    setMarkdownView('editor');
+    setMarkdownView(path.endsWith('/README.md') || path === 'README.md' ? 'preview' : 'editor');
 
     if (nextKind === 'image' || nextKind === 'audio' || nextKind === 'video') {
       setEditorContent('');
@@ -501,6 +517,35 @@ export default function VibeCodingPage() {
     setNotice('');
   };
 
+  const openProjectReadme = async (project: VibeProjectSummary) => {
+    const readmePath = `${project.name}/README.md`;
+    setEditorError('');
+    setNotice('');
+    try {
+      await axios.get(`${API_BASE_URL}/vibe-coding/content`, { params: { path: readmePath } });
+    } catch (err: any) {
+      if (err?.response?.status !== 404) {
+        console.error('Failed to check vibe coding README:', err);
+        setEditorError(err?.response?.data?.error || 'Failed to open project README.');
+        return;
+      }
+      try {
+        await axios.post(apiUrl('/api/files/write'), {
+          path: `${vibeProjectPath(project.name)}/README.md`,
+          content: `# ${vibeReadmeTitle(project.name)}\n`,
+        });
+        await fetchTree();
+        await fetchProjects();
+      } catch (writeErr: any) {
+        console.error('Failed to create vibe coding README:', writeErr);
+        setEditorError(writeErr?.response?.data?.error || 'Failed to create project README.');
+        return;
+      }
+    }
+    setExpandedFolders((prev) => Array.from(new Set([...prev, project.name])));
+    router.push(`/vibe-coding?view=explorer&task=${encodeURIComponent(readmePath)}`, undefined, { shallow: true });
+  };
+
   const openRequestModal = (project: string) => {
     setRequestMode('update');
     setRequestProject(project);
@@ -525,7 +570,16 @@ export default function VibeCodingPage() {
       await fetchTree();
       await fetchProjects();
       if (createdProject) {
-        router.push(`/vibe-coding?project=${encodeURIComponent(createdProject)}`, undefined, { shallow: true });
+        const createdProjectSummary: VibeProjectSummary = {
+          name: createdProject,
+          path: createdProject,
+          display_name: vibeReadmeTitle(createdProject),
+          initials: createdProject.slice(0, 1).toUpperCase() || '?',
+          icon_path: null,
+          commands: { start: '', dev: '', build: '', stop: '' },
+          mtime: Date.now() / 1000,
+        };
+        await openProjectReadme(createdProjectSummary);
       } else if (createdPath) {
         router.push(`/vibe-coding?view=explorer&task=${encodeURIComponent(createdPath)}`, undefined, { shallow: true });
       }
@@ -1256,20 +1310,65 @@ export default function VibeCodingPage() {
   const mediaUrl = currentTask ? `${API_BASE_URL}/vibe-coding/file?path=${encodeURIComponent(currentTask)}` : '';
   const isMarkdownEditor = selectedKind === 'markdown';
   const isTextEditor = selectedKind === 'text';
+  const isReadmeFile = currentFileName === 'README.md';
   const headerStatus = editorSaving ? 'Saving...' : notice;
   const renderHeaderActions = () => {
     if (!currentTask) return null;
+    const readmeProject = currentFileName === 'README.md' ? currentProjectSummary : null;
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flex: '0 0 auto', flexWrap: 'wrap' }}>
-        {isMarkdownEditor && (
+      <div className={readmeProject ? 'vibe-readme-action-toolbar' : undefined} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flex: '0 0 auto', flexWrap: 'wrap' }}>
+        {readmeProject && (
           <>
+            <div className="vibe-readme-action-group">
+              {[
+                { key: 'start' as const, label: 'Start', icon: <IconPlayerPlay size="0.95rem" /> },
+                { key: 'dev' as const, label: 'Dev', icon: <IconCode size="0.95rem" /> },
+                { key: 'build' as const, label: 'Build', icon: <IconPackage size="0.95rem" /> },
+                { key: 'stop' as const, label: 'Stop', icon: <IconPlayerStop size="0.95rem" /> },
+              ].map((action) => (
+                <Button
+                  key={action.key}
+                  size="xs"
+                  leftIcon={action.icon}
+                  variant={action.key === 'stop' ? 'light' : 'filled'}
+                  color={action.key === 'stop' ? 'red' : 'blue'}
+                  onClick={() => void startProjectCommand(readmeProject, action.key)}
+                  loading={commandStarting === `${readmeProject.name}:${action.key}`}
+                  disabled={!readmeProject.commands?.[action.key]}
+                >
+                  {action.label}
+                </Button>
+              ))}
+            </div>
+            <div className="vibe-readme-action-group">
+              {[
+                { key: 'push' as const, label: 'Push', icon: <IconUpload size="0.95rem" /> },
+                { key: 'update' as const, label: 'Update', icon: <IconPlus size="0.95rem" /> },
+                { key: 'issue' as const, label: 'Issue', icon: <IconBug size="0.95rem" /> },
+                { key: 'deploy' as const, label: 'Deploy', icon: <IconRocket size="0.95rem" /> },
+              ].map((action) => (
+                <Button
+                  key={action.key}
+                  size="xs"
+                  leftIcon={action.icon}
+                  variant="default"
+                  onClick={() => openProjectActionPrompt(readmeProject, action.key)}
+                >
+                  {action.label}
+                </Button>
+              ))}
+            </div>
+          </>
+        )}
+        {isMarkdownEditor && (
+          <div className={readmeProject ? 'vibe-readme-action-group' : undefined}>
             <Button size="xs" variant={markdownView === 'editor' ? 'filled' : 'default'} onClick={() => setMarkdownView('editor')}>
               Edit
             </Button>
             <Button size="xs" variant={markdownView === 'preview' ? 'filled' : 'default'} onClick={() => setMarkdownView('preview')}>
               Preview
             </Button>
-          </>
+          </div>
         )}
         {fileActions.map((action) => (
           <Button key={action.label} size="xs" variant="default" onClick={() => openExecuteModal(action)}>
@@ -1382,6 +1481,7 @@ export default function VibeCodingPage() {
     }
 
     if (isMarkdownEditor) {
+      const readmeProject = isReadmeFile ? currentProjectSummary : null;
       return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           {markdownView === 'editor' ? (
@@ -1406,10 +1506,54 @@ export default function VibeCodingPage() {
             </>
           ) : (
             <>
-              <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '20px 24px' }}>
-                <div className="doc-markdown" style={{ maxWidth: 'none', margin: 0, minHeight: '100%', padding: '18px 20px 24px', border: 'none', borderRadius: 0, boxShadow: 'none', background: '#ffffff' }}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
-                </div>
+              <div
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  overflow: 'auto',
+                  padding: readmeProject ? '0' : '20px 24px',
+                  background: readmeProject ? '#f6f8fb' : '#ffffff',
+                }}
+              >
+                {readmeProject ? (
+                  <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ borderBottom: '1px solid #dbe3ef', background: '#ffffff' }}>
+                      <div
+                        style={{
+                          maxWidth: 1120,
+                          margin: '0 auto',
+                          padding: '24px 28px 22px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 18,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <Group spacing="md" align="center" style={{ minWidth: 0, flex: '1 1 360px' }}>
+                          {renderProjectAvatar(readmeProject, 58)}
+                          <div style={{ minWidth: 0 }}>
+                            <Text size={24} weight={800} style={{ lineHeight: 1.15, color: '#0f172a', wordBreak: 'break-word' }}>
+                              {readmeProject.display_name}
+                            </Text>
+                            <Text size="sm" color="dimmed" mt={5} style={{ fontFamily: PAGE_EDITOR_FONT, wordBreak: 'break-word' }}>
+                              {vibeProjectPath(readmeProject.name)}
+                            </Text>
+                          </div>
+                        </Group>
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, minHeight: 0, padding: '26px 28px 44px' }}>
+                      <div className="doc-markdown vibe-readme-markdown">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="doc-markdown" style={{ maxWidth: 'none', margin: 0, minHeight: '100%', padding: '18px 20px 24px', border: 'none', borderRadius: 0, boxShadow: 'none', background: '#ffffff' }}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -1513,7 +1657,7 @@ export default function VibeCodingPage() {
             </div>
             <div style={{ minHeight: 0, overflow: 'hidden' }}>
               <EmbeddedSessionPanel
-                currentLabel={selectedProject?.display_name || 'Vibe coding session'}
+                currentLabel={currentProjectSummary?.display_name || 'Vibe coding session'}
                 liveSessionName={liveSessionName}
                 sessionPromptText={sessionPromptText}
                 setSessionPromptText={setSessionPromptText}
@@ -1579,7 +1723,7 @@ export default function VibeCodingPage() {
               <button
                 key={project.name}
                 type="button"
-                onClick={() => { void router.push(`/vibe-coding?project=${encodeURIComponent(project.name)}`, undefined, { shallow: true }); }}
+                onClick={() => { void openProjectReadme(project); }}
                 style={{
                   border: '1px solid transparent',
                   background: 'transparent',
@@ -1634,90 +1778,7 @@ export default function VibeCodingPage() {
     </div>,
   );
 
-  const renderProjectDetail = (project: VibeProjectSummary | null) => dashboardShell(
-    <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-      <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <Group spacing="md" align="center">
-          <ActionIcon variant="subtle" onClick={() => { void router.push('/vibe-coding', undefined, { shallow: true }); }} aria-label="Back to dashboard">
-            <IconArrowLeft size="1.1rem" />
-          </ActionIcon>
-          {project && renderProjectAvatar(project, 48)}
-          <div>
-            <Text size={20} weight={800}>{project?.display_name || selectedProjectName || 'Project'}</Text>
-            <Text size="sm" color="dimmed">{project ? vibeProjectPath(project.name) : 'Project metadata not found'}</Text>
-          </div>
-        </Group>
-        <Tooltip label="Explorer">
-          <ActionIcon
-            variant="light"
-            size="lg"
-            onClick={() => { void router.push('/vibe-coding?view=explorer', undefined, { shallow: true }); }}
-            aria-label="Open Explorer view"
-          >
-            <IconHierarchy size="1.25rem" />
-          </ActionIcon>
-        </Tooltip>
-      </div>
-      {!project ? (
-        <Box p="xl">
-          <Text color="dimmed">This project is not available. Return to the dashboard and refresh the project list.</Text>
-        </Box>
-      ) : (
-        <Stack spacing="lg" p="xl" style={{ maxWidth: 980 }}>
-          <Group spacing="sm">
-            {[
-              { key: 'start' as const, label: 'Start', icon: <IconPlayerPlay size="1rem" /> },
-              { key: 'dev' as const, label: 'Dev', icon: <IconCode size="1rem" /> },
-              { key: 'build' as const, label: 'Build', icon: <IconPackage size="1rem" /> },
-              { key: 'stop' as const, label: 'Stop', icon: <IconPlayerStop size="1rem" /> },
-            ].map((action) => (
-              <Button
-                key={action.key}
-                leftIcon={action.icon}
-                variant={action.key === 'stop' ? 'light' : 'filled'}
-                color={action.key === 'stop' ? 'red' : 'blue'}
-                onClick={() => void startProjectCommand(project, action.key)}
-                loading={commandStarting === `${project.name}:${action.key}`}
-                disabled={!project.commands?.[action.key]}
-              >
-                {action.label}
-              </Button>
-            ))}
-          </Group>
-          <Group spacing="sm">
-            {[
-              { key: 'push' as const, label: 'Push', icon: <IconUpload size="1rem" /> },
-              { key: 'update' as const, label: 'Update', icon: <IconPlus size="1rem" /> },
-              { key: 'issue' as const, label: 'Issue', icon: <IconBug size="1rem" /> },
-              { key: 'deploy' as const, label: 'Deploy', icon: <IconRocket size="1rem" /> },
-            ].map((action) => (
-              <Button
-                key={action.key}
-                leftIcon={action.icon}
-                variant="default"
-                onClick={() => openProjectActionPrompt(project, action.key)}
-              >
-                {action.label}
-              </Button>
-            ))}
-          </Group>
-          <Box style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, background: '#f8fafc' }}>
-            <Text size="sm" weight={700} mb={8}>Configured Commands</Text>
-            <Stack spacing={4}>
-              {(['start', 'dev', 'build', 'stop'] as const).map((key) => (
-                <Text key={key} size="sm" color={project.commands?.[key] ? undefined : 'dimmed'} style={{ fontFamily: PAGE_EDITOR_FONT, wordBreak: 'break-word' }}>
-                  {key}: {project.commands?.[key] || '(not configured)'}
-                </Text>
-              ))}
-            </Stack>
-          </Box>
-        </Stack>
-      )}
-    </div>,
-  );
-
   if (currentView === 'dashboard') {
-    if (selectedProjectName) return renderProjectDetail(selectedProject);
     return renderDashboard();
   }
 
