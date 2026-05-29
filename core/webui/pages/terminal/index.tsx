@@ -200,8 +200,12 @@ const TerminalPage = () => {
     void fetch(`${apiBase}/api/terminal/tmux/kill`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ session: currentSession }),
     }).catch(() => {});
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: "terminal-session-killed", session: currentSession }, "*");
+    }
     handleClose();
   }, [sessionName, handleClose]);
 
@@ -538,8 +542,13 @@ const TerminalPage = () => {
   const canKillReadonlySession = Boolean(
     isReadonly &&
     sessionName &&
-    allowReadonlyKill &&
-    !isProtectedSession(sessionName),
+    allowReadonlyKill,
+  );
+
+  const canKillAttachedSession = Boolean(
+    sessionName &&
+    !isReadonly &&
+    (allowReadonlyKill || !isProtectedSession(sessionName)),
   );
 
   return (
@@ -573,7 +582,7 @@ const TerminalPage = () => {
                   History
                 </button>
               )}
-              {sessionName && !isReadonly && !isProtectedSession(sessionName) && (
+              {canKillAttachedSession && (
                 <button
                   type="button"
                   onClick={handleKillSession}

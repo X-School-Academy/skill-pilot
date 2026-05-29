@@ -117,6 +117,7 @@ FILE_MANAGER_WEB_SHELL_SESSION_NAME = "webui-live-sh-file-manager"
 NATIVE_TMUX_SESSION_PREFIX = "native-terminal-"
 WORKFLOW_EXECUTE_SESSION_NAME = "sp-workflow-execute"
 PROTECTED_TMUX_SESSION_PREFIXES = ("sp-engine-", "sp-webui-")
+FILE_MANAGER_TERMINAL_SESSION_PREFIX = "sp-webui-file-manager-"
 TMUX_SESSION_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 SAVED_TERMINAL_HISTORY_ID_RE = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{6}-[a-zA-Z0-9_-]+\.md$")
 _last_heartbeat_time: float = time.time()

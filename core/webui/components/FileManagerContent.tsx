@@ -420,6 +420,11 @@ export default function FileManagerContent({
     [currentDir, projectRootId, resolvedScopedRoot, supportsWorktrees],
   );
 
+  const terminalRootPath = useMemo(() => {
+    if (currentDir === '/') return projectRootId;
+    return rootForPath(currentDir)?.id ?? projectRootId;
+  }, [currentDir, projectRootId, rootForPath]);
+
   const displayNameForPath = useCallback((path: string): string => {
     const normalized = normalizePath(path);
     if (normalized === '/') return supportsWorktrees ? 'Workspace' : projectLabel;
@@ -563,7 +568,7 @@ export default function FileManagerContent({
     setTerminalPanelOpen(true);
     setTerminalPanelHeight((current) => (current < 24 ? 38 : current));
 
-    const targetPath = clampToScopedRoot(currentDir);
+    const targetPath = terminalRootPath;
     setIsStartingTerminal(true);
     try {
       if (terminalSessionName && terminalSessionPath !== targetPath) {
@@ -607,7 +612,7 @@ export default function FileManagerContent({
     } finally {
       setIsStartingTerminal(false);
     }
-  }, [clampToScopedRoot, currentDir, isStartingTerminal, resolvedScopedRoot, terminalSessionName, terminalSessionPath]);
+  }, [isStartingTerminal, resolvedScopedRoot, terminalRootPath, terminalSessionName, terminalSessionPath]);
 
   const toggleTerminalPanel = useCallback(() => {
     if (terminalPanelOpen) {
@@ -616,6 +621,20 @@ export default function FileManagerContent({
     }
     void openTerminalPanel();
   }, [openTerminalPanel, terminalPanelOpen]);
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (!event.data || event.data.type !== 'terminal-session-killed') return;
+      const killedSession = event.data.session;
+      if (killedSession && killedSession === terminalSessionName) {
+        setTerminalSessionName(null);
+        setTerminalSessionPath('/');
+        setTerminalPanelOpen(false);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [terminalSessionName]);
 
   const saveFileNow = useCallback(async (path: string, content: string) => {
     const normalizedPath = normalizePath(path);
@@ -2248,7 +2267,7 @@ export default function FileManagerContent({
                     {terminalSessionName ? (
                       <iframe
                         key={terminalSessionName}
-                        src={`/terminal?session=${encodeURIComponent(terminalSessionName)}&compact=1`}
+                        src={`/terminal?session=${encodeURIComponent(terminalSessionName)}&compact=1&allowKill=1`}
                         style={{ width: '100%', height: '100%', border: 'none' }}
                       />
                     ) : (

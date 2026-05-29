@@ -216,7 +216,7 @@ def terminal_tmux_kill(payload: Dict[str, Any]):
         session_name = _validate_tmux_session_name_any(raw_session)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
-    if _is_protected_tmux_session(session_name):
+    if _is_protected_tmux_session(session_name) and not session_name.startswith(FILE_MANAGER_TERMINAL_SESSION_PREFIX):
         return JSONResponse(status_code=403, content={"error": f"tmux session '{session_name}' is protected"})
     try:
         removed = _kill_tmux_session_with_history(session_name)
