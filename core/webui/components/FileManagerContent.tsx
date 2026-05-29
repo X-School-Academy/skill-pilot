@@ -624,11 +624,15 @@ export default function FileManagerContent({
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (!event.data || event.data.type !== 'terminal-session-killed') return;
-      const killedSession = event.data.session;
-      if (killedSession && killedSession === terminalSessionName) {
-        setTerminalSessionName(null);
-        setTerminalSessionPath('/');
+      if (!event.data) return;
+      if (event.data.type === 'terminal-session-killed') {
+        const killedSession = event.data.session;
+        if (killedSession && killedSession === terminalSessionName) {
+          setTerminalSessionName(null);
+          setTerminalSessionPath('/');
+          setTerminalPanelOpen(false);
+        }
+      } else if (event.data.type === 'terminal-detached') {
         setTerminalPanelOpen(false);
       }
     };

@@ -191,6 +191,9 @@ const TerminalPage = () => {
   const handleClose = useCallback(() => {
     setIsOpen(false);
     closeActiveSocket(sessionName);
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: "terminal-detached", session: sessionName }, "*");
+    }
   }, [closeActiveSocket, sessionName]);
 
   const handleKillSession = useCallback(() => {
