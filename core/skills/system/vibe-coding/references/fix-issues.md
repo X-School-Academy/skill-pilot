@@ -23,4 +23,4 @@ If `issues.md` does not exist, create it from the user's bug descriptions or iss
 
 ### Step 2: Report
 
-Confirm `issues.md` is ready. State that the next step is `refine` → `initialize` → `plan` → `implement` → `test` → `review` → `merge`.
+Confirm `issues.md` is ready. State that the next step is `refine` → `plan` → `implement` → `test` → `review` → `deploy`.

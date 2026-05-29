@@ -1216,9 +1216,14 @@ export default function VibeCodingPage() {
     if (currentDesignDocName === 'update.md') {
       return [
         {
-          label: 'Update Code',
+          label: 'Refine',
           defaultSkill: 'vibe-coding',
-          skillPromptSuffix: `to update the code based on the update request defined in ${currentInstructionPath}`,
+          skillPromptSuffix: `to refine the update request defined in ${currentInstructionPath}`,
+        },
+        {
+          label: 'Plan',
+          defaultSkill: 'vibe-coding',
+          skillPromptSuffix: `to make a development plan for update request ${currentInstructionPath}`,
         },
       ];
     }
@@ -1234,9 +1239,14 @@ export default function VibeCodingPage() {
     if (currentDesignDocName === 'issues.md') {
       return [
         {
-          label: 'Fix Issues',
+          label: 'Refine',
           defaultSkill: 'vibe-coding',
-          skillPromptSuffix: `to fix the issues defined in ${currentInstructionPath}`,
+          skillPromptSuffix: `to refine the issues defined in ${currentInstructionPath}`,
+        },
+        {
+          label: 'Plan',
+          defaultSkill: 'vibe-coding',
+          skillPromptSuffix: `to make a development plan for issues ${currentInstructionPath}`,
         },
       ];
     }

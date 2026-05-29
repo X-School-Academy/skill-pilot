@@ -23,4 +23,4 @@ If `update.md` does not exist, create it from the user's description of the requ
 
 ### Step 2: Report
 
-Confirm `update.md` is ready. State that the next step is `refine` → `initialize` → `plan` → `implement` → `test` → `review` → `merge`.
+Confirm `update.md` is ready. State that the next step is `refine` → `plan` → `implement` → `test` → `review` → `deploy`.

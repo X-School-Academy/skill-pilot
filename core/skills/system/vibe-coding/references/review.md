@@ -58,7 +58,7 @@ Update `implementation.md` to reflect any code changes made during the review.
 
 ### Step 5: Hand off
 
-Present the review summary to the user. Once the user has decided what to do with any remaining notes (or when running in the default flow, proceed directly to `deploy` or `merge`), the consuming stage is responsible for archiving `reviewed.md`:
+Present the review summary to the user. Once the user has decided what to do with any remaining notes (or when running in the default flow, proceed directly to `deploy`), the consuming stage is responsible for archiving `reviewed.md`:
 
 ```bash
 timestamp=$(date +"%Y-%m-%d-%H%M")

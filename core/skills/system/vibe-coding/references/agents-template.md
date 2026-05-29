@@ -5,8 +5,8 @@ This project is managed with the **vibe-coding** skill.
 ## How to Work on This Project
 
 Use the `vibe-coding` skill for all development work:
-- New changes: `update` → `refine` → `initialize` → `plan` → `implement` → `test` → `review` → `merge` → `deploy`
-- Bug fixes: `fix-issues` → `refine` → `initialize` → `plan` → `implement` → `test` → `review` → `merge` → `deploy`
+- New changes: `update` → `refine` → `plan` → `implement` → `test` → `review` → `deploy`
+- Bug fixes: `fix-issues` → `refine` → `plan` → `implement` → `test` → `review` → `deploy`
 
 ## Project Context
 
