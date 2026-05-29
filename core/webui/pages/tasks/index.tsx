@@ -313,7 +313,15 @@ export default function TasksPage() {
       setEditorContent(content);
       lastLoadedContentRef.current = content;
     } catch (err: any) {
-      console.error('Failed to fetch task content:', err);
+      const status = err?.response?.status;
+      if (status === 404) {
+        setEditorError('This file was removed from disk. Select another file from the sidebar.');
+        setEditorContent('');
+        lastLoadedContentRef.current = '';
+        await fetchTree();
+        return;
+      }
+      console.error('Failed to fetch task content:', err?.response?.data?.error || err?.message || err);
       setEditorError(err?.response?.data?.error || 'Failed to load file content.');
       setEditorContent('');
     } finally {
