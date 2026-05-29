@@ -2090,6 +2090,8 @@ def _task_type_from_path(path: str) -> str:
         return "video"
     if lower.endswith((".md", ".markdown")):
         return "markdown"
+    if lower.endswith((".html", ".htm")):
+        return "html"
     return "text"
 
 

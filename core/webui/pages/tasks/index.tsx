@@ -14,7 +14,6 @@ import {
   Group,
   Header,
   LoadingOverlay,
-  Menu,
   MediaQuery,
   Modal,
   NavLink,
@@ -49,7 +48,7 @@ import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
 const API_BASE_URL = apiUrl('/api');
 axios.defaults.withCredentials = true;
 
-type FileKind = 'markdown' | 'text' | 'image' | 'audio' | 'video' | 'pdf';
+type FileKind = 'markdown' | 'html' | 'text' | 'image' | 'audio' | 'video' | 'pdf';
 type ExecuteMode = 'skill' | 'workflow';
 
 interface FileItem {
@@ -74,6 +73,7 @@ interface TaskAction {
 const detectFileKind = (path: string): FileKind => {
   const lower = (path || '').toLowerCase();
   if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'markdown';
+  if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'html';
   if (lower.endsWith('.pdf')) return 'pdf';
   if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.webp') || lower.endsWith('.bmp') || lower.endsWith('.svg')) return 'image';
   if (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.ogg') || lower.endsWith('.m4a') || lower.endsWith('.aac') || lower.endsWith('.flac')) return 'audio';
@@ -177,6 +177,7 @@ export default function TasksPage() {
   const [notice, setNotice] = useState('');
   const [editorContent, setEditorContent] = useState('');
   const [markdownView, setMarkdownView] = useState<'editor' | 'preview'>('editor');
+  const [htmlPreviewVersion, setHtmlPreviewVersion] = useState(0);
   const [taskModalOpened, setTaskModalOpened] = useState(false);
   const [taskNameInput, setTaskNameInput] = useState('');
   const [taskRequirementsInput, setTaskRequirementsInput] = useState('');
@@ -212,6 +213,7 @@ export default function TasksPage() {
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const uploadTargetRef = useRef<string>('workspace/tasks');
   const autoSaveTimerRef = useRef<number | null>(null);
+  const pendingSelfSaveRef = useRef<Record<string, string>>({});
   const lastLoadedContentRef = useRef<string>('');
   const editorContentRef = useRef<string>('');
   useEffect(() => { editorContentRef.current = editorContent; }, [editorContent]);
@@ -383,6 +385,7 @@ export default function TasksPage() {
         path: currentTask,
         content: contentToSave,
       });
+      pendingSelfSaveRef.current[currentTask] = contentToSave;
       lastLoadedContentRef.current = contentToSave;
       setNotice('Saved automatically.');
       await fetchTree();
@@ -459,6 +462,7 @@ export default function TasksPage() {
   };
 
   const createFileInTask = async (taskFolderPath: string) => {
+    setFileContextMenu(null);
     const name = window.prompt('File name');
     if (!name) return;
     const parentPath = taskProjectPath(taskFolderPath);
@@ -481,6 +485,7 @@ export default function TasksPage() {
   };
 
   const createFolderInTask = async (taskFolderPath: string) => {
+    setFileContextMenu(null);
     const name = window.prompt('Folder name');
     if (!name) return;
     setEditorError('');
@@ -499,6 +504,7 @@ export default function TasksPage() {
   };
 
   const openUploadForTask = (taskFolderPath: string) => {
+    setFileContextMenu(null);
     uploadTargetRef.current = taskProjectPath(taskFolderPath);
     uploadInputRef.current?.click();
   };
@@ -550,6 +556,35 @@ export default function TasksPage() {
     }
   };
 
+  const deleteTaskFolder = async (item: FileItem) => {
+    const typed = window.prompt(`Deleting ${item.path} will remove this folder and every file inside it. Type delete to confirm.`);
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== 'delete') {
+      setEditorError("Type 'delete' to confirm removing the folder.");
+      return;
+    }
+
+    setEditorError('');
+    setNotice('');
+    setDeletingFile(true);
+    try {
+      await axios.post(apiUrl('/api/files/delete'), {
+        ids: [taskProjectPath(item.path)],
+      });
+      setFileContextMenu(null);
+      setExpandedFolders((prev) => prev.filter((path) => path !== item.path && !path.startsWith(`${item.path}/`)));
+      await fetchTree();
+      if (currentTask === item.path || currentTask.startsWith(`${item.path}/`)) {
+        router.push('/tasks', undefined, { shallow: true });
+      }
+    } catch (err: any) {
+      console.error('Failed to delete task folder:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to delete folder.');
+    } finally {
+      setDeletingFile(false);
+    }
+  };
+
   const deleteTaskFile = async (item: FileItem) => {
     let confirmText = '';
     if (item.name === 'requirements.md') {
@@ -589,6 +624,22 @@ export default function TasksPage() {
     } catch {
       setEditorError('Failed to copy path.');
     }
+  };
+
+  const openPromptRunSession = async () => {
+    if (!currentTask || currentFileName !== 'prompt.md') return;
+    const saved = await saveCurrentContent();
+    if (!saved) return;
+    setSessionPromptText(editorContentRef.current);
+    setNewSessionWorkflow(null);
+    setNewSessionNextNodeTrigger('auto_continue');
+    setNewSessionWorkflowResumeAvailable(false);
+    setNewSessionWorkflowResume(false);
+    setLiveSessionName(null);
+    setWorkflowSessionActive(false);
+    setWorkflowExecuteStatus(null);
+    setSessionPanelHeight(50);
+    setSessionPanelOpen(true);
   };
 
   const openExecuteModal = (action: TaskAction) => {
@@ -703,6 +754,11 @@ export default function TasksPage() {
     currentFilePath: currentTask ? `/workspace/tasks/${currentTask}` : null,
     onCurrentFileChange: () => {
       if (!currentTask) return;
+      const pendingSelfSave = pendingSelfSaveRef.current[currentTask];
+      if (pendingSelfSave !== undefined && pendingSelfSave === lastLoadedContentRef.current) {
+        delete pendingSelfSaveRef.current[currentTask];
+        return;
+      }
       if (editorContentRef.current === lastLoadedContentRef.current) {
         setNotice('File updated on disk.');
         void fetchContent(currentTask);
@@ -750,7 +806,7 @@ export default function TasksPage() {
     if (
       !currentTask ||
       loading ||
-      (selectedKind !== 'markdown' && selectedKind !== 'text') ||
+      (selectedKind !== 'markdown' && selectedKind !== 'html' && selectedKind !== 'text') ||
       editorContent === lastLoadedContentRef.current
     ) {
       return undefined;
@@ -808,32 +864,6 @@ export default function TasksPage() {
       const taskLabel = (
         <Group position="apart" spacing={6} noWrap style={{ width: '100%' }}>
           <Text size="sm" truncate>{item.name}</Text>
-          <Menu shadow="md" width={160} withinPortal position="bottom-end">
-            <Menu.Target>
-              <ActionIcon
-                size="sm"
-                variant="subtle"
-                aria-label={`Add to ${item.name}`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-              >
-                <IconPlus size="0.95rem" />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown onClick={(event) => event.stopPropagation()}>
-              <Menu.Item icon={<IconFilePlus size="0.95rem" />} onClick={() => void createFileInTask(item.path)}>
-                New File
-              </Menu.Item>
-              <Menu.Item icon={<IconFolderPlus size="0.95rem" />} onClick={() => void createFolderInTask(item.path)}>
-                New Folder
-              </Menu.Item>
-              <Menu.Item icon={<IconFileUpload size="0.95rem" />} onClick={() => openUploadForTask(item.path)}>
-                Upload File
-              </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
         </Group>
       );
       return (
@@ -843,6 +873,11 @@ export default function TasksPage() {
           icon={<IconFolder size="1.2rem" stroke={1.5} color={theme.colors.blue[6]} />}
           childrenOffset={16}
           opened={expandedFolders.includes(item.path)}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setFileContextMenu({ x: event.clientX, y: event.clientY, item });
+          }}
           onChange={(nextOpened) => {
             setExpandedFolders((prev) => (
               nextOpened
@@ -881,11 +916,6 @@ export default function TasksPage() {
     if (currentFileName !== 'requirements.md' || !currentInstructionPath) return [];
     return [
       {
-        label: 'Refine',
-        defaultSkill: 'refine-task-requirement',
-        skillPromptSuffix: `to refine the task requirement ${currentInstructionPath}`,
-      },
-      {
         label: 'Execute',
         defaultSkill: 'execute-task',
         skillPromptSuffix: `to execute the task defined at ${currentInstructionPath}`,
@@ -894,23 +924,32 @@ export default function TasksPage() {
   }, [currentFileName, currentInstructionPath]);
 
   const mediaUrl = currentTask ? `${API_BASE_URL}/tasks/file?path=${encodeURIComponent(currentTask)}` : '';
+  const htmlPreviewUrl = currentTask ? `${API_BASE_URL}/tasks/raw/${currentTask.split('/').map(encodeURIComponent).join('/')}?v=${htmlPreviewVersion}` : '';
   const isMarkdownEditor = selectedKind === 'markdown';
+  const isHtmlEditor = selectedKind === 'html';
   const isTextEditor = selectedKind === 'text';
+  const headerStatus = editorSaving ? 'Saving...' : notice;
+  const switchToPreview = async () => {
+    if (!isHtmlEditor) {
+      setMarkdownView('preview');
+      return;
+    }
+    const saved = await saveCurrentContent();
+    if (saved) {
+      setHtmlPreviewVersion(Date.now());
+      setMarkdownView('preview');
+    }
+  };
   const renderHeaderActions = () => {
     if (!currentTask) return null;
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flex: '0 0 auto', flexWrap: 'wrap' }}>
-        {(isMarkdownEditor || isTextEditor) && (
-          <Text size="xs" color={editorSaving ? 'dimmed' : 'green'}>
-            {editorSaving ? 'Saving...' : 'Auto-save on'}
-          </Text>
-        )}
-        {isMarkdownEditor && (
+        {(isMarkdownEditor || isHtmlEditor) && (
           <>
             <Button size="xs" variant={markdownView === 'editor' ? 'filled' : 'default'} onClick={() => setMarkdownView('editor')}>
               Edit
             </Button>
-            <Button size="xs" variant={markdownView === 'preview' ? 'filled' : 'default'} onClick={() => setMarkdownView('preview')}>
+            <Button size="xs" variant={markdownView === 'preview' ? 'filled' : 'default'} onClick={() => void switchToPreview()}>
               Preview
             </Button>
           </>
@@ -920,6 +959,11 @@ export default function TasksPage() {
             {action.label}
           </Button>
         ))}
+        {currentFileName === 'prompt.md' && (isMarkdownEditor || isHtmlEditor || isTextEditor) && (
+          <Button size="xs" variant="default" onClick={() => void openPromptRunSession()}>
+            Run
+          </Button>
+        )}
       </div>
     );
   };
@@ -965,7 +1009,7 @@ export default function TasksPage() {
                 Start your first task
               </Text>
               <Text size="sm" color="dimmed" mt={12} style={{ maxWidth: 420, margin: '12px auto 0 auto', lineHeight: 1.6 }}>
-                Create a task folder with a requirements file, then refine it or execute it with a skill or workflow.
+                Create a task folder with a requirements file, then execute it with a skill or workflow.
               </Text>
               <Group position="center" mt="xl">
                 <Button onClick={openTaskModal}>New Task</Button>
@@ -1064,6 +1108,42 @@ export default function TasksPage() {
                 </div>
               </div>
             </>
+          )}
+        </div>
+      );
+    }
+
+    if (isHtmlEditor) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          {markdownView === 'editor' ? (
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <Textarea
+                value={editorContent}
+                onChange={(e) => {
+                  setEditorContent(e.currentTarget.value);
+                  if (editorError) setEditorError('');
+                  if (notice) setNotice('');
+                }}
+                autosize={false}
+                minRows={1}
+                styles={{
+                  root: { height: '100%' },
+                  wrapper: { height: '100%' },
+                  input: PAGE_EDITOR_DARK_INPUT_STYLE,
+                }}
+              />
+            </div>
+          ) : (
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: '#ffffff' }}>
+              <iframe
+                key={`${currentTask}:${htmlPreviewVersion}`}
+                title={currentFileName}
+                src={htmlPreviewUrl}
+                sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
+                style={{ width: '100%', height: '100%', border: 'none', background: '#ffffff' }}
+              />
+            </div>
           )}
         </div>
       );
@@ -1176,63 +1256,169 @@ export default function TasksPage() {
           onPointerDown={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
-          <button
-            type="button"
-            onClick={() => { void deleteTaskFile(fileContextMenu.item); }}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 10px',
-              border: 'none',
-              borderRadius: 6,
-              background: 'transparent',
-              color: '#dc2626',
-              cursor: 'pointer',
-              textAlign: 'left',
-            }}
-          >
-            Delete
-          </button>
-          <button
-            type="button"
-            onClick={() => { void renameTaskPath(fileContextMenu.item); }}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 10px',
-              border: 'none',
-              borderRadius: 6,
-              background: 'transparent',
-              color: '#1f2937',
-              cursor: 'pointer',
-              textAlign: 'left',
-            }}
-          >
-            Rename
-          </button>
-          <button
-            type="button"
-            onClick={() => { void copyTaskPath(fileContextMenu.item); }}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 10px',
-              border: 'none',
-              borderRadius: 6,
-              background: 'transparent',
-              color: '#1f2937',
-              cursor: 'pointer',
-              textAlign: 'left',
-            }}
-          >
-            Copy Path
-          </button>
+          {fileContextMenu.item.type === 'dir' ? (
+            <>
+              <button
+                type="button"
+                onClick={() => { void createFileInTask(fileContextMenu.item.path); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <IconFilePlus size="0.95rem" />
+                Add File
+              </button>
+              <button
+                type="button"
+                onClick={() => { void createFolderInTask(fileContextMenu.item.path); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <IconFolderPlus size="0.95rem" />
+                Add Folder
+              </button>
+              <button
+                type="button"
+                onClick={() => openUploadForTask(fileContextMenu.item.path)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <IconFileUpload size="0.95rem" />
+                Upload File
+              </button>
+              <div style={{ height: 1, margin: '6px 4px', background: '#e5e7eb' }} />
+              <button
+                type="button"
+                onClick={() => { void renameTaskPath(fileContextMenu.item); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                onClick={() => { void deleteTaskFolder(fileContextMenu.item); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#dc2626',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                Delete
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => { void deleteTaskFile(fileContextMenu.item); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#dc2626',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                onClick={() => { void renameTaskPath(fileContextMenu.item); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                onClick={() => { void copyTaskPath(fileContextMenu.item); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                Copy Path
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -1413,15 +1599,25 @@ export default function TasksPage() {
           <div style={{ minHeight: 0, overflow: 'hidden' }}>
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#ffffff', borderLeft: '1px solid #d6def8' }}>
               <div style={PAGE_HEADER_BAR_STYLE}>
-                <div style={{ fontSize: 12, color: '#64748b', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 240px' }}>
-                  {currentTask || 'Select a task file from the sidebar'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, overflow: 'hidden', flex: '1 1 240px' }}>
+                  <span style={{ fontSize: 12, color: '#64748b', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {currentTask || 'Select a task file from the sidebar'}
+                  </span>
+                  {currentTask && headerStatus && (
+                    <Text
+                      size="xs"
+                      color={editorSaving ? 'dimmed' : 'green'}
+                      style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}
+                    >
+                      {headerStatus}
+                    </Text>
+                  )}
                 </div>
                 {renderHeaderActions()}
               </div>
-              {(editorError || notice) && (
+              {editorError && (
                 <div style={{ flexShrink: 0 }}>
                   {editorError && <Text color="red" size="sm" px={18} py={10}>{editorError}</Text>}
-                  {!editorError && notice && <Text color="green" size="sm" px={18} py={10}>{notice}</Text>}
                 </div>
               )}
               <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>

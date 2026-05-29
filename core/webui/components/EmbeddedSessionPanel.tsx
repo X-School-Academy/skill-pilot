@@ -1,7 +1,6 @@
 import React from 'react';
 import { ActionIcon, Button, Select, Text, Textarea } from '@mantine/core';
 import { IconX } from '@tabler/icons-react';
-import { useSessionRoots } from '../libs/session-roots';
 
 type NextNodeTrigger = 'auto_continue' | 'start_by_prompt';
 
@@ -63,15 +62,7 @@ export default function EmbeddedSessionPanel({
   workflowSessionActive,
   continuingWorkflow,
   onContinueWorkflow,
-  hideSessionRootSelect = false,
 }: EmbeddedSessionPanelProps) {
-  const {
-    sessionRootOptions,
-    hasSessionWorktrees,
-    selectedSessionPath,
-    setSelectedSessionPath,
-  } = useSessionRoots();
-
   return (
     <div
       style={{
@@ -148,17 +139,6 @@ export default function EmbeddedSessionPanel({
                 Workflow mode: {`core/workflows/${newSessionWorkflow}`}
               </Text>
             )}
-            {!hideSessionRootSelect && hasSessionWorktrees && (
-              <Select
-                label="Worktree"
-                placeholder="Choose where to start"
-                value={selectedSessionPath || null}
-                onChange={(value) => setSelectedSessionPath(value || '')}
-                data={sessionRootOptions.map((root) => ({ value: root.value, label: root.label }))}
-                size="xs"
-                mb={8}
-              />
-            )}
           </div>
           <div style={{ flex: 1, minHeight: 0, padding: '0 14px 14px 14px' }}>
             <Textarea
@@ -167,7 +147,7 @@ export default function EmbeddedSessionPanel({
               onChange={(event) => setSessionPromptText(event.currentTarget.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-                  onStart(hideSessionRootSelect ? undefined : (selectedSessionPath || undefined));
+                  onStart(undefined);
                 }
               }}
               autosize={false}
@@ -234,7 +214,7 @@ export default function EmbeddedSessionPanel({
               )}
             </div>
             <Button
-              onClick={() => onStart(hideSessionRootSelect ? undefined : (selectedSessionPath || undefined))}
+              onClick={() => onStart(undefined)}
               disabled={!sessionPromptText.trim() || startingSession}
               loading={startingSession}
             >

@@ -2071,6 +2071,19 @@ def task_file(path: str):
     return FileResponse(file_path, media_type=media_type, filename=file_path.name)
 
 
+@router.get("/api/tasks/raw/{path:path}")
+def task_raw_file(path: str):
+    try:
+        file_path = _safe_tasks_path(path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    media_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+    return FileResponse(file_path, media_type=media_type)
+
+
 @router.get("/api/media/tree")
 def media_tree():
     if not MEDIA_DIR.exists():
