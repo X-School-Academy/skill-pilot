@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
@@ -24,11 +24,15 @@ import {
   IconExternalLink,
   IconFile,
   IconFolderOpen,
+  IconGripHorizontal,
   IconPlayerPlay,
   IconRobot,
+  IconSchool,
   IconSparkles,
   IconStar,
   IconTrendingUp,
+  IconVideo,
+  IconX,
 } from '@tabler/icons-react';
 
 import { apiUrl } from '../../libs/api-base';
@@ -90,6 +94,7 @@ interface ShowcaseSample {
   tool_items?: ShowcaseResolvedItem[];
   files: string[];
   file_items?: ShowcaseResolvedItem[];
+  prompt_items?: ShowcaseResolvedItem[];
   links: ShowcaseLink[];
   related: ShowcaseRelated[];
   variants: ShowcaseVariant[];
@@ -97,6 +102,7 @@ interface ShowcaseSample {
   next_showcase: ShowcaseSequenceLink | null;
   goals: string | null;
   terms: string[];
+  term_urls?: Record<string, string>;
   popularity: number;
   level: number;
   rate: number;
@@ -151,11 +157,225 @@ function openFileManager(path: string) {
   window.open(`/file-manager?path=${encodeURIComponent(normalized)}`, '_blank', 'noopener,noreferrer');
 }
 
-function promptToMarkdown(prompt: string): string {
+function promptToMarkdown(prompt: string, resolvedPaths?: Map<string, string>): string {
   return prompt.replace(/@([A-Za-z0-9_./-]+)/g, (_match, pathValue) => {
-    const path = `/${String(pathValue).replace(/^\/+/, '')}`;
-    return `[@${pathValue}](/file-manager?path=${encodeURIComponent(path)})`;
+    const rawPath = String(pathValue);
+    const punctuation = rawPath.match(/[.,;:!?]+$/)?.[0] || '';
+    const displayPath = punctuation ? rawPath.slice(0, -punctuation.length) : rawPath;
+    const normalizedPath = displayPath.replace(/^\/+/, '');
+    const resolvedPath = resolvedPaths?.get(normalizedPath);
+    if (resolvedPaths && !resolvedPath) {
+      return `@${displayPath}${punctuation}`;
+    }
+    const path = `/${resolvedPath || normalizedPath}`;
+    return `[@${displayPath}](/file-manager?path=${encodeURIComponent(path)})${punctuation}`;
   });
+}
+
+function isMarkdownUrl(value: string | null | undefined): boolean {
+  const raw = String(value || '').trim();
+  if (!raw) return false;
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      return new URL(raw).pathname.toLowerCase().endsWith('.md');
+    } catch {
+      return false;
+    }
+  }
+  const [withoutHash] = raw.split('#');
+  const [withoutQuery] = withoutHash.split('?');
+  return withoutQuery.toLowerCase().endsWith('.md');
+}
+
+function toCourseParam(value: string): string {
+  const raw = value.trim();
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith('/api/files/download')) {
+    try {
+      const path = new URL(raw, window.location.origin).searchParams.get('path') || '';
+      return path.replace(/^\/+/, '').replace(/^workspace\/learning\//, '');
+    } catch {
+      return raw;
+    }
+  }
+  return raw.replace(/^\/+/, '').replace(/^workspace\/learning\//, '').replace(/^learning\//, '');
+}
+
+function coursePopupUrl(value: string): string {
+  return `/courses?course=${encodeURIComponent(toCourseParam(value))}&popup=1`;
+}
+
+function FloatingPopup({
+  title,
+  onClose,
+  children,
+  initialWidth = 880,
+  initialHeight = 560,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  initialWidth?: number;
+  initialHeight?: number;
+}) {
+  const popupRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; left: number; top: number } | null>(null);
+  const resizeRef = useRef<{ startX: number; startY: number; width: number; height: number } | null>(null);
+  const [position, setPosition] = useState({ left: 80, top: 80 });
+  const [size, setSize] = useState({ width: initialWidth, height: initialHeight });
+  const [isDraggingPopup, setIsDraggingPopup] = useState(false);
+  const [isResizingPopup, setIsResizingPopup] = useState(false);
+
+  const stopPointerAction = (event?: React.PointerEvent<HTMLElement>) => {
+    if (event?.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    dragRef.current = null;
+    resizeRef.current = null;
+    setIsDraggingPopup(false);
+    setIsResizingPopup(false);
+  };
+
+  const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!popupRef.current) return;
+    if (event.button !== 0) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const bounds = popupRef.current.getBoundingClientRect();
+    dragRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      left: bounds.left,
+      top: bounds.top,
+    };
+    setIsDraggingPopup(true);
+    event.preventDefault();
+  };
+
+  const dragPopup = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const width = popupRef.current?.offsetWidth || initialWidth;
+    const height = popupRef.current?.offsetHeight || initialHeight;
+    setPosition({
+      left: Math.max(8, Math.min(window.innerWidth - Math.min(120, width), drag.left + event.clientX - drag.startX)),
+      top: Math.max(8, Math.min(window.innerHeight - Math.min(80, height), drag.top + event.clientY - drag.startY)),
+    });
+  };
+
+  const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!popupRef.current) return;
+    if (event.button !== 0) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      width: popupRef.current.offsetWidth,
+      height: popupRef.current.offsetHeight,
+    };
+    setIsResizingPopup(true);
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const resizePopup = (event: React.PointerEvent<HTMLDivElement>) => {
+    const resizing = resizeRef.current;
+    if (!resizing) return;
+    setSize({
+      width: Math.max(360, Math.min(window.innerWidth - position.left - 8, resizing.width + event.clientX - resizing.startX)),
+      height: Math.max(260, Math.min(window.innerHeight - position.top - 8, resizing.height + event.clientY - resizing.startY)),
+    });
+  };
+
+  return (
+    <div
+      ref={popupRef}
+      style={{
+        position: 'fixed',
+        left: position.left,
+        top: position.top,
+        width: `min(${size.width}px, calc(100vw - 24px))`,
+        height: `min(${size.height}px, calc(100vh - 24px))`,
+        minWidth: 360,
+        minHeight: 260,
+        maxWidth: 'calc(100vw - 16px)',
+        maxHeight: 'calc(100vh - 16px)',
+        overflow: 'hidden',
+        zIndex: 1000,
+        background: '#ffffff',
+        border: '1px solid #cbd5e1',
+        borderRadius: 12,
+        boxShadow: '0 24px 70px rgba(15, 23, 42, 0.28)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <div
+        style={{
+          height: 42,
+          padding: '0 10px 0 12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          borderBottom: '1px solid #e2e8f0',
+          background: '#ffffff',
+          userSelect: 'none',
+          flexShrink: 0,
+        }}
+      >
+        <Group
+          spacing={8}
+          noWrap
+          onPointerDown={startDrag}
+          onPointerMove={dragPopup}
+          onPointerUp={stopPointerAction}
+          onPointerCancel={stopPointerAction}
+          style={{ minWidth: 0, flex: 1, alignSelf: 'stretch', cursor: isDraggingPopup ? 'grabbing' : 'grab' }}
+        >
+          <IconGripHorizontal size="1rem" color={isDraggingPopup ? '#2563eb' : '#64748b'} />
+          <Text size="sm" weight={700} lineClamp={1}>{title}</Text>
+        </Group>
+        <Button size="xs" variant="subtle" compact onClick={onClose} leftIcon={<IconX size="0.9rem" />}>
+          Close
+        </Button>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#ffffff' }}>
+        {children}
+      </div>
+      <div
+        onPointerDown={startResize}
+        onPointerMove={resizePopup}
+        onPointerUp={stopPointerAction}
+        onPointerCancel={stopPointerAction}
+        title="Resize"
+        style={{
+          position: 'absolute',
+          right: 0,
+          bottom: 0,
+          width: 28,
+          height: 28,
+          cursor: 'nwse-resize',
+          background: 'transparent',
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'flex-end',
+          padding: 5,
+          zIndex: 2,
+        }}
+      >
+        <div
+          aria-hidden="true"
+          style={{
+            width: 13,
+            height: 13,
+            background:
+              `repeating-linear-gradient(135deg, transparent 0 4px, ${isResizingPopup ? '#2563eb' : '#64748b'} 4px 6px, transparent 6px 8px)`,
+            opacity: 0.85,
+          }}
+        />
+      </div>
+    </div>
+  );
 }
 
 function toKebabCase(term: string): string {
@@ -293,6 +513,7 @@ export default function ExploreView() {
   const [canUseTemplate, setCanUseTemplate] = useState(true);
   const [copiedPromptId, setCopiedPromptId] = useState('');
   const [mediaModal, setMediaModal] = useState<{ url: string; title: string; type: 'image' | 'video' | 'audio' } | null>(null);
+  const [coursePopup, setCoursePopup] = useState<{ url: string; title: string } | null>(null);
   const [templateSample, setTemplateSample] = useState<ShowcaseSample | null>(null);
   const [templateOpened, setTemplateOpened] = useState(false);
   const [templateUseWorktree, setTemplateUseWorktree] = useState(false);
@@ -456,9 +677,20 @@ export default function ExploreView() {
     setMediaModal({ url, title, type });
   };
 
-  const openTermVideo = (term: string) => {
-    const termName = toKebabCase(term);
-    openMedia(`/showcases/videos/${termName}.mp4`, term, 'video');
+  const openCoursePopup = (url: string, title: string) => {
+    setCoursePopup({ url: coursePopupUrl(url), title });
+  };
+
+  const openShowcaseResource = (url: string, title: string) => {
+    if (isMarkdownUrl(url)) {
+      openCoursePopup(url, title);
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const openTermVideo = (term: string, url: string) => {
+    openMedia(url, term, 'video');
   };
 
   const maybeOpenTutorial = (sample: ShowcaseSample) => {
@@ -467,7 +699,26 @@ export default function ExploreView() {
       openMedia(sample.tutorial_url, `${sample.title} tutorial`, isAudioLike(sample.tutorial) ? 'audio' : 'video');
       return;
     }
-    window.open(sample.tutorial_url, '_blank', 'noopener,noreferrer');
+    openShowcaseResource(sample.tutorial_url, `${sample.title} tutorial`);
+  };
+
+  const linkKind = (url: string): 'video' | 'course' | 'external' => {
+    if (isVideoLike(url)) return 'video';
+    if (isMarkdownUrl(url)) return 'course';
+    return 'external';
+  };
+
+  const openLinkResource = (link: ShowcaseLink) => {
+    const kind = linkKind(link.url);
+    if (kind === 'video') {
+      openMedia(link.url, link.name, 'video');
+      return;
+    }
+    if (kind === 'course') {
+      openCoursePopup(link.url, link.name);
+      return;
+    }
+    window.open(link.url, '_blank', 'noopener,noreferrer');
   };
 
   const openTemplateSettings = (sample: ShowcaseSample, forceWorktree = false) => {
@@ -641,6 +892,13 @@ export default function ExploreView() {
   const promptBorder = isDark ? `1px solid ${theme.colors.dark[4]}` : '1px solid #e2e8f0';
   const promptText = isDark ? theme.colors.dark[0] : '#1e293b';
   const linkColor = isDark ? theme.colors.blue[4] : '#2563eb';
+  const promptResolvedPaths = useMemo(() => {
+    const paths = new Map<string, string>();
+    (selectedSample?.prompt_items || []).forEach((item) => {
+      if (item.path) paths.set(item.label.replace(/^\/+/, ''), item.path.replace(/^\/+/, ''));
+    });
+    return paths;
+  }, [selectedSample?.prompt_items]);
 
   const markdownLinkComponents = {
     a: ({ href, children }: { href?: string; children?: React.ReactNode }) => {
@@ -860,18 +1118,27 @@ export default function ExploreView() {
           <div style={{ padding: 18, borderRadius: 18, border: cardBorder, background: cardBg }}>
             <Text size="sm" weight={700} mb={10}>Links</Text>
             <Stack spacing={8}>
-              {sample.links.map((link) => (
-                <Button
-                  key={link.url}
-                  variant="subtle"
-                  compact
-                  leftIcon={<IconExternalLink size="0.9rem" />}
-                  styles={{ inner: { justifyContent: 'flex-start' } }}
-                  onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
-                >
-                  {link.name}
-                </Button>
-              ))}
+              {sample.links.map((link) => {
+                const kind = linkKind(link.url);
+                return (
+                  <Button
+                    key={link.url}
+                    variant="subtle"
+                    compact
+                    leftIcon={
+                      kind === 'video'
+                        ? <IconVideo size="0.9rem" />
+                        : kind === 'course'
+                          ? <IconSchool size="0.9rem" />
+                          : <IconExternalLink size="0.9rem" />
+                    }
+                    styles={{ inner: { justifyContent: 'flex-start' } }}
+                    onClick={() => openLinkResource(link)}
+                  >
+                    {link.name}
+                  </Button>
+                );
+              })}
             </Stack>
           </div>
         )}
@@ -882,7 +1149,7 @@ export default function ExploreView() {
   const renderSampleDetail = () => {
     if (!selectedSample) return null;
     const sample = selectedSample;
-    const linkedPrompt = promptToMarkdown(sample.prompt);
+    const linkedPrompt = promptToMarkdown(sample.prompt, promptResolvedPaths);
 
     return (
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(280px, 360px)', gap: 20, padding: 20 }}>
@@ -1023,7 +1290,7 @@ export default function ExploreView() {
                     if (sample.request_is_media) {
                       openMedia(sample.request_url as string, `${sample.title} request`, isAudioLike(sample.request) ? 'audio' : 'video');
                     } else {
-                      window.open(sample.request_url as string, '_blank', 'noopener,noreferrer');
+                      openShowcaseResource(sample.request_url as string, `${sample.title} requirement`);
                     }
                   }}
                 >
@@ -1142,16 +1409,20 @@ export default function ExploreView() {
                 <Divider my="md" />
                 <Text size="sm" weight={700} mb={10}>Terms</Text>
                 <Group spacing={8}>
-                  {sample.terms.map((term) => (
-                    <Badge
-                      key={term}
-                      variant="light"
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => openTermVideo(term)}
-                    >
-                      {term}
-                    </Badge>
-                  ))}
+                  {sample.terms.map((term) => {
+                    const termUrl = sample.term_urls?.[term] || '';
+                    return (
+                      <Badge
+                        key={term}
+                        variant="light"
+                        color={termUrl ? undefined : 'gray'}
+                        style={{ cursor: termUrl ? 'pointer' : 'default' }}
+                        onClick={termUrl ? () => openTermVideo(term, termUrl) : undefined}
+                      >
+                        {term}
+                      </Badge>
+                    );
+                  })}
                 </Group>
               </>
             )}
@@ -1620,17 +1891,36 @@ export default function ExploreView() {
         )}
       </Modal>
 
-      <Modal opened={Boolean(mediaModal)} onClose={() => setMediaModal(null)} size="xl" centered title={mediaModal?.title || 'Media'}>
-        {mediaModal?.type === 'image' && (
-          <img src={mediaModal.url} alt={mediaModal.title} style={{ width: '100%', borderRadius: 12 }} />
-        )}
-        {mediaModal?.type === 'video' && (
-          <video src={mediaModal.url} controls autoPlay style={{ width: '100%', borderRadius: 12 }} />
-        )}
-        {mediaModal?.type === 'audio' && (
-          <audio src={mediaModal.url} controls autoPlay style={{ width: '100%' }} />
-        )}
-      </Modal>
+      {mediaModal && (
+        <FloatingPopup
+          title={mediaModal.title || 'Media'}
+          onClose={() => setMediaModal(null)}
+          initialWidth={mediaModal.type === 'audio' ? 520 : 920}
+          initialHeight={mediaModal.type === 'audio' ? 180 : 560}
+        >
+          {mediaModal.type === 'image' && (
+            <img src={mediaModal.url} alt={mediaModal.title} style={{ width: '100%', display: 'block' }} />
+          )}
+          {mediaModal.type === 'video' && (
+            <video src={mediaModal.url} controls autoPlay style={{ width: '100%', height: '100%', display: 'block', background: '#000' }} />
+          )}
+          {mediaModal.type === 'audio' && (
+            <div style={{ padding: 18 }}>
+              <audio src={mediaModal.url} controls autoPlay style={{ width: '100%' }} />
+            </div>
+          )}
+        </FloatingPopup>
+      )}
+
+      {coursePopup && (
+        <FloatingPopup title={coursePopup.title || 'Markdown course'} onClose={() => setCoursePopup(null)} initialWidth={980} initialHeight={660}>
+          <iframe
+            src={coursePopup.url}
+            title={coursePopup.title || 'Markdown course'}
+            style={{ width: '100%', height: '100%', border: 0, display: 'block' }}
+          />
+        </FloatingPopup>
+      )}
 
     </>
   );

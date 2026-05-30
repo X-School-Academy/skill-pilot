@@ -2,6 +2,7 @@ from routes_shared import *
 
 import yaml
 import zipfile
+from typing import Set
 from fastapi import HTTPException
 import routes_config  # noqa: F401
 import routes_codeware  # noqa: F401
@@ -1046,6 +1047,55 @@ def _showcase_item(label: str, path: str | None = None) -> Dict[str, str | None]
     return {"label": label, "path": path}
 
 
+def _load_showcase_term_urls() -> Dict[str, str]:
+    terms_path = _REPO_ROOT / "core" / "engine" / "data" / "terms.json"
+    if not terms_path.is_file():
+        return {}
+    try:
+        raw = json.loads(terms_path.read_text(encoding="utf-8"))
+    except Exception:
+        logger.warning("failed to load showcase terms data from %s", terms_path)
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {str(key): str(value).strip() for key, value in raw.items() if str(value).strip()}
+
+
+def _showcase_term_slug(term: str) -> str:
+    return re.sub(r"\s+", "-", re.sub(r"[^a-z0-9\s-]", "", term.lower()).strip())
+
+
+def _extract_showcase_prompt_refs(prompt: str) -> List[str]:
+    refs: List[str] = []
+    seen: Set[str] = set()
+    for match in re.finditer(r"@([A-Za-z0-9_./-]+)", prompt or ""):
+        ref = match.group(1).strip().rstrip(".,;:!?").lstrip("/")
+        if ref and ref not in seen:
+            seen.add(ref)
+            refs.append(ref)
+    return refs
+
+
+def _resolve_showcase_prompt_ref(ref: str, sample_id: str, directory: str | None, files: List[str]) -> str | None:
+    direct = _resolve_showcase_text_path(ref)
+    if direct:
+        return direct
+
+    if not directory:
+        return None
+    normalized_ref = str(ref or "").strip().lstrip("/")
+    normalized_dir = directory.strip().strip("/")
+    if not normalized_ref.startswith(f"{normalized_dir}/"):
+        return None
+    file_ref = normalized_ref[len(normalized_dir) + 1:]
+    for file_path in files:
+        normalized_file = file_path.strip().lstrip("/")
+        if normalized_file == file_ref:
+            packaged = f"workspace/showcases/{sample_id}/{normalized_file}"
+            return _resolve_showcase_text_path(packaged)
+    return None
+
+
 def _normalize_showcase_related(item: Any) -> Dict[str, str]:
     if not isinstance(item, dict):
         raise ValueError("Showcase related entries must be objects")
@@ -1141,6 +1191,7 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
     subagent_items = [_showcase_item(subagent, _resolve_showcase_subagent_path(subagent)) for subagent in subagents]
     tool_items = [_showcase_item(tool, _resolve_showcase_text_path(tool)) for tool in tools]
     file_items = [_showcase_item(file_path, _resolve_showcase_text_path(file_path)) for file_path in files]
+    prompt_items = [_showcase_item(ref, _resolve_showcase_prompt_ref(ref, sample_id, directory, files)) for ref in _extract_showcase_prompt_refs(prompt)]
     extensions = _normalize_showcase_extensions(sample.get("extensions"))
     links = [_normalize_showcase_link(item) for item in (sample.get("links") or [])]
     related = [_normalize_showcase_related(item) for item in (sample.get("related") or [])]
@@ -1153,6 +1204,12 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
     terms: List[str] = []
     if isinstance(terms_raw, list):
         terms = [str(t).strip() for t in terms_raw if str(t).strip()]
+    term_url_lookup = _load_showcase_term_urls()
+    term_urls = {
+        term: term_url_lookup[_showcase_term_slug(term)]
+        for term in terms
+        if term_url_lookup.get(_showcase_term_slug(term))
+    }
 
     try:
         popularity = int(sample.get("popularity", 0))
@@ -1199,6 +1256,7 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
         "tool_items": tool_items,
         "files": files,
         "file_items": file_items,
+        "prompt_items": prompt_items,
         "links": links,
         "related": related,
         "variants": variants,
@@ -1206,6 +1264,7 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
         "next_showcase": next_showcase,
         "goals": goals,
         "terms": terms,
+        "term_urls": term_urls,
         "popularity": popularity,
         "level": level,
         "rate": rate,
@@ -2711,16 +2770,18 @@ def courses_latest():
 
 
 def _is_remote_course(course: str) -> bool:
-    return isinstance(course, str) and course.lower().startswith("https://")
+    return isinstance(course, str) and course.lower().startswith(("http://", "https://"))
 
 
 def _validate_remote_course_url(course: str) -> str:
     parsed = urllib.parse.urlparse(course)
-    if parsed.scheme != "https" or not parsed.hostname:
-        raise HTTPException(status_code=400, detail="Remote courses must use an https:// URL")
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise HTTPException(status_code=400, detail="Remote courses must use an http:// or https:// URL")
+    if not parsed.path.lower().endswith(".md"):
+        raise HTTPException(status_code=400, detail="Remote courses must point to a .md file")
 
     try:
-        addresses = socket.getaddrinfo(parsed.hostname, parsed.port or 443, type=socket.SOCK_STREAM)
+        addresses = socket.getaddrinfo(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
     except OSError as exc:
         raise HTTPException(status_code=400, detail=f"Unable to resolve remote course host: {exc}") from exc
 
@@ -2745,8 +2806,8 @@ def _fetch_remote_course_content(course: str) -> str:
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
             final_url = response.geturl()
-            if not final_url.lower().startswith("https://"):
-                raise HTTPException(status_code=400, detail="Remote course redirects must stay on https:// URLs")
+            if not final_url.lower().startswith(("http://", "https://")):
+                raise HTTPException(status_code=400, detail="Remote course redirects must stay on http:// or https:// URLs")
             _validate_remote_course_url(final_url)
             data = response.read(max_bytes + 1)
     except HTTPException:

@@ -112,6 +112,7 @@ If \`config/profile.json5\` exists, tailor the tutorial to the learner profile i
 export default function CoursesPage() {
   const router = useRouter();
   const { course } = router.query;
+  const isPopupMode = router.query.popup === '1';
   const theme = useMantineTheme();
   const isDevMode = process.env.NODE_ENV === 'development';
   const [opened, setOpened] = useState(false);
@@ -346,7 +347,9 @@ export default function CoursesPage() {
   };
 
   useEffect(() => {
-    fetchTree();
+    if (!isPopupMode) {
+      fetchTree();
+    }
     fetchLlmProviders();
     void axios.get(`${API_BASE_URL}/config/settings`).then((res) => {
       const security = res.data?.security?.newSession;
@@ -357,7 +360,7 @@ export default function CoursesPage() {
     }).catch((err) => {
       console.error('Failed to fetch learning session settings:', err);
     });
-  }, []);
+  }, [isPopupMode]);
 
   useEffect(() => {
     const handler = (event: any) => {
@@ -421,7 +424,7 @@ export default function CoursesPage() {
 
   const isGuidedChallenge = courseRenderMode === 'guided_challenge';
   const markdownContent = courseRenderMode === 'interactive_tutorial' ? stripFrontmatter(courseContent) : courseContent;
-  const isRemoteCourse = typeof course === 'string' && /^https:\/\//i.test(course);
+  const isRemoteCourse = typeof course === 'string' && /^https?:\/\//i.test(course);
 
   return (
     <AppShell
@@ -429,16 +432,16 @@ export default function CoursesPage() {
         main: {
           background: theme.colorScheme === 'dark' ? theme.colors.dark[8] : theme.colors.gray[0],
           padding: 0,
-          marginTop: 60,
+          marginTop: isPopupMode ? 0 : 60,
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          height: 'calc(100vh - 60px)',
+          height: isPopupMode ? '100vh' : 'calc(100vh - 60px)',
           minHeight: 0,
         },
       }}
       navbarOffsetBreakpoint="sm"
-      header={
+      header={isPopupMode ? undefined : (
         <Header
           height={{ base: 60 }}
           p="md"
@@ -497,7 +500,7 @@ export default function CoursesPage() {
             </Group>
           </div>
         </Header>
-      }
+      )}
     >
       <Head>
         <title>Skill Pilot - Learning</title>
@@ -523,6 +526,7 @@ export default function CoursesPage() {
       </Modal>
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {!isPopupMode && (
         <MediaQuery
           smallerThan="sm"
           styles={{
@@ -609,6 +613,7 @@ export default function CoursesPage() {
             />
           </aside>
         </MediaQuery>
+        )}
 
         <main
           ref={rightPaneRef}
