@@ -378,6 +378,47 @@ function FloatingPopup({
   );
 }
 
+function PopupVideoPlayer({ src, title }: { src: string; title: string }) {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+  }, [src]);
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 220, background: '#000' }}>
+      <video
+        src={src}
+        controls
+        autoPlay
+        aria-label={title}
+        onLoadStart={() => setLoading(true)}
+        onWaiting={() => setLoading(true)}
+        onCanPlay={() => setLoading(false)}
+        onPlaying={() => setLoading(false)}
+        onError={() => setLoading(false)}
+        style={{ width: '100%', height: '100%', display: 'block', background: '#000' }}
+      />
+      {loading && (
+        <div
+          aria-label="Loading video"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+            background: 'rgba(0, 0, 0, 0.18)',
+          }}
+        >
+          <Loader size="lg" color="blue" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function toKebabCase(term: string): string {
   return term
     .toLowerCase()
@@ -1902,7 +1943,7 @@ export default function ExploreView() {
             <img src={mediaModal.url} alt={mediaModal.title} style={{ width: '100%', display: 'block' }} />
           )}
           {mediaModal.type === 'video' && (
-            <video src={mediaModal.url} controls autoPlay style={{ width: '100%', height: '100%', display: 'block', background: '#000' }} />
+            <PopupVideoPlayer src={mediaModal.url} title={mediaModal.title} />
           )}
           {mediaModal.type === 'audio' && (
             <div style={{ padding: 18 }}>
