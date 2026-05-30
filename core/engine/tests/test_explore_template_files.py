@@ -46,6 +46,7 @@ def test_prepare_showcase_template_files_extracts_zip_to_directory(monkeypatch, 
         source_zip,
         {
             "showcase.yaml": "id: sample\n",
+            "files.yaml": "showcase_id: sample\n",
             "requirements.md": "# Requirements\n",
             "assets/note.txt": "asset\n",
         },
@@ -68,7 +69,8 @@ def test_prepare_showcase_template_files_extracts_zip_to_directory(monkeypatch, 
 
     target = tmp_path / "workspace" / "tasks" / "sample"
     assert result["status"] == "extracted_zip"
-    assert (target / "showcase.yaml").read_text(encoding="utf-8") == "id: sample\n"
+    assert not (target / "showcase.yaml").exists()
+    assert not (target / "files.yaml").exists()
     assert (target / "requirements.md").read_text(encoding="utf-8") == "# Requirements\n"
     assert (target / "assets" / "note.txt").read_text(encoding="utf-8") == "asset\n"
     assert list((tmp_path / ".skillpilot" / "temp" / "explore-templates").glob("*")) == []

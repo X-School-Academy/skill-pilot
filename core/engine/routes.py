@@ -1641,6 +1641,9 @@ def _download_template_zip(url: str, destination: Path, *, max_bytes: int = 500 
             handle.write(chunk)
 
 
+_SHOWCASE_TEMPLATE_INTERNAL_FILES = {"files.yaml", "showcase.yaml"}
+
+
 def _safe_extract_zip(zip_path: Path, extract_dir: Path) -> None:
     extract_root = extract_dir.resolve()
     with zipfile.ZipFile(zip_path) as archive:
@@ -1654,14 +1657,26 @@ def _safe_extract_zip(zip_path: Path, extract_dir: Path) -> None:
                 target.relative_to(extract_root)
             except ValueError as exc:
                 raise ValueError(f"Unsafe path in showcase zip: {name}") from exc
-        archive.extractall(extract_root)
+            if path.name in _SHOWCASE_TEMPLATE_INTERNAL_FILES:
+                continue
+            if target.exists():
+                continue
+            if info.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(info) as source, target.open("wb") as destination:
+                shutil.copyfileobj(source, destination)
 
 
 def _move_template_files(extract_dir: Path, target_dir: Path) -> None:
     target_dir.parent.mkdir(parents=True, exist_ok=True)
     target_dir.mkdir()
     for child in extract_dir.iterdir():
-        shutil.move(str(child), str(target_dir / child.name))
+        target = target_dir / child.name
+        if target.exists():
+            continue
+        shutil.move(str(child), str(target))
 
 
 def _prepare_showcase_template_files(sample: Dict[str, Any], target_root: Path) -> Dict[str, Any]:
