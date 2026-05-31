@@ -16,14 +16,6 @@ type TerminalTarget = {
   session: string | null;
 };
 
-const isProtectedSession = (session: string | null): boolean => {
-  if (!session) return false;
-  return (
-    session.startsWith("sp-engine-") ||
-    session.startsWith("sp-webui-")
-  );
-};
-
 const toWsBase = (base: string): string => {
   const normalized = base.replace("://localhost:", "://127.0.0.1:");
   if (normalized.startsWith("https://")) return `wss://${normalized.slice("https://".length)}`;
@@ -33,7 +25,6 @@ const toWsBase = (base: string): string => {
 
 type TerminalTargetExt = TerminalTarget & {
   readonly: boolean;
-  allowKill: boolean;
   compactChrome: boolean;
 };
 
@@ -90,10 +81,9 @@ const buildProjectLinkMatches = (line: string, projectRoot: string): ProjectLink
 };
 
 const readTargetFromUrl = (): TerminalTargetExt => {
-  if (typeof window === "undefined") return { command: "top", session: null, readonly: false, allowKill: false, compactChrome: false };
+  if (typeof window === "undefined") return { command: "top", session: null, readonly: false, compactChrome: false };
   const params = new URLSearchParams(window.location.search);
   const isReadonly = params.get("readonly") === "1";
-  const allowKill = params.get("allowKill") === "1";
   const compactChrome = params.get("compact") === "1";
   const session = params.get("session");
   if (session && session.trim()) {
@@ -102,7 +92,6 @@ const readTargetFromUrl = (): TerminalTargetExt => {
       command: `tmux attach -t ${session.trim()}${readonlyFlag}`,
       session: session.trim(),
       readonly: isReadonly,
-      allowKill,
       compactChrome,
     };
   }
@@ -111,7 +100,6 @@ const readTargetFromUrl = (): TerminalTargetExt => {
     command: value && value.trim() ? value.trim() : "top",
     session: null,
     readonly: false,
-    allowKill: false,
     compactChrome,
   };
 };
@@ -129,15 +117,17 @@ const TerminalPage = () => {
   const [command, setCommand] = useState("top");
   const [sessionName, setSessionName] = useState<string | null>(null);
   const [isReadonly, setIsReadonly] = useState(false);
-  const [allowReadonlyKill, setAllowReadonlyKill] = useState(false);
   const [compactChrome, setCompactChrome] = useState(false);
 
-  const closeActiveSocket = useCallback((sessionId?: string | null) => {
+  const closeActiveSocket = useCallback((sessionId?: string | null, options?: { detach?: boolean }) => {
     const ws = wsRef.current;
     if (ws) {
       if (ws.readyState === WebSocket.OPEN) {
         try {
-          ws.send(JSON.stringify({ type: "close", sessionId: sessionId || undefined }));
+          ws.send(JSON.stringify({
+            type: options?.detach ? "detach" : "close",
+            sessionId: sessionId || undefined,
+          }));
         } catch {
           // The browser may already be tearing down during beforeunload.
         }
@@ -189,28 +179,13 @@ const TerminalPage = () => {
   }, [fitAndReadSize]);
 
   const handleClose = useCallback(() => {
+    const detach = Boolean(sessionName && !isReadonly);
     setIsOpen(false);
-    closeActiveSocket(sessionName);
+    closeActiveSocket(sessionName, { detach });
     if (window.parent && window.parent !== window) {
       window.parent.postMessage({ type: "terminal-detached", session: sessionName }, "*");
     }
-  }, [closeActiveSocket, sessionName]);
-
-  const handleKillSession = useCallback(() => {
-    const currentSession = sessionName;
-    if (!currentSession) return;
-    const apiBase = getApiBase();
-    void fetch(`${apiBase}/api/terminal/tmux/kill`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ session: currentSession }),
-    }).catch(() => {});
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage({ type: "terminal-session-killed", session: currentSession }, "*");
-    }
-    handleClose();
-  }, [sessionName, handleClose]);
+  }, [closeActiveSocket, isReadonly, sessionName]);
 
   const handleBackground = useCallback(() => {
     if (typeof window === "undefined") return;
@@ -232,7 +207,6 @@ const TerminalPage = () => {
     setCommand(currentTarget.command);
     setSessionName(currentTarget.session);
     setIsReadonly(currentTarget.readonly);
-    setAllowReadonlyKill(currentTarget.allowKill);
     setCompactChrome(currentTarget.compactChrome);
 
     let disposed = false;
@@ -542,18 +516,6 @@ const TerminalPage = () => {
     );
   }
 
-  const canKillReadonlySession = Boolean(
-    isReadonly &&
-    sessionName &&
-    allowReadonlyKill,
-  );
-
-  const canKillAttachedSession = Boolean(
-    sessionName &&
-    !isReadonly &&
-    (allowReadonlyKill || !isProtectedSession(sessionName)),
-  );
-
   return (
     <>
       <Head>
@@ -585,15 +547,6 @@ const TerminalPage = () => {
                   History
                 </button>
               )}
-              {canKillAttachedSession && (
-                <button
-                  type="button"
-                  onClick={handleKillSession}
-                  className={`${compactChrome ? "rounded-sm px-2 py-0.5 text-[11px]" : "rounded px-3 py-1 text-xs"} bg-[#8b1d24] leading-none hover:opacity-90`}
-                >
-                  Kill Session
-                </button>
-              )}
               {sessionName && !isReadonly && (
                 <button
                   type="button"
@@ -610,15 +563,6 @@ const TerminalPage = () => {
               >
                 {sessionName && !isReadonly ? "Detach" : "Close"}
               </button>
-              {canKillReadonlySession && (
-                <button
-                  type="button"
-                  onClick={handleKillSession}
-                  className={`${compactChrome ? "rounded-sm px-2 py-0.5 text-[11px]" : "rounded px-3 py-1 text-xs"} bg-[#8b1d24] leading-none hover:opacity-90`}
-                >
-                  Kill Session
-                </button>
-              )}
             </div>
           </div>
           <div ref={terminalContainerRef} className="flex-1 min-h-0 overflow-hidden bg-[#0b0f19]" />

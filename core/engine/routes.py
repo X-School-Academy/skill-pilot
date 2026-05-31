@@ -485,6 +485,7 @@ async def terminal_ws(
         return
     user_input_event = asyncio.Event()
     output_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+    cleanup_tmux_on_close = True
 
     async def reader() -> None:
         try:
@@ -540,6 +541,7 @@ async def terminal_ws(
                 await flush()
 
     async def receiver() -> None:
+        nonlocal cleanup_tmux_on_close
         while True:
             message = await websocket.receive_text()
             try:
@@ -563,6 +565,9 @@ async def terminal_ws(
                     user_input_event.set()
                 continue
             if event_type == "close":
+                break
+            if event_type == "detach":
+                cleanup_tmux_on_close = False
                 break
 
     reader_task = asyncio.create_task(reader())
@@ -597,7 +602,7 @@ async def terminal_ws(
             await websocket.close()
         except RuntimeError:
             pass
-        if session_name and session_name.startswith(TMUX_SESSION_PREFIX):
+        if cleanup_tmux_on_close and session_name and session_name.startswith(TMUX_SESSION_PREFIX):
             try:
                 removed = _cleanup_webui_tmux_session(session_name)
                 if removed:
