@@ -23,7 +23,7 @@ These views live inside the main `/` WebUI shell and usually keep the left navig
 
 ### Processes
 
-- Route: `/?view=processes`
+- Route: `/processes`
 - Use for read-only inspection of tmux-backed sessions and opening terminal views for running sessions
 - Typical actions:
   - inspect system and user sessions
@@ -32,37 +32,37 @@ These views live inside the main `/` WebUI shell and usually keep the left navig
 
 ### Discord Bot
 
-- Route: `/?view=discord-bot`
+- Route: `/discord-bot`
 - Use for bot status, sessions, and token-related UI flows
 
 ### Skills
 
-- Route: `/?view=skills`
+- Route: `/skills`
 - Use for skill browsing and skill enable or disable actions
 
 ### MCP Servers
 
-- Route: `/?view=mcp-servers`
+- Route: `/mcp-servers`
 - Use for MCP server inspection, configuration edits, sync actions, and test runs
 
 ### Schedules
 
-- Route: `/?view=schedule`
+- Route: `/schedules`
 - Use for creating or editing schedules and verifying cron-like timing previews
 
 ### Extensions
 
-- Route: `/?view=extensions`
+- Route: `/extensions`
 - Use for extension browsing or configuration inspection
 
 ### AI & Security
 
-- Route: `/?view=ai-security`
+- Route: `/ai-security`
 - Use for security flags, new-session defaults, and env safe-guard related settings
 
 ### Profile
 
-- Route: `/?view=profile`
+- Route: `/profile`
 - Use for editing visible profile fields such as name, location, school, and timezone
 
 ## Browser Guidance

@@ -1729,10 +1729,7 @@ def _prepare_showcase_template_files(sample: Dict[str, Any], target_root: Path) 
 
 def _build_prompt_target_url(base_url: str, prompt: str, path: str | None = None) -> str:
     encoded_prompt = quote(prompt, safe="")
-    if path:
-        encoded_path = quote(path, safe="")
-        return f"{base_url}/?new_session=true&prompt={encoded_prompt}&path={encoded_path}"
-    return f"{base_url}/?new_session=true&prompt={encoded_prompt}"
+    return f"{base_url}/agent-sessions?new=true&prompt={encoded_prompt}"
 
 
 def _stop_managed_explore_dev_if_running() -> None:

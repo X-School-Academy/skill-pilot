@@ -8,21 +8,30 @@ import remarkGfm from "remark-gfm";
 import { serverSideTranslations } from "next-i18next/serverSideTranslations";
 import {
   Button,
+  Checkbox,
   Group,
   Header,
   Loader,
   ScrollArea,
+  Select,
   Stack,
   Text,
+  Textarea,
   Title,
   Tooltip,
   useMantineTheme,
 } from "@mantine/core";
-import { IconArrowLeft, IconFolder, IconPlayerPlay, IconRefresh } from "@tabler/icons-react";
+import { IconArrowLeft, IconFolder, IconPlayerPlay, IconPlus, IconRefresh } from "@tabler/icons-react";
 
 import { apiUrl } from "../../libs/api-base";
+import { resolveSelectedProvider, setSelectedProvider } from "../../libs/llm";
 
 const API_BASE_URL = apiUrl("/api");
+
+interface LlmProvider {
+  id: string;
+  name: string;
+}
 
 interface AgentSessionSummary {
   id: string;
@@ -89,11 +98,21 @@ const AgentSessionsPage = () => {
   const [loadingList, setLoadingList] = useState(true);
   const [loadingSession, setLoadingSession] = useState(false);
   const [resuming, setResuming] = useState(false);
+  const [creatingSession, setCreatingSession] = useState(false);
+  const [creatingTerminal, setCreatingTerminal] = useState(false);
+  const [newSessionMode, setNewSessionMode] = useState(false);
+  const [newSessionPrompt, setNewSessionPrompt] = useState("");
+  const [newSessionSandbox, setNewSessionSandbox] = useState(false);
+  const [newSessionAuto, setNewSessionAuto] = useState(false);
+  const [newSessionNetwork, setNewSessionNetwork] = useState(true);
+  const [newSessionNativeTerminal, setNewSessionNativeTerminal] = useState(false);
+  const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
+  const [llmProvider, setLlmProvider] = useState<string | null>(null);
   const [error, setError] = useState("");
   const initialLoadRef = useRef(false);
 
   const goHome = useCallback(() => {
-    void router.push("/?view=home");
+    void router.push("/");
   }, [router]);
 
   const selectedSummary = useMemo(() => {
@@ -112,6 +131,7 @@ const AgentSessionsPage = () => {
       const res = await axios.get(`${API_BASE_URL}/agent-sessions/session`, { params: { id } });
       setPayload(res.data);
       setSelectedId(id);
+      setNewSessionMode(false);
       setError("");
       void router.replace(`/agent-sessions?id=${encodeURIComponent(id)}`, undefined, { shallow: true });
     } catch (err: any) {
@@ -168,12 +188,113 @@ const AgentSessionsPage = () => {
     }
   }, [resuming, router, selectedSummary]);
 
+  const showNewSession = useCallback(() => {
+    setNewSessionMode(true);
+    setSelectedId("");
+    setPayload(null);
+    setError("");
+    void router.replace("/agent-sessions?new=true", undefined, { shallow: true });
+  }, [router]);
+
+  const startNewSession = useCallback(async () => {
+    const prompt = newSessionPrompt.trim();
+    if (!prompt || creatingSession) return;
+    const provider = llmProvider || "gemini";
+    setCreatingSession(true);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/terminal/tmux/create`, {
+        provider_id: provider,
+        prompt,
+        sandbox: newSessionSandbox,
+        auto: newSessionAuto,
+        network: newSessionNetwork,
+        native_terminal: newSessionNativeTerminal,
+      });
+      const sessionName: string | undefined = res.data?.session?.name;
+      if (sessionName) {
+        setNewSessionPrompt("");
+        if (newSessionNativeTerminal) {
+          const nativeOpened: boolean = Boolean(res.data?.native_terminal?.opened);
+          const nativeError = String(res.data?.native_terminal?.error || "");
+          if (!nativeOpened) {
+            const details = nativeError ? `: ${nativeError}` : "";
+            window.alert(`Native terminal did not open${details}. You can attach manually with tmux session ${sessionName}.`);
+          }
+        } else {
+          await router.push(`/terminals?session=${encodeURIComponent(sessionName)}`);
+        }
+      }
+      setError("");
+    } catch (err: any) {
+      const message = err?.response?.data?.error || "Failed to start agent session.";
+      setError(String(message));
+    } finally {
+      setCreatingSession(false);
+    }
+  }, [
+    creatingSession,
+    llmProvider,
+    newSessionAuto,
+    newSessionNativeTerminal,
+    newSessionNetwork,
+    newSessionPrompt,
+    newSessionSandbox,
+    router,
+  ]);
+
+  const handleNewSessionKeyDown = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      void startNewSession();
+    }
+  }, [startNewSession]);
+
+  const startShellTerminal = useCallback(async () => {
+    if (creatingTerminal) return;
+    setCreatingTerminal(true);
+    try {
+      const res = await axios.post(`${API_BASE_URL}/terminal/tmux/create`, {
+        session_type: "shell",
+      });
+      const sessionName: string | undefined = res.data?.session?.name;
+      if (sessionName) {
+        await router.push(`/terminals?session=${encodeURIComponent(sessionName)}`);
+      }
+      setError("");
+    } catch (err: any) {
+      const message = err?.response?.data?.error || "Failed to start terminal session.";
+      setError(String(message));
+    } finally {
+      setCreatingTerminal(false);
+    }
+  }, [creatingTerminal, router]);
+
   useEffect(() => {
     if (!router.isReady || initialLoadRef.current) return;
     initialLoadRef.current = true;
     const queryId = typeof router.query.id === "string" ? router.query.id : "";
-    void fetchSessions(queryId, true);
+    const queryPrompt = typeof router.query.prompt === "string" ? router.query.prompt : "";
+    if (queryPrompt) {
+      setNewSessionPrompt(queryPrompt);
+    }
+    if (!queryId || router.query.new === "true") {
+      setNewSessionMode(true);
+    }
+    void fetchSessions(queryId, Boolean(queryId) && router.query.new !== "true");
   }, [fetchSessions, router.isReady, router.query.id]);
+
+  useEffect(() => {
+    axios.get(`${API_BASE_URL}/llm/providers`)
+      .then((res) => {
+        const providers: LlmProvider[] = res.data.providers || [];
+        const serverDefault: string = res.data.default || "";
+        setLlmProviders(providers);
+        const defaultId = resolveSelectedProvider(providers, serverDefault, "gemini");
+        if (defaultId) setSelectedProvider(defaultId);
+        setLlmProvider(defaultId);
+      })
+      .catch(() => {});
+  }, []);
 
   const renderResumeButton = (position: "top" | "bottom") => {
     const command = selectedSummary ? buildResumeCommand(selectedSummary) : null;
@@ -204,9 +325,23 @@ const AgentSessionsPage = () => {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", height: "100%", justifyContent: "space-between" }}>
-          <a href="/?view=home" style={{ display: "flex", alignItems: "center" }}>
+          <a href="/" style={{ display: "flex", alignItems: "center" }}>
             <img className="h-10" src="/images/skill-pilot-2.png" alt="Logo" />
           </a>
+          <Group spacing="xs">
+            <Select
+              placeholder="LLM"
+              value={llmProvider}
+              onChange={(value) => {
+                if (!value) return;
+                setLlmProvider(value);
+                setSelectedProvider(value);
+              }}
+              data={llmProviders.map((provider) => ({ value: provider.id, label: provider.name }))}
+              size="xs"
+              style={{ width: 200 }}
+            />
+          </Group>
         </div>
       </Header>
       <main
@@ -244,6 +379,28 @@ const AgentSessionsPage = () => {
           </Group>
           <ScrollArea style={{ height: "calc(100vh - 105px)" }}>
             <Stack spacing={4} p="sm">
+              <button
+                type="button"
+                onClick={showNewSession}
+                style={{
+                  width: "100%",
+                  border: `1px solid ${newSessionMode ? theme.colors.blue[5] : theme.colors.gray[3]}`,
+                  borderRadius: 8,
+                  padding: "9px 10px",
+                  marginBottom: 8,
+                  background: newSessionMode
+                    ? (theme.colorScheme === "dark" ? theme.colors.dark[5] : theme.colors.blue[0])
+                    : (theme.colorScheme === "dark" ? theme.colors.dark[6] : theme.colors.gray[0]),
+                  color: "inherit",
+                  cursor: "pointer",
+                  textAlign: "left",
+                }}
+              >
+                <Group spacing={8} noWrap>
+                  <IconPlus size="1rem" color={theme.colors.blue[6]} />
+                  <Text size="sm" weight={700}>New Session</Text>
+                </Group>
+              </button>
               {loadingList && categories.length === 0 ? (
                 <Group py="md" position="center">
                   <Loader size="sm" />
@@ -306,20 +463,90 @@ const AgentSessionsPage = () => {
             style={{ borderBottom: `1px solid ${theme.colors.gray[3]}`, background: theme.colorScheme === "dark" ? theme.colors.dark[7] : "#fff" }}
           >
             <div style={{ minWidth: 0 }}>
-              <Title order={3} style={{ fontSize: 18 }}>Agent Session</Title>
-              {selectedSummary && (
+              <Title order={3} style={{ fontSize: 18 }}>{newSessionMode ? "New Session" : "Agent Session"}</Title>
+              {!newSessionMode && selectedSummary && (
                 <Text size="xs" color="dimmed" truncate>
                   {selectedSummary.agent || "agent"} · {selectedSummary.session_id || selectedSummary.id}
                 </Text>
               )}
             </div>
-            {renderResumeButton("top")}
+            {!newSessionMode && renderResumeButton("top")}
           </Group>
 
           {error && <Text size="sm" color="red" px="lg" pt="sm">{error}</Text>}
 
           <ScrollArea style={{ flex: 1 }}>
-            {loadingSession ? (
+            {newSessionMode ? (
+              <div style={{ width: "100%", maxWidth: 720, margin: "0 auto", padding: "48px 24px", position: "relative" }}>
+                <div style={{ position: "absolute", top: 20, right: 24 }}>
+                  <Button
+                    size="sm"
+                    variant="subtle"
+                    leftIcon={<IconPlus size="1rem" />}
+                    onClick={() => void startShellTerminal()}
+                    loading={creatingTerminal}
+                    aria-label="New terminal"
+                  >
+                    Terminal
+                  </Button>
+                </div>
+                <Stack spacing="md">
+                  <div>
+                    <Title order={2} style={{ fontSize: 28 }}>Skill Pilot</Title>
+                    <Text size="md" color="dimmed" italic>
+                      Do first. Learn as needed.
+                    </Text>
+                  </div>
+                  <Textarea
+                    placeholder="What would you like to do?"
+                    value={newSessionPrompt}
+                    onChange={(event) => setNewSessionPrompt(event.currentTarget.value)}
+                    onKeyDown={handleNewSessionKeyDown}
+                    autosize
+                    minRows={4}
+                    maxRows={12}
+                    size="md"
+                  />
+                  <Group position="center" spacing="md">
+                    <Checkbox
+                      label="Sandbox"
+                      checked={newSessionSandbox}
+                      onChange={(event) => setNewSessionSandbox(event.currentTarget.checked)}
+                      size="xs"
+                    />
+                    <Checkbox
+                      label="Auto Run (Yolo)"
+                      checked={newSessionAuto}
+                      onChange={(event) => setNewSessionAuto(event.currentTarget.checked)}
+                      size="xs"
+                    />
+                    <Checkbox
+                      label="Network Access"
+                      checked={newSessionNetwork}
+                      onChange={(event) => setNewSessionNetwork(event.currentTarget.checked)}
+                      size="xs"
+                    />
+                    <Checkbox
+                      label="Native Terminal"
+                      checked={newSessionNativeTerminal}
+                      onChange={(event) => setNewSessionNativeTerminal(event.currentTarget.checked)}
+                      size="xs"
+                    />
+                  </Group>
+                  <Group position="center">
+                    <Button
+                      size="md"
+                      leftIcon={<IconPlayerPlay size="1rem" />}
+                      disabled={!newSessionPrompt.trim() || creatingSession}
+                      loading={creatingSession}
+                      onClick={() => void startNewSession()}
+                    >
+                      Start
+                    </Button>
+                  </Group>
+                </Stack>
+              </div>
+            ) : loadingSession ? (
               <Group position="center" py="xl">
                 <Loader size="sm" />
                 <Text size="sm" color="dimmed">Loading session...</Text>

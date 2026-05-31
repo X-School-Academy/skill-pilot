@@ -42,7 +42,7 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
   const currentView = pathname === '/' && typeof query.view === 'string' ? query.view : null;
 
   const isActive = (item: MainNavItem): boolean => {
-    if (item.view) return currentView === item.view;
+    if (item.view && currentView) return currentView === item.view;
     if (item.href === '/terminal-histories' && pathname === '/terminal-history') return true;
     if (item.href.includes('?')) return false;
     return pathname === item.href;

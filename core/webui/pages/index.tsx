@@ -29,7 +29,6 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { apiUrl } from '../libs/api-base';
 import { resolveSelectedProvider, setSelectedProvider } from '../libs/llm';
-import { useSessionRoots } from '../libs/session-roots';
 import ExploreView from '../components/explore/ExploreView';
 import { MAIN_NAV_ITEMS, type MainNavItem } from '../libs/main-nav';
 
@@ -211,12 +210,16 @@ interface EnvSafeguardStatus {
   reason?: string;
 }
 
-export default function HomePage() {
+interface HomePageProps {
+  initialView?: ActiveView;
+}
+
+export default function HomePage({ initialView = 'explore' }: HomePageProps) {
   const router = useRouter();
   const theme = useMantineTheme();
   const isDevMode = process.env.NODE_ENV === 'development';
   const [opened, setOpened] = useState(false);
-  const [activeView, setActiveView] = useState<ActiveView>('explore');
+  const [activeView, setActiveView] = useState<ActiveView>(initialView);
   const [promptText, setPromptText] = useState('');
   const [newSessionWorkflow, setNewSessionWorkflow] = useState<string | null>(null);
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
@@ -299,6 +302,7 @@ export default function HomePage() {
   const [newSessionNextNodeTrigger, setNewSessionNextNodeTrigger] = useState<NextNodeTrigger>('auto_continue');
   const [newSessionWorkflowResumeAvailable, setNewSessionWorkflowResumeAvailable] = useState(false);
   const [newSessionWorkflowResume, setNewSessionWorkflowResume] = useState(false);
+  const [newSessionPathOverride, setNewSessionPathOverride] = useState('');
   const [continuingWorkflow, setContinuingWorkflow] = useState(false);
   const [defaultLlmProvider, setDefaultLlmProvider] = useState<string>('');
   const [defaultDoctorProvider, setDefaultDoctorProvider] = useState<string>('');
@@ -324,12 +328,6 @@ export default function HomePage() {
   const [profileError, setProfileError] = useState('');
   const [timezoneList, setTimezoneList] = useState<string[]>([]);
   const [timezoneFocused, setTimezoneFocused] = useState(false);
-  const {
-    sessionRootOptions,
-    hasSessionWorktrees,
-    selectedSessionPath,
-    setSelectedSessionPath,
-  } = useSessionRoots();
 
   const fetchLlmProviders = useCallback(async () => {
     try {
@@ -662,7 +660,7 @@ export default function HomePage() {
         ? {
             workflow: newSessionWorkflow,
             prompt: trimmedPrompt,
-            path: selectedSessionPath || undefined,
+            path: newSessionPathOverride || undefined,
             sandbox: newSessionSandbox,
             auto: newSessionAuto,
             network: newSessionNetwork,
@@ -673,7 +671,7 @@ export default function HomePage() {
         : {
             provider_id: provider,
             prompt: trimmedPrompt,
-            path: selectedSessionPath || undefined,
+            path: newSessionPathOverride || undefined,
             sandbox: newSessionSandbox,
             auto: newSessionAuto,
             network: newSessionNetwork,
@@ -694,7 +692,7 @@ export default function HomePage() {
         } else {
           setLiveSessionName(sessionName);
           setLiveSessionMode('llm');
-          setLiveSessionPath(String(res.data?.session?.cwd || selectedSessionPath || ''));
+          setLiveSessionPath(String(res.data?.session?.cwd || newSessionPathOverride || ''));
           setActiveView('live-terminal');
         }
         if (newSessionWorkflow) {
@@ -702,6 +700,7 @@ export default function HomePage() {
           setWorkflowExecuteStatus(null);
         }
         setPromptText('');
+        setNewSessionPathOverride('');
         setNewSessionWorkflow(null);
         setNewSessionNextNodeTrigger('auto_continue');
         setNewSessionWorkflowResumeAvailable(false);
@@ -718,11 +717,11 @@ export default function HomePage() {
     newSessionNativeTerminal,
     newSessionNetwork,
     newSessionNextNodeTrigger,
+    newSessionPathOverride,
     newSessionSandbox,
     newSessionWorkflow,
     newSessionWorkflowResume,
     promptText,
-    selectedSessionPath,
     startingSession,
   ]);
 
@@ -759,42 +758,50 @@ export default function HomePage() {
       new_session,
       new_terminal,
       view,
-      workflow,
-      next_node_trigger,
-      resume,
-      resume_available,
-      path,
-      ...restQuery
     } = router.query;
 
-    if (new_session === 'true' && prompt) {
-      setPromptText(prompt as string);
-      setSelectedSessionPath(typeof path === 'string' ? path : '');
-      setNewSessionWorkflow(typeof workflow === 'string' && workflow ? workflow : null);
-      setNewSessionNextNodeTrigger(next_node_trigger === 'start_by_prompt' ? 'start_by_prompt' : 'auto_continue');
-      setNewSessionWorkflowResumeAvailable(resume_available === 'true');
-      setNewSessionWorkflowResume(resume === 'true');
-      setActiveView('home');
-      void router.replace({ pathname: '/', query: restQuery }, undefined, { shallow: true });
+    if (new_session === 'true') {
+      void router.replace({
+        pathname: '/agent-sessions',
+        query: {
+          new: 'true',
+          ...(typeof prompt === 'string' && prompt ? { prompt } : {}),
+        },
+      });
       return;
     }
 
     if (new_terminal === 'true') {
-      const requestedPath = typeof path === 'string' ? path : '';
-      const launchKey = requestedPath || '__project_root__';
-      if (terminalQueryLaunchRef.current === launchKey) return;
-      terminalQueryLaunchRef.current = launchKey;
-      setActiveView('home');
-      void handleStartShellTerminal(requestedPath);
-      void router.replace({ pathname: '/', query: restQuery }, undefined, { shallow: true });
+      void router.replace({ pathname: '/agent-sessions', query: { new: 'true' } });
       return;
     }
 
     terminalQueryLaunchRef.current = '';
 
+    if (view === 'home') {
+      void router.replace('/agent-sessions');
+      return;
+    }
+
+    const dedicatedViewRoutes: Partial<Record<ActiveView, string>> = {
+      processes: '/processes',
+      'discord-bot': '/discord-bot',
+      skills: '/skills',
+      subagents: '/subagents',
+      'mcp-servers': '/mcp-servers',
+      schedule: '/schedules',
+      extensions: '/extensions',
+      'ai-security': '/ai-security',
+      profile: '/profile',
+    };
+    if (typeof view === 'string' && dedicatedViewRoutes[view as ActiveView]) {
+      void router.replace(dedicatedViewRoutes[view as ActiveView] as string);
+      return;
+    }
+
     if (typeof view === 'string' && view) {
       const validViews: ActiveView[] = [
-        'explore', 'home', 'live-terminal', 'learning', 'projects', 'research', 'tasks',
+        'explore', 'learning', 'projects', 'research', 'tasks',
         'development', 'processes', 'discord-bot', 'skills', 'subagents', 'mcp-servers',
         'schedule', 'extensions', 'ai-security', 'profile',
       ];
@@ -833,21 +840,6 @@ export default function HomePage() {
 
   type HomeNavItem = MainNavItem & { action?: () => void; disabled?: boolean; active?: boolean };
   const navItems: HomeNavItem[] = MAIN_NAV_ITEMS.map((item) => {
-    if (item.view === 'home') {
-      return {
-        ...item,
-        action: () => {
-          if (activeView === 'live-terminal') {
-            handleDetachSession();
-          } else if (activeView !== 'home') {
-            setActiveView('home');
-          }
-          void router.push('/?view=home');
-        },
-        disabled: activeView === 'home',
-      };
-    }
-
     return {
       ...item,
       action: () => { void router.push(item.href); },
@@ -931,18 +923,9 @@ export default function HomePage() {
         <div>
           <Text size={36} weight={800} mb={8}>Skill Pilot</Text>
           <Text size="lg" color="dimmed" italic>
-            Do anything first, then learn anything you want
+            Do first. Learn as needed.
           </Text>
         </div>
-        {hasSessionWorktrees && (
-          <Select
-            label="Worktree"
-            placeholder="Choose where to start"
-            value={selectedSessionPath || null}
-            onChange={(value) => setSelectedSessionPath(value || '')}
-            data={sessionRootOptions.map((root) => ({ value: root.value, label: root.label }))}
-          />
-        )}
         <Textarea
           placeholder="What would you like to do?"
           value={promptText}

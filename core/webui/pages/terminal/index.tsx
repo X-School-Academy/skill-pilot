@@ -214,7 +214,7 @@ const TerminalPage = () => {
 
   const handleBackground = useCallback(() => {
     if (typeof window === "undefined") return;
-    const processesUrl = "/?view=processes";
+    const processesUrl = "/processes";
     window.open(processesUrl, "_blank", "noopener,noreferrer");
   }, []);
 
