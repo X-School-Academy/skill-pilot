@@ -36,7 +36,7 @@ ls extensions/vscode/
 ## Related Features
 
 - `core/features/code-executor.md`
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 
 ## Update Notes
 

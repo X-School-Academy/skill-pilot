@@ -22,7 +22,7 @@ from json_repair import repair_json
 import traceback
 
 from image_service import generate_image_from_prompt
-from .llm_adapter import WorkflowLLMAdapter
+from .llm_adapter import AgentCliLLMAdapter
 
 
 @dataclass
@@ -136,7 +136,7 @@ class PredefinedCoursePlannerWorkflow:
 
     def _init_llm(self):
         """Initialize the LLM model based on environment configuration"""
-        return WorkflowLLMAdapter()
+        return AgentCliLLMAdapter()
 
     def _build_graph(self) -> StateGraph:
         """Build the workflow graph with nodes and edges"""

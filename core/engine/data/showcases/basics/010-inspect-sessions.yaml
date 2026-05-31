@@ -1,32 +1,14 @@
 id: basics-inspect-sessions
 title: Inspect Sessions
 description: List Skill Pilot processes and tmux sessions and flag any that are stale.
-thumbnail: null
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/742f2c6a-b8dd-4de4-9304-79e9f91f424a.png
 video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my session auditor.
+  Inspect current local sessions and background processes for this workspace.
 
-  Goal: Show me every Skill Pilot-related process and tmux session that is currently
-  running, and tell me which ones look stale or abandoned so I can clean them up safely.
-
-  Steps:
-  1. List tmux sessions (`tmux ls`) and any running Skill Pilot engine/webui processes.
-  2. For each session: name, attached/detached, idle time (last activity), and what
-     command/agent appears to be running inside it.
-  3. Mark a session as STALE if: detached AND idle > 2 hours AND no foreground command.
-  4. Mark a session as ACTIVE if it is attached or has recent output.
-  5. Do NOT kill anything. Just produce a report and suggest the kill command for each
-     stale session as a copy-pasteable line.
-
-  Output:
-  - Markdown table: Session | State | Idle | Suggested action
-  - Followed by a "Suggested cleanup commands" code block (commented so I have to
-    uncomment to run).
-
-  Safety: never run `kill -9` or `tmux kill-server` automatically. The user must
-  confirm each kill.
+  Show what is running, flag anything that looks stale or duplicated, and recommend what can be kept or stopped. Do not stop anything without my approval.
 workflow: null
 directory: null
 git_tag: null
@@ -35,6 +17,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links: []
 popularity: 72
 level: 1

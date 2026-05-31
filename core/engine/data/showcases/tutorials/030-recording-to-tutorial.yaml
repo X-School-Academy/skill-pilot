@@ -1,33 +1,14 @@
 id: tutorials-recording-to-tutorial
 title: Recording → Tutorial
 description: Convert a lecture audio or video recording into a structured tutorial with quizzes and self-check.
-thumbnail: null
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/f5f73b25-a87b-4998-a7e9-4b2edf451036.png
 video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are a tutorial author working from a recording.
+  Turn my lecture recording into an interactive tutorial.
 
-  Inputs from me:
-  - Path to an audio (.mp3/.wav/.m4a) or video (.mp4/.mov) file.
-  - Optional: language hint.
-
-  Goal: Produce `.skillpilot/temp/tutorial-<slug>.md` — a learner-friendly
-  tutorial derived from the recording, plus the raw transcript saved alongside.
-
-  Steps:
-  1. Transcribe the recording (use the available STT tool/skill). Save
-     `.skillpilot/temp/transcript-<slug>.md` with timestamps every ~30s.
-  2. Skim the transcript to identify topic, sub-topics, and key examples.
-  3. Build the tutorial with the same structure as Notes → Tutorial: per
-     sub-topic explanation, example, Ask-AI prompt, quiz with hidden answer.
-  4. At the end include a "Cite your source" block linking each sub-topic back
-     to its transcript timestamp.
-  5. If audio quality is poor in places, mark `[unclear]` rather than guessing.
-
-  Constraints:
-  - Do not embed audio chunks inside the markdown; reference timestamps only.
-  - If the recording is > 60 minutes, ask whether to chunk it before transcribing.
+  Ask me for the audio or video file, extract the main ideas, organize them into lessons, add quizzes and self-checks, and save the tutorial under `.skillpilot/temp/tutorial-from-recording/`.
 workflow: null
 directory: null
 git_tag: null
@@ -36,6 +17,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links: []
 popularity: 74
 level: 3

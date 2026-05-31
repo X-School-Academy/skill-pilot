@@ -299,11 +299,105 @@ ul {
   font-weight: 700;
 }
 
+.vibe-readme-markdown {
+  max-width: 1120px;
+  min-height: 220px;
+  margin: 0 auto;
+  padding: 30px 34px 42px;
+  border-radius: 8px;
+  border: 1px solid #dbe3ef;
+  background: #ffffff;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.07);
+}
+
+.vibe-readme-markdown h1 {
+  font-size: 2.35rem;
+  line-height: 1.12;
+  margin-bottom: 1.2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.vibe-readme-markdown h2 {
+  margin-top: 2rem;
+  font-size: 1.35rem;
+  border-bottom-color: #e2e8f0;
+}
+
+.vibe-readme-markdown h3 {
+  margin-top: 1.5rem;
+}
+
+.vibe-readme-markdown p,
+.vibe-readme-markdown li {
+  font-size: 15.5px;
+}
+
+.vibe-readme-markdown table {
+  display: block;
+  overflow-x: auto;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+}
+
+.vibe-readme-markdown table thead {
+  background: #f8fafc;
+}
+
+.vibe-readme-markdown pre {
+  border-radius: 8px;
+}
+
+.vibe-readme-markdown img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.vibe-readme-action-toolbar {
+  max-width: 100%;
+}
+
+.vibe-readme-action-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 768px) {
   .doc-markdown,
   .dev-swarm-root .doc-markdown {
     padding: 1.25rem 1rem 1.5rem;
     border-radius: 10px;
+  }
+
+  .vibe-readme-markdown {
+    padding: 22px 18px 30px;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+
+  .vibe-readme-markdown h1 {
+    font-size: 1.8rem;
+  }
+
+  .vibe-readme-action-toolbar {
+    width: 100%;
+    justify-content: stretch !important;
+  }
+
+  .vibe-readme-action-group {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .vibe-readme-action-group .mantine-Button-root {
+    flex: 1 1 112px;
   }
 }
 

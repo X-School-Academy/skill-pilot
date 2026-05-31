@@ -45,6 +45,24 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Skill verify executable path (default: <repo>/core/bin/skill-verify).",
     )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--all",
+        action="store_true",
+        help="Install all discovered skills, respecting disabled_skills config (default).",
+    )
+    mode.add_argument(
+        "--add",
+        metavar="SKILL",
+        default=None,
+        help="Install a single named skill, ignoring disabled_skills. Leaves other installed skills untouched.",
+    )
+    mode.add_argument(
+        "--skills",
+        metavar="LIST",
+        default=None,
+        help="Comma-separated list of skills to install exclusively, ignoring disabled_skills. Removes any installed skills not in the list.",
+    )
     return parser.parse_args()
 
 
@@ -139,6 +157,20 @@ def remove_excluded_symlinks(target_root: Path, source_roots: list[Path]) -> lis
     return removed
 
 
+def remove_symlinks_not_in(target_root: Path, keep: set[str]) -> list[str]:
+    removed: list[str] = []
+    if not target_root.exists():
+        return removed
+    for entry in sorted(target_root.iterdir()):
+        if not entry.is_symlink():
+            continue
+        if entry.name in keep:
+            continue
+        entry.unlink()
+        removed.append(entry.name)
+    return removed
+
+
 def remove_disabled_symlinks(target_root: Path, disabled_skills: set[str]) -> list[str]:
     removed: list[str] = []
     if not target_root.exists() or not disabled_skills:
@@ -187,15 +219,28 @@ def main() -> int:
         print(f"skill verifier not found: {verify_bin}", file=sys.stderr)
         return 2
 
+    requested_names: set[str] | None = None
+    if args.add is not None:
+        name = args.add.strip()
+        if not name:
+            print("--add requires a non-empty skill name", file=sys.stderr)
+            return 2
+        requested_names = {name}
+        mode = "add"
+    elif args.skills is not None:
+        requested_names = {n.strip() for n in args.skills.split(",") if n.strip()}
+        if not requested_names:
+            print("--skills requires a non-empty comma-separated list", file=sys.stderr)
+            return 2
+        mode = "skills"
+    else:
+        mode = "all"
+
     try:
-        disabled_skills = load_disabled_skills(disabled_config)
+        disabled_skills = load_disabled_skills(disabled_config) if mode == "all" else set()
     except SkillInstallError as exc:
         print(str(exc), file=sys.stderr)
         return 2
-
-    removed_broken = remove_broken_symlinks(target_root)
-    removed_excluded = remove_excluded_symlinks(target_root, source_roots)
-    removed_disabled = remove_disabled_symlinks(target_root, disabled_skills)
 
     all_skill_dirs: list[Path] = []
     for source_root in source_roots:
@@ -215,14 +260,37 @@ def main() -> int:
             print(line, file=sys.stderr)
         return 2
 
+    if requested_names is not None:
+        unknown = sorted(n for n in requested_names if n not in seen)
+        if unknown:
+            print(f"Unknown skill name(s): {', '.join(unknown)}", file=sys.stderr)
+            return 2
+
+    removed_broken: list[str] = []
+    removed_excluded: list[str] = []
+    removed_disabled: list[str] = []
+    removed_not_in_list: list[str] = []
+
+    if mode == "all":
+        removed_broken = remove_broken_symlinks(target_root)
+        removed_excluded = remove_excluded_symlinks(target_root, source_roots)
+        removed_disabled = remove_disabled_symlinks(target_root, disabled_skills)
+    elif mode == "skills":
+        removed_not_in_list = remove_symlinks_not_in(target_root, requested_names or set())
+
+    if mode == "all":
+        targets = all_skill_dirs
+    else:
+        targets = [seen[name] for name in sorted(requested_names or set())]
+
     installed: list[str] = []
     skipped_disabled: list[str] = []
     failed_verify: list[tuple[str, str]] = []
     failed_link: list[tuple[str, str]] = []
 
-    for skill_dir in all_skill_dirs:
+    for skill_dir in targets:
         skill_name = skill_dir.name
-        if skill_name in disabled_skills:
+        if mode == "all" and skill_name in disabled_skills:
             skipped_disabled.append(skill_name)
             continue
 
@@ -238,7 +306,7 @@ def main() -> int:
             failed_link.append((skill_name, str(exc)))
 
     sources_label = ", ".join(str(s) for s in source_roots)
-    print(f"Discovered {len(all_skill_dirs)} skill(s) under [{sources_label}].")
+    print(f"Mode: {mode}. Discovered {len(all_skill_dirs)} skill(s) under [{sources_label}].")
     print(f"Installed {len(installed)} skill(s) into {target_root}.")
     if removed_broken:
         print(f"Removed {len(removed_broken)} broken symlink(s): {', '.join(removed_broken)}")
@@ -246,6 +314,8 @@ def main() -> int:
         print(f"Removed {len(removed_excluded)} excluded symlink(s): {', '.join(removed_excluded)}")
     if removed_disabled:
         print(f"Removed {len(removed_disabled)} disabled symlink(s): {', '.join(removed_disabled)}")
+    if removed_not_in_list:
+        print(f"Removed {len(removed_not_in_list)} symlink(s) not in --skills list: {', '.join(removed_not_in_list)}")
     if skipped_disabled:
         print(f"Skipped {len(skipped_disabled)} disabled skill(s).")
     if failed_verify:

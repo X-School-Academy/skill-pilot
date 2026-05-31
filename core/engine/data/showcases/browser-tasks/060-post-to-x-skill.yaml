@@ -1,34 +1,14 @@
 id: browser-post-to-x-skill
 title: Post to X Skill
 description: Build a `post-to-x` skill that publishes a confirmed message to X via the browser.
-thumbnail: null
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/26dd03fa-fde8-46c6-8998-15a12c0c0497.png
 video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my skill author.
+  Create a reusable posting flow for X.
 
-  Goal: Create an agent skill `post-to-x` that takes a message string and publishes
-  it to my X (Twitter) account using browser automation. The skill MUST require
-  explicit human confirmation before clicking Post.
-
-  Steps:
-  1. Scaffold `dev-swarm/skills/post-to-x/` with metadata + prompt + helper.
-  2. Implement:
-     a. Open https://x.com via agent-browser (headed).
-     b. If not signed in, pause and let me sign in.
-     c. Open the compose box, type the message verbatim.
-     d. Show me a screenshot of the composed tweet.
-     e. Wait for my "yes, post it" confirmation in chat.
-     f. Click Post and capture a screenshot of the published tweet URL.
-  3. Add input validation:
-     - Reject messages > 280 chars unless I pass `allow_thread=true`.
-     - Refuse to post anything containing keys or tokens (regex check).
-  4. Test once with a benign message (e.g., "hello world from skill pilot").
-
-  Safety:
-  - Never auto-post. Confirmation is mandatory.
-  - Warn that anything posted is public and permanent in caches.
+  It should take a message I provide, show me the final text for confirmation, post only after I approve, and report the resulting post link or failure reason.
 workflow: null
 directory: null
 git_tag: null
@@ -37,6 +17,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links: []
 popularity: 58
 level: 3

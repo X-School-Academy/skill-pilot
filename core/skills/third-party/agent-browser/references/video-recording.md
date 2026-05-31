@@ -1,173 +1,97 @@
-# Video Recording
+# Recording Demos
 
-Capture browser automation as video for debugging, documentation, or verification.
+Produce polished, shareable demo videos with a visible cursor and minimal dead time.
 
-**Related**: [commands.md](commands.md) for full command reference, [SKILL.md](../SKILL.md) for quick start.
+## Key Principles
 
-## Contents
+- **Minimize dead time** — chain commands with `&&` so tool-call overhead stays out of the video.
+- **Visible cursor** — headless Playwright has no cursor; inject a fake one via DOM.
+- **One chain per page** — navigation destroys the DOM cursor, so re-inject after every page change.
+- **No `sleep` calls** — tool execution provides enough natural pacing.
 
-- [Basic Recording](#basic-recording)
-- [Recording Commands](#recording-commands)
-- [Use Cases](#use-cases)
-- [Best Practices](#best-practices)
-- [Output Format](#output-format)
-- [Limitations](#limitations)
+## Step-by-step
 
-## Basic Recording
+### 1. Set up the page BEFORE recording
+
+Navigate and snapshot **before** `record start`. Any time after recording starts is in the video.
 
 ```bash
-# Start recording
-core/bin/agent-browser record start ./demo.webm
-
-# Perform actions
-core/bin/agent-browser open https://example.com
+core/bin/agent-browser open <url>
+```
+```bash
 core/bin/agent-browser snapshot -i
-core/bin/agent-browser click @e1
-core/bin/agent-browser fill @e2 "test input"
-
-# Stop and save
-core/bin/agent-browser record stop
 ```
 
-## Recording Commands
+Review the snapshot to identify element refs (`@e1`, `@e2`, …) and plan the interaction sequence.
+
+### 2. Find element coordinates for mouse moves
+
+Use `getBoundingClientRect()` to get the (x, y) center of each target element. Do this **before** recording starts so the lookup doesn't appear in the video.
 
 ```bash
-# Start recording to file
-core/bin/agent-browser record start ./output.webm
-
-# Stop current recording
-core/bin/agent-browser record stop
-
-# Restart with new file (stops current + starts new)
-core/bin/agent-browser record restart ./take2.webm
+core/bin/agent-browser eval "(() => {
+  const el = document.querySelector('<selector>');
+  const r = el.getBoundingClientRect();
+  return JSON.stringify({ x: Math.round(r.x + r.width/2), y: Math.round(r.y + r.height/2) });
+})()"
 ```
 
-## Use Cases
+### 3. Inject a visible cursor
 
-### Debugging Failed Automation
+Headless Playwright doesn't render a cursor. Inject a DOM element that tracks mouse events:
 
 ```bash
-#!/bin/bash
-# Record automation for debugging
-
-core/bin/agent-browser record start ./debug-$(date +%Y%m%d-%H%M%S).webm
-
-# Run your automation
-core/bin/agent-browser open https://app.example.com
-core/bin/agent-browser snapshot -i
-core/bin/agent-browser click @e1 || {
-    echo "Click failed - check recording"
-    core/bin/agent-browser record stop
-    exit 1
-}
-
-core/bin/agent-browser record stop
+core/bin/agent-browser eval "(() => {
+  const c = document.createElement('div');
+  c.style.cssText = 'width:20px;height:20px;border-radius:50%;background:rgba(255,50,50,0.85);position:fixed;top:290px;left:390px;z-index:999999;pointer-events:none;transition:top 0.15s ease,left 0.15s ease;box-shadow:0 0 8px rgba(255,50,50,0.5);';
+  document.body.appendChild(c);
+  document.addEventListener('mousemove', e => {
+    c.style.top=(e.clientY-10)+'px';
+    c.style.left=(e.clientX-10)+'px';
+  });
+})(); 'ok'"
 ```
 
-### Documentation Generation
+**Re-inject after every navigation** — page transitions destroy the DOM element.
+
+### 4. Chain all commands with `&&`
+
+Every separate tool call adds seconds of dead time. Chain everything into as few bash calls as possible:
 
 ```bash
-#!/bin/bash
-# Record workflow for documentation
-
-core/bin/agent-browser record start ./docs/how-to-login.webm
-
-core/bin/agent-browser open https://app.example.com/login
-core/bin/agent-browser wait 1000  # Pause for visibility
-
-core/bin/agent-browser snapshot -i
-core/bin/agent-browser fill @e1 "demo@example.com"
-core/bin/agent-browser wait 500
-
-core/bin/agent-browser fill @e2 "password"
-core/bin/agent-browser wait 500
-
-core/bin/agent-browser click @e3
-core/bin/agent-browser wait --load networkidle
-core/bin/agent-browser wait 1000  # Show result
-
-core/bin/agent-browser record stop
+core/bin/agent-browser record start ./demo.webm && core/bin/agent-browser eval "<inject cursor>" && core/bin/agent-browser mouse move 400 300 && core/bin/agent-browser click @e1 && core/bin/agent-browser mouse move 600 200 && core/bin/agent-browser click @e2 && core/bin/agent-browser record stop
 ```
 
-### CI/CD Test Evidence
+### 5. Use `mouse move` before every click
+
+Move the cursor to the target first so viewers can follow the action:
 
 ```bash
-#!/bin/bash
-# Record E2E test runs for CI artifacts
-
-TEST_NAME="${1:-e2e-test}"
-RECORDING_DIR="./test-recordings"
-mkdir -p "$RECORDING_DIR"
-
-core/bin/agent-browser record start "$RECORDING_DIR/$TEST_NAME-$(date +%s).webm"
-
-# Run test
-if run_e2e_test; then
-    echo "Test passed"
-else
-    echo "Test failed - recording saved"
-fi
-
-core/bin/agent-browser record stop
+core/bin/agent-browser mouse move 623 52 && core/bin/agent-browser click @e5
 ```
 
-## Best Practices
+### 6. No `sleep` calls
 
-### 1. Add Pauses for Clarity
+Every millisecond counts. Tool execution itself provides enough natural pacing. Drop all `sleep` and `wait` calls entirely.
+
+### 7. One chain per page
+
+Since the cursor needs re-injection after navigation, structure as one `&&` chain per page. The recording persists across chains — only stop it in the final chain.
 
 ```bash
-# Slow down for human viewing
-core/bin/agent-browser click @e1
-core/bin/agent-browser wait 500  # Let viewer see result
+# Chain 1: first page → click navigates away
+core/bin/agent-browser record start ./demo.webm && core/bin/agent-browser eval "<inject cursor>" && core/bin/agent-browser mouse move 400 300 && core/bin/agent-browser click @e5
 ```
-
-### 2. Use Descriptive Filenames
 
 ```bash
-# Include context in filename
-core/bin/agent-browser record start ./recordings/login-flow-2024-01-15.webm
-core/bin/agent-browser record start ./recordings/checkout-test-run-42.webm
+# Chain 2: new page → finish
+core/bin/agent-browser eval "<inject cursor>" && core/bin/agent-browser mouse move 200 150 && core/bin/agent-browser click @e3 && core/bin/agent-browser scroll down 200 && core/bin/agent-browser record stop
 ```
 
-### 3. Handle Recording in Error Cases
+## Common Mistakes
 
-```bash
-#!/bin/bash
-set -e
-
-cleanup() {
-    core/bin/agent-browser record stop 2>/dev/null || true
-    core/bin/agent-browser close 2>/dev/null || true
-}
-trap cleanup EXIT
-
-core/bin/agent-browser record start ./automation.webm
-# ... automation steps ...
-```
-
-### 4. Combine with Screenshots
-
-```bash
-# Record video AND capture key frames
-core/bin/agent-browser record start ./flow.webm
-
-core/bin/agent-browser open https://example.com
-core/bin/agent-browser screenshot ./screenshots/step1-homepage.png
-
-core/bin/agent-browser click @e1
-core/bin/agent-browser screenshot ./screenshots/step2-after-click.png
-
-core/bin/agent-browser record stop
-```
-
-## Output Format
-
-- Default format: WebM (VP8/VP9 codec)
-- Compatible with all modern browsers and video players
-- Compressed but high quality
-
-## Limitations
-
-- Recording adds slight overhead to automation
-- Large recordings can consume significant disk space
-- Some headless environments may have codec limitations
+- **Recording before the page is ready** — navigate and snapshot first.
+- **Forgetting to re-inject the cursor after navigation** — the DOM element is gone.
+- **Separate tool calls instead of `&&` chains** — adds seconds of blank screen.
+- **Using `sleep` or `wait`** — unnecessary; tool execution provides natural pacing.
+- **Clicking without `mouse move`** — clicks without visible cursor movement look jarring.

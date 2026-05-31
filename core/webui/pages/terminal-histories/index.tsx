@@ -87,7 +87,7 @@ const TerminalHistoriesPage = () => {
   }, [fetchHistories]);
 
   return (
-    <MainLayout title="Session Histories">
+    <MainLayout title="Session History">
       <main
         style={{
           minHeight: "calc(100vh - 60px)",
@@ -98,7 +98,7 @@ const TerminalHistoriesPage = () => {
         <Stack spacing="md" maw={980} mx="auto">
           <Group position="apart" align="center">
             <div>
-              <Title order={2}>Session Histories</Title>
+              <Title order={2}>Session History</Title>
               <Text size="sm" color="dimmed">Saved terminal histories from closed project sessions.</Text>
             </div>
             <Button

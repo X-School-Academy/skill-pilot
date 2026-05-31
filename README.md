@@ -167,6 +167,10 @@ Commands:
 
 Options:
   --dev   Use development mode for `start`, or stop only development sessions for `stop`.
+  --next-server
+          Production mode only. Serve the WebUI via `next start` (the Next.js production server)
+          instead of the static HTML export served by the engine. For testing the production
+          build of the WebUI. Cannot be combined with `--dev`.
 
 Defaults:
   - Command defaults to: start
@@ -197,6 +201,21 @@ Stop commands:
 
 - `./skillpilot.sh stop` stops production only
 - `./skillpilot.sh stop --dev` stops development only
+
+#### Testing the production WebUI build (`--next-server`)
+
+For testing the production build of the Next.js WebUI without the static export
+served by the engine, start prod mode with `--next-server`:
+
+```bash
+./skillpilot.sh start --next-server
+./skillpilot.sh stop  --next-server
+```
+
+This runs the engine on its prod port and additionally starts `next start`
+(Next.js production server) on the WebUI port (default `127.0.0.1:3003`). Use
+this only for local testing of the production WebUI bundle — normal usage
+should stick with `./skillpilot.sh` (static export served by the engine).
 
 ### Using AI Agent CLIs Directly
 
@@ -322,8 +341,8 @@ skill-pilot/
 |---------|--------|
 | Agent Skill Creator — create, update, and find reusable agent skills via `agent-skill` | ⭐⭐⭐⭐⭐ |
 | Import Agent Skill by Git URL — install third-party skills directly from any git repository | ⭐⭐⭐⭐⭐ |
-| Subagent via `use-skill-agent` — run skill-based tasks as a subagent through the core engine | ⭐⭐⭐⭐⭐ |
-| New Agent Session via `new-skill-session` — spawn a new agent process in an existing terminal session | ⭐⭐⭐⭐⭐ |
+| Background Prompt via `background-prompt` — execute a task in the background with a prompt through the core engine | ⭐⭐⭐⭐⭐ |
+| New Agent Session via `new-agent-session` — spawn a new agent process in an existing terminal session | ⭐⭐⭐⭐⭐ |
 | Agent Skill Schedule Support — cron-based skill scheduling via APScheduler | ⭐⭐⭐⭐⭐ |
 | MCP to Skills — expose MCP server tools as callable agent skills | ⭐⭐⭐⭐⭐ |
 | Multiple Agent Workflow Diagram Creator & Executor — visual multi-agent workflow editor and runner | ⭐⭐⭐⭐ |
@@ -341,7 +360,7 @@ skill-pilot/
 
 | Feature | Status |
 |---------|--------|
-| KeySafe Guard via `key-safe` skill — protect and manage LLM API keys in `config/.env` | ⭐⭐⭐⭐⭐ |
+| KeySafe Guard via `keys-safe-guard` skill — protect and manage LLM API keys in `config/.env` | ⭐⭐⭐⭐⭐ |
 
 ### AI Media Generation (via `media` MCP)
 

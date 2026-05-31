@@ -4,9 +4,6 @@ import { useRouter } from 'next/router';
 import { GetStaticPropsContext } from 'next';
 import axios from 'axios';
 import YAML from 'js-yaml';
-import JSON5 from 'json5';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import {
   AppShell,
@@ -40,13 +37,14 @@ import {
   IconPlus,
 } from '@tabler/icons-react';
 import CourseBlock from '../../components/blocks/course.block';
+import MarkdownRenderer from '../../components/blocks/MarkdownRenderer';
 import EmbeddedSessionPanel from '../../components/EmbeddedSessionPanel';
 import { apiUrl } from '../../libs/api-base';
 import { dispatchLlmStatus, getClientId, resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
 
 const API_BASE_URL = apiUrl('/api');
 
-type FileType = 'markdown' | 'yaml' | 'json' | 'json5' | 'other';
+type CourseRenderMode = 'guided_challenge' | 'interactive_tutorial' | 'markdown';
 
 interface FileItem {
   name: string;
@@ -61,55 +59,35 @@ interface LlmProvider {
   name: string;
 }
 
-const detectFileType = (path: string): FileType => {
-  const lower = (path || '').toLowerCase();
-  if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'markdown';
-  if (lower.endsWith('.yaml') || lower.endsWith('.yml')) return 'yaml';
-  if (lower.endsWith('.json5')) return 'json5';
-  if (lower.endsWith('.json')) return 'json';
-  return 'other';
-};
-
-const hasFirstYamlFence = (content: string): boolean => {
-  const firstFence = content.match(/^\s*```\s*([a-zA-Z0-9_-]+)[^\n]*\n/);
-  return (firstFence?.[1] || '').toLowerCase() === 'yaml';
-};
-
-const normalizeEditorContent = (content: string, type: FileType): string => {
+const parseYaml = (source: string): Record<string, any> => {
   try {
-    if (type === 'json') {
-      return `${JSON.stringify(JSON.parse(content), null, 2)}\n`;
-    }
-    if (type === 'json5') {
-      return `${JSON.stringify(JSON5.parse(content), null, 2)}\n`;
-    }
-    if (type === 'yaml') {
-      const parsed = YAML.load(content);
-      return `${YAML.dump(parsed, { lineWidth: -1 })}`;
-    }
+    const parsed = YAML.load(source);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, any> : {};
   } catch {
-    return content;
+    return {};
   }
-  return content;
 };
 
-const validateEditorContent = (content: string, type: FileType): string | null => {
-  try {
-    if (type === 'json') {
-      JSON.parse(content);
-    } else if (type === 'json5') {
-      JSON5.parse(content);
-    } else if (type === 'yaml') {
-      YAML.load(content);
-    }
-    return null;
-  } catch (err: any) {
-    const details = typeof err?.message === 'string' ? err.message : 'Invalid format';
-    if (type === 'json') return `Invalid JSON: ${details}`;
-    if (type === 'json5') return `Invalid JSON5: ${details}`;
-    if (type === 'yaml') return `Invalid YAML: ${details}`;
-    return details;
+const detectCourseRenderMode = (content: string): CourseRenderMode => {
+  const normalized = content.replace(/^\uFEFF/, '');
+  const yamlFence = normalized.match(/^```\s*yaml[^\n]*\n([\s\S]*?)\n```/i);
+  if (yamlFence) {
+    const meta = parseYaml(yamlFence[1]);
+    if (meta.type === 'guided_challenge') return 'guided_challenge';
   }
+
+  const frontmatter = normalized.match(/^---\s*\n([\s\S]*?)\n---(?:\s*\n|$)/);
+  if (frontmatter) {
+    const meta = parseYaml(frontmatter[1]);
+    if (meta.type === 'interactive_tutorial') return 'interactive_tutorial';
+  }
+
+  return 'markdown';
+};
+
+const stripFrontmatter = (content: string): string => {
+  const normalized = content.replace(/^\uFEFF/, '');
+  return normalized.replace(/^---\s*\n[\s\S]*?\n---(?:\s*\n|$)/, '');
 };
 
 const PAGE_HEADER_BAR_STYLE: React.CSSProperties = {
@@ -124,18 +102,6 @@ const PAGE_HEADER_BAR_STYLE: React.CSSProperties = {
   flexWrap: 'wrap',
 };
 
-const PAGE_ACTION_BAR_STYLE: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'flex-end',
-  gap: 8,
-  padding: '8px 16px',
-  borderTop: '1px solid #eef2f7',
-  background: '#f8fafc',
-  flexShrink: 0,
-};
-
-const PAGE_EDITOR_FONT = "'JetBrains Mono', 'Fira Mono', 'Cascadia Code', 'Consolas', monospace";
-
 const buildCourseCreatorPrompt = (requestText: string): string => `Use agent skill \`course-creator\` to create a tutorial based on the learner requirement below.
 
 Learner requirement:
@@ -146,6 +112,7 @@ If \`config/profile.json5\` exists, tailor the tutorial to the learner profile i
 export default function CoursesPage() {
   const router = useRouter();
   const { course } = router.query;
+  const isPopupMode = router.query.popup === '1';
   const theme = useMantineTheme();
   const isDevMode = process.env.NODE_ENV === 'development';
   const [opened, setOpened] = useState(false);
@@ -158,13 +125,8 @@ export default function CoursesPage() {
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
   const [llmProvider, setLlmProvider] = useState<string | null>(null);
   const [llmRunning, setLlmRunning] = useState(false);
-  const [editorSaving, setEditorSaving] = useState(false);
-  const [editorError, setEditorError] = useState<string>('');
 
-  const [editorContent, setEditorContent] = useState('');
-  const [fileType, setFileType] = useState<FileType>('other');
-  const [isCourseTutorial, setIsCourseTutorial] = useState(false);
-  const [markdownView, setMarkdownView] = useState<'editor' | 'preview'>('editor');
+  const [courseRenderMode, setCourseRenderMode] = useState<CourseRenderMode>('markdown');
 
   const [addSessionOpened, setAddSessionOpened] = useState(false);
   const [sessionPrompt, setSessionPrompt] = useState('');
@@ -251,34 +213,27 @@ export default function CoursesPage() {
   const fetchContent = async (path: string) => {
     setLoading(true);
     setCourseContent('');
-    setEditorContent('');
     setAssignment({ title: '', last_step: 0 });
-    setIsCourseTutorial(false);
+    setCourseRenderMode('markdown');
     try {
       const res = await axios.get(`${API_BASE_URL}/courses/content`, {
         params: { course: path },
       });
       const raw = String(res.data.content || '');
       const meta = res.data.meta || {};
-      const nextType = detectFileType(path);
-      const tutorial = nextType === 'markdown' && hasFirstYamlFence(raw);
+      const renderMode = detectCourseRenderMode(raw);
 
-      setFileType(nextType);
       setCourseContent(raw);
-      setEditorContent(normalizeEditorContent(raw, nextType));
-      setIsCourseTutorial(tutorial);
+      setCourseRenderMode(renderMode);
       setAssignment({
         title: meta.title || path.split('/').pop() || path,
         last_step: Number(meta.last_step ?? 0),
       });
-      setMarkdownView('editor');
     } catch (err) {
       console.error('Failed to fetch content:', err);
       setCourseContent('# Error\nFailed to load course content.');
-      setEditorContent('# Error\nFailed to load course content.');
       setAssignment(null);
-      setFileType('markdown');
-      setIsCourseTutorial(false);
+      setCourseRenderMode('markdown');
     } finally {
       setLoading(false);
     }
@@ -291,7 +246,6 @@ export default function CoursesPage() {
         router.push(`/courses?course=${res.data.path}`, undefined, { shallow: true });
       } else {
         setCourseContent('# No learning sessions available\nPlease create a learning file first.');
-        setEditorContent('# No learning sessions available\nPlease create a learning file first.');
         setAssignment(null);
       }
     } catch (err) {
@@ -300,7 +254,7 @@ export default function CoursesPage() {
   };
 
   const resetCourseProgress = async () => {
-    if (!course || !isCourseTutorial) return;
+    if (!course || courseRenderMode !== 'guided_challenge') return;
     setLoading(true);
     try {
       await axios.post(`${API_BASE_URL}/courses/reset`, { course });
@@ -309,29 +263,6 @@ export default function CoursesPage() {
       console.error('Failed to reset progress:', err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const saveContent = async () => {
-    if (!course) return;
-    const validationError = validateEditorContent(editorContent, fileType);
-    if (validationError) {
-      setEditorError(validationError);
-      return;
-    }
-    setEditorError('');
-    setEditorSaving(true);
-    try {
-      await axios.post(`${API_BASE_URL}/courses/save`, {
-        course,
-        content: editorContent,
-      });
-      await fetchContent(course as string);
-      await fetchTree();
-    } catch (err) {
-      console.error('Failed to save content:', err);
-    } finally {
-      setEditorSaving(false);
     }
   };
 
@@ -416,7 +347,9 @@ export default function CoursesPage() {
   };
 
   useEffect(() => {
-    fetchTree();
+    if (!isPopupMode) {
+      fetchTree();
+    }
     fetchLlmProviders();
     void axios.get(`${API_BASE_URL}/config/settings`).then((res) => {
       const security = res.data?.security?.newSession;
@@ -427,7 +360,7 @@ export default function CoursesPage() {
     }).catch((err) => {
       console.error('Failed to fetch learning session settings:', err);
     });
-  }, []);
+  }, [isPopupMode]);
 
   useEffect(() => {
     const handler = (event: any) => {
@@ -489,24 +422,9 @@ export default function CoursesPage() {
     });
   };
 
-  const isMarkdownEditor = fileType === 'markdown' && !isCourseTutorial;
-  const isDataEditor = fileType === 'yaml' || fileType === 'json' || fileType === 'json5';
-  const renderHeaderActions = () => {
-    if (!courseContent) return null;
-    if (isMarkdownEditor) {
-      return (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flex: '0 0 auto', flexWrap: 'wrap' }}>
-          <Button size="xs" variant={markdownView === 'editor' ? 'filled' : 'default'} onClick={() => setMarkdownView('editor')}>
-            Edit
-          </Button>
-          <Button size="xs" variant={markdownView === 'preview' ? 'filled' : 'default'} onClick={() => setMarkdownView('preview')}>
-            Preview
-          </Button>
-        </div>
-      );
-    }
-    return null;
-  };
+  const isGuidedChallenge = courseRenderMode === 'guided_challenge';
+  const markdownContent = courseRenderMode === 'interactive_tutorial' ? stripFrontmatter(courseContent) : courseContent;
+  const isRemoteCourse = typeof course === 'string' && /^https?:\/\//i.test(course);
 
   return (
     <AppShell
@@ -514,16 +432,16 @@ export default function CoursesPage() {
         main: {
           background: theme.colorScheme === 'dark' ? theme.colors.dark[8] : theme.colors.gray[0],
           padding: 0,
-          marginTop: 60,
+          marginTop: isPopupMode ? 0 : 60,
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          height: 'calc(100vh - 60px)',
+          height: isPopupMode ? '100vh' : 'calc(100vh - 60px)',
           minHeight: 0,
         },
       }}
       navbarOffsetBreakpoint="sm"
-      header={
+      header={isPopupMode ? undefined : (
         <Header
           height={{ base: 60 }}
           p="md"
@@ -569,7 +487,7 @@ export default function CoursesPage() {
                   {llmRunning ? <IconPlayerStop size="1rem" /> : <IconBolt size="1rem" />}
                 </ActionIcon>
               </Tooltip>
-              {isCourseTutorial && (
+              {isGuidedChallenge && !isRemoteCourse && (
                 <Button
                   variant="subtle"
                   leftIcon={<IconRefresh size="1rem" />}
@@ -582,7 +500,7 @@ export default function CoursesPage() {
             </Group>
           </div>
         </Header>
-      }
+      )}
     >
       <Head>
         <title>Skill Pilot - Learning</title>
@@ -608,6 +526,7 @@ export default function CoursesPage() {
       </Modal>
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {!isPopupMode && (
         <MediaQuery
           smallerThan="sm"
           styles={{
@@ -694,6 +613,7 @@ export default function CoursesPage() {
             />
           </aside>
         </MediaQuery>
+        )}
 
         <main
           ref={rightPaneRef}
@@ -711,103 +631,25 @@ export default function CoursesPage() {
                 <div style={{ fontSize: 12, color: '#64748b', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 240px' }}>
                   {typeof course === 'string' && course ? course : 'Select a learning file from the sidebar'}
                 </div>
-                {renderHeaderActions()}
               </div>
-              {editorError && (
-                <div style={{ flexShrink: 0 }}>
-                  <Text color="red" size="sm" px={18} py={10}>{editorError}</Text>
-                </div>
-              )}
               <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
                 <LoadingOverlay visible={loading} overlayBlur={2} />
                 {courseContent ? (
                   <>
-                    {isCourseTutorial ? (
+                    {isGuidedChallenge ? (
                       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '16px' }}>
                         <CourseBlock
                           key={`${course as string}-${assignment?.last_step ?? 0}`}
                           courseData={courseContent}
-                          token={course as string}
+                          token={isRemoteCourse ? undefined : course as string}
                           lastStep={assignment?.last_step ?? 0}
                           fromIndex={0}
                         />
                       </div>
-                    ) : isMarkdownEditor ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                        {markdownView === 'editor' ? (
-                          <>
-                            <div style={{ flex: 1, minHeight: 0 }}>
-                              <Textarea
-                                value={editorContent}
-                                onChange={(e) => {
-                                  setEditorContent(e.currentTarget.value);
-                                  if (editorError) setEditorError('');
-                                }}
-                                autosize={false}
-                                minRows={1}
-                                styles={{
-                                  root: { height: '100%' },
-                                  wrapper: { height: '100%' },
-                                  input: {
-                                    height: '100%',
-                                    minHeight: '100%',
-                                    resize: 'none',
-                                    border: 'none',
-                                    borderRadius: 0,
-                                    padding: '18px 20px',
-                                    fontFamily: PAGE_EDITOR_FONT,
-                                    fontSize: 13,
-                                    lineHeight: 1.65,
-                                  },
-                                }}
-                              />
-                            </div>
-                            <div style={PAGE_ACTION_BAR_STYLE}>
-                              <Button size="xs" onClick={() => void saveContent()} loading={editorSaving}>
-                                Save
-                              </Button>
-                            </div>
-                          </>
-                        ) : (
-                          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '20px 24px' }}>
-                            <div className="doc-markdown" style={{ maxWidth: 'none', margin: 0, minHeight: '100%', padding: '18px 20px 24px', border: 'none', borderRadius: 0, boxShadow: 'none', background: '#ffffff' }}>
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
-                            </div>
-                          </div>
-                        )}
-                      </div>
                     ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                        <div style={{ flex: 1, minHeight: 0 }}>
-                          <Textarea
-                            value={editorContent}
-                            onChange={(e) => {
-                              setEditorContent(e.currentTarget.value);
-                              if (editorError) setEditorError('');
-                            }}
-                            autosize={false}
-                            minRows={1}
-                            styles={{
-                              root: { height: '100%' },
-                              wrapper: { height: '100%' },
-                              input: {
-                                height: '100%',
-                                minHeight: '100%',
-                                resize: 'none',
-                                border: 'none',
-                                borderRadius: 0,
-                                padding: '18px 20px',
-                                fontFamily: PAGE_EDITOR_FONT,
-                                fontSize: 13,
-                                lineHeight: 1.65,
-                              },
-                            }}
-                          />
-                        </div>
-                        <div style={PAGE_ACTION_BAR_STYLE}>
-                          <Button size="xs" onClick={() => void saveContent()} loading={editorSaving}>
-                            Save
-                          </Button>
+                      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '20px 24px' }}>
+                        <div className="doc-markdown" style={{ maxWidth: 'none', margin: 0, minHeight: '100%', padding: '18px 20px 24px', border: 'none', borderRadius: 0, boxShadow: 'none', background: '#ffffff' }}>
+                          <MarkdownRenderer markdown={markdownContent} />
                         </div>
                       </div>
                     )}

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+if [[ $# -lt 1 ]]; then
+  echo "usage: core/bin/hook <hook_name> [args...]" >&2
+  exit 2
+fi
+
+HOOK_NAME="$1"
+shift
+
+HOOK_SCRIPT="${REPO_ROOT}/core/engine/hooks/${HOOK_NAME}.py"
+if [[ ! -f "${HOOK_SCRIPT}" ]]; then
+  echo "core/bin/hook: unknown hook '${HOOK_NAME}' (no ${HOOK_SCRIPT})" >&2
+  exit 2
+fi
+
+cd "$REPO_ROOT"
+exec uv --directory core/engine run python "${HOOK_SCRIPT}" "$@"

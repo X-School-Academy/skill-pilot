@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import sys
+from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -80,6 +81,26 @@ def test_file_realtime_scope_matching():
     assert path_within_scope("/config/.env", "/config", None) is True
     assert path_within_scope("/config/.env", "/docs", None) is False
     assert path_within_scope("/config/.env", "/docs", "/config/.env") is True
+
+
+def test_terminal_env_accepts_key_value_array():
+    assert routes._coerce_terminal_env([["SHOWCASE_SESSION_DIRECTORY", "/tmp/showcase"]]) == {
+        "SHOWCASE_SESSION_DIRECTORY": "/tmp/showcase",
+    }
+
+
+def test_prompt_target_url_includes_showcase_directory_and_file_manager_path(monkeypatch, tmp_path: Path):
+    directory = tmp_path / "workspace" / "tasks" / "aws-credentials-s3-cloudfront"
+    directory.mkdir(parents=True)
+    _set_repo_root(monkeypatch, tmp_path)
+
+    url = routes._build_prompt_target_url("", "do work", showcase_directory=str(directory))
+    query = parse_qs(urlparse(url).query)
+
+    assert query["new"] == ["true"]
+    assert query["prompt"] == ["do work"]
+    assert query["showcaseDirectory"] == [str(directory)]
+    assert query["fileManagerPath"] == ["/workspace/tasks/aws-credentials-s3-cloudfront"]
 
 
 def test_file_realtime_status_reports_unhealthy_state(tmp_path: Path):

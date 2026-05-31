@@ -22,7 +22,8 @@ import uuid
 import yaml
 
 from image_service import generate_image_from_prompt
-from .llm_adapter import WorkflowLLMAdapter
+from llm_service import get_tts_provider
+from .llm_adapter import AgentCliLLMAdapter
 
 # Import VideoStyle from separate module to avoid circular imports
 from .VideoStyle import VideoStyle
@@ -156,7 +157,6 @@ class VideoCreatorWorkflow:
 
         # Initialize LLM
         self.llm = self._init_llm()
-        self.plan_llm = self._init_plan_llm()
 
         # Build workflow graph
         self.graph = self._build_graph()
@@ -189,6 +189,10 @@ class VideoCreatorWorkflow:
         video_style = VideoStyle(theme=selected_theme, width=width, height=height)
         if voice_name:
             video_style.voice_name = voice_name
+        else:
+            provider_voice = get_tts_provider(None).get("voice")
+            if isinstance(provider_voice, str) and provider_voice.strip():
+                video_style.voice_name = provider_voice.strip()
         return video_style
 
     async def __aenter__(self):
@@ -208,21 +212,12 @@ class VideoCreatorWorkflow:
             if llm_client and hasattr(llm_client, 'aclose'):
                 await llm_client.aclose()
                 self.llm = None
-
-            plan_client = getattr(self.plan_llm, 'async_client', None)
-            if plan_client and hasattr(plan_client, 'aclose'):
-                await plan_client.aclose()
-                self.plan_llm = None
         except Exception as err:
             log(f"Error during cleanup: {err}")
     
     def _init_llm(self):
         """Initialize the LLM model based on environment configuration"""
-        return WorkflowLLMAdapter()
-    
-    def _init_plan_llm(self):
-        """Initialize the LLM model based on environment configuration"""
-        return WorkflowLLMAdapter()
+        return AgentCliLLMAdapter(cli_session_id=str(uuid.uuid4()))
     
     def _build_graph(self) -> StateGraph:
         """Build the workflow graph with nodes and edges"""
@@ -271,7 +266,7 @@ class VideoCreatorWorkflow:
                         log(f"Reusing existing video specification from {design_video_spec_path}")
                         return {
                             "video_spec": cached_video_spec,
-                            "messages": state.get("messages", []) + [
+                            "messages": [
                                 AIMessage(content=f"Reused existing video specification from {design_video_spec_path}")
                             ],
                         }
@@ -323,17 +318,13 @@ Target Duration: {target_duration} seconds
 
 Please analyze the requirement and extract all contextual information to create a personalized and effective educational video."""
         
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=human_prompt)
-        ]
-        
         try:
-            response = await self.llm.ainvoke(messages, config={
-                "configurable": {
-                    "model_kwargs": {"response_format": {"type": "json_object"}}
-                }
-            })
+            response, new_messages = await self._ainvoke_with_history(
+                state,
+                system_prompt,
+                human_prompt,
+                response_format={"type": "json_object"},
+            )
 
             # Parse JSON response
             content = response.content.strip()
@@ -368,14 +359,12 @@ Please analyze the requirement and extract all contextual information to create 
             
             return {
                 "video_spec": video_spec,
-                "messages": state.get('messages', []) + [response]
+                "messages": new_messages,
             }
             
         except Exception as e:
             log(f"Error in design_video_spec_node: {e}")
-            return {
-                "messages": [AIMessage(content=f"Error creating video specification: {str(e)}")]
-            }
+            raise RuntimeError(f"Error creating video specification: {str(e)}") from e
     
     async def initialize_style_node(self, state: State) -> Dict[str, Any]:
         """Initialize video style configuration based on video spec"""
@@ -384,7 +373,7 @@ Please analyze the requirement and extract all contextual information to create 
         video_spec = state.get("video_spec")
         
         if not video_spec:
-            return {"messages": [AIMessage(content="Error: No video specification found")]}
+            raise ValueError("No video specification found")
 
         video_style = self._build_video_style(
             resolution=video_spec.resolution,
@@ -418,7 +407,7 @@ Please analyze the requirement and extract all contextual information to create 
         requirement = state.get("requirement", "")
         
         if not video_spec:
-            return {"messages": [AIMessage(content="Error: No video specification found")]}
+            raise ValueError("No video specification found")
         
         # Dialog-specific voice-over guidelines
         dialog_guidelines = ""
@@ -664,7 +653,7 @@ This scene type is ideal for emphasizing titles, key points, or important concep
 }}
 ```
 
-* Host Speech Clip – Talking head or lipsynced host scene driven by a host image or source video.
+* Host Speech Clip – Talking head or lipsynced host scene driven by a host image or source video. Only use this scene type if user asks to use
 ```json
 {{
   "scene_type": "host_speech_clip",
@@ -678,7 +667,7 @@ This scene type is ideal for emphasizing titles, key points, or important concep
 }}
 ```
 
-* Video Clip – Existing video clip combined with scene narration.
+* Video Clip – Existing video clip combined with scene narration. Only use this scene type if user asks to use
 ```json
 {{
   "scene_type": "video_clip",
@@ -738,17 +727,13 @@ Target Audience: {video_spec.target_audience}
 
 Use the original requirement as the source of truth for any explicitly requested scene sequence, host media, or textual content. Use the video specification to preserve the intended teaching goal, emphasis, scope, and constraints."""
         
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=human_prompt)
-        ]
-        
         try:
-            response = await self.plan_llm.ainvoke(messages, config={
-                "configurable": {
-                    "model_kwargs": {"response_format": {"type": "json_object"}}
-                }
-            })
+            response, new_messages = await self._ainvoke_with_history(
+                state,
+                system_prompt,
+                human_prompt,
+                response_format={"type": "json_object"},
+            )
 
             content = response.content.strip()
             log(f"plan_scenes_node LLM response content: {content}")
@@ -770,6 +755,9 @@ Use the original requirement as the source of truth for any explicitly requested
                     data=scene_data  # Store all scene data in the data field
                 )
                 scenes.append(scene)
+
+            if not scenes:
+                raise ValueError("Scene plan did not include any scenes")
             
             log(f"Created scene plan with {len(scenes)} scenes")
             self._write_scene_plan_yaml(run_output_dir, scenes)
@@ -779,6 +767,7 @@ Use the original requirement as the source of truth for any explicitly requested
                     "scene_plan": scenes,
                     "total_scenes": len(scenes),
                     "current_scene_index": 0,
+                    "messages": self._messages_with_new(state, new_messages),
                 }
             )
             self._write_workflow_state(run_output_dir, state_snapshot)
@@ -787,14 +776,12 @@ Use the original requirement as the source of truth for any explicitly requested
                 "scene_plan": scenes,
                 "total_scenes": len(scenes),
                 "current_scene_index": 0,
-                "messages": state.get('messages', []) + [response]
+                "messages": new_messages,
             }
             
         except Exception as e:
             log(f"Error in plan_scenes_node: {e}")
-            return {
-                "messages": [AIMessage(content=f"Error creating scene plan: {str(e)}")]
-            }
+            raise RuntimeError(f"Error creating scene plan: {str(e)}") from e
         
     async def create_scene_video_by_type(
         self,
@@ -847,6 +834,8 @@ Use the original requirement as the source of truth for any explicitly requested
             raise ValueError(f"Unsupported scene type: {scene_type}")
         
         try:
+            if scene_type == SceneType.MERMAID_DIAGRAM:
+                return await creator_func(scene, style, llm=self.llm)
             return await creator_func(scene, style)
         except Exception as e:
             error(f"Error creating {scene_type.value} scene: {e}")
@@ -905,6 +894,60 @@ Use the original requirement as the source of truth for any explicitly requested
             "video_file_path": getattr(scene, "video_file_path", None),
         }
 
+    def _message_to_dict(self, message: Any) -> Dict[str, str]:
+        role = getattr(message, "type", None) or getattr(message, "role", None) or "human"
+        content = getattr(message, "content", message)
+        if role == "human":
+            role = "human"
+        elif role == "ai":
+            role = "ai"
+        elif role == "system":
+            role = "system"
+        else:
+            role = "human"
+        return {"role": role, "content": str(content)}
+
+    def _deserialize_message(self, payload: Dict[str, Any]) -> Any:
+        role = str(payload.get("role") or "human")
+        content = str(payload.get("content") or "")
+        if role == "system":
+            return SystemMessage(content=content)
+        if role == "ai":
+            return AIMessage(content=content)
+        return HumanMessage(content=content)
+
+    def _deserialize_messages(self, payload: Optional[List[Dict[str, Any]]]) -> List[Any]:
+        if not isinstance(payload, list):
+            return []
+        messages: List[Any] = []
+        for item in payload:
+            if isinstance(item, dict):
+                messages.append(self._deserialize_message(item))
+        return messages
+
+    def _messages_with_new(self, state: Dict[str, Any], new_messages: List[Any]) -> List[Any]:
+        return list(state.get("messages") or []) + list(new_messages)
+
+    async def _ainvoke_with_history(
+        self,
+        state: State,
+        system_prompt: str,
+        human_prompt: str,
+        response_format: Optional[Dict[str, Any]] = None,
+    ) -> tuple[AIMessage, List[Any]]:
+        new_messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=human_prompt),
+        ]
+        config: Dict[str, Any] = {}
+        if response_format:
+            config = {"configurable": {"model_kwargs": {"response_format": response_format}}}
+        response = await self.llm.ainvoke(
+            list(state.get("messages") or []) + new_messages,
+            config=config or None,
+        )
+        return response, [*new_messages, response]
+
     def _serialize_state(self, state_values: Dict[str, Any]) -> Dict[str, Any]:
         video_spec = state_values.get("video_spec")
         video_style = state_values.get("video_style")
@@ -923,6 +966,10 @@ Use the original requirement as the source of truth for any explicitly requested
             "final_video_path": state_values.get("final_video_path"),
             "current_scene_index": state_values.get("current_scene_index", 0),
             "total_scenes": state_values.get("total_scenes", len(scene_plan)),
+            "messages": [
+                self._message_to_dict(message)
+                for message in state_values.get("messages") or []
+            ],
         }
 
     def _write_workflow_state(self, run_output_dir: Optional[str], state_values: Dict[str, Any]) -> None:
@@ -1707,7 +1754,12 @@ Use the original requirement as the source of truth for any explicitly requested
             "messages": [AIMessage(content=f"Created scene: {current_scene.scene_id} - {normalized_scene_video_path}")]
         }
         state_snapshot = dict(state)
-        state_snapshot.update(updated_state)
+        state_snapshot.update(
+            {
+                **updated_state,
+                "messages": self._messages_with_new(state, updated_state["messages"]),
+            }
+        )
         self._write_workflow_state(run_output_dir, state_snapshot)
         
         # Check if we have more scenes to create
@@ -1868,6 +1920,7 @@ Use the original requirement as the source of truth for any explicitly requested
         output_path: str = "/tmp",
         voice_name: Optional[str] = None,
         theme: Optional[str] = None,
+        create_thumbnail: bool = False,
     ) -> Dict[str, Any]:
         """
         Create an educational video based on a requirement
@@ -1880,6 +1933,7 @@ Use the original requirement as the source of truth for any explicitly requested
             output_path: Parent directory to save generated artifacts
             voice_name: Optional TTS voice override
             theme: Optional visual theme override
+            create_thumbnail: Whether to generate an AI thumbnail image
 
         Returns:
             Dictionary containing final video path and metadata
@@ -1921,14 +1975,15 @@ Use the original requirement as the source of truth for any explicitly requested
             state_values = state.values if state else {}
             result = self._build_result(state_values)
             
-            # Generate thumbnail and extract video metadata
+            # Extract video metadata and optionally generate thumbnail
             final_video_url = result['final_video_path']
             if final_video_url:
                 try:
                     metadata = await self._extract_video_metadata_and_thumbnail(
                         final_video_url,
                         state_values.get('requirement'),
-                        state_values.get('video_spec')
+                        state_values.get('video_spec'),
+                        create_thumbnail=create_thumbnail,
                     )
                     result.update(metadata)
                 except Exception as e:
@@ -1958,6 +2013,7 @@ Use the original requirement as the source of truth for any explicitly requested
         output_path: str = "/tmp",
         voice_name: Optional[str] = None,
         theme: Optional[str] = None,
+        create_thumbnail: bool = False,
     ) -> Dict[str, Any]:
         result = asyncio.run(
             self.create_video(
@@ -1967,11 +2023,12 @@ Use the original requirement as the source of truth for any explicitly requested
                 output_path=output_path,
                 voice_name=voice_name,
                 theme=theme,
+                create_thumbnail=create_thumbnail,
             )
         )
         return result
 
-    async def resume_video(self, output_path: str) -> Dict[str, Any]:
+    async def resume_video(self, output_path: str, create_thumbnail: bool = False) -> Dict[str, Any]:
         run_output_dir = self._create_run_output_dir(output_path, "")
         plan_path = self._get_plan_scenes_path(run_output_dir)
         state_path = self._get_workflow_state_path(run_output_dir)
@@ -1997,6 +2054,7 @@ Use the original requirement as the source of truth for any explicitly requested
             "final_video_path": persisted_state.get("final_video_path"),
             "current_scene_index": persisted_state.get("current_scene_index", 0),
             "total_scenes": persisted_state.get("total_scenes", 0),
+            "messages": self._deserialize_messages(persisted_state.get("messages")),
         }
 
         state_values["video_spec"] = self._load_video_spec_yaml(
@@ -2077,17 +2135,24 @@ Use the original requirement as the source of truth for any explicitly requested
                     final_video_url,
                     state_values.get("requirement"),
                     state_values.get("video_spec"),
+                    create_thumbnail=create_thumbnail,
                 )
                 result.update(metadata)
             except Exception as e:
                 log(f"Warning: Failed to extract video metadata during resume: {e}")
         return result
 
-    def resume_multiple_scene_video(self, output_path: str) -> Dict[str, Any]:
-        result = asyncio.run(self.resume_video(output_path))
+    def resume_multiple_scene_video(self, output_path: str, create_thumbnail: bool = False) -> Dict[str, Any]:
+        result = asyncio.run(self.resume_video(output_path, create_thumbnail=create_thumbnail))
         return result
     
-    async def _extract_video_metadata_and_thumbnail(self, video_url: str, requirement: str = None, video_spec = None) -> Dict[str, Any]:
+    async def _extract_video_metadata_and_thumbnail(
+        self,
+        video_url: str,
+        requirement: str = None,
+        video_spec = None,
+        create_thumbnail: bool = False,
+    ) -> Dict[str, Any]:
         """
         Extract video metadata and generate thumbnail using ffprobe and ffmpeg
 
@@ -2153,21 +2218,22 @@ Use the original requirement as the source of truth for any explicitly requested
                 'height': int(video_stream.get('height', 0)),
             }
             
-            thumbnail_source_path = await self._generate_ai_thumbnail(
-                requirement,
-                video_spec,
-                metadata["width"],
-                metadata["height"],
-            )
-            temp_thumbnail_path = thumbnail_source_path
-            thumbnail_image = self._copy_thumbnail_to_output_path(
-                thumbnail_source_path,
-                video_url,
-                metadata["width"],
-                metadata["height"],
-            )
-            metadata["thumbnail_image"] = thumbnail_image
-            metadata["thumbnail_url"] = thumbnail_image
+            if create_thumbnail:
+                thumbnail_source_path = await self._generate_ai_thumbnail(
+                    requirement,
+                    video_spec,
+                    metadata["width"],
+                    metadata["height"],
+                )
+                temp_thumbnail_path = thumbnail_source_path
+                thumbnail_image = self._copy_thumbnail_to_output_path(
+                    thumbnail_source_path,
+                    video_url,
+                    metadata["width"],
+                    metadata["height"],
+                )
+                metadata["thumbnail_image"] = thumbnail_image
+                metadata["thumbnail_url"] = thumbnail_image
             
             return metadata
             

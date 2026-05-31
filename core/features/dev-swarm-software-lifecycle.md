@@ -59,7 +59,7 @@ find extensions/vibe-kanban/ -type f | head -10
 
 - `core/features/vibe-coding-project-manager.md`
 - `core/features/research-manager.md`
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 - `core/features/workflow-runner-editor.md`
 
 ## Update Notes

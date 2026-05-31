@@ -43,24 +43,23 @@ Important: do not open, read, parse, or analyze the workflow JSON file directly.
 ### Step 5: Build the Execution Command
 
 1. In tmux mode, use:
-   - `core/bin/run-workflow --workflow=<workflow-path> --prompt=<prompt> --tmux-session=<session-name>`
+   - `core/bin/run-workflow --workflow=<workflow-path> --prompt=<prompt>`
+   - The CLI auto-detects `TMUX_SESSION_NAME`; pass `--tmux-session=<session-name>` only when overriding the current session.
 2. Add tmux-only flags only when they apply:
    - `--resume`
    - `--auto-continue`
 3. In non-tmux mode, use:
    - `core/bin/run-workflow <workflow-path> <prompt>`
-4. Pass the resolved workflow path.
+4. Pass the resolved workflow path only as the CLI workflow argument.
 5. Build a structured workflow prompt, not a generic sentence such as `run the workflow`.
 6. The prompt should include all user-provided context that the workflow needs, especially:
-   - the workflow file being executed
    - the instruction file path when one is relevant
    - the workspace path when one is relevant
    - any requirement that intermediate files must stay inside the workflow workspace
-7. Prefer this shape when task context is available:
+7. Do not include the workflow file path in the prompt. The workflow runner already receives the path through `--workflow`, and node agents should only receive current-node context.
+8. Prefer this shape when task context is available:
 
 ```text
-Execute workflow core/workflows/<workflow-file>.json.
-
 Follow the instructions defined at <instruction-file-path>.
 
 Workspace path: <workspace-path>
@@ -68,15 +67,16 @@ Workspace path: <workspace-path>
 If you create any intermediate files, save them inside the task workspace above.
 ```
 
-8. If the user supplied additional workflow-specific context, append it after the base structure instead of replacing the structure.
-9. Do not rewrite the user's intent beyond minimal cleanup needed for shell-safe execution.
+9. If the user supplied additional workflow-specific context, append it after the base structure instead of replacing the structure.
+10. Do not rewrite the user's intent beyond minimal cleanup needed for shell-safe execution.
 
 ### Step 6: Execute and Capture Output
 
 1. Run the workflow CLI from the repository root.
 2. Capture stdout, stderr, and the exit code.
 3. If tmux mode is used, follow the returned first-node instruction exactly.
-4. If the command fails, report whether the failure is:
+4. In start-by-prompt runs, each node should finish only the current node, ask the user to approve the node output, and then rely on `continue-workflow-action` from the main process/agent after approval.
+5. If the command fails, report whether the failure is:
    - path resolution
    - validation/runtime error
    - missing runner

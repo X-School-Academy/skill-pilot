@@ -14,6 +14,7 @@ import {
   Group,
   Header,
   LoadingOverlay,
+  Menu,
   MediaQuery,
   Modal,
   Navbar,
@@ -31,8 +32,11 @@ import {
 import {
   IconArrowLeft,
   IconClock,
+  IconFilePlus,
   IconFileText,
+  IconFileUpload,
   IconFolder,
+  IconFolderPlus,
   IconPlus,
   IconRefresh,
   IconSortAscending,
@@ -90,6 +94,13 @@ const researchProjectPath = (path: string): string => {
   return trimmed ? `workspace/research/${trimmed}` : 'workspace/research';
 };
 
+const researchRelativePath = (projectPath: string): string => {
+  const normalized = projectPath.replace(/^\/+/, '');
+  return normalized
+    .replace(/^\$project\/workspace\/research\/?/, '')
+    .replace(/^workspace\/research\/?/, '');
+};
+
 const getAncestorDirectoryPaths = (path: string): string[] => {
   const segments = path.split('/').filter(Boolean);
   if (segments.length <= 1) return [];
@@ -133,6 +144,20 @@ const PAGE_ACTION_BAR_STYLE: React.CSSProperties = {
 };
 
 const PAGE_EDITOR_FONT = "'JetBrains Mono', 'Fira Mono', 'Cascadia Code', 'Consolas', monospace";
+const PAGE_EDITOR_DARK_INPUT_STYLE = {
+  height: '100%',
+  minHeight: '100%',
+  resize: 'none',
+  border: 'none',
+  borderRadius: 0,
+  padding: '18px 20px',
+  fontFamily: PAGE_EDITOR_FONT,
+  fontSize: 13,
+  lineHeight: 1.65,
+  background: '#0f172a',
+  color: '#e5e7eb',
+  caretColor: '#93c5fd',
+} as const;
 
 export default function ResearchPage() {
   const router = useRouter();
@@ -158,6 +183,7 @@ export default function ResearchPage() {
   const [topicRequirementsInput, setTopicRequirementsInput] = useState('');
   const [creatingTopic, setCreatingTopic] = useState(false);
   const [deletingFile, setDeletingFile] = useState(false);
+  const [fileContextMenu, setFileContextMenu] = useState<{ x: number; y: number; item: FileItem } | null>(null);
   const [executeOpened, setExecuteOpened] = useState(false);
   const [executeMode, setExecuteMode] = useState<ExecuteMode>('skill');
   const [skillOptions, setSkillOptions] = useState<string[]>([]);
@@ -184,6 +210,9 @@ export default function ResearchPage() {
   const [workflowExecuteStatus, setWorkflowExecuteStatus] = useState<WorkflowExecuteStatus | null>(null);
   const [continuingWorkflow, setContinuingWorkflow] = useState(false);
   const rightPaneRef = useRef<HTMLDivElement | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadTargetRef = useRef<string>('workspace/research');
+  const autoSaveTimerRef = useRef<number | null>(null);
   const lastLoadedContentRef = useRef<string>('');
   const editorContentRef = useRef<string>('');
   useEffect(() => { editorContentRef.current = editorContent; }, [editorContent]);
@@ -346,17 +375,18 @@ export default function ResearchPage() {
     if (!currentTask || selectedKind === 'image' || selectedKind === 'audio' || selectedKind === 'video' || selectedKind === 'pdf') {
       return true;
     }
+    const contentToSave = editorContentRef.current;
     setEditorSaving(true);
     setEditorError('');
     setNotice('');
     try {
       await axios.post(`${API_BASE_URL}/research/save`, {
         path: currentTask,
-        content: editorContent,
+        content: contentToSave,
       });
-      setNotice('Saved.');
+      lastLoadedContentRef.current = contentToSave;
+      setNotice('Saved automatically.');
       await fetchTree();
-      await fetchContent(currentTask);
       return true;
     } catch (err: any) {
       console.error('Failed to save research content:', err);
@@ -425,6 +455,139 @@ export default function ResearchPage() {
       setEditorError(err?.response?.data?.error || 'Failed to delete file.');
     } finally {
       setDeletingFile(false);
+    }
+  };
+
+  const createFileInTopic = async (topicPath: string) => {
+    const name = window.prompt('File name');
+    if (!name) return;
+    const parentPath = researchProjectPath(topicPath);
+    const projectPath = `${parentPath}/${name}`.replace(/\/+/g, '/');
+    setEditorError('');
+    setNotice('');
+    try {
+      await axios.post(apiUrl('/api/files/write'), {
+        path: projectPath,
+        content: '',
+      });
+      const nextPath = researchRelativePath(projectPath);
+      setExpandedFolders((prev) => Array.from(new Set([...prev, topicPath])));
+      await fetchTree();
+      router.push(`/research?task=${encodeURIComponent(nextPath)}`, undefined, { shallow: true });
+    } catch (err: any) {
+      console.error('Failed to create research file:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to create file.');
+    }
+  };
+
+  const createFolderInTopic = async (topicPath: string) => {
+    const name = window.prompt('Folder name');
+    if (!name) return;
+    setEditorError('');
+    setNotice('');
+    try {
+      await axios.post(apiUrl('/api/files/mkdir'), {
+        parent: researchProjectPath(topicPath),
+        name,
+      });
+      setExpandedFolders((prev) => Array.from(new Set([...prev, topicPath])));
+      await fetchTree();
+    } catch (err: any) {
+      console.error('Failed to create research folder:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to create folder.');
+    }
+  };
+
+  const openUploadForTopic = (topicPath: string) => {
+    uploadTargetRef.current = researchProjectPath(topicPath);
+    uploadInputRef.current?.click();
+  };
+
+  const uploadFilesToTopic = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setEditorError('');
+    setNotice('');
+    try {
+      for (const file of Array.from(files)) {
+        const formData = new FormData();
+        formData.append('path', uploadTargetRef.current);
+        formData.append('file', file);
+        await axios.post(apiUrl('/api/files/upload'), formData);
+      }
+      const topicPath = researchRelativePath(uploadTargetRef.current);
+      if (topicPath) {
+        setExpandedFolders((prev) => Array.from(new Set([...prev, topicPath])));
+      }
+      await fetchTree();
+    } catch (err: any) {
+      console.error('Failed to upload research file:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to upload file.');
+    }
+  };
+
+  const renameResearchPath = async (item: FileItem) => {
+    const nextName = window.prompt('Rename', item.name);
+    if (!nextName || nextName === item.name) return;
+    setEditorError('');
+    setNotice('');
+    try {
+      const res = await axios.post(apiUrl('/api/files/rename'), {
+        id: researchProjectPath(item.path),
+        name: nextName,
+      });
+      const nextPath = researchRelativePath(String(res.data?.newId || ''));
+      setFileContextMenu(null);
+      await fetchTree();
+      if (currentTask === item.path && nextPath) {
+        router.push(`/research?task=${encodeURIComponent(nextPath)}`, undefined, { shallow: true });
+      } else if (currentTask.startsWith(`${item.path}/`) && nextPath) {
+        const suffix = currentTask.slice(item.path.length);
+        router.push(`/research?task=${encodeURIComponent(`${nextPath}${suffix}`)}`, undefined, { shallow: true });
+      }
+    } catch (err: any) {
+      console.error('Failed to rename research path:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to rename file.');
+    }
+  };
+
+  const deleteResearchFile = async (item: FileItem) => {
+    let confirmText = '';
+    if (item.name === 'requirements.md') {
+      const typed = window.prompt(`Deleting ${item.path} will remove the full topic folder. Type delete to confirm.`);
+      if (typed === null) return;
+      confirmText = typed;
+    } else if (!window.confirm(`Delete ${item.path}?`)) {
+      return;
+    }
+
+    setEditorError('');
+    setNotice('');
+    setDeletingFile(true);
+    try {
+      await axios.post(`${API_BASE_URL}/research/delete`, {
+        path: item.path,
+        confirm_text: confirmText,
+      });
+      setFileContextMenu(null);
+      await fetchTree();
+      if (currentTask === item.path) {
+        router.push('/research', undefined, { shallow: true });
+      }
+    } catch (err: any) {
+      console.error('Failed to delete research file:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to delete file.');
+    } finally {
+      setDeletingFile(false);
+    }
+  };
+
+  const copyResearchPath = async (item: FileItem) => {
+    try {
+      await navigator.clipboard.writeText(researchProjectPath(item.path));
+      setFileContextMenu(null);
+      setNotice('Path copied.');
+    } catch {
+      setEditorError('Failed to copy path.');
     }
   };
 
@@ -550,6 +713,12 @@ export default function ResearchPage() {
   });
 
   useEffect(() => {
+    const closeFileContextMenu = () => setFileContextMenu(null);
+    window.addEventListener('pointerdown', closeFileContextMenu);
+    return () => window.removeEventListener('pointerdown', closeFileContextMenu);
+  }, []);
+
+  useEffect(() => {
     fetchTree();
     fetchLlmProviders();
     fetchExecuteOptions();
@@ -571,6 +740,34 @@ export default function ResearchPage() {
       fetchLatest();
     }
   }, [currentTask, router.isReady]);
+
+  useEffect(() => {
+    if (autoSaveTimerRef.current) {
+      window.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
+    if (
+      !currentTask ||
+      loading ||
+      (selectedKind !== 'markdown' && selectedKind !== 'text') ||
+      editorContent === lastLoadedContentRef.current
+    ) {
+      return undefined;
+    }
+
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      autoSaveTimerRef.current = null;
+      void saveCurrentContent();
+    }, 900);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        window.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    };
+  }, [currentTask, editorContent, loading, selectedKind]);
 
   useEffect(() => {
     if (!workflowSessionActive) return undefined;
@@ -608,10 +805,41 @@ export default function ResearchPage() {
   const renderTree = (items: FileItem[]) => items.map((item) => {
     const isSelected = currentTask === item.path;
     if (item.type === 'dir') {
+      const topicLabel = (
+        <Group position="apart" spacing={6} noWrap style={{ width: '100%' }}>
+          <Text size="sm" truncate>{item.name}</Text>
+          <Menu shadow="md" width={160} withinPortal position="bottom-end">
+            <Menu.Target>
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                aria-label={`Add to ${item.name}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+              >
+                <IconPlus size="0.95rem" />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown onClick={(event) => event.stopPropagation()}>
+              <Menu.Item icon={<IconFilePlus size="0.95rem" />} onClick={() => void createFileInTopic(item.path)}>
+                New File
+              </Menu.Item>
+              <Menu.Item icon={<IconFolderPlus size="0.95rem" />} onClick={() => void createFolderInTopic(item.path)}>
+                New Folder
+              </Menu.Item>
+              <Menu.Item icon={<IconFileUpload size="0.95rem" />} onClick={() => openUploadForTopic(item.path)}>
+                Upload File
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+        </Group>
+      );
       return (
         <NavLink
           key={item.path}
-          label={item.name}
+          label={topicLabel}
           icon={<IconFolder size="1.2rem" stroke={1.5} color={theme.colors.blue[6]} />}
           childrenOffset={16}
           opened={expandedFolders.includes(item.path)}
@@ -634,7 +862,13 @@ export default function ResearchPage() {
         label={item.name}
         icon={<IconFileText size="1.2rem" stroke={1.5} color={theme.colors.gray[6]} />}
         active={isSelected}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setFileContextMenu({ x: event.clientX, y: event.clientY, item });
+        }}
         onClick={() => {
+          setFileContextMenu(null);
           router.push(`/research?task=${encodeURIComponent(item.path)}`, undefined, { shallow: true });
           setOpened(false);
         }}
@@ -666,6 +900,11 @@ export default function ResearchPage() {
     if (!currentTask) return null;
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flex: '0 0 auto', flexWrap: 'wrap' }}>
+        {(isMarkdownEditor || isTextEditor) && (
+          <Text size="xs" color={editorSaving ? 'dimmed' : 'green'}>
+            {editorSaving ? 'Saving...' : 'Auto-save on'}
+          </Text>
+        )}
         {isMarkdownEditor && (
           <>
             <Button size="xs" variant={markdownView === 'editor' ? 'filled' : 'default'} onClick={() => setMarkdownView('editor')}>
@@ -812,23 +1051,9 @@ export default function ResearchPage() {
                   styles={{
                     root: { height: '100%' },
                     wrapper: { height: '100%' },
-                    input: {
-                      height: '100%',
-                      minHeight: '100%',
-                      resize: 'none',
-                      border: 'none',
-                      borderRadius: 0,
-                      padding: '18px 20px',
-                      fontFamily: PAGE_EDITOR_FONT,
-                      fontSize: 13,
-                      lineHeight: 1.65,
-                    },
+                    input: PAGE_EDITOR_DARK_INPUT_STYLE,
                   }}
                 />
-              </div>
-              <div style={PAGE_ACTION_BAR_STYLE}>
-                <Button size="xs" onClick={() => void saveCurrentContent()} loading={editorSaving}>Save</Button>
-                <Button size="xs" color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
               </div>
             </>
           ) : (
@@ -837,9 +1062,6 @@ export default function ResearchPage() {
                 <div className="doc-markdown" style={{ maxWidth: 'none', margin: 0, minHeight: '100%', padding: '18px 20px 24px', border: 'none', borderRadius: 0, boxShadow: 'none', background: '#ffffff' }}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
                 </div>
-              </div>
-              <div style={PAGE_ACTION_BAR_STYLE}>
-                <Button size="xs" color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
               </div>
             </>
           )}
@@ -863,23 +1085,9 @@ export default function ResearchPage() {
               styles={{
                 root: { height: '100%' },
                 wrapper: { height: '100%' },
-                input: {
-                  height: '100%',
-                  minHeight: '100%',
-                  resize: 'none',
-                  border: 'none',
-                  borderRadius: 0,
-                  padding: '18px 20px',
-                  fontFamily: PAGE_EDITOR_FONT,
-                  fontSize: 13,
-                  lineHeight: 1.65,
-                },
+                input: PAGE_EDITOR_DARK_INPUT_STYLE,
               }}
             />
-          </div>
-          <div style={PAGE_ACTION_BAR_STYLE}>
-            <Button size="xs" onClick={() => void saveCurrentContent()} loading={editorSaving}>Save</Button>
-            <Button size="xs" color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
           </div>
         </div>
       );
@@ -939,6 +1147,94 @@ export default function ResearchPage() {
       <Head>
         <title>Skill Pilot - Research</title>
       </Head>
+
+      <input
+        ref={uploadInputRef}
+        type="file"
+        multiple
+        style={{ display: 'none' }}
+        onChange={(event) => {
+          void uploadFilesToTopic(event.currentTarget.files);
+          event.currentTarget.value = '';
+        }}
+      />
+
+      {fileContextMenu && (
+        <div
+          style={{
+            position: 'fixed',
+            top: fileContextMenu.y,
+            left: fileContextMenu.x,
+            zIndex: 1000,
+            minWidth: 150,
+            padding: 6,
+            borderRadius: 8,
+            border: '1px solid #dbe3ef',
+            background: '#ffffff',
+            boxShadow: '0 18px 40px rgba(15, 23, 42, 0.16)',
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <button
+            type="button"
+            onClick={() => { void deleteResearchFile(fileContextMenu.item); }}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 10px',
+              border: 'none',
+              borderRadius: 6,
+              background: 'transparent',
+              color: '#dc2626',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            Delete
+          </button>
+          <button
+            type="button"
+            onClick={() => { void renameResearchPath(fileContextMenu.item); }}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 10px',
+              border: 'none',
+              borderRadius: 6,
+              background: 'transparent',
+              color: '#1f2937',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            Rename
+          </button>
+          <button
+            type="button"
+            onClick={() => { void copyResearchPath(fileContextMenu.item); }}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 10px',
+              border: 'none',
+              borderRadius: 6,
+              background: 'transparent',
+              color: '#1f2937',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            Copy Path
+          </button>
+        </div>
+      )}
 
       <Modal opened={topicModalOpened} onClose={() => setTopicModalOpened(false)} title="New Topic" centered>
         <div>

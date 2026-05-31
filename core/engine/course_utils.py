@@ -79,11 +79,17 @@ def _meta_block_match(text: str) -> Optional[re.Match]:
     return None
 
 
+def _frontmatter_match(text: str) -> Optional[re.Match]:
+    return re.match(r"^---\s*\n(.*?)\n---(?:\s*\n|$)", text.lstrip("\ufeff"), re.DOTALL)
+
+
 def read_course_meta(text: str) -> Dict[str, Any]:
     match = _meta_block_match(text)
     if not match:
+        match = _frontmatter_match(text)
+    if not match:
         return {}
-    yaml_body = match.group(2)
+    yaml_body = match.group(2) if match.lastindex and match.lastindex >= 2 else match.group(1)
     try:
         data = yaml.safe_load(yaml_body)
         return data if isinstance(data, dict) else {}

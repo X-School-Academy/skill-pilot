@@ -192,8 +192,8 @@ def run_workflow(
                         {
                             "node_id": node_id,
                             "node_name": node_name(graph.id_to_node[node_id]),
-                            "skill": str(
-                                (graph.id_to_node[node_id].get("data") or {}).get("skill")  # type: ignore[union-attr]
+                            "subagent": str(
+                                (graph.id_to_node[node_id].get("data") or {}).get("subagent")  # type: ignore[union-attr]
                                 or ""
                             ),
                             "error": error_text,
@@ -231,7 +231,7 @@ def run_workflow(
             {
                 "node_id": node_id,
                 "node_name": node_name(graph.id_to_node[node_id]),
-                "skill": str(((graph.id_to_node[node_id].get("data") or {}).get("skill"))),  # type: ignore[union-attr]
+                "subagent": str(((graph.id_to_node[node_id].get("data") or {}).get("subagent"))),  # type: ignore[union-attr]
                 "error": f"blocked: {reason}",
             }
         )

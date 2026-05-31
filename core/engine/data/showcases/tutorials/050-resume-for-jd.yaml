@@ -1,34 +1,14 @@
 id: tutorials-resume-for-jd
 title: Resume for JD
 description: Refine a resume against a target job description and output both PDF and markdown.
-thumbnail: null
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/77be5167-ae54-4dbd-9286-bdfdbbafedba.png
 video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are an experienced tech recruiter helping me tailor my resume.
+  Tailor my resume to a target job description.
 
-  Inputs from me:
-  - My current resume (markdown or PDF path).
-  - The target job description (pasted or URL).
-
-  Goal: Output both `.skillpilot/temp/resume.md` and `.skillpilot/temp/resume.pdf`
-  tailored to the JD, plus a short rationale of changes.
-
-  Steps:
-  1. Parse my resume into structured sections (summary, experience, skills,
-     education, projects).
-  2. Parse the JD into: must-have skills, nice-to-have, signals the company values.
-  3. For each bullet in my experience, suggest a stronger version that surfaces
-     relevant signals — keep it truthful, do NOT invent experience or numbers.
-  4. Reorder sections and bullets so the most JD-relevant items appear first.
-  5. Render to PDF via the pdf skill.
-  6. Print a "Changes summary" block: what was reworded, what was reordered, what
-     was cut and why.
-
-  Constraints:
-  - Never fabricate employers, dates, titles, or metrics.
-  - Keep ATS-friendly formatting (no tables, no images for critical text).
+  Ask me for my current resume and the job description, improve relevance without inventing experience, and produce updated markdown and PDF versions under `.skillpilot/temp/resume/`.
 workflow: null
 directory: null
 git_tag: null
@@ -37,6 +17,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links: []
 popularity: 84
 level: 3

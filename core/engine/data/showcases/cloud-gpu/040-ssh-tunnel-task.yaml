@@ -1,36 +1,14 @@
 id: cloud-ssh-tunnel-task
 title: SSH Tunnel Task
 description: Open an SSH tunnel to a remote service, verify it locally, and document a safe stop procedure.
-thumbnail: /showcases/cloud-gpu/cloud-ssh-tunnel-task.png
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/ebfd1068-a6ea-4d79-9bb7-4c08795466ec.png
 video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my secure-tunneling assistant.
+  Open a secure tunnel to a remote service.
 
-  Inputs from me:
-  - Remote host alias (already in SSH config) or full SSH target.
-  - Remote service host:port (e.g., `localhost:5432` on the remote).
-  - Local port (e.g., 5432).
-
-  Goal: A working `-L` tunnel I can use locally, with a known safe way to stop it.
-
-  Steps:
-  1. Check that the local port is free; if not, propose another.
-  2. Open: `ssh -N -L <local>:<remote_host>:<remote_port> <target>` as a tmux
-     session via the terminal MCP, lifecycle="tmux", name like `tunnel-<port>`.
-  3. Verify the tunnel:
-     - For TCP: `nc -zv localhost <local>`.
-     - For DB: small no-op query if creds available.
-  4. Print:
-     - Active tunnel info
-     - The tmux session name
-     - Exact stop command: `tmux kill-session -t tunnel-<port>`
-     - Reminder to log out / rotate creds if you suspect compromise.
-
-  Constraints:
-  - Never bind to 0.0.0.0; bind to 127.0.0.1.
-  - Do not embed remote credentials in the command.
+  Ask me for the host, remote service port, and local port first. Verify the local endpoint works, keep the tunnel manageable, and explain how to stop it safely.
 workflow: null
 directory: null
 git_tag: null
@@ -39,6 +17,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links: []
 popularity: 64
 level: 3

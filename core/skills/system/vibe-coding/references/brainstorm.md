@@ -11,7 +11,7 @@ Generate ideas, alternatives, and enhancements for an existing `requirements.md`
 
 ### Step 1: Read the Requirement
 
-Read `design-docs/requirements.md` and understand goals, scope, and constraints.
+Read `requirements.md` and understand goals, scope, and constraints.
 
 ### Step 2: Brainstorm Ideas
 
@@ -25,7 +25,7 @@ Generate ideas across these categories. For each, note benefit and trade-off.
 
 ### Step 3: Save and Present
 
-Save the brainstorm to `design-docs/brainstorm.md` (create or update). Present the ideas in a structured format and ask the user which to incorporate.
+Save the brainstorm to `brainstorm.md` (create or update). Present the ideas in a structured format and ask the user which to incorporate.
 
 ### Step 4: Hand off
 

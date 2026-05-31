@@ -16,17 +16,17 @@ These items are defined on the main WebUI home shell.
 | `Tasks` | `/tasks` | `workspace-pages.md` |
 | `Development` | `/skill-pilot-development` | `workspace-pages.md` |
 | `Dev Swarm` | `/dev-swarm` | `workspace-pages.md` |
-| `Processes` | `/?view=processes` | `home-views.md` |
-| `Discord Bot` | `/?view=discord-bot` | `home-views.md` |
+| `Processes` | `/processes` | `home-views.md` |
+| `Discord Bot` | `/discord-bot` | `home-views.md` |
 | `Live Avatar` | `/live-avatar` | `workspace-pages.md` |
 | `Security Cameras` | `/cameras` | `workspace-pages.md` |
-| `Skills` | `/?view=skills` | `home-views.md` |
+| `Skills` | `/skills` | `home-views.md` |
 | `Workflows` | `/workflows` | `workspace-pages.md` |
-| `MCP Servers` | `/?view=mcp-servers` | `home-views.md` |
-| `Schedules` | `/?view=schedule` | `home-views.md` |
-| `Extensions` | `/?view=extensions` | `home-views.md` |
-| `AI & Security` | `/?view=ai-security` | `home-views.md` |
-| `Profile` | `/?view=profile` | `home-views.md` |
+| `MCP Servers` | `/mcp-servers` | `home-views.md` |
+| `Schedules` | `/schedules` | `home-views.md` |
+| `Extensions` | `/extensions` | `home-views.md` |
+| `AI & Security` | `/ai-security` | `home-views.md` |
+| `Profile` | `/profile` | `home-views.md` |
 
 ## Routing Rule
 

@@ -1,0 +1,42 @@
+id: media-tts-cli
+title: Create a TTS Shell CLI
+description: Build a small shell command that turns text into MP3 or WAV narration using gpt-4o-mini-tts.
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/fd1ac4c4-0db3-46f1-a8ac-97afbf5a3250.png
+video: null
+tutorial: null
+request: null
+prompt: |
+  Create a small local command that turns text into speech audio.
+
+  It should support a simple way to choose the input text, output path, voice, and audio format. Include helpful validation, generate a short sample narration file, and print clear usage examples. Save the command and sample output under `.skillpilot/temp/tts-cli/`.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills:
+  - create-image-audio
+tools:
+  - core/bin/create-audio
+  - ffmpeg
+  - ffprobe
+files: []
+goals: |
+  - Build a reusable text-to-speech CLI for narration assets.
+  - Learn how audio format choices affect downstream video production.
+terms:
+  - shell command
+  - mp3
+  - wav
+  - aac
+  - ffprobe
+  - gpt-4o-mini-tts
+related:
+  - slug: media-kids-audio-book-video
+    caption: Provides the narration step for the audio-book workflow.
+  - slug: media-image-cli
+    caption: Pair narration with generated scene images.
+links: []
+popularity: 72
+level: 3
+rate: 4.4

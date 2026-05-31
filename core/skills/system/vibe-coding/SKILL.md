@@ -24,17 +24,16 @@ workspace/vibe-coding/{project-name}/
 ├── README.md                 # overview and usage guide
 ├── CHANGELOG.md              # change log per update/fix cycle
 ├── AGENTS.md                 # AI-agent instructions for this project
-├── design-docs/
-│   ├── requirements.md       # living — scope and intent
-│   ├── plan.md               # living — current implementation plan
-│   ├── implementation.md     # living — current implementation summary
-│   ├── deployment.md         # living — deployment record
-│   ├── initialized.md        # write-once — init completed mark
-│   └── archive/              # timestamped snapshots
+├── requirements.md           # living — scope and intent
+├── plan.md                   # living — current implementation plan
+├── implementation.md         # living — current implementation summary
+├── deployment.md             # living — deployment record
+├── initialized.md            # write-once — init completed mark
+├── design-archive/           # timestamped snapshots, created only when needed
 └── (project source code)
 ```
 
-`create` bootstraps all folders and top-level files. `deploy` creates `assets/` when missing.
+`create` bootstraps the project folder, root design docs, and top-level files. It does not create `design-archive/`; archive stages create it when needed. `deploy` creates `assets/` when missing.
 
 ## File Lifecycle Rules
 
@@ -48,7 +47,8 @@ workspace/vibe-coding/{project-name}/
 **Plan archiving** — before writing a new `plan.md`, archive the old one:
 ```bash
 timestamp=$(date +"%Y-%m-%d-%H%M")
-mv design-docs/plan.md "design-docs/archive/plan.$timestamp.md"
+mkdir -p design-archive
+mv plan.md "design-archive/plan.$timestamp.md"
 ```
 
 **Intermediates** — archive after consumption using `{basename}.{YYYY-MM-DD-HHMM}.md`:
@@ -60,7 +60,7 @@ mv design-docs/plan.md "design-docs/archive/plan.$timestamp.md"
 
 **New project:** `create → refine → initialize → plan → implement → test → review → deploy`
 
-**Update/fix:** `update/fix → refine → initialize-branch → plan → implement → test → review → merge → deploy`
+**Update/fix:** `update/fix → refine → plan → implement → test → review → deploy`
 
 The `update/fix` stage only sets up the trigger doc. `plan` and `implement` then run the same as in the new project flow, but automatically read the trigger doc for context.
 
@@ -68,12 +68,11 @@ The `update/fix` stage only sets up the trigger doc. `plan` and `implement` then
 |-------|---------|
 | create | Create project folder, `requirements.md`, and top-level stubs |
 | refine | Resolve ambiguities only; keep original meaning |
-| initialize | Init git repo (new project) or create a new branch (update/fix) |
+| initialize | Init git repo for a new project |
 | plan | Archive old `plan.md`; write new plan |
 | implement | Write code; update `implementation.md` |
 | test | Test → fix → retest until all requirements pass |
 | review | Review for cleanliness/correctness; fix all issues found |
-| merge | Merge branch to main; update `CHANGELOG.md` and living docs |
 | deploy | Deploy; update `deployment.md` and `README.md` |
 
 ## agent-workflow Context
@@ -88,7 +87,7 @@ When invoked inside an `agent-workflow`, call the `agent-workflow` skill's **con
 | Clarify requirements | `references/refine.md` |
 | Brainstorm ideas | `references/brainstorm.md` |
 | Apply brainstorm to requirements | `references/apply-brainstorm.md` |
-| Initialize repo or branch | `references/initial.md` |
+| Initialize new project repo | `references/initial.md` |
 | Create a dev plan | `references/plan.md` |
 | Implement from plan | `references/implement.md` |
 | Review for defects | `references/review.md` |
@@ -96,7 +95,6 @@ When invoked inside an `agent-workflow`, call the `agent-workflow` skill's **con
 | Deploy the project | `references/deploy.md` |
 | Apply `update.md` changes | `references/update.md` |
 | Fix issues from `issues.md` | `references/fix-issues.md` |
-| Merge update/fix branch | `references/merge.md` |
 
 If the intent matches multiple stages, ask before acting.
 

@@ -1,30 +1,14 @@
 id: basics-check-environment
 title: Check Environment
 description: Use the terminal skill to inspect system architecture and runtime so we know what's available before doing anything else.
-thumbnail: null
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/d31c29f9-c6e4-47c1-9110-7c826a84930c.png
 video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my environment inspector.
+  Check this machine's development environment.
 
-  Goal: Give me a one-screen report of this machine so I know what tools and runtimes
-  I can rely on in later tasks.
-
-  Steps:
-  1. Open a terminal session via the terminal skill.
-  2. Detect and print: OS name + version, CPU architecture, total RAM, free disk on $HOME.
-  3. For each of these tools, print the version if installed or "missing" if not:
-     git, gh, node, pnpm, python3, uv, ffmpeg, docker.
-  4. Note any that are missing and would block common Skill Pilot tasks
-     (e.g. missing `gh` blocks GitHub samples).
-
-  Output format: a short markdown table (Tool | Version | Notes), then a one-line summary
-  like "Ready for: X, Y. Missing for: Z."
-
-  Constraints:
-  - Read-only commands only. Do not install or modify anything.
-  - If a command would take more than ~5 seconds, skip it and mark "skipped".
+  Give me a one-screen report of the operating system, available runtimes, common developer tools, and anything missing that would block typical AI-agent work.
 workflow: null
 directory: null
 git_tag: null
@@ -33,6 +17,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links: []
 popularity: 88
 level: 1

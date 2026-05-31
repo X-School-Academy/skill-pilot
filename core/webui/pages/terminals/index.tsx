@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import { GetStaticPropsContext } from 'next';
 import axios from 'axios';
@@ -18,31 +19,24 @@ import {
   Burger,
   ScrollArea,
 } from '@mantine/core';
-import {
-  IconTerminal2,
-  IconPlus,
-  IconSparkles,
-  IconSchool,
-  IconBriefcase,
-  IconSearch,
-  IconChecklist,
-  IconCode,
-  IconHammer,
-  IconRocket,
-  IconProgress,
-  IconWand,
-  IconServer,
-  IconCalendar,
-  IconPuzzle,
-  IconUser,
-  IconVectorBezier2,
-  IconFolderOpen,
-  IconHistory,
-} from '@tabler/icons-react';
+import { IconFolderOpen, IconGripHorizontal } from '@tabler/icons-react';
 import { apiUrl } from '../../libs/api-base';
 import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
+import { MAIN_NAV_ITEMS } from '../../libs/main-nav';
 
 const API_BASE_URL = apiUrl('/api');
+const SPLIT_HANDLE_SIZE = 12;
+const FileManagerContent = dynamic(
+  () => import('../../components/FileManagerContent'),
+  {
+    ssr: false,
+    loading: () => (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#868e96', fontSize: 14 }}>
+        Loading file manager...
+      </div>
+    ),
+  },
+);
 
 interface LlmProvider {
   id: string;
@@ -77,6 +71,11 @@ export default function TerminalsPage() {
   const [busyAction, setBusyAction] = useState<'create' | 'close' | null>(null);
   const [busySessionName, setBusySessionName] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string>('');
+  const [fileManagerOpen, setFileManagerOpen] = useState(false);
+  const [fileManagerHeight, setFileManagerHeight] = useState(44);
+  const [isSplitResizing, setIsSplitResizing] = useState(false);
+  const [activeFileManagerPath, setActiveFileManagerPath] = useState('');
+  const activePaneRef = useRef<HTMLDivElement | null>(null);
   const queryBootstrappedRef = useRef(false);
 
   const fetchLlmProviders = async () => {
@@ -171,37 +170,75 @@ export default function TerminalsPage() {
     }
   }, [createTmuxSession, router.isReady, router.query.command]);
 
-  const navItems: NavItem[] = [
-    { label: 'Explore', icon: <IconSparkles size="1rem" />, action: () => { void router.push('/?view=explore'); } },
-    { dividerBefore: '', label: 'New Session', icon: <IconPlus size="1rem" />, action: () => { void router.push('/?view=home'); } },
-    {
-      label: 'Live Sessions',
-      icon: <IconTerminal2 size="1rem" />,
-      active: true,
-      action: () => {
-        if (activeSessionName) {
-          setActiveSessionName(null);
-        }
-      },
-    },
-    { label: 'Session Histories', icon: <IconHistory size="1rem" />, action: () => { void router.push('/terminal-histories'); } },
-    { dividerBefore: 'Workspace', label: 'Learning', icon: <IconSchool size="1rem" />, action: () => { void router.push('/courses'); } },
-    { label: 'Vibe Coding', icon: <IconBriefcase size="1rem" />, action: () => { void router.push('/vibe-coding'); } },
-    { label: 'Research', icon: <IconSearch size="1rem" />, action: () => { void router.push('/research'); } },
-    { label: 'Tasks', icon: <IconChecklist size="1rem" />, action: () => { void router.push('/tasks'); } },
-    { label: 'File Manager', icon: <IconFolderOpen size="1rem" />, action: () => { void router.push('/file-manager'); } },
-    { dividerBefore: 'Skill Pilot', label: 'Development', icon: <IconCode size="1rem" />, action: () => { void router.push('/skill-pilot-development'); } },
-    { label: 'Codeware', icon: <IconHammer size="1rem" />, action: () => { void router.push('/codeware'); } },
-    { dividerBefore: 'Commercial Project', label: 'Dev Swarm', icon: <IconRocket size="1rem" />, action: () => { void router.push('/dev-swarm'); } },
-    { dividerBefore: '', label: 'Processes', icon: <IconProgress size="1rem" />, action: () => { void router.push('/?view=processes'); } },
-    { label: 'Remote Clients', icon: <IconTerminal2 size="1rem" />, action: () => { void router.push('/?view=remote-clients'); } },
-    { label: 'Workflows', icon: <IconVectorBezier2 size="1rem" />, action: () => { void router.push('/workflows'); } },
-    { dividerBefore: '', label: 'Skills', icon: <IconWand size="1rem" />, action: () => { void router.push('/?view=skills'); } },
-    { label: 'MCP Servers', icon: <IconServer size="1rem" />, action: () => { void router.push('/?view=mcp-servers'); } },
-    { label: 'Schedule', icon: <IconCalendar size="1rem" />, action: () => { void router.push('/?view=schedule'); } },
-    { label: 'Extensions', icon: <IconPuzzle size="1rem" />, action: () => { void router.push('/?view=extensions'); } },
-    { label: 'Profile', icon: <IconUser size="1rem" />, action: () => { void router.push('/?view=profile'); } },
-  ];
+  useEffect(() => {
+    if (!router.isReady) return;
+    const querySession = typeof router.query.session === 'string' ? router.query.session.trim() : '';
+    const queryFileManagerPath = typeof router.query.fileManagerPath === 'string' ? router.query.fileManagerPath.trim() : '';
+    if (!querySession) return;
+    if (liveSessions.some((session) => session.name === querySession)) {
+      setActiveSessionName(querySession);
+      setActiveFileManagerPath(queryFileManagerPath);
+    }
+  }, [liveSessions, router.isReady, router.query.fileManagerPath, router.query.session]);
+
+  useEffect(() => {
+    if (!isSplitResizing) return undefined;
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!activePaneRef.current) return;
+      const bounds = activePaneRef.current.getBoundingClientRect();
+      if (bounds.height <= 0) return;
+      event.preventDefault();
+      const availableHeight = Math.max(1, bounds.height - SPLIT_HANDLE_SIZE);
+      const nextTopPixels = Math.max(0, Math.min(availableHeight, event.clientY - bounds.top));
+      setFileManagerHeight((nextTopPixels / availableHeight) * 100);
+    };
+
+    const handlePointerUp = () => setIsSplitResizing(false);
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, [isSplitResizing]);
+
+  const startSplitResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setIsSplitResizing(true);
+  }, []);
+
+  const navItems: NavItem[] = MAIN_NAV_ITEMS.map((item) => {
+    if (item.href === '/terminals') {
+      return {
+        ...item,
+        active: true,
+        action: () => {
+          if (activeSessionName) {
+            setActiveSessionName(null);
+            setActiveFileManagerPath('');
+            setFileManagerOpen(false);
+          }
+        },
+      };
+    }
+
+    return {
+      ...item,
+      action: () => { void router.push(item.href); },
+    };
+  });
 
   const renderNavItems = () => navItems.map((item, idx) => {
     const elements: React.ReactNode[] = [];
@@ -311,31 +348,96 @@ export default function TerminalsPage() {
               <Text size="sm" weight={700}>Viewing: {activeSessionName}</Text>
               <button
                 type="button"
-                onClick={() => setActiveSessionName(null)}
+                onClick={() => setFileManagerOpen((open) => !open)}
+                title={fileManagerOpen ? 'Hide file manager' : 'Show file manager'}
+                aria-label={fileManagerOpen ? 'Hide file manager' : 'Show file manager'}
                 style={{
+                  width: 30,
+                  height: 28,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   border: `1px solid ${theme.colors.gray[3]}`,
                   borderRadius: 8,
-                  padding: '4px 10px',
-                  background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff',
-                  fontSize: 12,
+                  padding: 0,
+                  background: fileManagerOpen
+                    ? (theme.colorScheme === 'dark' ? theme.colors.dark[5] : theme.colors.blue[0])
+                    : (theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff'),
+                  color: fileManagerOpen ? theme.colors.blue[6] : 'inherit',
                   cursor: 'pointer',
                 }}
               >
-                Back to List
+                <IconFolderOpen size={16} />
               </button>
             </Group>
-            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
-              <iframe
-                key={activeSessionName}
-                src={`/terminal?session=${encodeURIComponent(activeSessionName)}`}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'block',
-                  border: 'none',
-                  borderRadius: 8,
-                }}
-              />
+            <div
+              ref={activePaneRef}
+              style={{
+                flex: 1,
+                minHeight: 0,
+                overflow: 'hidden',
+                position: 'relative',
+                display: 'grid',
+                gridTemplateRows: fileManagerOpen ? `minmax(0, ${fileManagerHeight}fr) ${SPLIT_HANDLE_SIZE}px minmax(0, ${100 - fileManagerHeight}fr)` : '1fr',
+              }}
+            >
+              {isSplitResizing && (
+                <div
+                  style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 9999,
+                    cursor: 'row-resize',
+                    background: 'transparent',
+                  }}
+                />
+              )}
+              {fileManagerOpen && (
+                <>
+                  <div style={{ minHeight: 0, overflow: 'hidden', border: `1px solid ${theme.colors.gray[3]}`, borderRadius: 8, background: '#fff' }}>
+                    <div style={{ height: '100%', minHeight: 0 }}>
+                      <FileManagerContent
+                        key={activeFileManagerPath || 'project-root'}
+                        title="Documents"
+                        initialPath={activeFileManagerPath || undefined}
+                        hideDirectoryTree
+                        hideStandaloneHeader
+                        routePathname="/terminals"
+                        updateRoute={false}
+                      />
+                    </div>
+                  </div>
+                  <div
+                    onPointerDown={startSplitResize}
+                    aria-label="Resize file manager and terminal"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'row-resize',
+                      touchAction: 'none',
+                      userSelect: 'none',
+                      color: '#93a4cc',
+                      background: 'transparent',
+                    }}
+                  >
+                    <IconGripHorizontal size={16} />
+                  </div>
+                </>
+              )}
+              <div style={{ minHeight: 0, overflow: 'hidden', position: 'relative' }}>
+                <iframe
+                  key={activeSessionName}
+                  src={`/terminal?session=${encodeURIComponent(activeSessionName)}`}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'block',
+                    border: 'none',
+                    borderRadius: 8,
+                  }}
+                />
+              </div>
             </div>
           </div>
         ) : (
@@ -397,6 +499,7 @@ export default function TerminalsPage() {
                           window.open(`/terminal?session=${encodeURIComponent(session.name)}`, '_blank');
                         } else {
                           setActiveSessionName(session.name);
+                          setActiveFileManagerPath('');
                         }
                       }}
                       disabled={activeSessionName === session.name}

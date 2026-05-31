@@ -1,34 +1,14 @@
 id: mcp-notes-server
 title: Notes MCP Server
 description: Build a small MCP server that exposes add/list/search-note tools, with a sample agent prompt that uses it.
-thumbnail: null
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/a5ae10c6-eedb-438d-ab5c-a8e5f4c6af5e.png
 video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my MCP server engineer.
+  Create a local notes service that supports adding, listing, and searching notes.
 
-  Goal: A working MCP server under `.skillpilot/temp/notes-mcp/` with three tools
-  (`add_note`, `list_notes`, `search_notes`) backed by a local SQLite file, plus
-  a sample agent prompt that exercises all three.
-
-  Steps:
-  1. Scaffold (Python + uv, or Node — pick one and justify).
-  2. Implement the three tools; each with explicit input schemas and concise
-     descriptions (LLMs read these to decide when to call).
-  3. Storage: SQLite at `~/.skillpilot/notes.db`. Schema: id, ts, tags TEXT[],
-     body TEXT. FTS over body+tags for search.
-  4. Add stdin/stdout MCP transport.
-  5. Register the server in Skill Pilot config (show me the exact snippet).
-  6. Sample agent prompt at `examples/use-notes.md` that:
-     - Adds 3 notes with tags
-     - Lists recent notes
-     - Searches for one
-  7. Smoke test that runs the sample prompt and checks the DB state after.
-
-  Constraints:
-  - All input validated; no SQL injection.
-  - DB file must be created with 0600 perms.
+  Include a small persistent notes store, a sample interaction, safety checks for local file access, and clear run instructions. Save the project under `.skillpilot/temp/notes-mcp/`.
 workflow: null
 directory: null
 git_tag: null
@@ -37,6 +17,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links:
   - name: Model Context Protocol
     url: https://modelcontextprotocol.io

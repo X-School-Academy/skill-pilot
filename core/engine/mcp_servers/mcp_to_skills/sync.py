@@ -350,6 +350,10 @@ def expand_env_placeholders(value: Any, env: dict[str, str], missing: set[str]) 
     return value
 
 
+def prune_empty_env_values(env: dict[Any, Any]) -> dict[str, str]:
+    return {str(k): str(v) for k, v in env.items() if v is not None and str(v) != ""}
+
+
 def _coerce_to_bool(value: Any) -> bool:
     """Convert env-expanded field values (possibly strings) to bool.
 
@@ -418,7 +422,7 @@ def load_mcp_configs(path: Path) -> tuple[dict[str, ServerConfig], dict[str, set
             id=server_id,
             command=command,
             args=args,
-            env={str(k): str(v) for k, v in env_val.items()} if isinstance(env_val, dict) else {},
+            env=prune_empty_env_values(env_val) if isinstance(env_val, dict) else {},
             url=str(expanded.get("url")) if expanded.get("url") is not None else None,
             type=str(expanded.get("type")) if expanded.get("type") is not None else None,
             transport=str(expanded.get("transport")) if expanded.get("transport") is not None else None,

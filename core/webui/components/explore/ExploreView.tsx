@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
@@ -12,21 +12,27 @@ import {
   Group,
   Loader,
   Modal,
-  ScrollArea,
   Stack,
   Text,
   Tooltip,
   useMantineTheme,
 } from '@mantine/core';
 import {
+  IconArrowRight,
   IconArrowLeft,
   IconCopy,
   IconExternalLink,
+  IconFile,
   IconFolderOpen,
+  IconGripHorizontal,
   IconPlayerPlay,
+  IconRobot,
+  IconSchool,
   IconSparkles,
   IconStar,
   IconTrendingUp,
+  IconVideo,
+  IconX,
 } from '@tabler/icons-react';
 
 import { apiUrl } from '../../libs/api-base';
@@ -36,6 +42,26 @@ type ExploreMode = 'category' | 'popularity' | 'level';
 interface ShowcaseLink {
   name: string;
   url: string;
+}
+
+interface ShowcaseRelated {
+  slug: string;
+  caption: string;
+}
+
+interface ShowcaseVariant {
+  slug: string;
+  caption: string;
+}
+
+interface ShowcaseSequenceLink {
+  slug_id: string;
+  title: string;
+}
+
+interface ShowcaseResolvedItem {
+  label: string;
+  path: string | null;
 }
 
 interface ShowcaseSample {
@@ -55,14 +81,28 @@ interface ShowcaseSample {
   prompt: string;
   workflow: string | null;
   directory: string | null;
+  'zip-files-url'?: string | null;
   in_mode: 'dev' | 'prod';
   git_tag: string | null;
   use_worktree: boolean;
   skills: string[];
+  skill_items?: ShowcaseResolvedItem[];
+  subagents?: string[];
+  subagent_items?: ShowcaseResolvedItem[];
   extensions: string[];
   tools: string[];
+  tool_items?: ShowcaseResolvedItem[];
   files: string[];
+  file_items?: ShowcaseResolvedItem[];
+  prompt_items?: ShowcaseResolvedItem[];
   links: ShowcaseLink[];
+  related: ShowcaseRelated[];
+  variants: ShowcaseVariant[];
+  previous_showcase: ShowcaseSequenceLink | null;
+  next_showcase: ShowcaseSequenceLink | null;
+  goals: string | null;
+  terms: string[];
+  term_urls?: Record<string, string>;
   popularity: number;
   level: number;
   rate: number;
@@ -117,11 +157,274 @@ function openFileManager(path: string) {
   window.open(`/file-manager?path=${encodeURIComponent(normalized)}`, '_blank', 'noopener,noreferrer');
 }
 
-function promptToMarkdown(prompt: string): string {
+function promptToMarkdown(prompt: string, resolvedPaths?: Map<string, string>): string {
   return prompt.replace(/@([A-Za-z0-9_./-]+)/g, (_match, pathValue) => {
-    const path = `/${String(pathValue).replace(/^\/+/, '')}`;
-    return `[@${pathValue}](/file-manager?path=${encodeURIComponent(path)})`;
+    const rawPath = String(pathValue);
+    const punctuation = rawPath.match(/[.,;:!?]+$/)?.[0] || '';
+    const displayPath = punctuation ? rawPath.slice(0, -punctuation.length) : rawPath;
+    const normalizedPath = displayPath.replace(/^\/+/, '');
+    const resolvedPath = resolvedPaths?.get(normalizedPath);
+    if (resolvedPaths && !resolvedPath) {
+      return `@${displayPath}${punctuation}`;
+    }
+    const path = `/${resolvedPath || normalizedPath}`;
+    return `[@${displayPath}](/file-manager?path=${encodeURIComponent(path)})${punctuation}`;
   });
+}
+
+function isMarkdownUrl(value: string | null | undefined): boolean {
+  const raw = String(value || '').trim();
+  if (!raw) return false;
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      return new URL(raw).pathname.toLowerCase().endsWith('.md');
+    } catch {
+      return false;
+    }
+  }
+  const [withoutHash] = raw.split('#');
+  const [withoutQuery] = withoutHash.split('?');
+  return withoutQuery.toLowerCase().endsWith('.md');
+}
+
+function toCourseParam(value: string): string {
+  const raw = value.trim();
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith('/api/files/download')) {
+    try {
+      const path = new URL(raw, window.location.origin).searchParams.get('path') || '';
+      return path.replace(/^\/+/, '').replace(/^workspace\/learning\//, '');
+    } catch {
+      return raw;
+    }
+  }
+  return raw.replace(/^\/+/, '').replace(/^workspace\/learning\//, '').replace(/^learning\//, '');
+}
+
+function coursePopupUrl(value: string): string {
+  return `/courses?course=${encodeURIComponent(toCourseParam(value))}&popup=1`;
+}
+
+function FloatingPopup({
+  title,
+  onClose,
+  children,
+  initialWidth = 880,
+  initialHeight = 560,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  initialWidth?: number;
+  initialHeight?: number;
+}) {
+  const popupRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; left: number; top: number } | null>(null);
+  const resizeRef = useRef<{ startX: number; startY: number; width: number; height: number } | null>(null);
+  const [position, setPosition] = useState({ left: 80, top: 80 });
+  const [size, setSize] = useState({ width: initialWidth, height: initialHeight });
+  const [isDraggingPopup, setIsDraggingPopup] = useState(false);
+  const [isResizingPopup, setIsResizingPopup] = useState(false);
+
+  const stopPointerAction = (event?: React.PointerEvent<HTMLElement>) => {
+    if (event?.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    dragRef.current = null;
+    resizeRef.current = null;
+    setIsDraggingPopup(false);
+    setIsResizingPopup(false);
+  };
+
+  const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!popupRef.current) return;
+    if (event.button !== 0) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const bounds = popupRef.current.getBoundingClientRect();
+    dragRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      left: bounds.left,
+      top: bounds.top,
+    };
+    setIsDraggingPopup(true);
+    event.preventDefault();
+  };
+
+  const dragPopup = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const width = popupRef.current?.offsetWidth || initialWidth;
+    const height = popupRef.current?.offsetHeight || initialHeight;
+    setPosition({
+      left: Math.max(8, Math.min(window.innerWidth - Math.min(120, width), drag.left + event.clientX - drag.startX)),
+      top: Math.max(8, Math.min(window.innerHeight - Math.min(80, height), drag.top + event.clientY - drag.startY)),
+    });
+  };
+
+  const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!popupRef.current) return;
+    if (event.button !== 0) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      width: popupRef.current.offsetWidth,
+      height: popupRef.current.offsetHeight,
+    };
+    setIsResizingPopup(true);
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const resizePopup = (event: React.PointerEvent<HTMLDivElement>) => {
+    const resizing = resizeRef.current;
+    if (!resizing) return;
+    setSize({
+      width: Math.max(360, Math.min(window.innerWidth - position.left - 8, resizing.width + event.clientX - resizing.startX)),
+      height: Math.max(260, Math.min(window.innerHeight - position.top - 8, resizing.height + event.clientY - resizing.startY)),
+    });
+  };
+
+  return (
+    <div
+      ref={popupRef}
+      style={{
+        position: 'fixed',
+        left: position.left,
+        top: position.top,
+        width: `min(${size.width}px, calc(100vw - 24px))`,
+        height: `min(${size.height}px, calc(100vh - 24px))`,
+        minWidth: 360,
+        minHeight: 260,
+        maxWidth: 'calc(100vw - 16px)',
+        maxHeight: 'calc(100vh - 16px)',
+        overflow: 'hidden',
+        zIndex: 1000,
+        background: '#ffffff',
+        border: '1px solid #cbd5e1',
+        borderRadius: 12,
+        boxShadow: '0 24px 70px rgba(15, 23, 42, 0.28)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <div
+        style={{
+          height: 42,
+          padding: '0 10px 0 12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          borderBottom: '1px solid #e2e8f0',
+          background: '#ffffff',
+          userSelect: 'none',
+          flexShrink: 0,
+        }}
+      >
+        <Group
+          spacing={8}
+          noWrap
+          onPointerDown={startDrag}
+          onPointerMove={dragPopup}
+          onPointerUp={stopPointerAction}
+          onPointerCancel={stopPointerAction}
+          style={{ minWidth: 0, flex: 1, alignSelf: 'stretch', cursor: isDraggingPopup ? 'grabbing' : 'grab' }}
+        >
+          <IconGripHorizontal size="1rem" color={isDraggingPopup ? '#2563eb' : '#64748b'} />
+          <Text size="sm" weight={700} lineClamp={1}>{title}</Text>
+        </Group>
+        <Button size="xs" variant="subtle" compact onClick={onClose} leftIcon={<IconX size="0.9rem" />}>
+          Close
+        </Button>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: '#ffffff' }}>
+        {children}
+      </div>
+      <div
+        onPointerDown={startResize}
+        onPointerMove={resizePopup}
+        onPointerUp={stopPointerAction}
+        onPointerCancel={stopPointerAction}
+        title="Resize"
+        style={{
+          position: 'absolute',
+          right: 0,
+          bottom: 0,
+          width: 28,
+          height: 28,
+          cursor: 'nwse-resize',
+          background: 'transparent',
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'flex-end',
+          padding: 5,
+          zIndex: 2,
+        }}
+      >
+        <div
+          aria-hidden="true"
+          style={{
+            width: 13,
+            height: 13,
+            background:
+              `repeating-linear-gradient(135deg, transparent 0 4px, ${isResizingPopup ? '#2563eb' : '#64748b'} 4px 6px, transparent 6px 8px)`,
+            opacity: 0.85,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function PopupVideoPlayer({ src, title }: { src: string; title: string }) {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+  }, [src]);
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: 220, background: '#000' }}>
+      <video
+        src={src}
+        controls
+        autoPlay
+        aria-label={title}
+        onLoadStart={() => setLoading(true)}
+        onWaiting={() => setLoading(true)}
+        onCanPlay={() => setLoading(false)}
+        onPlaying={() => setLoading(false)}
+        onError={() => setLoading(false)}
+        style={{ width: '100%', height: '100%', display: 'block', background: '#000' }}
+      />
+      {loading && (
+        <div
+          aria-label="Loading video"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+            background: 'rgba(0, 0, 0, 0.18)',
+          }}
+        >
+          <Loader size="lg" color="blue" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function toKebabCase(term: string): string {
+  return term
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
 }
 
 function isVideoLike(value: string | null | undefined): boolean {
@@ -134,13 +437,87 @@ function isAudioLike(value: string | null | undefined): boolean {
   return ['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac'].some((suffix) => lower.includes(suffix));
 }
 
+function LoadingThumbnailImage({
+  src,
+  alt,
+  isDark,
+  style,
+}: {
+  src: string;
+  alt: string;
+  isDark?: boolean;
+  style?: React.CSSProperties;
+}) {
+  const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
+
+  useEffect(() => {
+    setStatus('loading');
+  }, [src]);
+
+  return (
+    <>
+      <img
+        src={src}
+        alt={alt}
+        onLoad={() => setStatus('loaded')}
+        onError={() => setStatus('error')}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          display: 'block',
+          opacity: status === 'loaded' ? 1 : 0,
+          transition: 'opacity 0.18s ease',
+          ...style,
+        }}
+      />
+      {status === 'loading' && (
+        <div
+          aria-label={`Loading ${alt} thumbnail`}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: isDark ? 'rgba(15, 23, 42, 0.72)' : 'rgba(248, 250, 252, 0.72)',
+            color: isDark ? '#cbd5e1' : '#475569',
+            pointerEvents: 'none',
+          }}
+        >
+          <Loader size="sm" />
+        </div>
+      )}
+      {status === 'error' && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 10,
+            background: isDark ? '#111827' : '#f1f5f9',
+            color: isDark ? '#cbd5e1' : '#64748b',
+            fontSize: 12,
+            fontWeight: 700,
+            textAlign: 'center',
+          }}
+        >
+          Thumbnail unavailable
+        </div>
+      )}
+    </>
+  );
+}
+
 function TileThumb({ label, src, seed, isDark, size = 64 }: { label: string; src?: string | null; seed: string; isDark?: boolean; size?: number }) {
   const [bg, fg] = pickColor(seed);
   const radius = Math.round(size * 0.22);
   if (src) {
     return (
-      <div style={{ width: size, height: size, borderRadius: radius, overflow: 'hidden', background: isDark ? '#374151' : '#e5e7eb', flexShrink: 0 }}>
-        <img src={src} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      <div style={{ position: 'relative', width: size, height: size, borderRadius: radius, overflow: 'hidden', background: isDark ? '#374151' : '#e5e7eb', flexShrink: 0 }}>
+        <LoadingThumbnailImage src={src} alt={label} isDark={isDark} />
       </div>
     );
   }
@@ -177,6 +554,7 @@ export default function ExploreView() {
   const [canUseTemplate, setCanUseTemplate] = useState(true);
   const [copiedPromptId, setCopiedPromptId] = useState('');
   const [mediaModal, setMediaModal] = useState<{ url: string; title: string; type: 'image' | 'video' | 'audio' } | null>(null);
+  const [coursePopup, setCoursePopup] = useState<{ url: string; title: string } | null>(null);
   const [templateSample, setTemplateSample] = useState<ShowcaseSample | null>(null);
   const [templateOpened, setTemplateOpened] = useState(false);
   const [templateUseWorktree, setTemplateUseWorktree] = useState(false);
@@ -267,7 +645,7 @@ export default function ExploreView() {
     return base;
   }, [allSamples, mode]);
 
-  const updateQuery = (patch: Record<string, string | undefined>) => {
+  const updateQuery = (patch: Record<string, string | undefined>, options?: { history?: 'replace' | 'push' }) => {
     const nextQuery: Record<string, string> = {};
     const current = router.query;
     Object.entries(current).forEach(([key, value]) => {
@@ -281,7 +659,12 @@ export default function ExploreView() {
         nextQuery[key] = value;
       }
     });
-    void router.replace({ pathname: '/', query: nextQuery }, undefined, { shallow: true });
+    const nextRoute = { pathname: '/', query: nextQuery };
+    if (options?.history === 'push') {
+      void router.push(nextRoute, undefined, { shallow: true });
+      return;
+    }
+    void router.replace(nextRoute, undefined, { shallow: true });
   };
 
   const openMode = (nextMode: ExploreMode) => {
@@ -304,6 +687,19 @@ export default function ExploreView() {
     });
   };
 
+  const openSampleBySlug = (slug: string) => {
+    const target = allSamples.find((sample) => sample.id === slug);
+    if (target) {
+      updateQuery({
+        explore_mode: mode === 'category' ? 'category' : mode,
+        category: target.__category || selectedCategoryName || undefined,
+        sample: target.id,
+      }, { history: 'push' });
+      return;
+    }
+    updateQuery({ sample: slug }, { history: 'push' });
+  };
+
   const goBackFromSample = () => {
     updateQuery({ sample: undefined });
   };
@@ -322,13 +718,48 @@ export default function ExploreView() {
     setMediaModal({ url, title, type });
   };
 
+  const openCoursePopup = (url: string, title: string) => {
+    setCoursePopup({ url: coursePopupUrl(url), title });
+  };
+
+  const openShowcaseResource = (url: string, title: string) => {
+    if (isMarkdownUrl(url)) {
+      openCoursePopup(url, title);
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const openTermVideo = (term: string, url: string) => {
+    openMedia(url, term, 'video');
+  };
+
   const maybeOpenTutorial = (sample: ShowcaseSample) => {
     if (!sample.tutorial_url) return;
     if (sample.tutorial_is_media) {
       openMedia(sample.tutorial_url, `${sample.title} tutorial`, isAudioLike(sample.tutorial) ? 'audio' : 'video');
       return;
     }
-    window.open(sample.tutorial_url, '_blank', 'noopener,noreferrer');
+    openShowcaseResource(sample.tutorial_url, `${sample.title} tutorial`);
+  };
+
+  const linkKind = (url: string): 'video' | 'course' | 'external' => {
+    if (isVideoLike(url)) return 'video';
+    if (isMarkdownUrl(url)) return 'course';
+    return 'external';
+  };
+
+  const openLinkResource = (link: ShowcaseLink) => {
+    const kind = linkKind(link.url);
+    if (kind === 'video') {
+      openMedia(link.url, link.name, 'video');
+      return;
+    }
+    if (kind === 'course') {
+      openCoursePopup(link.url, link.name);
+      return;
+    }
+    window.open(link.url, '_blank', 'noopener,noreferrer');
   };
 
   const openTemplateSettings = (sample: ShowcaseSample, forceWorktree = false) => {
@@ -502,6 +933,13 @@ export default function ExploreView() {
   const promptBorder = isDark ? `1px solid ${theme.colors.dark[4]}` : '1px solid #e2e8f0';
   const promptText = isDark ? theme.colors.dark[0] : '#1e293b';
   const linkColor = isDark ? theme.colors.blue[4] : '#2563eb';
+  const promptResolvedPaths = useMemo(() => {
+    const paths = new Map<string, string>();
+    (selectedSample?.prompt_items || []).forEach((item) => {
+      if (item.path) paths.set(item.label.replace(/^\/+/, ''), item.path.replace(/^\/+/, ''));
+    });
+    return paths;
+  }, [selectedSample?.prompt_items]);
 
   const markdownLinkComponents = {
     a: ({ href, children }: { href?: string; children?: React.ReactNode }) => {
@@ -536,13 +974,99 @@ export default function ExploreView() {
     </ReactMarkdown>
   );
 
+  const renderResolvedItem = (item: ShowcaseResolvedItem, icon: React.ReactNode, displayLabel?: string) => {
+    const label = displayLabel || item.label;
+    if (item.path) {
+      return (
+        <Button
+          key={`${item.label}-${item.path}`}
+          variant="subtle"
+          compact
+          styles={{ inner: { justifyContent: 'flex-start' }, label: { textAlign: 'left' } }}
+          leftIcon={icon}
+          onClick={() => openFileManager(item.path as string)}
+        >
+          {label}
+        </Button>
+      );
+    }
+    return (
+      <Group
+        key={item.label}
+        spacing={8}
+        noWrap
+        style={{
+          minHeight: 30,
+          padding: '4px 10px',
+          color: isDark ? theme.colors.dark[2] : '#64748b',
+        }}
+      >
+        {icon}
+        <Text size="sm" style={{ flex: 1, minWidth: 0, lineHeight: 1.35, wordBreak: 'break-word' }}>{label}</Text>
+      </Group>
+    );
+  };
+
+  const renderSequenceLink = (label: string, link: ShowcaseSequenceLink, direction: 'previous' | 'next') => (
+    <button
+      type="button"
+      onClick={() => openSampleBySlug(link.slug_id)}
+      style={{
+        flex: 1,
+        minWidth: 220,
+        border: isDark ? `1px solid ${theme.colors.dark[4]}` : '1px solid #bfdbfe',
+        borderRadius: 10,
+        background: isDark ? theme.colors.dark[6] : '#eff6ff',
+        color: isDark ? theme.colors.blue[2] : '#1d4ed8',
+        cursor: 'pointer',
+        padding: '10px 12px',
+        textAlign: 'left',
+        fontSize: 13,
+        fontWeight: 600,
+        lineHeight: 1.45,
+        whiteSpace: 'normal',
+        overflowWrap: 'anywhere',
+      }}
+    >
+      <Group spacing={8} noWrap>
+        {direction === 'previous' && <IconArrowLeft size="0.9rem" />}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <Text size="xs" weight={700} color={isDark ? 'blue.2' : 'blue.7'}>{label}</Text>
+          <Text size="sm" weight={700} style={{ lineHeight: 1.35 }}>{link.title}</Text>
+        </div>
+        {direction === 'next' && <IconArrowRight size="0.9rem" />}
+      </Group>
+    </button>
+  );
+
   const renderSampleActions = (sample: ShowcaseSample) => {
-    const pathGroups: Array<{ title: string; items: string[] }> = [
-      ...(sample.workflow ? [{ title: 'Workflow', items: [sample.workflow] }] : []),
-      ...(sample.directory ? [{ title: 'Directory', items: [sample.directory] }] : []),
-      { title: 'Skills', items: sample.skills },
-      { title: 'Tools', items: sample.tools },
-      { title: 'Files', items: sample.files },
+    const subagents = sample.subagents || [];
+    const pathGroups: Array<{ title: string; items: ShowcaseResolvedItem[]; icon: React.ReactNode }> = [
+      ...(sample.workflow ? [{
+        title: 'Workflow',
+        items: [{ label: sample.workflow, path: null }],
+        icon: <IconFile size="0.9rem" />,
+      }] : []),
+      ...(sample.directory ? [{
+        title: 'Directory',
+        items: [{ label: sample.directory, path: null }],
+        icon: <IconFolderOpen size="0.9rem" />,
+      }] : []),
+      ...(sample.skills.length > 0 ? [{
+        title: 'Skills',
+        items: sample.skill_items || sample.skills.map((skill) => ({ label: skill, path: null })),
+        icon: <IconFolderOpen size="0.9rem" />,
+      }] : []),
+      ...(subagents.length > 0 ? [{
+        title: 'Subagents',
+        items: sample.subagent_items || subagents.map((subagent) => ({ label: subagent, path: null })),
+        icon: <IconRobot size="0.9rem" />,
+      }] : []),
+      ...(sample.tools.length > 0 ? [{
+        title: 'Tools',
+        items: sample.tool_items || sample.tools.map((tool) => ({ label: tool, path: null })),
+        icon: <IconFile size="0.9rem" />,
+      }] : []),
     ];
 
     return (
@@ -587,72 +1111,78 @@ export default function ExploreView() {
         {pathGroups.map((group) => (
           <div key={group.title} style={{ padding: 18, borderRadius: 18, border: cardBorder, background: cardBg }}>
             <Text size="sm" weight={700} mb={10}>{group.title}</Text>
-            {group.items.length === 0 ? (
-              <Text size="xs" color="dimmed">None</Text>
-            ) : (
-              <Stack spacing={6}>
-                {group.items.map((item) => (
-                  <Button
-                    key={item}
-                    variant="subtle"
-                    compact
-                    styles={{ inner: { justifyContent: 'flex-start' } }}
-                    leftIcon={<IconFolderOpen size="0.9rem" />}
-                    onClick={() => openFileManager(item)}
-                  >
-                    {item}
-                  </Button>
-                ))}
-              </Stack>
-            )}
+            <Stack spacing={6}>
+              {group.items.map((item) => renderResolvedItem(item, group.icon))}
+            </Stack>
           </div>
         ))}
+
+        {sample.files.length > 0 && (
+          <div style={{ padding: 18, borderRadius: 18, border: cardBorder, background: cardBg }}>
+            <Text size="sm" weight={700} mb={10}>Files</Text>
+            <Stack spacing={6}>
+              {(sample.file_items || sample.files.map((filePath) => ({ label: filePath, path: null }))).map((item) => {
+                const fileName = item.label.split('/').pop() || item.label;
+                return renderResolvedItem(item, <IconFile size="0.9rem" />, fileName);
+              })}
+            </Stack>
+          </div>
+        )}
 
         {sample.extensions.length > 0 && (
           <div style={{ padding: 18, borderRadius: 18, border: cardBorder, background: cardBg }}>
             <Text size="sm" weight={700} mb={10}>Extensions</Text>
             <Stack spacing={6}>
               {sample.extensions.map((ext) => {
-                const extPath = ext.startsWith('extensions/') ? ext : `extensions/${ext}`;
                 const extName = ext.replace(/^extensions\//, '');
                 return (
-                  <Button
+                  <Group
                     key={ext}
-                    variant="subtle"
-                    compact
-                    styles={{ inner: { justifyContent: 'flex-start' } }}
-                    leftIcon={<IconFolderOpen size="0.9rem" />}
-                    onClick={() => openFileManager(extPath)}
+                    spacing={8}
+                    noWrap
+                    style={{
+                      minHeight: 30,
+                      padding: '4px 10px',
+                      color: isDark ? theme.colors.dark[2] : '#64748b',
+                    }}
                   >
-                    {extName}
-                  </Button>
+                    <IconFolderOpen size="0.9rem" />
+                    <Text size="sm" style={{ flex: 1, minWidth: 0, lineHeight: 1.35, wordBreak: 'break-word' }}>{extName}</Text>
+                  </Group>
                 );
               })}
             </Stack>
           </div>
         )}
 
-        <div style={{ padding: 18, borderRadius: 18, border: cardBorder, background: cardBg }}>
-          <Text size="sm" weight={700} mb={10}>Links</Text>
-          {sample.links.length === 0 ? (
-            <Text size="xs" color="dimmed">None</Text>
-          ) : (
+        {sample.links.length > 0 && (
+          <div style={{ padding: 18, borderRadius: 18, border: cardBorder, background: cardBg }}>
+            <Text size="sm" weight={700} mb={10}>Links</Text>
             <Stack spacing={8}>
-              {sample.links.map((link) => (
-                <Button
-                  key={link.url}
-                  variant="subtle"
-                  compact
-                  leftIcon={<IconExternalLink size="0.9rem" />}
-                  styles={{ inner: { justifyContent: 'flex-start' } }}
-                  onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
-                >
-                  {link.name}
-                </Button>
-              ))}
+              {sample.links.map((link) => {
+                const kind = linkKind(link.url);
+                return (
+                  <Button
+                    key={link.url}
+                    variant="subtle"
+                    compact
+                    leftIcon={
+                      kind === 'video'
+                        ? <IconVideo size="0.9rem" />
+                        : kind === 'course'
+                          ? <IconSchool size="0.9rem" />
+                          : <IconExternalLink size="0.9rem" />
+                    }
+                    styles={{ inner: { justifyContent: 'flex-start' } }}
+                    onClick={() => openLinkResource(link)}
+                  >
+                    {link.name}
+                  </Button>
+                );
+              })}
             </Stack>
-          )}
-        </div>
+          </div>
+        )}
       </Stack>
     );
   };
@@ -660,7 +1190,7 @@ export default function ExploreView() {
   const renderSampleDetail = () => {
     if (!selectedSample) return null;
     const sample = selectedSample;
-    const linkedPrompt = promptToMarkdown(sample.prompt);
+    const linkedPrompt = promptToMarkdown(sample.prompt, promptResolvedPaths);
 
     return (
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(280px, 360px)', gap: 20, padding: 20 }}>
@@ -698,11 +1228,7 @@ export default function ExploreView() {
                   overflow: 'hidden',
                 }}
               >
-                <img
-                  src={sample.thumbnail_url}
-                  alt={sample.title}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                />
+                <LoadingThumbnailImage src={sample.thumbnail_url} alt={sample.title} isDark={isDark} />
                 <div
                   style={{
                     position: 'absolute',
@@ -711,6 +1237,7 @@ export default function ExploreView() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     pointerEvents: 'none',
+                    zIndex: 1,
                   }}
                 >
                   <div
@@ -804,7 +1331,7 @@ export default function ExploreView() {
                     if (sample.request_is_media) {
                       openMedia(sample.request_url as string, `${sample.title} request`, isAudioLike(sample.request) ? 'audio' : 'video');
                     } else {
-                      window.open(sample.request_url as string, '_blank', 'noopener,noreferrer');
+                      openShowcaseResource(sample.request_url as string, `${sample.title} requirement`);
                     }
                   }}
                 >
@@ -887,6 +1414,126 @@ export default function ExploreView() {
                 {linkedPrompt}
               </ReactMarkdown>
             </Box>
+
+            {(sample.previous_showcase || sample.next_showcase) && (
+              <>
+                <Divider my="md" />
+                <Group spacing={10} align="stretch">
+                  {sample.previous_showcase && renderSequenceLink('Previous showcase', sample.previous_showcase, 'previous')}
+                  {sample.next_showcase && renderSequenceLink('Next showcase', sample.next_showcase, 'next')}
+                </Group>
+              </>
+            )}
+
+            {sample.goals && (
+              <>
+                <Divider my="md" />
+                <Text size="sm" weight={700} mb={10}>Goals</Text>
+                <Box
+                  sx={{
+                    fontSize: 14,
+                    color: isDark ? theme.colors.dark[1] : '#475569',
+                    lineHeight: 1.6,
+                    '& p': { margin: '0 0 8px' },
+                    '& p:last-child': { marginBottom: 0 },
+                    '& ul, & ol': { paddingLeft: 20, margin: '4px 0 8px' },
+                    '& li': { margin: '2px 0' },
+                  }}
+                >
+                  {renderMarkdown(sample.goals)}
+                </Box>
+              </>
+            )}
+
+            {sample.terms.length > 0 && (
+              <>
+                <Divider my="md" />
+                <Text size="sm" weight={700} mb={10}>Terms</Text>
+                <Group spacing={8}>
+                  {sample.terms.map((term) => {
+                    const termUrl = sample.term_urls?.[term] || '';
+                    return (
+                      <Badge
+                        key={term}
+                        variant="light"
+                        color={termUrl ? undefined : 'gray'}
+                        style={{ cursor: termUrl ? 'pointer' : 'default' }}
+                        onClick={termUrl ? () => openTermVideo(term, termUrl) : undefined}
+                      >
+                        {term}
+                      </Badge>
+                    );
+                  })}
+                </Group>
+              </>
+            )}
+
+            {sample.variants.length > 0 && (
+              <>
+                <Divider my="md" />
+                <Text size="sm" weight={700} mb={10}>Variants</Text>
+                <Stack spacing={8}>
+                  {sample.variants.map((variant) => (
+                    <button
+                      type="button"
+                      key={`${variant.slug}-${variant.caption}`}
+                      onClick={() => openSampleBySlug(variant.slug)}
+                      style={{
+                        width: '100%',
+                        border: isDark ? `1px solid ${theme.colors.dark[4]}` : '1px solid #ccfbf1',
+                        borderRadius: 10,
+                        background: isDark ? theme.colors.dark[6] : '#f0fdfa',
+                        color: isDark ? theme.colors.teal[2] : '#0f766e',
+                        cursor: 'pointer',
+                        padding: '10px 12px',
+                        textAlign: 'left',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        lineHeight: 1.45,
+                        whiteSpace: 'normal',
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
+                      {variant.caption}
+                    </button>
+                  ))}
+                </Stack>
+              </>
+            )}
+
+            {sample.related.length > 0 && (
+              <>
+                <Divider my="md" />
+                <Text size="sm" weight={700} mb={10}>Related</Text>
+                <Stack spacing={8}>
+                  {sample.related.map((related) => (
+                    <button
+                      type="button"
+                      key={`${related.slug}-${related.caption}`}
+                      onClick={() => openSampleBySlug(related.slug)}
+                      style={{
+                        width: '100%',
+                        border: isDark ? `1px solid ${theme.colors.dark[4]}` : '1px solid #dbeafe',
+                        borderRadius: 10,
+                        background: isDark ? theme.colors.dark[6] : '#eff6ff',
+                        color: isDark ? theme.colors.blue[2] : '#1d4ed8',
+                        cursor: 'pointer',
+                        padding: '10px 12px',
+                        textAlign: 'left',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        lineHeight: 1.45,
+                        whiteSpace: 'normal',
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
+                      {related.caption}
+                    </button>
+                  ))}
+                </Stack>
+              </>
+            )}
+
             </div>
           </div>
         </div>
@@ -941,9 +1588,9 @@ export default function ExploreView() {
         >
           {landscape ? (
             <>
-              <div style={{ width: '100%', aspectRatio: '16 / 9', background: src ? (isDark ? '#0f172a' : '#e5e7eb') : `linear-gradient(135deg, ${bg}, ${isDark ? bg : fg})`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+              <div style={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', background: src ? (isDark ? '#0f172a' : '#e5e7eb') : `linear-gradient(135deg, ${bg}, ${isDark ? bg : fg})`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
                 {src ? (
-                  <img src={src} alt={title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  <LoadingThumbnailImage src={src} alt={title} isDark={isDark} />
                 ) : (
                   <span style={{ color: '#fff', fontSize: 36, fontWeight: 800, letterSpacing: 1 }}>{initialsFromText(title)}</span>
                 )}
@@ -1177,7 +1824,7 @@ export default function ExploreView() {
               label="Using worktree"
               checked={templateUseWorktree}
               onChange={(event) => setTemplateUseWorktree(event.currentTarget.checked)}
-              disabled={templateSample.git_tag !== null || runtimeMode === 'development'}
+              disabled={templateSample.use_worktree || templateSample.git_tag !== null || runtimeMode === 'development'}
             />
             {templateSample.git_tag && (
               <Checkbox
@@ -1285,17 +1932,37 @@ export default function ExploreView() {
         )}
       </Modal>
 
-      <Modal opened={Boolean(mediaModal)} onClose={() => setMediaModal(null)} size="xl" centered title={mediaModal?.title || 'Media'}>
-        {mediaModal?.type === 'image' && (
-          <img src={mediaModal.url} alt={mediaModal.title} style={{ width: '100%', borderRadius: 12 }} />
-        )}
-        {mediaModal?.type === 'video' && (
-          <video src={mediaModal.url} controls autoPlay style={{ width: '100%', borderRadius: 12 }} />
-        )}
-        {mediaModal?.type === 'audio' && (
-          <audio src={mediaModal.url} controls autoPlay style={{ width: '100%' }} />
-        )}
-      </Modal>
+      {mediaModal && (
+        <FloatingPopup
+          title={mediaModal.title || 'Media'}
+          onClose={() => setMediaModal(null)}
+          initialWidth={mediaModal.type === 'audio' ? 520 : 920}
+          initialHeight={mediaModal.type === 'audio' ? 180 : 560}
+        >
+          {mediaModal.type === 'image' && (
+            <img src={mediaModal.url} alt={mediaModal.title} style={{ width: '100%', display: 'block' }} />
+          )}
+          {mediaModal.type === 'video' && (
+            <PopupVideoPlayer src={mediaModal.url} title={mediaModal.title} />
+          )}
+          {mediaModal.type === 'audio' && (
+            <div style={{ padding: 18 }}>
+              <audio src={mediaModal.url} controls autoPlay style={{ width: '100%' }} />
+            </div>
+          )}
+        </FloatingPopup>
+      )}
+
+      {coursePopup && (
+        <FloatingPopup title={coursePopup.title || 'Markdown course'} onClose={() => setCoursePopup(null)} initialWidth={980} initialHeight={660}>
+          <iframe
+            src={coursePopup.url}
+            title={coursePopup.title || 'Markdown course'}
+            style={{ width: '100%', height: '100%', border: 0, display: 'block' }}
+          />
+        </FloatingPopup>
+      )}
+
     </>
   );
 }

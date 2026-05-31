@@ -155,7 +155,7 @@ const ControlBlock = (props: any) => {
                                 if (props.action == 'use_skill') {
                                     const skillName = props.skill_name || 'unknown-skill';
                                     const prompt = `Use agent skill ${skillName}, as user's request below: ${feedback}`;
-                                    window.location.href = `/?new_session=true&prompt=${encodeURIComponent(prompt)}`;
+                                    window.location.href = `/agent-sessions?new=true&prompt=${encodeURIComponent(prompt)}`;
                                     return;
                                 }
 

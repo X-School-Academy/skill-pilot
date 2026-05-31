@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -60,20 +61,37 @@ def _compose_instructions(config: SkillPilotAgentConfig) -> str:
 
 def _prompt_requires_bash(prompt: str) -> bool:
     lowered = prompt.lower()
-    filesystem_terms = (
-        "file",
-        "folder",
-        "directory",
+    filesystem_request_patterns = (
+        r"\b(create|write|edit|read|list|inspect|count|verify|delete|remove|move|copy|append|patch|modify|check)\s+"
+        r"(a\s+|an\s+|the\s+)?(local\s+)?(file|folder|directory|repo|repository|workspace)s?\b",
+        r"\b(file|folder|directory)s?\s+(exists?|is present|is missing)\b",
+    )
+    if any(re.search(pattern, lowered) for pattern in filesystem_request_patterns):
+        return True
+
+    action_terms = (
         "create",
         "write",
         "edit",
-        "count",
-        "list",
         "read",
+        "list",
+        "inspect",
+        "count",
         "verify",
-        "exists",
+        "delete",
+        "remove",
+        "move",
+        "copy",
+        "append",
+        "patch",
+        "modify",
+        "check",
     )
-    return any(term in lowered for term in filesystem_terms)
+    path_like_pattern = re.compile(
+        r"(^|\s)(\.skillpilot/|\.{1,2}/|~/|/[\w.-]|[\w./-]+\."
+        r"(py|js|jsx|ts|tsx|json|json5|md|txt|yaml|yml|toml|html|css|csv|svg|png|jpg|jpeg|mp4|wav)\b)"
+    )
+    return any(term in lowered for term in action_terms) and bool(path_like_pattern.search(lowered))
 
 
 async def run_agent_async(config: SkillPilotAgentConfig) -> str:

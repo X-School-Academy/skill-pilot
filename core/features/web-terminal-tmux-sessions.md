@@ -10,7 +10,7 @@ terminal, tmux, session, WebSocket, xterm, ttyd, web terminal, browser terminal,
 - Tmux session lifecycle: create, attach, kill, cleanup, list
 - Terminal history save and retrieval
 - Session roots and readonly session enforcement
-- Excludes: SSH tunnels (see `connect-ec2-ssh` skill), MCP terminal server (separate MCP)
+- Excludes: SSH tunnels (see `cloud-operation` skill → aws-ec2-tunnel action), MCP terminal server (separate MCP)
 
 ## Main Behavior
 

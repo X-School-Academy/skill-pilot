@@ -23,7 +23,7 @@ There is no separate browser route that accepts a distinct `agent_id` parameter 
 If the user says "agent id", resolve it to the tmux session name used by the live session:
 
 1. Inspect the current context for the session name
-2. If unknown, open `/terminals` or `/?view=processes` and identify the matching live session
+2. If unknown, open `/terminals` or `/processes` and identify the matching live session
 3. Open the direct terminal route:
 
 ```text

@@ -1,0 +1,49 @@
+{
+  "version": "1.0",
+  "name": "new-workflow",
+  "updated_at": "2026-05-23T01:26:00Z",
+  "nodes": [
+    {
+      "id": 0,
+      "type": "start",
+      "position": {
+        "x": 120,
+        "y": 300
+      }
+    },
+    {
+      "id": 1,
+      "type": "agent",
+      "position": {
+        "x": 420,
+        "y": 280
+      },
+      "data": {
+        "title": "Agent 1",
+        "provider_id": "claude",
+        "subagent": "code-reviewer",
+        "responsibility": ""
+      }
+    },
+    {
+      "id": -1,
+      "type": "end",
+      "position": {
+        "x": 760,
+        "y": 300
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "0->1",
+      "source": 0,
+      "target": 1
+    },
+    {
+      "id": "1->-1",
+      "source": 1,
+      "target": -1
+    }
+  ]
+}

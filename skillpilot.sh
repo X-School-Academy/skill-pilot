@@ -35,6 +35,8 @@ ACTION_TARGET=""
 TEST_FILES=()
 DOCTOR_QUESTION=""
 IS_DEV=0
+NEXT_SERVER=0
+STOP_ALL=0
 SOURCE="manual"
 AVAILABLE_PROVIDERS=()
 LOADED_ENV_KEYS=()
@@ -53,6 +55,7 @@ Commands:
   build   Build static webui export (core/webui/www).
   start   Start services. Default command.
   stop    Stop running tmux sessions. Use `--dev` to stop only development sessions.
+          Use `--all` to stop production, development, next-server, and stray WebUI processes.
   test    Run engine pytest suite, or only the named files under core/engine/tests.
   doctor  Open the configured doctor AI agent for troubleshooting and guided help.
   enable human-detection    Install optional human detection dependencies.
@@ -62,6 +65,10 @@ Commands:
 
 Options:
   --dev   Use development mode for `start`, or stop only development sessions for `stop`.
+  --all   Stop all Skill Pilot runtime instances. Only valid with `stop`.
+  --next-server
+          Production mode only. Serve the WebUI via `next start` (the Next.js production server)
+          instead of the static HTML export served by the engine. Cannot be combined with `--dev`.
   --source <manual|webui>
           Identify the caller. `webui` restarts dev sessions and uses GUI auth for protected env reads when possible.
 
@@ -134,6 +141,12 @@ parse_args() {
       --dev)
         IS_DEV=1
         ;;
+      --all)
+        STOP_ALL=1
+        ;;
+      --next-server)
+        NEXT_SERVER=1
+        ;;
       help|-h|--help|build|start|stop|test|doctor|enable|disable)
         if ((action_set == 1)); then
           echo "Error: multiple commands provided."
@@ -185,6 +198,30 @@ parse_args() {
 
   if ((IS_DEV == 1)) && [[ "${ACTION}" != "start" && "${ACTION}" != "stop" ]]; then
     echo "Error: --dev is only supported with 'start' or 'stop'."
+    print_help
+    exit 1
+  fi
+
+  if ((NEXT_SERVER == 1)) && [[ "${ACTION}" != "start" && "${ACTION}" != "stop" ]]; then
+    echo "Error: --next-server is only supported with 'start' or 'stop'."
+    print_help
+    exit 1
+  fi
+
+  if ((STOP_ALL == 1)) && [[ "${ACTION}" != "stop" ]]; then
+    echo "Error: --all is only supported with 'stop'."
+    print_help
+    exit 1
+  fi
+
+  if ((STOP_ALL == 1)) && ((IS_DEV == 1 || NEXT_SERVER == 1)); then
+    echo "Error: --all cannot be combined with --dev or --next-server."
+    print_help
+    exit 1
+  fi
+
+  if ((NEXT_SERVER == 1)) && ((IS_DEV == 1)); then
+    echo "Error: --next-server cannot be combined with --dev."
     print_help
     exit 1
   fi
@@ -973,7 +1010,7 @@ detect_available_providers() {
 }
 
 kill_all_sp_sessions() {
-  local sessions=("sp-engine-prod" "sp-engine-dev" "sp-webui-dev")
+  local sessions=("sp-engine-prod" "sp-engine-dev" "sp-webui-dev" "sp-webui-prod")
   local killed=0
   for s in "${sessions[@]}"; do
     if tmux has-session -t "${s}" 2>/dev/null; then
@@ -986,6 +1023,60 @@ kill_all_sp_sessions() {
     echo "Cleared old sessions to free ports for this installation."
     echo ""
   fi
+}
+
+stop_all_skillpilot_tmux_sessions() {
+  local killed=0
+  local session_name
+  while IFS= read -r session_name; do
+    [[ -n "${session_name}" ]] || continue
+    case "${session_name}" in
+      sp-engine-*|sp-webui-*)
+        if tmux has-session -t "${session_name}" 2>/dev/null; then
+          tmux kill-session -t "${session_name}"
+          echo "Stopped tmux session '${session_name}'."
+          killed=1
+        fi
+        ;;
+    esac
+  done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null || true)
+
+  if ((killed == 0)); then
+    echo "No Skill Pilot tmux sessions were running."
+  fi
+}
+
+stop_stray_webui_processes() {
+  if ! command -v pgrep >/dev/null 2>&1; then
+    echo "pgrep is not available; skipped stray WebUI process scan."
+    return
+  fi
+
+  local patterns=(
+    "node scripts/with-timestamp-logs.js dev"
+    "node scripts/with-timestamp-logs.js start"
+  )
+  local killed=0
+  local pattern pid
+
+  for pattern in "${patterns[@]}"; do
+    while IFS= read -r pid; do
+      [[ -n "${pid}" ]] || continue
+      if kill "${pid}" 2>/dev/null; then
+        echo "Stopped stray WebUI process ${pid} matching '${pattern}'."
+        killed=1
+      fi
+    done < <(pgrep -f "${pattern}" 2>/dev/null || true)
+  done
+
+  if ((killed == 0)); then
+    echo "No stray WebUI dev/start processes were found."
+  fi
+}
+
+stop_all_runtime_instances() {
+  stop_all_skillpilot_tmux_sessions
+  stop_stray_webui_processes
 }
 
 run_init_wizard_if_needed() {
@@ -1520,6 +1611,8 @@ get_webui_base_url() {
   local mode="$1"
   if [[ "${mode}" == "dev" ]]; then
     get_service_base_url "webui" "development"
+  elif ((NEXT_SERVER == 1)); then
+    get_service_base_url "webui" "development"
   else
     get_service_base_url "engine" "production"
   fi
@@ -1739,6 +1832,13 @@ get_running_webui_url() {
   fi
 }
 
+webui_running() {
+  local mode="$1"
+  local url
+  url="$(get_webui_base_url "${mode}")"
+  wait_for_tcp_ready "${url}"
+}
+
 session_exists() {
   local session_name="$1"
   tmux has-session -t "${session_name}" 2>/dev/null
@@ -1748,6 +1848,8 @@ required_sessions_live() {
   local mode="$1"
   if [[ "${mode}" == "dev" ]]; then
     session_exists "sp-webui-dev" && session_exists "sp-engine-dev"
+  elif ((NEXT_SERVER == 1)); then
+    session_exists "sp-engine-prod" && session_exists "sp-webui-prod"
   else
     session_exists "sp-engine-prod"
   fi
@@ -1756,6 +1858,17 @@ required_sessions_live() {
 print_startup_troubleshooting() {
   local mode="$1"
   echo "A startup tmux session exited before Skill Pilot became reachable."
+  echo "Check captured error logs:"
+  if [[ "${mode}" == "dev" ]]; then
+    echo "  cat ${ROOT_DIR}/.skillpilot/logs/sp-webui-dev.err"
+    echo "  cat ${ROOT_DIR}/.skillpilot/logs/sp-engine-dev.err"
+  else
+    echo "  cat ${ROOT_DIR}/.skillpilot/logs/sp-engine-prod.err"
+    if ((NEXT_SERVER == 1)); then
+      echo "  cat ${ROOT_DIR}/.skillpilot/logs/sp-webui-prod.err"
+    fi
+  fi
+  echo ""
   echo "Run the raw command(s) below for troubleshooting:"
   if [[ "${mode}" == "dev" ]]; then
     local dev_webui_host dev_webui_port
@@ -1765,6 +1878,12 @@ print_startup_troubleshooting() {
     echo "  cd ${ROOT_DIR} && SKILL_PILOT_RUNTIME_MODE=development uv --project core/engine run core/engine/main.py --reload --reload-dir core/engine --reload-exclude core/engine/tests"
   else
     echo "  cd ${ROOT_DIR} && SKILL_PILOT_RUNTIME_MODE=production uv --project core/engine run core/engine/main.py"
+    if ((NEXT_SERVER == 1)); then
+      local prod_webui_host prod_webui_port
+      prod_webui_host="$(get_service_host "webui" "development")"
+      prod_webui_port="$(get_service_port "webui" "development")"
+      echo "  cd ${ROOT_DIR}/core/webui && SKILL_PILOT_RUNTIME_MODE=production HOSTNAME=${prod_webui_host} PORT=${prod_webui_port} node scripts/with-timestamp-logs.js start --hostname ${prod_webui_host} --port ${prod_webui_port}"
+    fi
   fi
 }
 
@@ -1850,6 +1969,11 @@ start_session() {
   local session_name="$1"
   local command="$2"
   local replace_existing="${3:-0}"
+  local log_dir="${ROOT_DIR}/.skillpilot/logs"
+  local stdout_log="${log_dir}/${session_name}.log"
+  local stderr_log="${log_dir}/${session_name}.err"
+  local escaped_root escaped_stdout_log escaped_stderr_log
+  local wrapped_command tmux_command
 
   if tmux has-session -t "${session_name}" 2>/dev/null; then
     if [[ "${replace_existing}" == "1" ]]; then
@@ -1861,8 +1985,18 @@ start_session() {
     fi
   fi
 
+  mkdir -p "${log_dir}"
+  : > "${stdout_log}"
+  : > "${stderr_log}"
+
+  printf -v escaped_root "%q" "${ROOT_DIR}"
+  printf -v escaped_stdout_log "%q" "${stdout_log}"
+  printf -v escaped_stderr_log "%q" "${stderr_log}"
+  wrapped_command="cd ${escaped_root} && { ${command}; } > >(tee -a ${escaped_stdout_log}) 2> >(tee -a ${escaped_stderr_log} >&2)"
+  printf -v tmux_command "bash -lc %q" "${wrapped_command}"
+
   sync_tmux_environment
-  tmux new-session -d -s "${session_name}" "cd '${ROOT_DIR}' && ${command}" \; set -g status off
+  tmux new-session -d -s "${session_name}" "${tmux_command}" \; set -g status off
   echo "Started session '${session_name}'."
 }
 
@@ -1876,6 +2010,15 @@ stop_session() {
 
   tmux kill-session -t "${session_name}"
   echo "Stopped session '${session_name}'."
+}
+
+stop_session_if_exists() {
+  local session_name="$1"
+
+  if tmux has-session -t "${session_name}" 2>/dev/null; then
+    tmux kill-session -t "${session_name}"
+    echo "Stopped existing session '${session_name}'."
+  fi
 }
 
 parse_args "$@"
@@ -1898,7 +2041,7 @@ case "${ACTION}" in
     require_tmux
     ensure_engine_venv
     if ((IS_DEV == 1)); then
-      if [[ "${SOURCE}" != "webui" ]] && engine_socket_running "dev"; then
+      if [[ "${SOURCE}" != "webui" ]] && engine_socket_running "dev" && webui_running "dev"; then
         _running_url="$(get_running_webui_url "dev")"
         echo "Skill Pilot is already running in development mode."
         if [[ -n "${_running_url}" ]]; then
@@ -1907,7 +2050,7 @@ case "${ACTION}" in
         fi
         exit 0
       fi
-    elif [[ "${SOURCE}" != "webui" ]] && engine_socket_running "prod"; then
+    elif [[ "${SOURCE}" != "webui" ]] && ((NEXT_SERVER == 0)) && engine_socket_running "prod"; then
       _running_url="$(get_running_webui_url "prod")"
       echo "Skill Pilot is already running in production mode."
       if [[ -n "${_running_url}" ]]; then
@@ -1932,7 +2075,8 @@ case "${ACTION}" in
       if [[ "${SOURCE}" == "webui" ]]; then
         _replace_existing_dev_sessions=1
       fi
-      start_session "sp-webui-dev" "cd core/webui && SKILL_PILOT_RUNTIME_MODE=development HOSTNAME=${_dev_webui_host} PORT=${_dev_webui_port} node scripts/with-timestamp-logs.js dev --webpack --hostname ${_dev_webui_host} --port ${_dev_webui_port}" "${_replace_existing_dev_sessions}"
+      stop_session_if_exists "sp-webui-prod"
+      start_session "sp-webui-dev" "cd core/webui && SKILL_PILOT_RUNTIME_MODE=development HOSTNAME=${_dev_webui_host} PORT=${_dev_webui_port} node scripts/with-timestamp-logs.js dev --webpack --hostname ${_dev_webui_host} --port ${_dev_webui_port}" "1"
       start_session "sp-engine-dev" "SKILL_PILOT_RUNTIME_MODE=development uv --project core/engine run core/engine/main.py --reload --reload-dir core/engine --reload-exclude core/engine/tests" "${_replace_existing_dev_sessions}"
       _dev_engine_url="$(get_service_base_url "engine" "development")"
       _webui_url="$(get_webui_base_url "dev")"
@@ -1940,22 +2084,56 @@ case "${ACTION}" in
       echo "  WebUI   ->  ${_webui_url%/}  (dev mode)"
       echo ""
       echo "Use 'tmux attach -t sp-webui-dev -r' or 'tmux attach -t sp-engine-dev -r' to view logs."
+      echo "For startup errors:"
+      echo "  cat .skillpilot/logs/sp-webui-dev.err"
+      echo "  cat .skillpilot/logs/sp-engine-dev.err"
     else
-      ensure_webui_release_assets
       _replace_existing_prod_sessions=0
       if [[ "${SOURCE}" == "webui" ]]; then
         _replace_existing_prod_sessions=1
       fi
+      if ((NEXT_SERVER == 1)); then
+        require_cmd pnpm
+        echo "Running pnpm install for core/webui..."
+        pnpm -C "${ROOT_DIR}/core/webui" install
+        if [[ ! -f "${ROOT_DIR}/core/webui/.next/BUILD_ID" ]]; then
+          echo "Building Next.js production server bundle (next build)..."
+          pnpm -C "${ROOT_DIR}/core/webui" build
+        fi
+      else
+        ensure_webui_release_assets
+      fi
       start_session "sp-engine-prod" "SKILL_PILOT_RUNTIME_MODE=production uv --project core/engine run core/engine/main.py" "${_replace_existing_prod_sessions}"
-      _engine_url="$(get_webui_base_url "prod")"
-      echo "  Engine + WebUI  ->  ${_engine_url%/}  (production mode)"
-      echo ""
-      echo "Use 'tmux attach -t sp-engine-prod -r' to view logs."
+      _engine_prod_url="$(get_service_base_url "engine" "production")"
+      if ((NEXT_SERVER == 1)); then
+        _prod_webui_host="$(get_service_host "webui" "development")"
+        _prod_webui_port="$(get_service_port "webui" "development")"
+        stop_session_if_exists "sp-webui-dev"
+        stop_session_if_exists "sp-engine-dev"
+        start_session "sp-webui-prod" "cd core/webui && SKILL_PILOT_RUNTIME_MODE=production HOSTNAME=${_prod_webui_host} PORT=${_prod_webui_port} node scripts/with-timestamp-logs.js start --hostname ${_prod_webui_host} --port ${_prod_webui_port}" "1"
+        _webui_url="$(get_webui_base_url "prod")"
+        echo "  Engine  ->  ${_engine_prod_url%/}  (production mode)"
+        echo "  WebUI   ->  ${_webui_url%/}  (production mode, next start)"
+        echo ""
+        echo "Use 'tmux attach -t sp-engine-prod -r' or 'tmux attach -t sp-webui-prod -r' to view logs."
+        echo "For startup errors:"
+        echo "  cat .skillpilot/logs/sp-engine-prod.err"
+        echo "  cat .skillpilot/logs/sp-webui-prod.err"
+      else
+        _engine_url="$(get_webui_base_url "prod")"
+        echo "  Engine + WebUI  ->  ${_engine_url%/}  (production mode)"
+        echo ""
+        echo "Use 'tmux attach -t sp-engine-prod -r' to view logs."
+        echo "For startup errors:"
+        echo "  cat .skillpilot/logs/sp-engine-prod.err"
+      fi
     fi
     echo ""
     echo "To stop Skill Pilot at any time, run:"
     if ((IS_DEV == 1)); then
       echo "  ./skillpilot.sh stop --dev"
+    elif ((NEXT_SERVER == 1)); then
+      echo "  ./skillpilot.sh stop --next-server"
     else
       echo "  ./skillpilot.sh stop"
     fi
@@ -1967,11 +2145,16 @@ case "${ACTION}" in
     ;;
   stop)
     require_tmux
-    if ((IS_DEV == 1)); then
+    if ((STOP_ALL == 1)); then
+      stop_all_runtime_instances
+    elif ((IS_DEV == 1)); then
       stop_session "sp-webui-dev"
       stop_session "sp-engine-dev"
     else
       stop_session "sp-engine-prod"
+      if ((NEXT_SERVER == 1)); then
+        stop_session "sp-webui-prod"
+      fi
     fi
     echo "Done."
     ;;
