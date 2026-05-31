@@ -30,6 +30,36 @@ _DEV_ENGINE_SESSION_NAME = "sp-engine-dev"
 _EXPLORE_DEV_START_GRACE_SECONDS = 20.0
 
 
+def _coerce_terminal_env(raw_env: Any) -> Dict[str, str]:
+    if raw_env in (None, "", []):
+        return {}
+    values: Dict[str, str] = {}
+    if isinstance(raw_env, dict):
+        items = raw_env.items()
+    elif isinstance(raw_env, list):
+        items = []
+        for entry in raw_env:
+            if isinstance(entry, dict):
+                key = entry.get("key", entry.get("name"))
+                value = entry.get("value", "")
+                items.append((key, value))
+            elif isinstance(entry, (list, tuple)) and len(entry) >= 2:
+                items.append((entry[0], entry[1]))
+            else:
+                raise ValueError("env entries must be key/value pairs")
+    else:
+        raise ValueError("env must be an object or key/value array")
+
+    for key, value in items:
+        env_key = str(key or "").strip()
+        if not env_key:
+            continue
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", env_key):
+            raise ValueError(f"invalid env key: {env_key}")
+        values[env_key] = str(value)
+    return values
+
+
 @router.get("/api/health")
 def health():
     return {"status": "ok", "timestamp": time.time()}
@@ -128,6 +158,7 @@ def terminal_tmux_create(payload: Dict[str, Any]):
     requested_path_mode = (str(payload.get("path_mode") or "").strip().lower() or None)
 
     try:
+        extra_env = _coerce_terminal_env(payload.get("env"))
         start_dir = _resolve_terminal_start_dir(requested_start_path, path_mode=requested_path_mode)
     except ValueError as exc:
         return JSONResponse(status_code=400, content={"error": str(exc)})
@@ -139,6 +170,7 @@ def terminal_tmux_create(payload: Dict[str, Any]):
             sandbox=sandbox,
             auto=auto,
             network=network,
+            extra_env=extra_env,
         )
         logger.info("[tmux-create] provider=%s command=%s", provider.get("id"), command)
     else:
@@ -1727,9 +1759,42 @@ def _prepare_showcase_template_files(sample: Dict[str, Any], target_root: Path) 
     return {"status": "extracted_zip", "directory": str(target_dir), "zip_url": zip_url}
 
 
-def _build_prompt_target_url(base_url: str, prompt: str, path: str | None = None) -> str:
-    encoded_prompt = quote(prompt, safe="")
-    return f"{base_url}/agent-sessions?new=true&prompt={encoded_prompt}"
+def _showcase_session_directory(sample: Dict[str, Any], target_root: Path) -> str | None:
+    target_dir = _safe_template_directory(target_root, sample.get("directory"))
+    if target_dir is None:
+        return None
+    return str(target_dir)
+
+
+def _file_manager_path_for_directory(directory: str | None) -> str | None:
+    if not directory:
+        return None
+    try:
+        normalized = routes_file_manager._normalize_files_repo_path(Path(directory))
+    except Exception:
+        return None
+    return normalized
+
+
+def _build_prompt_target_url(
+    base_url: str,
+    prompt: str,
+    path: str | None = None,
+    showcase_directory: str | None = None,
+) -> str:
+    params = [
+        ("new", "true"),
+        ("prompt", prompt),
+    ]
+    if path:
+        params.append(("path", path))
+    if showcase_directory:
+        params.append(("showcaseDirectory", showcase_directory))
+        file_manager_path = _file_manager_path_for_directory(showcase_directory)
+        if file_manager_path:
+            params.append(("fileManagerPath", file_manager_path))
+    query = "&".join(f"{quote(key, safe='')}={quote(str(value), safe='')}" for key, value in params)
+    return f"{base_url}/agent-sessions?{query}"
 
 
 def _stop_managed_explore_dev_if_running() -> None:
@@ -1812,14 +1877,22 @@ def explore_template_start(payload: Dict[str, Any]):
                 return JSONResponse(status_code=500, content={"status": "error", "error": str(exc)})
             return {
                 "status": "relaunching_current_dev",
-                "target_url": _build_prompt_target_url("", prompt),
+                "target_url": _build_prompt_target_url(
+                    "",
+                    prompt,
+                    showcase_directory=_showcase_session_directory(sample, dev_runtime_target_root),
+                ),
                 "sample_id": sample_id,
                 "use_worktree": False,
                 "template_files": template_files,
             }
         return {
             "status": "launched",
-            "target_url": _build_prompt_target_url("", prompt),
+            "target_url": _build_prompt_target_url(
+                "",
+                prompt,
+                showcase_directory=_showcase_session_directory(sample, dev_runtime_target_root),
+            ),
             "sample_id": sample_id,
             "use_worktree": False,
             "template_files": template_files,
@@ -1834,7 +1907,11 @@ def explore_template_start(payload: Dict[str, Any]):
             return JSONResponse(status_code=500, content={"status": "error", "error": str(exc)})
         return {
             "status": "launched",
-            "target_url": _build_prompt_target_url("", prompt),
+            "target_url": _build_prompt_target_url(
+                "",
+                prompt,
+                showcase_directory=_showcase_session_directory(sample, _REPO_ROOT),
+            ),
             "sample_id": sample_id,
             "use_worktree": False,
             "template_files": template_files,
@@ -1842,7 +1919,15 @@ def explore_template_start(payload: Dict[str, Any]):
 
     git_tag = sample.get("git_tag")
     worktree_path = _explore_worktree_path(sample_id) if use_worktree else _REPO_ROOT
-    current_instance_target_url = _build_prompt_target_url("", prompt, str(worktree_path) if use_worktree else None)
+    def build_current_instance_target_url() -> str:
+        return _build_prompt_target_url(
+            "",
+            prompt,
+            str(worktree_path) if use_worktree else None,
+            showcase_directory=_showcase_session_directory(sample, worktree_path),
+        )
+
+    current_instance_target_url = build_current_instance_target_url()
     base_ref = str(git_tag) if (checkout_tag and git_tag) else None
     snapshot = _managed_explore_dev_snapshot()
     same_managed_worktree = str(snapshot.get("worktree_path") or "") == str(worktree_path)
@@ -1918,6 +2003,7 @@ def explore_template_start(payload: Dict[str, Any]):
                 return result
 
         template_files = _prepare_showcase_template_files(sample, worktree_path)
+        current_instance_target_url = build_current_instance_target_url()
 
         try:
             _run_skillpilot_command(["stop", "--dev"], cwd=worktree_path, timeout=90.0)

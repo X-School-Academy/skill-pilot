@@ -33,6 +33,21 @@ def test_infer_session_category_from_project_paths(tmp_path):
     assert agent_sessions.infer_session_category("no path here", repo) == "/"
 
 
+def test_infer_session_category_from_showcase_directory(tmp_path):
+    repo = tmp_path / "repo"
+    directory = repo / "workspace" / "tasks" / "aws-credentials-s3-cloudfront"
+    directory.mkdir(parents=True)
+
+    assert (
+        agent_sessions.infer_session_category_from_directory(
+            "workspace/tasks/aws-credentials-s3-cloudfront",
+            repo,
+        )
+        == "aws-credentials-s3-cloudfront"
+    )
+    assert agent_sessions.infer_session_category_from_directory(str(directory), repo) == "aws-credentials-s3-cloudfront"
+
+
 def test_list_and_render_agent_session_without_commit_block(tmp_path):
     session_dir = tmp_path / "agent-sessions"
     session_dir.mkdir()

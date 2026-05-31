@@ -15,7 +15,7 @@ ENGINE_ROOT = Path(__file__).resolve().parents[1]
 if str(ENGINE_ROOT) not in sys.path:
     sys.path.insert(0, str(ENGINE_ROOT))
 
-from agent_sessions import infer_session_category
+from agent_sessions import infer_session_category, infer_session_category_from_directory
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -267,6 +267,12 @@ def ensure_session_category_record(
 ) -> None:
     if has_record_type(path, "session_category"):
         return
+    showcase_directory = os.environ.get("SHOWCASE_SESSION_DIRECTORY", "").strip()
+    category = (
+        infer_session_category_from_directory(showcase_directory, REPO_ROOT)
+        if showcase_directory
+        else infer_session_category(prompt, REPO_ROOT)
+    )
     append_record(
         path,
         {
@@ -274,7 +280,7 @@ def ensure_session_category_record(
             "timestamp": format_timestamp(),
             "agent": agent,
             "session_id": sid,
-            "category": infer_session_category(prompt, REPO_ROOT),
+            "category": category,
         },
     )
 

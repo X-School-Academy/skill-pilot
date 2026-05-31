@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Head from 'next/head';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import { GetStaticPropsContext } from 'next';
 import axios from 'axios';
@@ -18,11 +19,23 @@ import {
   Burger,
   ScrollArea,
 } from '@mantine/core';
+import { IconFolderOpen, IconGripHorizontal } from '@tabler/icons-react';
 import { apiUrl } from '../../libs/api-base';
 import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
 import { MAIN_NAV_ITEMS } from '../../libs/main-nav';
 
 const API_BASE_URL = apiUrl('/api');
+const FileManagerContent = dynamic(
+  () => import('../../components/FileManagerContent'),
+  {
+    ssr: false,
+    loading: () => (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#868e96', fontSize: 14 }}>
+        Loading file manager...
+      </div>
+    ),
+  },
+);
 
 interface LlmProvider {
   id: string;
@@ -57,6 +70,11 @@ export default function TerminalsPage() {
   const [busyAction, setBusyAction] = useState<'create' | 'close' | null>(null);
   const [busySessionName, setBusySessionName] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string>('');
+  const [fileManagerOpen, setFileManagerOpen] = useState(false);
+  const [fileManagerHeight, setFileManagerHeight] = useState(44);
+  const [isSplitResizing, setIsSplitResizing] = useState(false);
+  const [activeFileManagerPath, setActiveFileManagerPath] = useState('');
+  const activePaneRef = useRef<HTMLDivElement | null>(null);
   const queryBootstrappedRef = useRef(false);
 
   const fetchLlmProviders = async () => {
@@ -154,11 +172,57 @@ export default function TerminalsPage() {
   useEffect(() => {
     if (!router.isReady) return;
     const querySession = typeof router.query.session === 'string' ? router.query.session.trim() : '';
+    const queryFileManagerPath = typeof router.query.fileManagerPath === 'string' ? router.query.fileManagerPath.trim() : '';
     if (!querySession) return;
     if (liveSessions.some((session) => session.name === querySession)) {
       setActiveSessionName(querySession);
+      setActiveFileManagerPath(queryFileManagerPath);
     }
-  }, [liveSessions, router.isReady, router.query.session]);
+  }, [liveSessions, router.isReady, router.query.fileManagerPath, router.query.session]);
+
+  useEffect(() => {
+    if (!isSplitResizing) return undefined;
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!activePaneRef.current) return;
+      const bounds = activePaneRef.current.getBoundingClientRect();
+      if (bounds.height <= 0) return;
+      event.preventDefault();
+      const splitterHeight = 12;
+      const availableHeight = Math.max(1, bounds.height - splitterHeight);
+      const minTop = Math.min(180, availableHeight * 0.45);
+      const minBottom = Math.min(220, availableHeight * 0.5);
+      const lowerBound = Math.max(0, minTop);
+      const upperBound = Math.max(lowerBound, availableHeight - minBottom);
+      const nextTopPixels = Math.max(lowerBound, Math.min(upperBound, event.clientY - bounds.top));
+      const nextTopPercent = (nextTopPixels / bounds.height) * 100;
+      setFileManagerHeight(Math.max(24, Math.min(72, nextTopPercent)));
+    };
+
+    const handlePointerUp = () => setIsSplitResizing(false);
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, [isSplitResizing]);
+
+  const startSplitResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setIsSplitResizing(true);
+  }, []);
 
   const navItems: NavItem[] = MAIN_NAV_ITEMS.map((item) => {
     if (item.href === '/terminals') {
@@ -168,6 +232,8 @@ export default function TerminalsPage() {
         action: () => {
           if (activeSessionName) {
             setActiveSessionName(null);
+            setActiveFileManagerPath('');
+            setFileManagerOpen(false);
           }
         },
       };
@@ -285,33 +351,124 @@ export default function TerminalsPage() {
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '12px 16px 16px 16px' }}>
             <Group position="apart" mb={8}>
               <Text size="sm" weight={700}>Viewing: {activeSessionName}</Text>
-              <button
-                type="button"
-                onClick={() => setActiveSessionName(null)}
-                style={{
-                  border: `1px solid ${theme.colors.gray[3]}`,
-                  borderRadius: 8,
-                  padding: '4px 10px',
-                  background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                }}
-              >
-                Back to List
-              </button>
+              <Group spacing={6}>
+                <button
+                  type="button"
+                  onClick={() => setFileManagerOpen((open) => !open)}
+                  title={fileManagerOpen ? 'Hide file manager' : 'Show file manager'}
+                  aria-label={fileManagerOpen ? 'Hide file manager' : 'Show file manager'}
+                  style={{
+                    width: 30,
+                    height: 28,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: `1px solid ${theme.colors.gray[3]}`,
+                    borderRadius: 8,
+                    padding: 0,
+                    background: fileManagerOpen
+                      ? (theme.colorScheme === 'dark' ? theme.colors.dark[5] : theme.colors.blue[0])
+                      : (theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff'),
+                    color: fileManagerOpen ? theme.colors.blue[6] : 'inherit',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <IconFolderOpen size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveSessionName(null);
+                    setActiveFileManagerPath('');
+                    setFileManagerOpen(false);
+                  }}
+                  style={{
+                    border: `1px solid ${theme.colors.gray[3]}`,
+                    borderRadius: 8,
+                    padding: '4px 10px',
+                    background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Back to List
+                </button>
+              </Group>
             </Group>
-            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative' }}>
-              <iframe
-                key={activeSessionName}
-                src={`/terminal?session=${encodeURIComponent(activeSessionName)}`}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'block',
-                  border: 'none',
-                  borderRadius: 8,
-                }}
-              />
+            <div
+              ref={activePaneRef}
+              style={{
+                flex: 1,
+                minHeight: 0,
+                overflow: 'hidden',
+                position: 'relative',
+                display: 'grid',
+                gridTemplateRows: fileManagerOpen ? `${fileManagerHeight}% 12px minmax(0, 1fr)` : '1fr',
+              }}
+            >
+              {isSplitResizing && (
+                <div
+                  style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 9999,
+                    cursor: 'row-resize',
+                    background: 'transparent',
+                  }}
+                />
+              )}
+              {fileManagerOpen && (
+                <>
+                  <div style={{ minHeight: 0, overflow: 'hidden', border: `1px solid ${theme.colors.gray[3]}`, borderRadius: 8, background: '#fff' }}>
+                    <div style={{ height: 34, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 12px', borderBottom: `1px solid ${theme.colors.gray[3]}`, background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : theme.colors.gray[0] }}>
+                      <Text size="xs" weight={700}>Documents</Text>
+                      {activeFileManagerPath && (
+                        <Text size="xs" color="dimmed" truncate style={{ flex: 1, textAlign: 'right' }}>
+                          {activeFileManagerPath}
+                        </Text>
+                      )}
+                    </div>
+                    <div style={{ height: 'calc(100% - 34px)', minHeight: 0 }}>
+                      <FileManagerContent
+                        key={activeFileManagerPath || 'project-root'}
+                        title="Documents"
+                        initialPath={activeFileManagerPath || undefined}
+                        hideDirectoryTree
+                        hideStandaloneHeader
+                        routePathname="/terminals"
+                        updateRoute={false}
+                      />
+                    </div>
+                  </div>
+                  <div
+                    onPointerDown={startSplitResize}
+                    aria-label="Resize file manager and terminal"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'row-resize',
+                      color: '#93a4cc',
+                      background: 'transparent',
+                    }}
+                  >
+                    <IconGripHorizontal size={16} />
+                  </div>
+                </>
+              )}
+              <div style={{ minHeight: 0, overflow: 'hidden', position: 'relative' }}>
+                <iframe
+                  key={activeSessionName}
+                  src={`/terminal?session=${encodeURIComponent(activeSessionName)}`}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'block',
+                    border: 'none',
+                    borderRadius: 8,
+                  }}
+                />
+              </div>
             </div>
           </div>
         ) : (
@@ -373,6 +530,7 @@ export default function TerminalsPage() {
                           window.open(`/terminal?session=${encodeURIComponent(session.name)}`, '_blank');
                         } else {
                           setActiveSessionName(session.name);
+                          setActiveFileManagerPath('');
                         }
                       }}
                       disabled={activeSessionName === session.name}

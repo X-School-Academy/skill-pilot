@@ -99,6 +99,32 @@ def infer_session_category(prompt: str | None, repo_root: Path = REPO_ROOT) -> s
     return "/"
 
 
+def infer_session_category_from_directory(directory: str | None, repo_root: Path = REPO_ROOT) -> str:
+    text = _strip_path_token(str(directory or ""))
+    if not text:
+        return "/"
+    if text.startswith("@"):
+        text = text[1:]
+
+    raw_path = Path(text).expanduser()
+    if raw_path.is_absolute():
+        path = raw_path.resolve(strict=False)
+    else:
+        while text.startswith("./"):
+            text = text[2:]
+        if text.startswith("../") or text == "..":
+            return "/"
+        path = (repo_root / text).resolve(strict=False)
+
+    if path.is_file():
+        path = path.parent
+
+    root = repo_root.resolve(strict=False)
+    if path == root:
+        return "/"
+    return path.name or "/"
+
+
 def iter_records(path: Path) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     if not path.is_file():

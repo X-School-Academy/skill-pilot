@@ -80,9 +80,11 @@ interface FileManagerInfo {
 interface FileManagerContentProps {
   title?: string;
   scopedRootPath?: string;
+  initialPath?: string;
   hideDirectoryTree?: boolean;
   hideStandaloneHeader?: boolean;
   routePathname?: string;
+  updateRoute?: boolean;
 }
 
 type ClipboardMode = 'copy' | 'cut';
@@ -254,9 +256,11 @@ function buildFileManagerTerminalSessionName(scope?: string): string {
 export default function FileManagerContent({
   title = 'File Manager',
   scopedRootPath,
+  initialPath,
   hideDirectoryTree = false,
   hideStandaloneHeader = false,
   routePathname = '/file-manager',
+  updateRoute = true,
 }: FileManagerContentProps = {}) {
   const router = useRouter();
   const isDevMode = process.env.NODE_ENV === 'development';
@@ -497,12 +501,13 @@ export default function FileManagerContent({
   }, [isTerminalPanelResizing]);
 
   const updateUrlPath = useCallback((path: string) => {
+    if (!updateRoute) return;
     void routerRef.current.replace(
       { pathname: routePathname, query: { path } },
       undefined,
       { shallow: true },
     );
-  }, [routePathname]);
+  }, [routePathname, updateRoute]);
 
   const loadDirectory = useCallback(async (
     path: string,
@@ -868,7 +873,7 @@ export default function FileManagerContent({
     initializedRef.current = true;
 
     void (async () => {
-      const rawQueryPath = typeof router.query.path === 'string' ? router.query.path : null;
+      const rawQueryPath = updateRoute && typeof router.query.path === 'string' ? router.query.path : initialPath || null;
 
       const info = await loadFileManagerInfo();
       if (info) {
@@ -908,7 +913,7 @@ export default function FileManagerContent({
       await loadDirectory(containingDir, { quiet: true });
       await openFileInPanel(requestedPath, { updateUrl: false });
     })();
-  }, [buildFileManagerInfoSignature, clampToScopedRoot, ensureTreePath, loadDirectory, loadFileManagerInfo, openFileInPanel, rawScopedRootPath, router.isReady, router.query.path]);
+  }, [buildFileManagerInfoSignature, clampToScopedRoot, ensureTreePath, initialPath, loadDirectory, loadFileManagerInfo, openFileInPanel, rawScopedRootPath, router.isReady, router.query.path, updateRoute]);
 
   useEffect(() => {
     const view = editorViewRef.current;
@@ -993,7 +998,19 @@ export default function FileManagerContent({
   const fileName = openFile ? pathName(openFile.path) : '';
   const isVirtualWorkspaceRoot = supportsWorktrees && currentDir === '/';
   const isAtScopedRoot = !!resolvedScopedRoot && currentDir === resolvedScopedRoot;
-  const canNavigateToParent = !!resolvedScopedRoot && !openFile && !isAtScopedRoot && isWithinScopedRoot(parentPath(currentDir));
+  const currentFileRootId = rootForPath(currentDir)?.id ?? projectRootId;
+  const parentNavigationRoot = resolvedScopedRoot ?? currentFileRootId;
+  const parentNavigationPath = parentPath(currentDir);
+  const canNavigateToParent = !openFile
+    && !isVirtualWorkspaceRoot
+    && currentDir !== parentNavigationRoot
+    && (!resolvedScopedRoot || (!isAtScopedRoot && isWithinScopedRoot(parentNavigationPath)))
+    && (
+      !parentNavigationRoot
+      || parentNavigationRoot === '/'
+      || currentDir === parentNavigationRoot
+      || currentDir.startsWith(`${parentNavigationRoot}/`)
+    );
   const realtimeSubscriptionEnabled = hasRootDirectory && !isVirtualWorkspaceRoot;
   const isEditorVisible = !!(
     openFile &&
@@ -1813,8 +1830,8 @@ export default function FileManagerContent({
                 {canNavigateToParent && (
                   <button
                     type="button"
-                    onClick={() => { void navigateToDirectory(parentPath(currentDir)); }}
-                    title="Parent folder"
+                    onClick={() => { void navigateToDirectory(parentNavigationPath); }}
+                    title="Back to parent folder"
                     style={{
                       ...iconButtonStyle,
                       width: 30,

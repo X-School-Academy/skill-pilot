@@ -175,6 +175,31 @@ def test_first_user_prompt_records_session_category(monkeypatch, tmp_path):
     assert records[1]["category"] == "hooks"
 
 
+def test_showcase_directory_env_records_session_category(monkeypatch, tmp_path):
+    recorder = load_recorder(monkeypatch, tmp_path)
+    repo = tmp_path / "repo"
+    showcase_dir = repo / "workspace" / "tasks" / "aws-credentials-s3-cloudfront"
+    showcase_dir.mkdir(parents=True)
+    (repo / "core" / "engine" / "hooks").mkdir(parents=True)
+    monkeypatch.setattr(recorder, "REPO_ROOT", repo)
+    monkeypatch.setenv("SHOWCASE_SESSION_DIRECTORY", str(showcase_dir))
+    payload = {
+        "session_id": "codex-session",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "update core/engine/hooks",
+        "cwd": str(repo),
+    }
+
+    monkeypatch.setattr(sys, "argv", ["user_prompt.py", "--agent", "codex"])
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+
+    recorder.record_event("user_prompt")
+
+    path = next((tmp_path / "agent-sessions").glob("*.jsonl"))
+    records = read_jsonl(path)
+    assert records[1]["category"] == "aws-credentials-s3-cloudfront"
+
+
 def test_opencode_sessionless_events_are_ignored(monkeypatch, tmp_path):
     recorder = load_recorder(monkeypatch, tmp_path)
 

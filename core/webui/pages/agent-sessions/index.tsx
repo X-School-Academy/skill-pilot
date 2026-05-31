@@ -106,6 +106,9 @@ const AgentSessionsPage = () => {
   const [newSessionAuto, setNewSessionAuto] = useState(false);
   const [newSessionNetwork, setNewSessionNetwork] = useState(true);
   const [newSessionNativeTerminal, setNewSessionNativeTerminal] = useState(false);
+  const [newSessionPath, setNewSessionPath] = useState("");
+  const [newSessionShowcaseDirectory, setNewSessionShowcaseDirectory] = useState("");
+  const [newSessionFileManagerPath, setNewSessionFileManagerPath] = useState("");
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
   const [llmProvider, setLlmProvider] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -192,6 +195,9 @@ const AgentSessionsPage = () => {
     setNewSessionMode(true);
     setSelectedId("");
     setPayload(null);
+    setNewSessionPath("");
+    setNewSessionShowcaseDirectory("");
+    setNewSessionFileManagerPath("");
     setError("");
     void router.replace("/agent-sessions?new=true", undefined, { shallow: true });
   }, [router]);
@@ -200,15 +206,21 @@ const AgentSessionsPage = () => {
     const prompt = newSessionPrompt.trim();
     if (!prompt || creatingSession) return;
     const provider = llmProvider || "gemini";
+    const envPairs: [string, string][] = [];
+    if (newSessionShowcaseDirectory) {
+      envPairs.push(["SHOWCASE_SESSION_DIRECTORY", newSessionShowcaseDirectory]);
+    }
     setCreatingSession(true);
     try {
       const res = await axios.post(`${API_BASE_URL}/terminal/tmux/create`, {
         provider_id: provider,
         prompt,
+        path: newSessionPath || undefined,
         sandbox: newSessionSandbox,
         auto: newSessionAuto,
         network: newSessionNetwork,
         native_terminal: newSessionNativeTerminal,
+        env: envPairs.length ? envPairs : undefined,
       });
       const sessionName: string | undefined = res.data?.session?.name;
       if (sessionName) {
@@ -221,7 +233,13 @@ const AgentSessionsPage = () => {
             window.alert(`Native terminal did not open${details}. You can attach manually with tmux session ${sessionName}.`);
           }
         } else {
-          await router.push(`/terminals?session=${encodeURIComponent(sessionName)}`);
+          await router.push({
+            pathname: "/terminals",
+            query: {
+              session: sessionName,
+              ...(newSessionFileManagerPath ? { fileManagerPath: newSessionFileManagerPath } : {}),
+            },
+          });
         }
       }
       setError("");
@@ -235,10 +253,13 @@ const AgentSessionsPage = () => {
     creatingSession,
     llmProvider,
     newSessionAuto,
+    newSessionFileManagerPath,
     newSessionNativeTerminal,
     newSessionNetwork,
+    newSessionPath,
     newSessionPrompt,
     newSessionSandbox,
+    newSessionShowcaseDirectory,
     router,
   ]);
 
@@ -274,8 +295,20 @@ const AgentSessionsPage = () => {
     initialLoadRef.current = true;
     const queryId = typeof router.query.id === "string" ? router.query.id : "";
     const queryPrompt = typeof router.query.prompt === "string" ? router.query.prompt : "";
+    const queryPath = typeof router.query.path === "string" ? router.query.path : "";
+    const queryShowcaseDirectory = typeof router.query.showcaseDirectory === "string" ? router.query.showcaseDirectory : "";
+    const queryFileManagerPath = typeof router.query.fileManagerPath === "string" ? router.query.fileManagerPath : "";
     if (queryPrompt) {
       setNewSessionPrompt(queryPrompt);
+    }
+    if (queryPath) {
+      setNewSessionPath(queryPath);
+    }
+    if (queryShowcaseDirectory) {
+      setNewSessionShowcaseDirectory(queryShowcaseDirectory);
+    }
+    if (queryFileManagerPath) {
+      setNewSessionFileManagerPath(queryFileManagerPath);
     }
     if (!queryId || router.query.new === "true") {
       setNewSessionMode(true);
@@ -507,6 +540,20 @@ const AgentSessionsPage = () => {
                     maxRows={12}
                     size="md"
                   />
+                  {(newSessionPath || newSessionShowcaseDirectory) && (
+                    <Stack spacing={3}>
+                      {newSessionPath && (
+                        <Text size="xs" color="dimmed" truncate>
+                          Start directory: {newSessionPath}
+                        </Text>
+                      )}
+                      {newSessionShowcaseDirectory && (
+                        <Text size="xs" color="dimmed" truncate>
+                          Showcase directory: {newSessionShowcaseDirectory}
+                        </Text>
+                      )}
+                    </Stack>
+                  )}
                   <Group position="center" spacing="md">
                     <Checkbox
                       label="Sandbox"
