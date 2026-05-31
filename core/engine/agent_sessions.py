@@ -175,7 +175,7 @@ def summarize_session(path: Path) -> dict[str, Any] | None:
         "id": path.name,
         "file": path.name,
         "category": category or "/",
-        "title": first_prompt or "(no user prompt)",
+        "title": first_prompt,
         "agent": agent,
         "model": _session_model(records),
         "session_id": session_id,
@@ -190,7 +190,7 @@ def list_agent_session_categories(session_dir: Path = SESSION_DIR) -> list[dict[
     sessions: list[dict[str, Any]] = []
     for path in sorted(session_dir.glob("*.jsonl")):
         summary = summarize_session(path)
-        if summary is not None:
+        if summary is not None and summary.get("title"):
             sessions.append(summary)
 
     sessions.sort(key=lambda item: item.get("time") or "", reverse=True)

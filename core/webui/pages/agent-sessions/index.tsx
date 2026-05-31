@@ -15,6 +15,7 @@ import {
   Stack,
   Text,
   Title,
+  Tooltip,
   useMantineTheme,
 } from "@mantine/core";
 import { IconArrowLeft, IconFolder, IconPlayerPlay, IconRefresh } from "@tabler/icons-react";
@@ -60,6 +61,12 @@ const formatTime = (value: string): string => {
 };
 
 const quoteShell = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+
+const titlePreview = (value: string): string => {
+  const title = String(value || "").trim();
+  if (title.length <= 30) return title;
+  return `${title.slice(0, 30)}...`;
+};
 
 const buildResumeCommand = (session: AgentSessionSummary): string | null => {
   const agent = String(session.agent || "").toLowerCase();
@@ -252,7 +259,7 @@ const AgentSessionsPage = () => {
                         {category.name}
                       </Text>
                     </Group>
-                    {category.sessions.map((session) => {
+                    {category.sessions.slice(0, 10).map((session) => {
                       const active = session.id === selectedId;
                       return (
                         <button
@@ -275,7 +282,9 @@ const AgentSessionsPage = () => {
                             textAlign: "left",
                           }}
                         >
-                          <Text size="sm" weight={600} truncate>{session.title}</Text>
+                          <Tooltip label={session.title} openDelay={350} multiline width={320} disabled={session.title.length <= 30}>
+                            <Text size="sm" weight={600} truncate>{titlePreview(session.title)}</Text>
+                          </Tooltip>
                           <Text size="xs" color="dimmed" truncate>
                             {session.agent || "agent"} · {formatTime(session.time)}
                           </Text>

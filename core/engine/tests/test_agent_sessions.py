@@ -80,3 +80,23 @@ def test_list_and_render_agent_session_without_commit_block(tmp_path):
     assert "- time: 2026-05-26T05:24:00Z" in payload["markdown"]
     assert "git checkout" not in payload["markdown"]
     assert "- commit:" not in payload["markdown"]
+
+
+def test_agent_session_list_hides_sessions_without_user_prompt(tmp_path):
+    session_dir = tmp_path / "agent-sessions"
+    session_dir.mkdir()
+    (session_dir / "20260526T052351Z-codex-empty.jsonl").write_text(
+        json.dumps(
+            {
+                "type": "session_start",
+                "timestamp": "20260526T052351Z",
+                "agent": "codex",
+                "session_id": "empty-session",
+                "metadata": {"model": "gpt-5.5"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert agent_sessions.list_agent_session_categories(session_dir) == []
