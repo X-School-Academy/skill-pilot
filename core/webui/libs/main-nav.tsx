@@ -25,6 +25,7 @@ import {
   IconHistory,
   IconRobot,
   IconFileText,
+  IconMessages,
 } from '@tabler/icons-react';
 
 export interface MainNavItem {
@@ -39,6 +40,7 @@ export const MAIN_NAV_ITEMS: MainNavItem[] = [
   { label: 'Explore', href: '/?view=explore', view: 'explore', icon: <IconSparkles size="1rem" /> },
   { dividerBefore: '', label: 'New Session', href: '/?view=home', view: 'home', icon: <IconPlus size="1rem" /> },
   { label: 'Live Sessions', href: '/terminals', icon: <IconTerminal2 size="1rem" /> },
+  { label: 'Agent Sessions', href: '/agent-sessions', icon: <IconMessages size="1rem" /> },
   { label: 'Session Histories', href: '/terminal-histories', icon: <IconHistory size="1rem" /> },
   { dividerBefore: 'Workspace', label: 'Learning', href: '/courses', icon: <IconSchool size="1rem" /> },
   { label: 'Vibe Coding', href: '/vibe-coding', icon: <IconBriefcase size="1rem" /> },

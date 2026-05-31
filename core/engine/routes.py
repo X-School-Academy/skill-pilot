@@ -22,6 +22,7 @@ from routes_file_manager import (
     files_upload,
     files_write,
 )
+from agent_sessions import list_agent_session_categories, read_agent_session_payload
 
 _REPO_ROOT_RESOLVED = _REPO_ROOT.resolve()
 _DEV_WEBUI_SESSION_NAME = "sp-webui-dev"
@@ -258,6 +259,27 @@ def terminal_tmux_saved_history(id: str):
     except OSError as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})
     return history
+
+
+@router.get("/api/agent-sessions")
+def agent_sessions():
+    try:
+        categories = list_agent_session_categories()
+    except OSError as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc), "categories": []})
+    return {"categories": categories}
+
+
+@router.get("/api/agent-sessions/session")
+def agent_session(id: str):
+    try:
+        return read_agent_session_payload(id)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+    except OSError as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
 @router.delete("/api/terminal/tmux/saved-history")

@@ -11,6 +11,13 @@ from pathlib import Path
 from typing import Any
 
 
+ENGINE_ROOT = Path(__file__).resolve().parents[1]
+if str(ENGINE_ROOT) not in sys.path:
+    sys.path.insert(0, str(ENGINE_ROOT))
+
+from agent_sessions import infer_session_category
+
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SESSION_DIR = Path(
     os.environ.get("SKILLPILOT_AGENT_SESSION_DIR", REPO_ROOT / ".skillpilot" / "agent-sessions")
@@ -252,6 +259,26 @@ def has_record_type(path: Path, record_type: str) -> bool:
     return any(record.get("type") == record_type for record in iter_records(path))
 
 
+def ensure_session_category_record(
+    path: Path,
+    agent: str,
+    sid: str,
+    prompt: str,
+) -> None:
+    if has_record_type(path, "session_category"):
+        return
+    append_record(
+        path,
+        {
+            "type": "session_category",
+            "timestamp": format_timestamp(),
+            "agent": agent,
+            "session_id": sid,
+            "category": infer_session_category(prompt, REPO_ROOT),
+        },
+    )
+
+
 def session_start_metadata(
     payload: dict[str, Any], extra_metadata: dict[str, Any] | None = None
 ) -> dict[str, Any]:
@@ -422,6 +449,8 @@ def record_event(default_event: str, extra_metadata: dict[str, Any] | None = Non
         record_type = event
 
     if content:
+        if record_type == "user_prompt":
+            ensure_session_category_record(path, agent, sid, content)
         append_record(
             path,
             {

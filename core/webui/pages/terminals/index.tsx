@@ -151,6 +151,15 @@ export default function TerminalsPage() {
     }
   }, [createTmuxSession, router.isReady, router.query.command]);
 
+  useEffect(() => {
+    if (!router.isReady) return;
+    const querySession = typeof router.query.session === 'string' ? router.query.session.trim() : '';
+    if (!querySession) return;
+    if (liveSessions.some((session) => session.name === querySession)) {
+      setActiveSessionName(querySession);
+    }
+  }, [liveSessions, router.isReady, router.query.session]);
+
   const navItems: NavItem[] = MAIN_NAV_ITEMS.map((item) => {
     if (item.href === '/terminals') {
       return {
