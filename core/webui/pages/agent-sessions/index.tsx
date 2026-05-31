@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Head from "next/head";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/router";
 import { GetStaticPropsContext } from "next";
 import axios from "axios";
@@ -21,12 +22,24 @@ import {
   Tooltip,
   useMantineTheme,
 } from "@mantine/core";
-import { IconArrowLeft, IconFolder, IconPlayerPlay, IconPlus, IconRefresh } from "@tabler/icons-react";
+import { IconArrowLeft, IconFolder, IconFolderOpen, IconGripHorizontal, IconPlayerPlay, IconPlus, IconRefresh } from "@tabler/icons-react";
 
 import { apiUrl } from "../../libs/api-base";
 import { resolveSelectedProvider, setSelectedProvider } from "../../libs/llm";
 
 const API_BASE_URL = apiUrl("/api");
+const SPLIT_HANDLE_SIZE = 12;
+const FileManagerContent = dynamic(
+  () => import("../../components/FileManagerContent"),
+  {
+    ssr: false,
+    loading: () => (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#868e96", fontSize: 14 }}>
+        Loading file manager...
+      </div>
+    ),
+  },
+);
 
 interface LlmProvider {
   id: string;
@@ -109,9 +122,15 @@ const AgentSessionsPage = () => {
   const [newSessionPath, setNewSessionPath] = useState("");
   const [newSessionShowcaseDirectory, setNewSessionShowcaseDirectory] = useState("");
   const [newSessionFileManagerPath, setNewSessionFileManagerPath] = useState("");
+  const [liveSessionName, setLiveSessionName] = useState("");
+  const [liveSessionFileManagerPath, setLiveSessionFileManagerPath] = useState("");
+  const [fileManagerOpen, setFileManagerOpen] = useState(false);
+  const [fileManagerHeight, setFileManagerHeight] = useState(44);
+  const [isSplitResizing, setIsSplitResizing] = useState(false);
   const [llmProviders, setLlmProviders] = useState<LlmProvider[]>([]);
   const [llmProvider, setLlmProvider] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const livePaneRef = useRef<HTMLDivElement | null>(null);
   const initialLoadRef = useRef(false);
 
   const goHome = useCallback(() => {
@@ -135,6 +154,9 @@ const AgentSessionsPage = () => {
       setPayload(res.data);
       setSelectedId(id);
       setNewSessionMode(false);
+      setLiveSessionName("");
+      setLiveSessionFileManagerPath("");
+      setFileManagerOpen(false);
       setError("");
       void router.replace(`/agent-sessions?id=${encodeURIComponent(id)}`, undefined, { shallow: true });
     } catch (err: any) {
@@ -198,6 +220,9 @@ const AgentSessionsPage = () => {
     setNewSessionPath("");
     setNewSessionShowcaseDirectory("");
     setNewSessionFileManagerPath("");
+    setLiveSessionName("");
+    setLiveSessionFileManagerPath("");
+    setFileManagerOpen(false);
     setError("");
     void router.replace("/agent-sessions?new=true", undefined, { shallow: true });
   }, [router]);
@@ -233,13 +258,9 @@ const AgentSessionsPage = () => {
             window.alert(`Native terminal did not open${details}. You can attach manually with tmux session ${sessionName}.`);
           }
         } else {
-          await router.push({
-            pathname: "/terminals",
-            query: {
-              session: sessionName,
-              ...(newSessionFileManagerPath ? { fileManagerPath: newSessionFileManagerPath } : {}),
-            },
-          });
+          setLiveSessionName(sessionName);
+          setLiveSessionFileManagerPath(newSessionFileManagerPath);
+          setFileManagerOpen(false);
         }
       }
       setError("");
@@ -279,7 +300,9 @@ const AgentSessionsPage = () => {
       });
       const sessionName: string | undefined = res.data?.session?.name;
       if (sessionName) {
-        await router.push(`/terminals?session=${encodeURIComponent(sessionName)}`);
+        setLiveSessionName(sessionName);
+        setLiveSessionFileManagerPath("");
+        setFileManagerOpen(false);
       }
       setError("");
     } catch (err: any) {
@@ -288,7 +311,7 @@ const AgentSessionsPage = () => {
     } finally {
       setCreatingTerminal(false);
     }
-  }, [creatingTerminal, router]);
+  }, [creatingTerminal]);
 
   useEffect(() => {
     if (!router.isReady || initialLoadRef.current) return;
@@ -329,6 +352,44 @@ const AgentSessionsPage = () => {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (!isSplitResizing) return undefined;
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!livePaneRef.current) return;
+      const bounds = livePaneRef.current.getBoundingClientRect();
+      if (bounds.height <= 0) return;
+      event.preventDefault();
+      const availableHeight = Math.max(1, bounds.height - SPLIT_HANDLE_SIZE);
+      const nextTopPixels = Math.max(0, Math.min(availableHeight, event.clientY - bounds.top));
+      setFileManagerHeight((nextTopPixels / availableHeight) * 100);
+    };
+
+    const handlePointerUp = () => setIsSplitResizing(false);
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [isSplitResizing]);
+
+  const startSplitResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setIsSplitResizing(true);
+  }, []);
+
   const renderResumeButton = (position: "top" | "bottom") => {
     const command = selectedSummary ? buildResumeCommand(selectedSummary) : null;
     return (
@@ -344,6 +405,114 @@ const AgentSessionsPage = () => {
       </Button>
     );
   };
+
+  const renderLiveTerminal = () => (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: "12px 16px 16px" }}>
+      <Group position="apart" mb={8}>
+        <Text size="sm" weight={700}>Viewing: {liveSessionName}</Text>
+        <button
+          type="button"
+          onClick={() => setFileManagerOpen((open) => !open)}
+          title={fileManagerOpen ? "Hide file manager" : "Show file manager"}
+          aria-label={fileManagerOpen ? "Hide file manager" : "Show file manager"}
+          style={{
+            width: 30,
+            height: 28,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: `1px solid ${theme.colors.gray[3]}`,
+            borderRadius: 8,
+            padding: 0,
+            background: fileManagerOpen
+              ? (theme.colorScheme === "dark" ? theme.colors.dark[5] : theme.colors.blue[0])
+              : (theme.colorScheme === "dark" ? theme.colors.dark[6] : "#fff"),
+            color: fileManagerOpen ? theme.colors.blue[6] : "inherit",
+            cursor: "pointer",
+          }}
+        >
+          <IconFolderOpen size={16} />
+        </button>
+      </Group>
+      <div
+        ref={livePaneRef}
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflow: "hidden",
+          position: "relative",
+          display: "grid",
+          gridTemplateRows: fileManagerOpen ? `minmax(0, ${fileManagerHeight}fr) ${SPLIT_HANDLE_SIZE}px minmax(0, ${100 - fileManagerHeight}fr)` : "1fr",
+        }}
+      >
+        {isSplitResizing && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 9999,
+              cursor: "row-resize",
+              background: "transparent",
+            }}
+          />
+        )}
+        {fileManagerOpen && (
+          <>
+            <div style={{ minHeight: 0, overflow: "hidden", border: `1px solid ${theme.colors.gray[3]}`, borderRadius: 8, background: "#fff" }}>
+              <div style={{ height: 34, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "0 12px", borderBottom: `1px solid ${theme.colors.gray[3]}`, background: theme.colorScheme === "dark" ? theme.colors.dark[6] : theme.colors.gray[0] }}>
+                <Text size="xs" weight={700}>Documents</Text>
+                {liveSessionFileManagerPath && (
+                  <Text size="xs" color="dimmed" truncate style={{ flex: 1, textAlign: "right" }}>
+                    {liveSessionFileManagerPath}
+                  </Text>
+                )}
+              </div>
+              <div style={{ height: "calc(100% - 34px)", minHeight: 0 }}>
+                <FileManagerContent
+                  key={liveSessionFileManagerPath || "project-root"}
+                  title="Documents"
+                  initialPath={liveSessionFileManagerPath || undefined}
+                  hideDirectoryTree
+                  hideStandaloneHeader
+                  routePathname="/agent-sessions"
+                  updateRoute={false}
+                />
+              </div>
+            </div>
+            <div
+              onPointerDown={startSplitResize}
+              aria-label="Resize file manager and terminal"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "row-resize",
+                touchAction: "none",
+                userSelect: "none",
+                color: "#93a4cc",
+                background: "transparent",
+              }}
+            >
+              <IconGripHorizontal size={16} />
+            </div>
+          </>
+        )}
+        <div style={{ minHeight: 0, overflow: "hidden", position: "relative" }}>
+          <iframe
+            key={liveSessionName}
+            src={`/terminal?session=${encodeURIComponent(liveSessionName)}`}
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "block",
+              border: "none",
+              borderRadius: 8,
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -496,18 +665,28 @@ const AgentSessionsPage = () => {
             style={{ borderBottom: `1px solid ${theme.colors.gray[3]}`, background: theme.colorScheme === "dark" ? theme.colors.dark[7] : "#fff" }}
           >
             <div style={{ minWidth: 0 }}>
-              <Title order={3} style={{ fontSize: 18 }}>{newSessionMode ? "New Session" : "Agent Session"}</Title>
+              <Title order={3} style={{ fontSize: 18 }}>{liveSessionName ? "Live Terminal" : newSessionMode ? "New Session" : "Agent Session"}</Title>
+              {liveSessionName && (
+                <Text size="xs" color="dimmed" truncate>
+                  {liveSessionName}
+                </Text>
+              )}
               {!newSessionMode && selectedSummary && (
                 <Text size="xs" color="dimmed" truncate>
                   {selectedSummary.agent || "agent"} · {selectedSummary.session_id || selectedSummary.id}
                 </Text>
               )}
             </div>
-            {!newSessionMode && renderResumeButton("top")}
+            {!liveSessionName && !newSessionMode && renderResumeButton("top")}
           </Group>
 
           {error && <Text size="sm" color="red" px="lg" pt="sm">{error}</Text>}
 
+          {liveSessionName ? (
+            <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+              {renderLiveTerminal()}
+            </div>
+          ) : (
           <ScrollArea style={{ flex: 1 }}>
             {newSessionMode ? (
               <div style={{ width: "100%", maxWidth: 720, margin: "0 auto", padding: "48px 24px", position: "relative" }}>
@@ -611,6 +790,7 @@ const AgentSessionsPage = () => {
               <Text size="sm" color="dimmed" p="lg">Select an agent session.</Text>
             )}
           </ScrollArea>
+          )}
         </section>
       </main>
     </>

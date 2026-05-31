@@ -346,49 +346,29 @@ export default function TerminalsPage() {
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '12px 16px 16px 16px' }}>
             <Group position="apart" mb={8}>
               <Text size="sm" weight={700}>Viewing: {activeSessionName}</Text>
-              <Group spacing={6}>
-                <button
-                  type="button"
-                  onClick={() => setFileManagerOpen((open) => !open)}
-                  title={fileManagerOpen ? 'Hide file manager' : 'Show file manager'}
-                  aria-label={fileManagerOpen ? 'Hide file manager' : 'Show file manager'}
-                  style={{
-                    width: 30,
-                    height: 28,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: `1px solid ${theme.colors.gray[3]}`,
-                    borderRadius: 8,
-                    padding: 0,
-                    background: fileManagerOpen
-                      ? (theme.colorScheme === 'dark' ? theme.colors.dark[5] : theme.colors.blue[0])
-                      : (theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff'),
-                    color: fileManagerOpen ? theme.colors.blue[6] : 'inherit',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <IconFolderOpen size={16} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveSessionName(null);
-                    setActiveFileManagerPath('');
-                    setFileManagerOpen(false);
-                  }}
-                  style={{
-                    border: `1px solid ${theme.colors.gray[3]}`,
-                    borderRadius: 8,
-                    padding: '4px 10px',
-                    background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Back to List
-                </button>
-              </Group>
+              <button
+                type="button"
+                onClick={() => setFileManagerOpen((open) => !open)}
+                title={fileManagerOpen ? 'Hide file manager' : 'Show file manager'}
+                aria-label={fileManagerOpen ? 'Hide file manager' : 'Show file manager'}
+                style={{
+                  width: 30,
+                  height: 28,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: `1px solid ${theme.colors.gray[3]}`,
+                  borderRadius: 8,
+                  padding: 0,
+                  background: fileManagerOpen
+                    ? (theme.colorScheme === 'dark' ? theme.colors.dark[5] : theme.colors.blue[0])
+                    : (theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#fff'),
+                  color: fileManagerOpen ? theme.colors.blue[6] : 'inherit',
+                  cursor: 'pointer',
+                }}
+              >
+                <IconFolderOpen size={16} />
+              </button>
             </Group>
             <div
               ref={activePaneRef}
