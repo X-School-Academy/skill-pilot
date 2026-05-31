@@ -246,6 +246,8 @@ const iconButtonStyle: React.CSSProperties = {
   padding: 0,
 };
 
+const SPLIT_HANDLE_SIZE = 12;
+
 function buildFileManagerTerminalSessionName(scope?: string): string {
   if (typeof window === 'undefined') return 'sp-webui-file-manager';
   const port = window.location.port.trim() || 'default';
@@ -478,27 +480,42 @@ export default function FileManagerContent({
   useEffect(() => {
     if (!isTerminalPanelResizing) return undefined;
 
-    const handleMouseMove = (event: MouseEvent) => {
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const handlePointerMove = (event: PointerEvent) => {
       if (!rightPaneRef.current) return;
       const bounds = rightPaneRef.current.getBoundingClientRect();
       if (bounds.height <= 0) return;
-      const offsetY = event.clientY - bounds.top;
-      const nextTopPercent = (offsetY / bounds.height) * 100;
-      const nextBottomPercent = Math.max(24, Math.min(68, 100 - nextTopPercent));
-      setTerminalPanelHeight(nextBottomPercent);
+      event.preventDefault();
+      const availableHeight = Math.max(1, bounds.height - SPLIT_HANDLE_SIZE);
+      const nextTopPixels = Math.max(0, Math.min(availableHeight, event.clientY - bounds.top));
+      setTerminalPanelHeight(100 - ((nextTopPixels / availableHeight) * 100));
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
       setIsTerminalPanelResizing(false);
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
     };
   }, [isTerminalPanelResizing]);
+
+  const startTerminalPanelResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setIsTerminalPanelResizing(true);
+  }, []);
 
   const updateUrlPath = useCallback((path: string) => {
     if (!updateRoute) return;
@@ -1794,12 +1811,23 @@ export default function FileManagerContent({
             flex: 1,
             minWidth: 0,
             display: 'grid',
-            gridTemplateRows: terminalPanelOpen ? `${100 - terminalPanelHeight}fr 12px ${terminalPanelHeight}fr` : '1fr',
+            gridTemplateRows: terminalPanelOpen ? `minmax(0, ${100 - terminalPanelHeight}fr) ${SPLIT_HANDLE_SIZE}px minmax(0, ${terminalPanelHeight}fr)` : '1fr',
             overflow: 'hidden',
             position: 'relative',
             minHeight: 0,
           }}
         >
+          {isTerminalPanelResizing && (
+            <div
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 9999,
+                cursor: 'row-resize',
+                background: 'transparent',
+              }}
+            />
+          )}
           <div style={{ minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
           {isLoadingFile && (
             <div style={{
@@ -2259,15 +2287,14 @@ export default function FileManagerContent({
           {terminalPanelOpen && (
             <>
               <div
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  setIsTerminalPanelResizing(true);
-                }}
+                onPointerDown={startTerminalPanelResize}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'row-resize',
+                  touchAction: 'none',
+                  userSelect: 'none',
                   color: '#93a4cc',
                   background: '#fff',
                   borderTop: '1px solid #e9ecef',

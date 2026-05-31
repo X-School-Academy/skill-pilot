@@ -25,6 +25,7 @@ import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
 import { MAIN_NAV_ITEMS } from '../../libs/main-nav';
 
 const API_BASE_URL = apiUrl('/api');
+const SPLIT_HANDLE_SIZE = 12;
 const FileManagerContent = dynamic(
   () => import('../../components/FileManagerContent'),
   {
@@ -193,15 +194,9 @@ export default function TerminalsPage() {
       const bounds = activePaneRef.current.getBoundingClientRect();
       if (bounds.height <= 0) return;
       event.preventDefault();
-      const splitterHeight = 12;
-      const availableHeight = Math.max(1, bounds.height - splitterHeight);
-      const minTop = Math.min(180, availableHeight * 0.45);
-      const minBottom = Math.min(220, availableHeight * 0.5);
-      const lowerBound = Math.max(0, minTop);
-      const upperBound = Math.max(lowerBound, availableHeight - minBottom);
-      const nextTopPixels = Math.max(lowerBound, Math.min(upperBound, event.clientY - bounds.top));
-      const nextTopPercent = (nextTopPixels / bounds.height) * 100;
-      setFileManagerHeight(Math.max(24, Math.min(72, nextTopPercent)));
+      const availableHeight = Math.max(1, bounds.height - SPLIT_HANDLE_SIZE);
+      const nextTopPixels = Math.max(0, Math.min(availableHeight, event.clientY - bounds.top));
+      setFileManagerHeight((nextTopPixels / availableHeight) * 100);
     };
 
     const handlePointerUp = () => setIsSplitResizing(false);
@@ -403,7 +398,7 @@ export default function TerminalsPage() {
                 overflow: 'hidden',
                 position: 'relative',
                 display: 'grid',
-                gridTemplateRows: fileManagerOpen ? `${fileManagerHeight}% 12px minmax(0, 1fr)` : '1fr',
+                gridTemplateRows: fileManagerOpen ? `minmax(0, ${fileManagerHeight}fr) ${SPLIT_HANDLE_SIZE}px minmax(0, ${100 - fileManagerHeight}fr)` : '1fr',
               }}
             >
               {isSplitResizing && (
@@ -448,6 +443,8 @@ export default function TerminalsPage() {
                       alignItems: 'center',
                       justifyContent: 'center',
                       cursor: 'row-resize',
+                      touchAction: 'none',
+                      userSelect: 'none',
                       color: '#93a4cc',
                       background: 'transparent',
                     }}
