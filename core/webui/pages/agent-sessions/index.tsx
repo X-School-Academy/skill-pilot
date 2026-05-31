@@ -260,7 +260,7 @@ const AgentSessionsPage = () => {
         } else {
           setLiveSessionName(sessionName);
           setLiveSessionFileManagerPath(newSessionFileManagerPath);
-          setFileManagerOpen(false);
+          setFileManagerOpen(Boolean(newSessionFileManagerPath));
         }
       }
       setError("");
@@ -459,15 +459,7 @@ const AgentSessionsPage = () => {
         {fileManagerOpen && (
           <>
             <div style={{ minHeight: 0, overflow: "hidden", border: `1px solid ${theme.colors.gray[3]}`, borderRadius: 8, background: "#fff" }}>
-              <div style={{ height: 34, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "0 12px", borderBottom: `1px solid ${theme.colors.gray[3]}`, background: theme.colorScheme === "dark" ? theme.colors.dark[6] : theme.colors.gray[0] }}>
-                <Text size="xs" weight={700}>Documents</Text>
-                {liveSessionFileManagerPath && (
-                  <Text size="xs" color="dimmed" truncate style={{ flex: 1, textAlign: "right" }}>
-                    {liveSessionFileManagerPath}
-                  </Text>
-                )}
-              </div>
-              <div style={{ height: "calc(100% - 34px)", minHeight: 0 }}>
+              <div style={{ height: "100%", minHeight: 0 }}>
                 <FileManagerContent
                   key={liveSessionFileManagerPath || "project-root"}
                   title="Documents"
@@ -658,27 +650,24 @@ const AgentSessionsPage = () => {
         </aside>
 
         <section style={{ minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-          <Group
-            position="apart"
-            px="lg"
-            py="sm"
-            style={{ borderBottom: `1px solid ${theme.colors.gray[3]}`, background: theme.colorScheme === "dark" ? theme.colors.dark[7] : "#fff" }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <Title order={3} style={{ fontSize: 18 }}>{liveSessionName ? "Live Terminal" : newSessionMode ? "New Session" : "Agent Session"}</Title>
-              {liveSessionName && (
-                <Text size="xs" color="dimmed" truncate>
-                  {liveSessionName}
-                </Text>
-              )}
-              {!newSessionMode && selectedSummary && (
-                <Text size="xs" color="dimmed" truncate>
-                  {selectedSummary.agent || "agent"} · {selectedSummary.session_id || selectedSummary.id}
-                </Text>
-              )}
-            </div>
-            {!liveSessionName && !newSessionMode && renderResumeButton("top")}
-          </Group>
+          {!liveSessionName && (
+            <Group
+              position="apart"
+              px="lg"
+              py="sm"
+              style={{ borderBottom: `1px solid ${theme.colors.gray[3]}`, background: theme.colorScheme === "dark" ? theme.colors.dark[7] : "#fff" }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <Title order={3} style={{ fontSize: 18 }}>{newSessionMode ? "New Session" : "Agent Session"}</Title>
+                {!newSessionMode && selectedSummary && (
+                  <Text size="xs" color="dimmed" truncate>
+                    {selectedSummary.agent || "agent"} · {selectedSummary.session_id || selectedSummary.id}
+                  </Text>
+                )}
+              </div>
+              {!newSessionMode && renderResumeButton("top")}
+            </Group>
+          )}
 
           {error && <Text size="sm" color="red" px="lg" pt="sm">{error}</Text>}
 

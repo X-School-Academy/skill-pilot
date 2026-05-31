@@ -395,15 +395,7 @@ export default function TerminalsPage() {
               {fileManagerOpen && (
                 <>
                   <div style={{ minHeight: 0, overflow: 'hidden', border: `1px solid ${theme.colors.gray[3]}`, borderRadius: 8, background: '#fff' }}>
-                    <div style={{ height: 34, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '0 12px', borderBottom: `1px solid ${theme.colors.gray[3]}`, background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : theme.colors.gray[0] }}>
-                      <Text size="xs" weight={700}>Documents</Text>
-                      {activeFileManagerPath && (
-                        <Text size="xs" color="dimmed" truncate style={{ flex: 1, textAlign: 'right' }}>
-                          {activeFileManagerPath}
-                        </Text>
-                      )}
-                    </div>
-                    <div style={{ height: 'calc(100% - 34px)', minHeight: 0 }}>
+                    <div style={{ height: '100%', minHeight: 0 }}>
                       <FileManagerContent
                         key={activeFileManagerPath || 'project-root'}
                         title="Documents"
