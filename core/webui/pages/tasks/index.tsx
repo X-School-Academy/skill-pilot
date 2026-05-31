@@ -17,9 +17,9 @@ import {
   MediaQuery,
   Modal,
   NavLink,
+  Radio,
   ScrollArea,
   Select,
-  Stack,
   Text,
   TextInput,
   Textarea,
@@ -30,25 +30,26 @@ import {
 import {
   IconArrowLeft,
   IconClock,
+  IconFilePlus,
   IconFileText,
+  IconFileUpload,
   IconFolder,
-  IconPlayerPlay,
+  IconFolderPlus,
   IconPlus,
   IconRefresh,
   IconSortAscending,
-  IconGripHorizontal,
-  IconX,
 } from '@tabler/icons-react';
+import EmbeddedSessionPanel, { WorkflowExecuteStatus } from '../../components/EmbeddedSessionPanel';
 import { apiUrl } from '../../libs/api-base';
 import { AUTO_EXECUTE_OPTION, buildExecuteSelectOptions, isAutoExecuteTarget } from '../../libs/execute-targets';
 import { useWorkspaceWatcher } from '../../libs/file-events';
 import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
-import { useSessionRoots } from '../../libs/session-roots';
 
 const API_BASE_URL = apiUrl('/api');
 axios.defaults.withCredentials = true;
 
-type TaskKind = 'markdown' | 'text' | 'image' | 'audio' | 'video';
+type FileKind = 'markdown' | 'html' | 'text' | 'image' | 'audio' | 'video' | 'pdf';
+type ExecuteMode = 'skill' | 'workflow';
 
 interface FileItem {
   name: string;
@@ -63,24 +64,17 @@ interface LlmProvider {
   name: string;
 }
 
-interface SaveTaskResult {
-  saved: boolean;
-  workflowResumeAvailable: boolean;
+interface TaskAction {
+  label: string;
+  defaultSkill: string;
+  skillPromptSuffix: string;
 }
 
-type ExecuteMode = 'skill' | 'workflow';
-type NextNodeTrigger = 'auto_continue' | 'start_by_prompt';
-
-interface WorkflowExecuteStatus {
-  status: string;
-  error?: string;
-  next_node_trigger?: NextNodeTrigger;
-  waiting_for_continue?: boolean;
-}
-
-const detectTaskKind = (path: string): TaskKind => {
+const detectFileKind = (path: string): FileKind => {
   const lower = (path || '').toLowerCase();
   if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'markdown';
+  if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'html';
+  if (lower.endsWith('.pdf')) return 'pdf';
   if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.webp') || lower.endsWith('.bmp') || lower.endsWith('.svg')) return 'image';
   if (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.ogg') || lower.endsWith('.m4a') || lower.endsWith('.aac') || lower.endsWith('.flac')) return 'audio';
   if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.webm') || lower.endsWith('.m4v') || lower.endsWith('.avi') || lower.endsWith('.mkv')) return 'video';
@@ -92,23 +86,18 @@ const workflowBaseName = (path: string): string => {
   return filename.endsWith('.json') ? filename.slice(0, -5) : filename;
 };
 
+const workflowProjectPath = (name: string): string => `core/workflows/${name}.json`;
+
 const taskProjectPath = (path: string): string => {
   const trimmed = path.replace(/^\/+/, '');
   return trimmed ? `workspace/tasks/${trimmed}` : 'workspace/tasks';
 };
 
-const workflowProjectPath = (name: string): string => `core/workflows/${name}.json`;
-const TASK_EDITOR_BG = '#0f172a';
-const TASK_EDITOR_FG = '#e2e8f0';
-const TASK_EDITOR_FONT = "'JetBrains Mono', 'Fira Mono', 'Cascadia Code', 'Consolas', monospace";
-const TASK_ACTION_BAR_STYLE: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'flex-end',
-  gap: 8,
-  padding: '8px 16px',
-  borderTop: '1px solid #eef2f7',
-  background: '#f8fafc',
-  flexShrink: 0,
+const taskRelativePath = (projectPath: string): string => {
+  const normalized = projectPath.replace(/^\/+/, '');
+  return normalized
+    .replace(/^\$project\/workspace\/tasks\/?/, '')
+    .replace(/^workspace\/tasks\/?/, '');
 };
 
 const getAncestorDirectoryPaths = (path: string): string[] => {
@@ -131,22 +120,43 @@ const collectDirectoryPaths = (items: FileItem[]): string[] => {
   return paths;
 };
 
-const listFilesInDirectory = (items: FileItem[], directoryPath: string): FileItem[] => {
-  if (!directoryPath) {
-    return items.filter((item) => item.type === 'file');
-  }
-
-  for (const item of items) {
-    if (item.type !== 'dir') continue;
-    if (item.path === directoryPath) {
-      return (item.children || []).filter((child) => child.type === 'file');
-    }
-    const nested = listFilesInDirectory(item.children || [], directoryPath);
-    if (nested.length > 0) return nested;
-  }
-
-  return [];
+const PAGE_HEADER_BAR_STYLE: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+  padding: '8px 18px',
+  borderBottom: '1px solid #eef2f7',
+  background: '#ffffff',
+  flexShrink: 0,
+  flexWrap: 'wrap',
 };
+
+const PAGE_ACTION_BAR_STYLE: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'flex-end',
+  gap: 8,
+  padding: '8px 16px',
+  borderTop: '1px solid #eef2f7',
+  background: '#f8fafc',
+  flexShrink: 0,
+};
+
+const PAGE_EDITOR_FONT = "'JetBrains Mono', 'Fira Mono', 'Cascadia Code', 'Consolas', monospace";
+const PAGE_EDITOR_DARK_INPUT_STYLE = {
+  height: '100%',
+  minHeight: '100%',
+  resize: 'none',
+  border: 'none',
+  borderRadius: 0,
+  padding: '18px 20px',
+  fontFamily: PAGE_EDITOR_FONT,
+  fontSize: 13,
+  lineHeight: 1.65,
+  background: '#0f172a',
+  color: '#e5e7eb',
+  caretColor: '#93c5fd',
+} as const;
 
 export default function TasksPage() {
   const router = useRouter();
@@ -155,7 +165,7 @@ export default function TasksPage() {
   const isDevMode = process.env.NODE_ENV === 'development';
   const [opened, setOpened] = useState(false);
   const [treeData, setTreeData] = useState<FileItem[]>([]);
-  const [selectedKind, setSelectedKind] = useState<TaskKind>('text');
+  const [selectedKind, setSelectedKind] = useState<FileKind>('text');
   const [loading, setLoading] = useState(false);
   const [treeLoading, setTreeLoading] = useState(false);
   const [sortByTime, setSortByTime] = useState(true);
@@ -167,20 +177,20 @@ export default function TasksPage() {
   const [notice, setNotice] = useState('');
   const [editorContent, setEditorContent] = useState('');
   const [markdownView, setMarkdownView] = useState<'editor' | 'preview'>('editor');
-  const [addTaskOpened, setAddTaskOpened] = useState(false);
-  const [newTaskFolder, setNewTaskFolder] = useState('');
-  const [newTaskFile, setNewTaskFile] = useState('new task');
-  const [taskTitle, setTaskTitle] = useState('');
+  const [htmlPreviewVersion, setHtmlPreviewVersion] = useState(0);
+  const [taskModalOpened, setTaskModalOpened] = useState(false);
+  const [taskNameInput, setTaskNameInput] = useState('');
+  const [taskRequirementsInput, setTaskRequirementsInput] = useState('');
   const [creatingTask, setCreatingTask] = useState(false);
-  const [deletingTask, setDeletingTask] = useState(false);
+  const [deletingFile, setDeletingFile] = useState(false);
+  const [fileContextMenu, setFileContextMenu] = useState<{ x: number; y: number; item: FileItem } | null>(null);
   const [executeOpened, setExecuteOpened] = useState(false);
   const [executeMode, setExecuteMode] = useState<ExecuteMode>('skill');
   const [skillOptions, setSkillOptions] = useState<string[]>([]);
   const [workflowOptions, setWorkflowOptions] = useState<string[]>([]);
   const [selectedSkill, setSelectedSkill] = useState<string | null>(AUTO_EXECUTE_OPTION);
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(AUTO_EXECUTE_OPTION);
-  const [executeNextNodeTrigger, setExecuteNextNodeTrigger] = useState<NextNodeTrigger>('auto_continue');
-  const [selectedReferenceFiles, setSelectedReferenceFiles] = useState<string[]>([]);
+  const [pendingAction, setPendingAction] = useState<TaskAction | null>(null);
   const [navbarWidth, setNavbarWidth] = useState(300);
   const [isResizing, setIsResizing] = useState(false);
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false);
@@ -191,7 +201,7 @@ export default function TasksPage() {
   const [newSessionSandbox, setNewSessionSandbox] = useState(false);
   const [newSessionAuto, setNewSessionAuto] = useState(false);
   const [newSessionNetwork, setNewSessionNetwork] = useState(true);
-  const [newSessionNextNodeTrigger, setNewSessionNextNodeTrigger] = useState<NextNodeTrigger>('auto_continue');
+  const [newSessionNextNodeTrigger, setNewSessionNextNodeTrigger] = useState<'auto_continue' | 'start_by_prompt'>('auto_continue');
   const [newSessionWorkflowResumeAvailable, setNewSessionWorkflowResumeAvailable] = useState(false);
   const [newSessionWorkflowResume, setNewSessionWorkflowResume] = useState(false);
   const [startingSession, setStartingSession] = useState(false);
@@ -200,33 +210,19 @@ export default function TasksPage() {
   const [workflowExecuteStatus, setWorkflowExecuteStatus] = useState<WorkflowExecuteStatus | null>(null);
   const [continuingWorkflow, setContinuingWorkflow] = useState(false);
   const rightPaneRef = useRef<HTMLDivElement | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadTargetRef = useRef<string>('workspace/tasks');
+  const autoSaveTimerRef = useRef<number | null>(null);
+  const pendingSelfSaveRef = useRef<Record<string, string>>({});
   const lastLoadedContentRef = useRef<string>('');
   const editorContentRef = useRef<string>('');
   useEffect(() => { editorContentRef.current = editorContent; }, [editorContent]);
-  const {
-    sessionRootOptions,
-    hasSessionWorktrees,
-    selectedSessionPath,
-    setSelectedSessionPath,
-  } = useSessionRoots();
 
   const currentTask = typeof task === 'string' ? task : '';
   const currentTaskFolder = currentTask.includes('/') ? currentTask.split('/')[0] : '';
-  const currentDirectory = currentTask.includes('/') ? currentTask.slice(0, currentTask.lastIndexOf('/')) : '';
-  const currentDirectoryFiles = useMemo(
-    () => listFilesInDirectory(treeData, currentDirectory).filter((item) => item.path !== currentTask),
-    [treeData, currentDirectory, currentTask],
-  );
+  const currentFileName = currentTask.split('/').pop() || '';
   const skillSelectOptions = useMemo(() => buildExecuteSelectOptions(skillOptions), [skillOptions]);
   const workflowSelectOptions = useMemo(() => buildExecuteSelectOptions(workflowOptions), [workflowOptions]);
-  const workflowSelectsAuto = isAutoExecuteTarget(selectedWorkflow);
-  const taskFolderOptions = useMemo(
-    () => treeData
-      .filter((item) => item.type === 'dir' && !item.path.includes('/'))
-      .map((item) => item.path)
-      .sort((a, b) => a.localeCompare(b)),
-    [treeData],
-  );
 
   const startResizing = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -254,7 +250,6 @@ export default function TasksPage() {
 
   useEffect(() => {
     if (!isSessionPanelResizing) return undefined;
-
     const handleMouseMove = (event: MouseEvent) => {
       if (!rightPaneRef.current) return;
       const bounds = rightPaneRef.current.getBoundingClientRect();
@@ -264,11 +259,7 @@ export default function TasksPage() {
       const nextBottomPercent = Math.max(28, Math.min(72, 100 - nextTopPercent));
       setSessionPanelHeight(nextBottomPercent);
     };
-
-    const handleMouseUp = () => {
-      setIsSessionPanelResizing(false);
-    };
-
+    const handleMouseUp = () => setIsSessionPanelResizing(false);
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
     return () => {
@@ -302,15 +293,14 @@ export default function TasksPage() {
   };
 
   const fetchContent = async (path: string) => {
-    const nextKind = detectTaskKind(path);
+    const nextKind = detectFileKind(path);
     setLoading(true);
     setEditorError('');
     setNotice('');
-    setTaskTitle(path.split('/').pop() || path);
     setSelectedKind(nextKind);
     setMarkdownView('editor');
 
-    if (nextKind === 'image' || nextKind === 'audio' || nextKind === 'video') {
+    if (nextKind === 'image' || nextKind === 'audio' || nextKind === 'video' || nextKind === 'pdf') {
       setEditorContent('');
       setLoading(false);
       return;
@@ -318,13 +308,21 @@ export default function TasksPage() {
 
     try {
       const res = await axios.get(`${API_BASE_URL}/tasks/content`, { params: { path } });
-      setSelectedKind((res.data.kind as TaskKind) || nextKind);
+      setSelectedKind((res.data.kind as FileKind) || nextKind);
       const content = String(res.data.content || '');
       setEditorContent(content);
       lastLoadedContentRef.current = content;
     } catch (err: any) {
-      console.error('Failed to fetch task content:', err);
-      setEditorError(err?.response?.data?.error || 'Failed to load task content.');
+      const status = err?.response?.status;
+      if (status === 404) {
+        setEditorError('This file was removed from disk. Select another file from the sidebar.');
+        setEditorContent('');
+        lastLoadedContentRef.current = '';
+        await fetchTree();
+        return;
+      }
+      console.error('Failed to fetch task content:', err?.response?.data?.error || err?.message || err);
+      setEditorError(err?.response?.data?.error || 'Failed to load file content.');
       setEditorContent('');
     } finally {
       setLoading(false);
@@ -337,12 +335,11 @@ export default function TasksPage() {
       if (res.data.path) {
         router.push(`/tasks?task=${encodeURIComponent(res.data.path)}`, undefined, { shallow: true });
       } else {
-        setTaskTitle('');
         setEditorContent('');
         setNotice('');
       }
     } catch (err) {
-      console.error('Failed to fetch latest task:', err);
+      console.error('Failed to fetch latest task file:', err);
     }
   };
 
@@ -353,9 +350,7 @@ export default function TasksPage() {
       setLlmProviders(providers);
       const serverDefault: string = res.data.default || '';
       const defaultId = resolveSelectedProvider(providers, serverDefault, 'gemini');
-      if (defaultId) {
-        setSelectedProvider(defaultId);
-      }
+      if (defaultId) setSelectedProvider(defaultId);
       setLlmProvider(defaultId);
     } catch (err) {
       console.error('Failed to fetch LLM providers:', err);
@@ -385,60 +380,57 @@ export default function TasksPage() {
     }
   };
 
-  const saveCurrentTaskContent = async (options?: { checkWorkflowResume?: boolean; workflowPath?: string }): Promise<SaveTaskResult> => {
-    if (!currentTask || selectedKind === 'image' || selectedKind === 'audio' || selectedKind === 'video') {
-      return { saved: true, workflowResumeAvailable: false };
+  const saveCurrentContent = async (): Promise<boolean> => {
+    if (!currentTask || selectedKind === 'image' || selectedKind === 'audio' || selectedKind === 'video' || selectedKind === 'pdf') {
+      return true;
     }
-    const projectReferenceFiles = Array.from(new Set(selectedReferenceFiles.map((path) => taskProjectPath(path))))
-      .sort((a, b) => a.localeCompare(b));
+    const contentToSave = editorContentRef.current;
     setEditorSaving(true);
     setEditorError('');
     setNotice('');
     try {
-      const res = await axios.post(`${API_BASE_URL}/tasks/save`, {
+      await axios.post(`${API_BASE_URL}/tasks/save`, {
         path: currentTask,
-        content: editorContent,
-        check_workflow_resume: Boolean(options?.checkWorkflowResume),
-        workflow_path: options?.workflowPath || '',
-        reference_files: projectReferenceFiles,
+        content: contentToSave,
       });
-      setNotice('Saved.');
+      pendingSelfSaveRef.current[currentTask] = contentToSave;
+      lastLoadedContentRef.current = contentToSave;
+      setNotice('Saved automatically.');
       await fetchTree();
-      await fetchContent(currentTask);
-      return {
-        saved: true,
-        workflowResumeAvailable: Boolean(res.data?.workflow_resume_available),
-      };
+      return true;
     } catch (err: any) {
       console.error('Failed to save task content:', err);
-      setEditorError(err?.response?.data?.error || 'Failed to save task content.');
-      return { saved: false, workflowResumeAvailable: false };
+      setEditorError(err?.response?.data?.error || 'Failed to save content.');
+      return false;
     } finally {
       setEditorSaving(false);
     }
   };
 
-  const saveContent = async () => {
-    await saveCurrentTaskContent();
+  const openTaskModal = () => {
+    setTaskNameInput(currentTaskFolder || '');
+    setTaskRequirementsInput('');
+    setTaskModalOpened(true);
+    setEditorError('');
+    setNotice('');
   };
 
   const createTask = async () => {
-    const trimmedFile = newTaskFile.trim();
-    if (!trimmedFile) return;
     setCreatingTask(true);
     setEditorError('');
     setNotice('');
     try {
       const res = await axios.post(`${API_BASE_URL}/tasks/create`, {
-        folder: newTaskFolder.trim(),
-        file: trimmedFile,
+        folder: taskNameInput,
+        file: 'requirements.md',
+        requirements: taskRequirementsInput,
       });
-      const createdPath = String(res.data.path || trimmedFile);
-      setAddTaskOpened(false);
-      setNewTaskFolder(currentTaskFolder);
-      setNewTaskFile('new task');
+      const createdPath = String(res.data.path || '');
+      setTaskModalOpened(false);
       await fetchTree();
-      router.push(`/tasks?task=${encodeURIComponent(createdPath)}`, undefined, { shallow: true });
+      if (createdPath) {
+        router.push(`/tasks?task=${encodeURIComponent(createdPath)}`, undefined, { shallow: true });
+      }
     } catch (err: any) {
       console.error('Failed to create task:', err);
       setEditorError(err?.response?.data?.error || 'Failed to create task.');
@@ -447,156 +439,253 @@ export default function TasksPage() {
     }
   };
 
-  const deleteTask = async () => {
+  const deleteCurrentFile = async () => {
     if (!currentTask) return;
-    if (!window.confirm(`Delete ${currentTask}?`)) return;
-    setDeletingTask(true);
+
+    let confirmText = '';
+    if (currentFileName === 'requirements.md') {
+      const typed = window.prompt(`Deleting ${currentTask} will remove the full task folder. Type delete to confirm.`);
+      if (typed === null) return;
+      confirmText = typed;
+    } else if (!window.confirm(`Delete ${currentTask}?`)) {
+      return;
+    }
+
+    setDeletingFile(true);
     setEditorError('');
     setNotice('');
     try {
-      await axios.post(`${API_BASE_URL}/tasks/delete`, { path: currentTask });
+      await axios.post(`${API_BASE_URL}/tasks/delete`, {
+        path: currentTask,
+        confirm_text: confirmText,
+      });
       await fetchTree();
       router.push('/tasks', undefined, { shallow: true });
     } catch (err: any) {
-      console.error('Failed to delete task:', err);
-      setEditorError(err?.response?.data?.error || 'Failed to delete task.');
+      console.error('Failed to delete task file:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to delete file.');
     } finally {
-      setDeletingTask(false);
+      setDeletingFile(false);
     }
   };
 
-  useWorkspaceWatcher({
-    prefix: '/workspace/tasks',
-    onTreeChange: () => { void fetchTree(); },
-    currentFilePath: currentTask ? `/workspace/tasks/${currentTask}` : null,
-    onCurrentFileChange: () => {
-      if (!currentTask) return;
-      if (editorContentRef.current === lastLoadedContentRef.current) {
-        setNotice('File updated on disk.');
-        void fetchContent(currentTask);
-      } else {
-        setEditorError('File changed on disk. Reload after saving or discard your edits.');
-      }
-    },
-  });
-
-  useEffect(() => {
-    fetchTree();
-    fetchLlmProviders();
-    fetchExecuteOptions();
-    void axios.get(`${API_BASE_URL}/config/settings`).then((res) => {
-      const security = res.data?.security?.newSession;
-      if (!security) return;
-      setNewSessionSandbox(Boolean(security.sandbox));
-      setNewSessionAuto(Boolean(security.auto));
-      setNewSessionNetwork(security.network !== false);
-    }).catch((err) => {
-      console.error('Failed to fetch task session settings:', err);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (currentTask) {
-      fetchContent(currentTask);
-    } else if (router.isReady) {
-      fetchLatest();
+  const createFileInTask = async (taskFolderPath: string) => {
+    setFileContextMenu(null);
+    const name = window.prompt('File name');
+    if (!name) return;
+    const parentPath = taskProjectPath(taskFolderPath);
+    const projectPath = `${parentPath}/${name}`.replace(/\/+/g, '/');
+    setEditorError('');
+    setNotice('');
+    try {
+      await axios.post(apiUrl('/api/files/write'), {
+        path: projectPath,
+        content: '',
+      });
+      const nextPath = taskRelativePath(projectPath);
+      setExpandedFolders((prev) => Array.from(new Set([...prev, taskFolderPath])));
+      await fetchTree();
+      router.push(`/tasks?task=${encodeURIComponent(nextPath)}`, undefined, { shallow: true });
+    } catch (err: any) {
+      console.error('Failed to create task file:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to create file.');
     }
-  }, [currentTask, router.isReady]);
-
-  useEffect(() => {
-    setSelectedReferenceFiles((prev) => prev.filter((path) => currentDirectoryFiles.some((item) => item.path === path)));
-  }, [currentDirectoryFiles]);
-
-  useEffect(() => {
-    if (!workflowSessionActive) return undefined;
-
-    const poll = async () => {
-      try {
-        const res = await axios.get(`${API_BASE_URL}/workflows/execute/status`, { withCredentials: true });
-        const status = res.data as WorkflowExecuteStatus;
-        setWorkflowExecuteStatus(status);
-        if (status.status === 'finished' || status.status === 'error' || status.status === 'terminated') {
-          setWorkflowSessionActive(false);
-        }
-      } catch {
-        // Ignore transient polling failures while the session is running.
-      }
-    };
-
-    void poll();
-    const intervalId = window.setInterval(() => void poll(), 3000);
-    return () => window.clearInterval(intervalId);
-  }, [workflowSessionActive]);
-
-  useEffect(() => {
-    if (executeMode !== 'workflow' || workflowSelectsAuto) {
-      setExecuteNextNodeTrigger('auto_continue');
-    }
-  }, [executeMode, workflowSelectsAuto]);
-
-  const sortItems = (items: FileItem[]): FileItem[] => {
-    const sorted = [...items].sort((a, b) => {
-      if (a.type === 'dir' && b.type !== 'dir') return -1;
-      if (a.type !== 'dir' && b.type === 'dir') return 1;
-      if (sortByTime) return b.mtime - a.mtime;
-      return a.name.localeCompare(b.name);
-    });
-
-    return sorted.map((item) => (item.children ? { ...item, children: sortItems(item.children) } : item));
   };
 
-  const sortedTreeData = useMemo(() => sortItems(treeData), [treeData, sortByTime]);
+  const createFolderInTask = async (taskFolderPath: string) => {
+    setFileContextMenu(null);
+    const name = window.prompt('Folder name');
+    if (!name) return;
+    setEditorError('');
+    setNotice('');
+    try {
+      await axios.post(apiUrl('/api/files/mkdir'), {
+        parent: taskProjectPath(taskFolderPath),
+        name,
+      });
+      setExpandedFolders((prev) => Array.from(new Set([...prev, taskFolderPath])));
+      await fetchTree();
+    } catch (err: any) {
+      console.error('Failed to create task folder:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to create folder.');
+    }
+  };
 
-  const renderTree = (items: FileItem[]) => items.map((item) => {
-    const isSelected = currentTask === item.path;
-    if (item.type === 'dir') {
-      return (
-        <NavLink
-          key={item.path}
-          label={item.name}
-          icon={<IconFolder size="1.2rem" stroke={1.5} color={theme.colors.blue[6]} />}
-          childrenOffset={16}
-          opened={expandedFolders.includes(item.path)}
-          onChange={(nextOpened) => {
-            setExpandedFolders((prev) => (
-              nextOpened
-                ? Array.from(new Set([...prev, item.path]))
-                : prev.filter((path) => path !== item.path)
-            ));
-          }}
-        >
-          {item.children && renderTree(item.children)}
-        </NavLink>
-      );
+  const openUploadForTask = (taskFolderPath: string) => {
+    setFileContextMenu(null);
+    uploadTargetRef.current = taskProjectPath(taskFolderPath);
+    uploadInputRef.current?.click();
+  };
+
+  const uploadFilesToTask = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setEditorError('');
+    setNotice('');
+    try {
+      for (const file of Array.from(files)) {
+        const formData = new FormData();
+        formData.append('path', uploadTargetRef.current);
+        formData.append('file', file);
+        await axios.post(apiUrl('/api/files/upload'), formData);
+      }
+      const taskFolderPath = taskRelativePath(uploadTargetRef.current);
+      if (taskFolderPath) {
+        setExpandedFolders((prev) => Array.from(new Set([...prev, taskFolderPath])));
+      }
+      await fetchTree();
+    } catch (err: any) {
+      console.error('Failed to upload task file:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to upload file.');
+    }
+  };
+
+  const renameTaskPath = async (item: FileItem) => {
+    const nextName = window.prompt('Rename', item.name);
+    if (!nextName || nextName === item.name) return;
+    setEditorError('');
+    setNotice('');
+    try {
+      const res = await axios.post(apiUrl('/api/files/rename'), {
+        id: taskProjectPath(item.path),
+        name: nextName,
+      });
+      const nextPath = taskRelativePath(String(res.data?.newId || ''));
+      setFileContextMenu(null);
+      await fetchTree();
+      if (currentTask === item.path && nextPath) {
+        router.push(`/tasks?task=${encodeURIComponent(nextPath)}`, undefined, { shallow: true });
+      } else if (currentTask.startsWith(`${item.path}/`) && nextPath) {
+        const suffix = currentTask.slice(item.path.length);
+        router.push(`/tasks?task=${encodeURIComponent(`${nextPath}${suffix}`)}`, undefined, { shallow: true });
+      }
+    } catch (err: any) {
+      console.error('Failed to rename task path:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to rename file.');
+    }
+  };
+
+  const deleteTaskFolder = async (item: FileItem) => {
+    const typed = window.prompt(`Deleting ${item.path} will remove this folder and every file inside it. Type delete to confirm.`);
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== 'delete') {
+      setEditorError("Type 'delete' to confirm removing the folder.");
+      return;
     }
 
-    return (
-      <NavLink
-        key={item.path}
-        label={item.name}
-        icon={<IconFileText size="1.2rem" stroke={1.5} color={theme.colors.gray[6]} />}
-        active={isSelected}
-        onClick={() => {
-          router.push(`/tasks?task=${encodeURIComponent(item.path)}`, undefined, { shallow: true });
-          setOpened(false);
-        }}
-      />
-    );
-  });
+    setEditorError('');
+    setNotice('');
+    setDeletingFile(true);
+    try {
+      await axios.post(apiUrl('/api/files/delete'), {
+        ids: [taskProjectPath(item.path)],
+      });
+      setFileContextMenu(null);
+      setExpandedFolders((prev) => prev.filter((path) => path !== item.path && !path.startsWith(`${item.path}/`)));
+      await fetchTree();
+      if (currentTask === item.path || currentTask.startsWith(`${item.path}/`)) {
+        router.push('/tasks', undefined, { shallow: true });
+      }
+    } catch (err: any) {
+      console.error('Failed to delete task folder:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to delete folder.');
+    } finally {
+      setDeletingFile(false);
+    }
+  };
 
-  const mediaUrl = currentTask ? `${API_BASE_URL}/tasks/file?path=${encodeURIComponent(currentTask)}` : '';
-  const isMarkdownEditor = selectedKind === 'markdown';
-  const isTextEditor = selectedKind === 'text';
+  const deleteTaskFile = async (item: FileItem) => {
+    let confirmText = '';
+    if (item.name === 'requirements.md') {
+      const typed = window.prompt(`Deleting ${item.path} will remove the full task folder. Type delete to confirm.`);
+      if (typed === null) return;
+      confirmText = typed;
+    } else if (!window.confirm(`Delete ${item.path}?`)) {
+      return;
+    }
 
-  const openExecuteScreen = () => {
+    setEditorError('');
+    setNotice('');
+    setDeletingFile(true);
+    try {
+      await axios.post(`${API_BASE_URL}/tasks/delete`, {
+        path: item.path,
+        confirm_text: confirmText,
+      });
+      setFileContextMenu(null);
+      await fetchTree();
+      if (currentTask === item.path) {
+        router.push('/tasks', undefined, { shallow: true });
+      }
+    } catch (err: any) {
+      console.error('Failed to delete task file:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to delete file.');
+    } finally {
+      setDeletingFile(false);
+    }
+  };
+
+  const copyTaskPath = async (item: FileItem) => {
+    try {
+      await navigator.clipboard.writeText(taskProjectPath(item.path));
+      setFileContextMenu(null);
+      setNotice('Path copied.');
+    } catch {
+      setEditorError('Failed to copy path.');
+    }
+  };
+
+  const openPromptRunSession = async () => {
+    if (!currentTask || currentFileName !== 'prompt.md') return;
+    const saved = await saveCurrentContent();
+    if (!saved) return;
+    setSessionPromptText(editorContentRef.current);
+    setNewSessionWorkflow(null);
+    setNewSessionNextNodeTrigger('auto_continue');
+    setNewSessionWorkflowResumeAvailable(false);
+    setNewSessionWorkflowResume(false);
+    setLiveSessionName(null);
+    setWorkflowSessionActive(false);
+    setWorkflowExecuteStatus(null);
+    setSessionPanelHeight(50);
+    setSessionPanelOpen(true);
+  };
+
+  const openExecuteModal = (action: TaskAction) => {
+    setPendingAction(action);
     setExecuteMode('skill');
     setSelectedSkill(AUTO_EXECUTE_OPTION);
     setSelectedWorkflow(AUTO_EXECUTE_OPTION);
-    setExecuteNextNodeTrigger('auto_continue');
-    setSelectedReferenceFiles([]);
     setExecuteOpened(true);
-    setNotice('');
-    setEditorError('');
+  };
+
+  const runAction = async () => {
+    if (!currentTask || !pendingAction) return;
+    const target = executeMode === 'skill' ? selectedSkill : selectedWorkflow;
+    if (!target) return;
+    const shouldRunWorkflow = executeMode === 'workflow' && !isAutoExecuteTarget(target);
+
+    const saved = await saveCurrentContent();
+    if (!saved) return;
+
+    const prompt = executeMode === 'skill'
+      ? (isAutoExecuteTarget(target)
+          ? `Find and use the correct agent skill ${pendingAction.skillPromptSuffix}`
+          : `Use agent skill ${target} ${pendingAction.skillPromptSuffix}`)
+      : (shouldRunWorkflow
+          ? `Execute workflow ${workflowProjectPath(target)}. ${pendingAction.skillPromptSuffix.charAt(0).toUpperCase()}${pendingAction.skillPromptSuffix.slice(1)}\n\nYour Workspace path: ${currentTaskFolder ? taskProjectPath(currentTaskFolder) : 'workspace/tasks'}\n\nIf you create any intermediate files, save them inside the task workspace above.`
+          : `Find and use the correct workflow ${pendingAction.skillPromptSuffix}`);
+
+    setExecuteOpened(false);
+    setSessionPromptText(prompt);
+    setNewSessionWorkflow(shouldRunWorkflow ? `${target}.json` : null);
+    setNewSessionNextNodeTrigger('auto_continue');
+    setNewSessionWorkflowResumeAvailable(false);
+    setNewSessionWorkflowResume(false);
+    setLiveSessionName(null);
+    setWorkflowSessionActive(false);
+    setWorkflowExecuteStatus(null);
+    setSessionPanelHeight(50);
+    setSessionPanelOpen(true);
   };
 
   const closeSessionPanel = () => {
@@ -609,50 +698,6 @@ export default function TasksPage() {
     setNewSessionWorkflow(null);
     setNewSessionWorkflowResumeAvailable(false);
     setNewSessionWorkflowResume(false);
-  };
-
-  const toggleReferenceFile = (path: string, checked: boolean) => {
-    setSelectedReferenceFiles((prev) => (
-      checked
-        ? (prev.includes(path) ? prev : [...prev, path])
-        : prev.filter((item) => item !== path)
-    ));
-  };
-
-  const runExecuteAction = async () => {
-    if (!currentTask) return;
-    const target = executeMode === 'skill' ? selectedSkill : selectedWorkflow;
-    if (!target) return;
-    const shouldRunWorkflow = executeMode === 'workflow' && !isAutoExecuteTarget(target);
-    const saveResult = await saveCurrentTaskContent({
-      checkWorkflowResume: shouldRunWorkflow,
-      workflowPath: shouldRunWorkflow ? workflowProjectPath(target) : undefined,
-    });
-    if (!saveResult.saved) return;
-
-    const instructionPath = taskProjectPath(currentTask);
-    const projectReferenceFiles = Array.from(new Set(selectedReferenceFiles.map((path) => taskProjectPath(path))))
-      .sort((a, b) => a.localeCompare(b));
-    const referenceSentence = selectedReferenceFiles.length > 0 ? ` Reference files: ${projectReferenceFiles.join(', ')}.` : '';
-    const prompt = executeMode === 'skill'
-      ? (isAutoExecuteTarget(target)
-          ? `Find and use the correct agent skill for the instructions defined at ${instructionPath}.${referenceSentence}`
-          : `Use agent skill ${target} for the instructions defined at ${instructionPath}.${referenceSentence}`)
-      : (shouldRunWorkflow
-          ? `Execute workflow ${workflowProjectPath(target)}.\n\nFollow the instructions defined at ${instructionPath}.\n\nWorkspace path: ${currentDirectory ? taskProjectPath(currentDirectory) : 'workspace/tasks'}\n\nIf you create any intermediate files, save them inside the task workspace above.${selectedReferenceFiles.length > 0 ? `\n\nReference files:\n- ${projectReferenceFiles.join('\n- ')}` : ''}`
-          : `Find and use the correct workflow for the instructions defined at ${instructionPath}.${referenceSentence}`);
-
-    setExecuteOpened(false);
-    setSessionPromptText(prompt);
-    setNewSessionWorkflow(shouldRunWorkflow ? `${target}.json` : null);
-    setNewSessionNextNodeTrigger(shouldRunWorkflow ? executeNextNodeTrigger : 'auto_continue');
-    setNewSessionWorkflowResumeAvailable(shouldRunWorkflow ? saveResult.workflowResumeAvailable : false);
-    setNewSessionWorkflowResume(false);
-    setLiveSessionName(null);
-    setWorkflowSessionActive(false);
-    setWorkflowExecuteStatus(null);
-    setSessionPanelHeight(50);
-    setSessionPanelOpen(true);
   };
 
   const handleStartSession = async (path?: string) => {
@@ -688,9 +733,6 @@ export default function TasksPage() {
         if (newSessionWorkflow) {
           setWorkflowSessionActive(true);
           setWorkflowExecuteStatus(null);
-        } else {
-          setWorkflowSessionActive(false);
-          setWorkflowExecuteStatus(null);
         }
       }
     } catch (err) {
@@ -714,197 +756,221 @@ export default function TasksPage() {
     }
   };
 
-  const handleSessionPromptKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-      void handleStartSession();
+  useWorkspaceWatcher({
+    prefix: '/workspace/tasks',
+    onTreeChange: () => { void fetchTree(); },
+    currentFilePath: currentTask ? `/workspace/tasks/${currentTask}` : null,
+    onCurrentFileChange: () => {
+      if (!currentTask) return;
+      const pendingSelfSave = pendingSelfSaveRef.current[currentTask];
+      if (pendingSelfSave !== undefined && pendingSelfSave === lastLoadedContentRef.current) {
+        delete pendingSelfSaveRef.current[currentTask];
+        return;
+      }
+      if (editorContentRef.current === lastLoadedContentRef.current) {
+        setNotice('File updated on disk.');
+        void fetchContent(currentTask);
+      } else {
+        setEditorError('File changed on disk. Reload after saving or discard your edits.');
+      }
+    },
+  });
+
+  useEffect(() => {
+    const closeFileContextMenu = () => setFileContextMenu(null);
+    window.addEventListener('pointerdown', closeFileContextMenu);
+    return () => window.removeEventListener('pointerdown', closeFileContextMenu);
+  }, []);
+
+  useEffect(() => {
+    fetchTree();
+    fetchLlmProviders();
+    fetchExecuteOptions();
+    void axios.get(`${API_BASE_URL}/config/settings`).then((res) => {
+      const security = res.data?.security?.newSession;
+      if (!security) return;
+      setNewSessionSandbox(Boolean(security.sandbox));
+      setNewSessionAuto(Boolean(security.auto));
+      setNewSessionNetwork(security.network !== false);
+    }).catch((err) => {
+      console.error('Failed to fetch task session settings:', err);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (currentTask) {
+      fetchContent(currentTask);
+    } else if (router.isReady) {
+      fetchLatest();
     }
+  }, [currentTask, router.isReady]);
+
+  useEffect(() => {
+    if (autoSaveTimerRef.current) {
+      window.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
+    if (
+      !currentTask ||
+      loading ||
+      (selectedKind !== 'markdown' && selectedKind !== 'html' && selectedKind !== 'text') ||
+      editorContent === lastLoadedContentRef.current
+    ) {
+      return undefined;
+    }
+
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      autoSaveTimerRef.current = null;
+      void saveCurrentContent();
+    }, 900);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        window.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    };
+  }, [currentTask, editorContent, loading, selectedKind]);
+
+  useEffect(() => {
+    if (!workflowSessionActive) return undefined;
+
+    const poll = async () => {
+      try {
+        const res = await axios.get(`${API_BASE_URL}/workflows/execute/status`, { withCredentials: true });
+        const status = res.data as WorkflowExecuteStatus;
+        setWorkflowExecuteStatus(status);
+        if (status.status === 'finished' || status.status === 'error' || status.status === 'terminated') {
+          setWorkflowSessionActive(false);
+        }
+      } catch {
+        // Ignore transient polling failures while the session is running.
+      }
+    };
+
+    void poll();
+    const intervalId = window.setInterval(() => void poll(), 3000);
+    return () => window.clearInterval(intervalId);
+  }, [workflowSessionActive]);
+
+  const sortItems = (items: FileItem[]): FileItem[] => {
+    const sorted = [...items].sort((a, b) => {
+      if (a.type === 'dir' && b.type !== 'dir') return -1;
+      if (a.type !== 'dir' && b.type === 'dir') return 1;
+      if (sortByTime) return b.mtime - a.mtime;
+      return a.name.localeCompare(b.name);
+    });
+    return sorted.map((item) => (item.children ? { ...item, children: sortItems(item.children) } : item));
   };
 
-  const renderSessionPanel = () => {
-    const panelBorder = theme.colorScheme === 'dark' ? theme.colors.dark[4] : '#cfdaf6';
-    const panelBackground = theme.colorScheme === 'dark' ? theme.colors.dark[7] : '#ffffff';
+  const sortedTreeData = useMemo(() => sortItems(treeData), [treeData, sortByTime]);
 
-    return (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100%',
-          minHeight: 0,
-          borderRadius: liveSessionName ? 0 : 10,
-          border: `1px solid ${panelBorder}`,
-          background: panelBackground,
-          boxShadow: theme.colorScheme === 'dark'
-            ? '0 20px 40px rgba(0, 0, 0, 0.24)'
-            : '0 20px 40px rgba(60, 91, 173, 0.12)',
-          overflow: 'hidden',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '10px 14px',
-            borderBottom: `1px solid ${panelBorder}`,
-            background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#f7f9ff',
+  const renderTree = (items: FileItem[]) => items.map((item) => {
+    const isSelected = currentTask === item.path;
+    if (item.type === 'dir') {
+      const taskLabel = (
+        <Group position="apart" spacing={6} noWrap style={{ width: '100%' }}>
+          <Text size="sm" truncate>{item.name}</Text>
+        </Group>
+      );
+      return (
+        <NavLink
+          key={item.path}
+          label={taskLabel}
+          icon={<IconFolder size="1.2rem" stroke={1.5} color={theme.colors.blue[6]} />}
+          childrenOffset={16}
+          opened={expandedFolders.includes(item.path)}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setFileContextMenu({ x: event.clientX, y: event.clientY, item });
+          }}
+          onChange={(nextOpened) => {
+            setExpandedFolders((prev) => (
+              nextOpened
+                ? Array.from(new Set([...prev, item.path]))
+                : prev.filter((path) => path !== item.path)
+            ));
           }}
         >
-          <div style={{ minWidth: 0 }}>
-            <Text size="sm" weight={700}>
-              {liveSessionName ? 'Session Terminal' : 'New Session'}
-            </Text>
-            <Text size="xs" color="dimmed" truncate>
-              {liveSessionName ? liveSessionName : currentTask || 'Task execution'}
-            </Text>
-          </div>
-          <ActionIcon variant="subtle" onClick={closeSessionPanel} aria-label="Close session panel">
-            <IconX size="1rem" />
-          </ActionIcon>
-        </div>
+          {item.children && renderTree(item.children)}
+        </NavLink>
+      );
+    }
 
-        {liveSessionName ? (
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            {workflowExecuteStatus && (workflowExecuteStatus.status === 'error' || workflowExecuteStatus.status === 'terminated') && (
-              <div style={{ padding: '8px 12px', borderBottom: `1px solid ${panelBorder}`, background: '#fde8e8', color: '#c0392b', fontSize: 13 }}>
-                Workflow execution failed{workflowExecuteStatus.error ? `: ${workflowExecuteStatus.error}` : ''}
-              </div>
-            )}
-            {workflowExecuteStatus && workflowExecuteStatus.status === 'finished' && (
-              <div style={{ padding: '8px 12px', borderBottom: `1px solid ${panelBorder}`, background: '#e8fde8', color: '#1f8a4c', fontSize: 13 }}>
-                Workflow completed
-              </div>
-            )}
-            {workflowExecuteStatus && workflowSessionActive && workflowExecuteStatus.status !== 'finished' && workflowExecuteStatus.status !== 'error' && workflowExecuteStatus.status !== 'terminated' && (
-              <div style={{ padding: '8px 12px', borderBottom: `1px solid ${panelBorder}`, background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#f7f9ff', fontSize: 13 }}>
-                Workflow status: {workflowExecuteStatus.status}
-                {workflowExecuteStatus.error ? ` - ${workflowExecuteStatus.error}` : ''}
-              </div>
-            )}
-            <div style={{ flex: 1, minHeight: 0, background: '#0b1220' }}>
-              <iframe
-                key={liveSessionName}
-                src={`/terminal?session=${encodeURIComponent(liveSessionName)}&compact=1`}
-                style={{ width: '100%', height: '100%', border: 'none' }}
-              />
-            </div>
-            {workflowSessionActive && workflowExecuteStatus?.waiting_for_continue && (
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  padding: '10px 14px',
-                  borderTop: `1px solid ${panelBorder}`,
-                  background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#f7f9ff',
-                }}
-              >
-                <Button size="xs" variant="light" onClick={() => void handleWorkflowContinue()} loading={continuingWorkflow}>
-                  Continue Next Node
-                </Button>
-              </div>
-            )}
-          </div>
-        ) : (
+    return (
+      <NavLink
+        key={item.path}
+        label={item.name}
+        icon={<IconFileText size="1.2rem" stroke={1.5} color={theme.colors.gray[6]} />}
+        active={isSelected}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setFileContextMenu({ x: event.clientX, y: event.clientY, item });
+        }}
+        onClick={() => {
+          setFileContextMenu(null);
+          router.push(`/tasks?task=${encodeURIComponent(item.path)}`, undefined, { shallow: true });
+          setOpened(false);
+        }}
+      />
+    );
+  });
+
+  const currentInstructionPath = currentTask ? taskProjectPath(currentTask) : '';
+  const fileActions = useMemo<TaskAction[]>(() => {
+    if (currentFileName !== 'requirements.md' || !currentInstructionPath) return [];
+    return [
+      {
+        label: 'Execute',
+        defaultSkill: 'execute-task',
+        skillPromptSuffix: `to execute the task defined at ${currentInstructionPath}`,
+      },
+    ];
+  }, [currentFileName, currentInstructionPath]);
+
+  const mediaUrl = currentTask ? `${API_BASE_URL}/tasks/file?path=${encodeURIComponent(currentTask)}` : '';
+  const htmlPreviewUrl = currentTask ? `${API_BASE_URL}/tasks/raw/${currentTask.split('/').map(encodeURIComponent).join('/')}?v=${htmlPreviewVersion}` : '';
+  const isMarkdownEditor = selectedKind === 'markdown';
+  const isHtmlEditor = selectedKind === 'html';
+  const isTextEditor = selectedKind === 'text';
+  const headerStatus = editorSaving ? 'Saving...' : notice;
+  const switchToPreview = async () => {
+    if (!isHtmlEditor) {
+      setMarkdownView('preview');
+      return;
+    }
+    const saved = await saveCurrentContent();
+    if (saved) {
+      setHtmlPreviewVersion(Date.now());
+      setMarkdownView('preview');
+    }
+  };
+  const renderHeaderActions = () => {
+    if (!currentTask) return null;
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flex: '0 0 auto', flexWrap: 'wrap' }}>
+        {(isMarkdownEditor || isHtmlEditor) && (
           <>
-            <div style={{ padding: '10px 14px 0 14px' }}>
-              {newSessionWorkflow && (
-                <Text size="xs" color="dimmed" mb={8}>
-                  Workflow mode: {`core/workflows/${newSessionWorkflow}`}
-                </Text>
-              )}
-              {hasSessionWorktrees && (
-                <Select
-                  label="Worktree"
-                  placeholder="Choose where to start"
-                  value={selectedSessionPath || null}
-                  onChange={(value) => setSelectedSessionPath(value || '')}
-                  data={sessionRootOptions.map((root) => ({ value: root.value, label: root.label }))}
-                  size="xs"
-                  mb={8}
-                />
-              )}
-            </div>
-            <div style={{ flex: 1, minHeight: 0, padding: '0 14px 14px 14px' }}>
-              <Textarea
-                placeholder="What would you like to do?"
-                value={sessionPromptText}
-                onChange={(event) => setSessionPromptText(event.currentTarget.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-                    event.preventDefault();
-                    void handleStartSession(selectedSessionPath || undefined);
-                    return;
-                  }
-                  handleSessionPromptKeyDown(event);
-                }}
-                autosize={false}
-                minRows={1}
-                styles={{
-                  root: { height: '100%' },
-                  wrapper: { height: '100%' },
-                  input: {
-                    height: '100%',
-                    minHeight: '100%',
-                    resize: 'none',
-                    border: 'none',
-                    padding: 0,
-                    background: 'transparent',
-                    fontSize: 14,
-                    lineHeight: 1.6,
-                  },
-                }}
-              />
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-                padding: '10px 14px',
-                borderTop: `1px solid ${panelBorder}`,
-                background: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#f7f9ff',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={newSessionSandbox} onChange={(event) => setNewSessionSandbox(event.currentTarget.checked)} />
-                  <span>Sandbox</span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={newSessionAuto} onChange={(event) => setNewSessionAuto(event.currentTarget.checked)} />
-                  <span>Auto Run (Yolo)</span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={newSessionNetwork} onChange={(event) => setNewSessionNetwork(event.currentTarget.checked)} />
-                  <span>Network Access</span>
-                </label>
-                {newSessionWorkflow && (
-                  <>
-                    <Select
-                      value={newSessionNextNodeTrigger}
-                      onChange={(value) => setNewSessionNextNodeTrigger((value as NextNodeTrigger) || 'auto_continue')}
-                      data={[
-                        { value: 'auto_continue', label: 'Auto continue' },
-                        { value: 'start_by_prompt', label: 'Start by prompt' },
-                      ]}
-                      size="xs"
-                      style={{ width: 160 }}
-                    />
-                    {newSessionWorkflowResumeAvailable && (
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={newSessionWorkflowResume} onChange={(event) => setNewSessionWorkflowResume(event.currentTarget.checked)} />
-                        <span>Resume Workflow</span>
-                      </label>
-                    )}
-                  </>
-                )}
-              </div>
-              <Button onClick={() => void handleStartSession(selectedSessionPath || undefined)} disabled={!sessionPromptText.trim() || startingSession} loading={startingSession}>
-                Start
-              </Button>
-            </div>
+            <Button size="xs" variant={markdownView === 'editor' ? 'filled' : 'default'} onClick={() => setMarkdownView('editor')}>
+              Edit
+            </Button>
+            <Button size="xs" variant={markdownView === 'preview' ? 'filled' : 'default'} onClick={() => void switchToPreview()}>
+              Preview
+            </Button>
           </>
+        )}
+        {fileActions.map((action) => (
+          <Button key={action.label} size="xs" variant="default" onClick={() => openExecuteModal(action)}>
+            {action.label}
+          </Button>
+        ))}
+        {currentFileName === 'prompt.md' && (isMarkdownEditor || isHtmlEditor || isTextEditor) && (
+          <Button size="xs" variant="default" onClick={() => void openPromptRunSession()}>
+            Run
+          </Button>
         )}
       </div>
     );
@@ -917,11 +983,10 @@ export default function TasksPage() {
         return (
           <div
             style={{
-              flex: 1,
+              minHeight: '60vh',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: 24,
             }}
           >
             <div
@@ -952,26 +1017,27 @@ export default function TasksPage() {
                 Start your first task
               </Text>
               <Text size="sm" color="dimmed" mt={12} style={{ maxWidth: 420, margin: '12px auto 0 auto', lineHeight: 1.6 }}>
-                Create a task file, then edit it directly or execute it with a skill or workflow from the same screen.
+                Create a task folder with a requirements file, then execute it with a skill or workflow.
               </Text>
               <Group position="center" mt="xl">
-                <Button
-                  onClick={() => {
-                    setNewTaskFolder(currentTaskFolder);
-                    setNewTaskFile('new task');
-                    setAddTaskOpened(true);
-                  }}
-                >
-                  New Task
-                </Button>
+                <Button onClick={openTaskModal}>New Task</Button>
               </Group>
             </div>
           </div>
         );
       }
+      return <Text align="center" py="xl" color="dimmed">Select a task file from the sidebar to begin.</Text>;
+    }
+
+    if (selectedKind === 'pdf' && currentTask) {
       return (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 14 }}>
-          Select a task file from the sidebar to begin.
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <iframe title={currentFileName} src={mediaUrl} style={{ width: '100%', height: '100%', border: 'none' }} />
+          </div>
+          <div style={PAGE_ACTION_BAR_STYLE}>
+            <Button size="xs" color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
+          </div>
         </div>
       );
     }
@@ -980,10 +1046,10 @@ export default function TasksPage() {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           <div style={{ flex: 1, minHeight: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 16, overflow: 'auto' }}>
-            <img src={mediaUrl} alt={taskTitle} style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 8 }} />
+            <img src={mediaUrl} alt={currentFileName} style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 8 }} />
           </div>
-          <div style={TASK_ACTION_BAR_STYLE}>
-            <Button size="xs" color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
+          <div style={PAGE_ACTION_BAR_STYLE}>
+            <Button size="xs" color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
           </div>
         </div>
       );
@@ -997,8 +1063,8 @@ export default function TasksPage() {
               Your browser does not support audio playback.
             </audio>
           </div>
-          <div style={TASK_ACTION_BAR_STYLE}>
-            <Button size="xs" color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
+          <div style={PAGE_ACTION_BAR_STYLE}>
+            <Button size="xs" color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
           </div>
         </div>
       );
@@ -1007,13 +1073,13 @@ export default function TasksPage() {
     if (selectedKind === 'video' && currentTask) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', justifyContent: 'center', padding: 16, background: '#0f172a' }}>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', justifyContent: 'center', padding: 16 }}>
             <video controls src={mediaUrl} style={{ width: '100%', maxHeight: '70vh', borderRadius: 8 }}>
               Your browser does not support video playback.
             </video>
           </div>
-          <div style={{ ...TASK_ACTION_BAR_STYLE, borderTop: '1px solid #20324d', background: '#111827' }}>
-            <Button size="xs" color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
+          <div style={PAGE_ACTION_BAR_STYLE}>
+            <Button size="xs" color="red" variant="light" onClick={() => void deleteCurrentFile()} loading={deletingFile}>Delete</Button>
           </div>
         </div>
       );
@@ -1023,7 +1089,43 @@ export default function TasksPage() {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           {markdownView === 'editor' ? (
-            <div style={{ flex: 1, minHeight: 0, background: TASK_EDITOR_BG }}>
+            <>
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <Textarea
+                  value={editorContent}
+                  onChange={(e) => {
+                    setEditorContent(e.currentTarget.value);
+                    if (editorError) setEditorError('');
+                    if (notice) setNotice('');
+                  }}
+                  autosize={false}
+                  minRows={1}
+                  styles={{
+                    root: { height: '100%' },
+                    wrapper: { height: '100%' },
+                    input: PAGE_EDITOR_DARK_INPUT_STYLE,
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '20px 24px' }}>
+                <div className="doc-markdown" style={{ maxWidth: 'none', margin: 0, minHeight: '100%', padding: '18px 20px 24px', border: 'none', borderRadius: 0, boxShadow: 'none', background: '#ffffff' }}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    if (isHtmlEditor) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+          {markdownView === 'editor' ? (
+            <div style={{ flex: 1, minHeight: 0 }}>
               <Textarea
                 value={editorContent}
                 onChange={(e) => {
@@ -1035,47 +1137,22 @@ export default function TasksPage() {
                 minRows={1}
                 styles={{
                   root: { height: '100%' },
-                  wrapper: { height: '100%', background: TASK_EDITOR_BG },
-                  input: {
-                    height: '100%',
-                    minHeight: '100%',
-                    resize: 'none',
-                    border: 'none',
-                    borderRadius: 0,
-                    padding: '18px 20px',
-                    fontFamily: TASK_EDITOR_FONT,
-                    fontSize: 13,
-                    lineHeight: 1.65,
-                    background: TASK_EDITOR_BG,
-                    color: TASK_EDITOR_FG,
-                    caretColor: '#f8fafc',
-                  },
+                  wrapper: { height: '100%' },
+                  input: PAGE_EDITOR_DARK_INPUT_STYLE,
                 }}
               />
             </div>
           ) : (
-            <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '20px 24px', background: '#ffffff' }}>
-              <div
-                className="doc-markdown"
-                style={{
-                  maxWidth: 'none',
-                  margin: 0,
-                  minHeight: '100%',
-                  padding: '18px 20px 24px',
-                  border: 'none',
-                  borderRadius: 0,
-                  boxShadow: 'none',
-                  background: '#ffffff',
-                }}
-              >
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
-              </div>
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: '#ffffff' }}>
+              <iframe
+                key={`${currentTask}:${htmlPreviewVersion}`}
+                title={currentFileName}
+                src={htmlPreviewUrl}
+                sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
+                style={{ width: '100%', height: '100%', border: 'none', background: '#ffffff' }}
+              />
             </div>
           )}
-          <div style={TASK_ACTION_BAR_STYLE}>
-            <Button size="xs" onClick={() => void saveContent()} loading={editorSaving}>Save</Button>
-            <Button size="xs" color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
-          </div>
         </div>
       );
     }
@@ -1083,7 +1160,7 @@ export default function TasksPage() {
     if (isTextEditor) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-          <div style={{ flex: 1, minHeight: 0, background: TASK_EDITOR_BG }}>
+          <div style={{ flex: 1, minHeight: 0 }}>
             <Textarea
               value={editorContent}
               onChange={(e) => {
@@ -1095,37 +1172,16 @@ export default function TasksPage() {
               minRows={1}
               styles={{
                 root: { height: '100%' },
-                wrapper: { height: '100%', background: TASK_EDITOR_BG },
-                input: {
-                  height: '100%',
-                  minHeight: '100%',
-                  resize: 'none',
-                  border: 'none',
-                  borderRadius: 0,
-                  padding: '18px 20px',
-                  fontFamily: TASK_EDITOR_FONT,
-                  fontSize: 13,
-                  lineHeight: 1.65,
-                  background: TASK_EDITOR_BG,
-                  color: TASK_EDITOR_FG,
-                  caretColor: '#f8fafc',
-                },
+                wrapper: { height: '100%' },
+                input: PAGE_EDITOR_DARK_INPUT_STYLE,
               }}
             />
-          </div>
-          <div style={TASK_ACTION_BAR_STYLE}>
-            <Button size="xs" onClick={() => void saveContent()} loading={editorSaving}>Save</Button>
-            <Button size="xs" color="red" variant="light" onClick={() => void deleteTask()} loading={deletingTask}>Delete</Button>
           </div>
         </div>
       );
     }
 
-    return !loading ? (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 14 }}>
-        Select a task file from the sidebar to begin.
-      </div>
-    ) : null;
+    return !loading ? <Text align="center" py="xl" color="dimmed">Select a task file from the sidebar to begin.</Text> : null;
   };
 
   return (
@@ -1180,67 +1236,242 @@ export default function TasksPage() {
         <title>Skill Pilot - Tasks</title>
       </Head>
 
-      <Modal opened={addTaskOpened} onClose={() => setAddTaskOpened(false)} title="Add Task" centered>
-        <Stack spacing="md">
+      <input
+        ref={uploadInputRef}
+        type="file"
+        multiple
+        style={{ display: 'none' }}
+        onChange={(event) => {
+          void uploadFilesToTask(event.currentTarget.files);
+          event.currentTarget.value = '';
+        }}
+      />
+
+      {fileContextMenu && (
+        <div
+          style={{
+            position: 'fixed',
+            top: fileContextMenu.y,
+            left: fileContextMenu.x,
+            zIndex: 1000,
+            minWidth: 150,
+            padding: 6,
+            borderRadius: 8,
+            border: '1px solid #dbe3ef',
+            background: '#ffffff',
+            boxShadow: '0 18px 40px rgba(15, 23, 42, 0.16)',
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          {fileContextMenu.item.type === 'dir' ? (
+            <>
+              <button
+                type="button"
+                onClick={() => { void createFileInTask(fileContextMenu.item.path); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <IconFilePlus size="0.95rem" />
+                Add File
+              </button>
+              <button
+                type="button"
+                onClick={() => { void createFolderInTask(fileContextMenu.item.path); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <IconFolderPlus size="0.95rem" />
+                Add Folder
+              </button>
+              <button
+                type="button"
+                onClick={() => openUploadForTask(fileContextMenu.item.path)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <IconFileUpload size="0.95rem" />
+                Upload File
+              </button>
+              <div style={{ height: 1, margin: '6px 4px', background: '#e5e7eb' }} />
+              <button
+                type="button"
+                onClick={() => { void renameTaskPath(fileContextMenu.item); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                onClick={() => { void deleteTaskFolder(fileContextMenu.item); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#dc2626',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                Delete
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => { void deleteTaskFile(fileContextMenu.item); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#dc2626',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                onClick={() => { void renameTaskPath(fileContextMenu.item); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                onClick={() => { void copyTaskPath(fileContextMenu.item); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                Copy Path
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      <Modal opened={taskModalOpened} onClose={() => setTaskModalOpened(false)} title="New Task" centered>
+        <div>
+          <Text size="sm" weight={700} mb={4}>Task Name</Text>
           <TextInput
-            label="Task"
-            placeholder="Current folder or new subfolder"
-            value={newTaskFolder}
-            onChange={(e) => setNewTaskFolder(e.currentTarget.value)}
-            list="task-folder-options"
-            description="Top-level subfolders under workspace/tasks. Leave blank for the root folder."
+            placeholder="task-name"
+            value={taskNameInput}
+            onChange={(e) => setTaskNameInput(e.currentTarget.value)}
+            description="A task folder will be created in kebab-case with requirements.md inside. Duplicates get _1, _2, and so on."
           />
-          <datalist id="task-folder-options">
-            {taskFolderOptions.map((folder) => (
-              <option key={folder} value={folder} />
-            ))}
-          </datalist>
-          <TextInput
-            label="File"
-            placeholder="new task"
-            value={newTaskFile}
-            onChange={(e) => setNewTaskFile(e.currentTarget.value)}
-            description="Names are converted to lowercase kebab-case. Missing extensions default to .md and duplicates get _1, _2, etc."
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <Text size="sm" weight={700} mb={4}>Task Requirements</Text>
+          <Textarea
+            value={taskRequirementsInput}
+            onChange={(e) => setTaskRequirementsInput(e.currentTarget.value)}
+            minRows={10}
+            autosize
           />
-        </Stack>
+        </div>
         <Group position="right" mt="md">
-          <Button variant="default" onClick={() => setAddTaskOpened(false)}>Cancel</Button>
-          <Button onClick={() => void createTask()} disabled={!newTaskFile.trim()} loading={creatingTask}>Create Task</Button>
+          <Button variant="default" onClick={() => setTaskModalOpened(false)}>Cancel</Button>
+          <Button onClick={() => void createTask()} loading={creatingTask} disabled={!taskNameInput.trim()}>
+            Create Task
+          </Button>
         </Group>
       </Modal>
 
       <Modal
         opened={executeOpened}
         onClose={() => setExecuteOpened(false)}
-        title="Execute Task"
+        title={pendingAction ? pendingAction.label : 'Run Action'}
         centered
         size="lg"
       >
-        <Stack spacing="md">
-          <div>
-            <Text size="sm" weight={600} mb={6}>Executed By</Text>
-            <Group spacing="lg">
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  name="execute-mode"
-                  checked={executeMode === 'skill'}
-                  onChange={() => setExecuteMode('skill')}
-                />
-                <span>Skill</span>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  name="execute-mode"
-                  checked={executeMode === 'workflow'}
-                  onChange={() => setExecuteMode('workflow')}
-                />
-                <span>Workflow</span>
-              </label>
-            </Group>
-          </div>
-
+        <div>
+          <Text size="sm" weight={700} mb={4}>Run By</Text>
+          <Group mt="xs">
+            <Radio value="skill" checked={executeMode === 'skill'} onChange={() => setExecuteMode('skill')} label="Skill" />
+            <Radio value="workflow" checked={executeMode === 'workflow'} onChange={() => setExecuteMode('workflow')} label="Workflow" />
+          </Group>
+        </div>
+        <div style={{ marginTop: 16 }}>
           {executeMode === 'skill' ? (
             <Select
               label="Skill"
@@ -1252,78 +1483,30 @@ export default function TasksPage() {
               clearable={false}
             />
           ) : (
-            <>
-              <Select
-                label="Workflow"
-                placeholder="Select a workflow"
-                value={selectedWorkflow}
-                onChange={setSelectedWorkflow}
-                data={workflowSelectOptions}
-                searchable
-                clearable={false}
-              />
-              <Select
-                label="Next Node Trigger"
-                value={executeNextNodeTrigger}
-                onChange={(value) => setExecuteNextNodeTrigger((value as NextNodeTrigger) || 'auto_continue')}
-                data={[
-                  { value: 'auto_continue', label: 'Auto continue' },
-                  { value: 'start_by_prompt', label: 'Start by prompt' },
-                ]}
-                disabled={workflowSelectsAuto}
-                description={workflowSelectsAuto ? 'Disabled for Auto because the session will choose a workflow from the prompt.' : undefined}
-              />
-            </>
+            <Select
+              label="Workflow"
+              placeholder="Select a workflow"
+              value={selectedWorkflow}
+              onChange={setSelectedWorkflow}
+              data={workflowSelectOptions}
+              searchable
+              clearable={false}
+            />
           )}
-
-          <div>
-            <Text size="sm" weight={600}>Instruction File</Text>
-            <Text size="sm" color="dimmed" mt={4}>{currentTask || '(no file selected)'}</Text>
-          </div>
-
-          <div>
-            <Text size="sm" weight={600} mb={6}>Reference Files</Text>
-            {currentDirectoryFiles.length > 0 ? (
-              <div
-                style={{
-                  border: `1px solid ${theme.colorScheme === 'dark' ? theme.colors.dark[4] : theme.colors.gray[3]}`,
-                  borderRadius: 8,
-                  padding: 12,
-                  maxHeight: 220,
-                  overflowY: 'auto',
-                }}
-              >
-                {currentDirectoryFiles.map((item) => (
-                  <label
-                    key={item.path}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer' }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedReferenceFiles.includes(item.path)}
-                      onChange={(e) => toggleReferenceFile(item.path, e.currentTarget.checked)}
-                    />
-                    <span>{item.name}</span>
-                  </label>
-                ))}
-              </div>
-            ) : (
-              <Text size="sm" color="dimmed">No other files found in this directory.</Text>
-            )}
-          </div>
-          <Group position="right">
-            <Button variant="default" onClick={() => setExecuteOpened(false)}>Cancel</Button>
-            <Button
-              onClick={runExecuteAction}
-              disabled={!currentTask || (executeMode === 'skill' ? !selectedSkill : !selectedWorkflow)}
-            >
-              Run
-            </Button>
-          </Group>
-        </Stack>
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <Text size="sm" weight={700} mb={4}>Instruction File</Text>
+          <Text size="sm">{currentInstructionPath || '(no file selected)'}</Text>
+        </div>
+        <Group position="right" mt="md">
+          <Button variant="default" onClick={() => setExecuteOpened(false)}>Cancel</Button>
+          <Button onClick={() => void runAction()} disabled={!currentTask || (executeMode === 'skill' ? !selectedSkill : !selectedWorkflow)}>
+            Run
+          </Button>
+        </Group>
       </Modal>
 
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <MediaQuery
           smallerThan="sm"
           styles={{
@@ -1347,44 +1530,35 @@ export default function TasksPage() {
               transition: isResizing ? 'none' : 'width 200ms ease',
             }}
           >
-            <div style={{ padding: '12px 14px', minHeight: 46, borderBottom: '1px solid #eef2f7', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => { void router.push('/'); }}
-                className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-[#5e6b9d] hover:bg-[#eef2ff] hover:text-[#1a2455] transition"
-                title="Back to Home"
-              >
-                <IconArrowLeft size="1rem" />
-                <span>Back to Home</span>
-              </button>
-            </div>
             <div style={{ padding: '12px 14px', minHeight: 46, borderBottom: '1px solid #eef2f7', flexShrink: 0 }}>
               <Group position="apart" align="center">
-              <Text weight={700} size="lg">Tasks</Text>
-              <Group spacing={4}>
-                <Tooltip label="Add Task">
+                <Group spacing={6} align="center">
                   <ActionIcon
                     variant="subtle"
-                    onClick={() => {
-                      setNewTaskFolder(currentTaskFolder);
-                      setNewTaskFile('new task');
-                      setAddTaskOpened(true);
-                    }}
+                    onClick={() => { void router.push('/'); }}
+                    title="Back to Home"
                   >
-                    <IconPlus size="1.1rem" />
+                    <IconArrowLeft size="1rem" />
                   </ActionIcon>
-                </Tooltip>
-                <Tooltip label="Refresh">
-                  <ActionIcon variant="subtle" onClick={() => void fetchTree()}>
-                    <IconRefresh size="1.1rem" />
-                  </ActionIcon>
-                </Tooltip>
-                <Tooltip label={sortByTime ? 'Sorted by Time' : 'Sorted Alpha'}>
-                  <ActionIcon variant="subtle" onClick={() => setSortByTime(!sortByTime)}>
-                    {sortByTime ? <IconClock size="1.1rem" /> : <IconSortAscending size="1.1rem" />}
-                  </ActionIcon>
-                </Tooltip>
-              </Group>
+                  <Text weight={700} size="lg">Tasks</Text>
+                </Group>
+                <Group spacing={4}>
+                  <Tooltip label="New Task">
+                    <ActionIcon variant="subtle" onClick={openTaskModal}>
+                      <IconPlus size="1.1rem" />
+                    </ActionIcon>
+                  </Tooltip>
+                  <Tooltip label="Refresh">
+                    <ActionIcon variant="subtle" onClick={() => void fetchTree()}>
+                      <IconRefresh size="1.1rem" />
+                    </ActionIcon>
+                  </Tooltip>
+                  <Tooltip label={sortByTime ? 'Sorted by Time' : 'Sorted Alpha'}>
+                    <ActionIcon variant="subtle" onClick={() => setSortByTime(!sortByTime)}>
+                      {sortByTime ? <IconClock size="1.1rem" /> : <IconSortAscending size="1.1rem" />}
+                    </ActionIcon>
+                  </Tooltip>
+                </Group>
               </Group>
             </div>
             <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
@@ -1396,6 +1570,7 @@ export default function TasksPage() {
                 )}
               </ScrollArea>
             </div>
+
             <div
               onMouseDown={startResizing}
               style={{
@@ -1427,68 +1602,38 @@ export default function TasksPage() {
             display: 'grid',
             gridTemplateRows: sessionPanelOpen ? `${100 - sessionPanelHeight}fr 12px ${sessionPanelHeight}fr` : '1fr',
             overflow: 'hidden',
-            padding: 0,
-            background: '#ffffff',
-            minHeight: 0,
-            height: '100%',
           }}
         >
-          <div style={{ minHeight: 0, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', borderBottom: sessionPanelOpen ? 'none' : '1px solid #e9ecef', background: '#ffffff' }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-                padding: '8px 18px',
-                borderBottom: '1px solid #eef2f7',
-                background: '#ffffff',
-                flexShrink: 0,
-                flexWrap: 'wrap',
-              }}
-            >
-              <div style={{ fontSize: 12, color: '#64748b', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: '1 1 240px' }}>
-                {currentTask || 'Select a task file from the sidebar'}
-              </div>
-              {currentTask ? (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flex: '0 0 auto', flexWrap: 'wrap' }}>
-                  {selectedKind === 'markdown' && (
-                    <>
-                      <Button size="xs" variant={markdownView === 'editor' ? 'filled' : 'default'} onClick={() => setMarkdownView('editor')}>
-                        Edit
-                      </Button>
-                      <Button size="xs" variant={markdownView === 'preview' ? 'filled' : 'default'} onClick={() => setMarkdownView('preview')}>
-                        Preview
-                      </Button>
-                    </>
-                  )}
-                  {(selectedKind === 'markdown' || selectedKind === 'text') && (
-                    <Button
+          <div style={{ minHeight: 0, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#ffffff', borderLeft: '1px solid #d6def8' }}>
+              <div style={PAGE_HEADER_BAR_STYLE}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, overflow: 'hidden', flex: '1 1 240px' }}>
+                  <span style={{ fontSize: 12, color: '#64748b', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {currentTask || 'Select a task file from the sidebar'}
+                  </span>
+                  {currentTask && headerStatus && (
+                    <Text
                       size="xs"
-                      variant="default"
-                      leftIcon={<IconPlayerPlay size="1rem" />}
-                      onClick={openExecuteScreen}
+                      color={editorSaving ? 'dimmed' : 'green'}
+                      style={{ flex: '0 0 auto', whiteSpace: 'nowrap' }}
                     >
-                      Execute
-                    </Button>
+                      {headerStatus}
+                    </Text>
                   )}
-                  </div>
-              ) : null}
-            </div>
-
-            {(editorError || notice) && (
-              <div style={{ flexShrink: 0 }}>
-                {editorError && <Text color="red" size="sm" px={18} py={10}>{editorError}</Text>}
-                {!editorError && notice && <Text color="green" size="sm" px={18} py={10}>{notice}</Text>}
+                </div>
+                {renderHeaderActions()}
               </div>
-            )}
-
-            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-              <LoadingOverlay visible={loading} overlayBlur={2} />
-              {renderMainContent()}
+              {editorError && (
+                <div style={{ flexShrink: 0 }}>
+                  {editorError && <Text color="red" size="sm" px={18} py={10}>{editorError}</Text>}
+                </div>
+              )}
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                <LoadingOverlay visible={loading} overlayBlur={2} />
+                {renderMainContent()}
+              </div>
             </div>
           </div>
-
           {sessionPanelOpen && (
             <>
               <div
@@ -1496,21 +1641,36 @@ export default function TasksPage() {
                   event.preventDefault();
                   setIsSessionPanelResizing(true);
                 }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'row-resize',
-                  color: theme.colorScheme === 'dark' ? theme.colors.gray[5] : '#93a4cc',
-                }}
-                aria-label="Resize session panel"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'row-resize', color: '#93a4cc' }}
               >
-                <IconGripHorizontal size="1rem" />
+                <span style={{ fontSize: 16, lineHeight: 1 }}>⋯</span>
               </div>
-              <div style={{ minHeight: 0, overflow: 'hidden', borderLeft: '1px solid #e9ecef', borderTop: '1px solid #e9ecef', background: '#ffffff' }}>
-                <div style={{ width: '100%', height: '100%' }}>
-                  {renderSessionPanel()}
-                </div>
+              <div style={{ minHeight: 0, overflow: 'hidden' }}>
+                <EmbeddedSessionPanel
+                  currentLabel={currentTask || 'Task session'}
+                  liveSessionName={liveSessionName}
+                  sessionPromptText={sessionPromptText}
+                  setSessionPromptText={setSessionPromptText}
+                  newSessionWorkflow={newSessionWorkflow}
+                  newSessionSandbox={newSessionSandbox}
+                  setNewSessionSandbox={setNewSessionSandbox}
+                  newSessionAuto={newSessionAuto}
+                  setNewSessionAuto={setNewSessionAuto}
+                  newSessionNetwork={newSessionNetwork}
+                  setNewSessionNetwork={setNewSessionNetwork}
+                  newSessionNextNodeTrigger={newSessionNextNodeTrigger}
+                  setNewSessionNextNodeTrigger={setNewSessionNextNodeTrigger}
+                  newSessionWorkflowResumeAvailable={newSessionWorkflowResumeAvailable}
+                  newSessionWorkflowResume={newSessionWorkflowResume}
+                  setNewSessionWorkflowResume={setNewSessionWorkflowResume}
+                  startingSession={startingSession}
+                  onStart={(path) => void handleStartSession(path)}
+                  onClose={closeSessionPanel}
+                  workflowExecuteStatus={workflowExecuteStatus}
+                  workflowSessionActive={workflowSessionActive}
+                  continuingWorkflow={continuingWorkflow}
+                  onContinueWorkflow={() => void handleWorkflowContinue()}
+                />
               </div>
             </>
           )}
@@ -1520,10 +1680,10 @@ export default function TasksPage() {
   );
 }
 
-export const getStaticProps = async (context: GetStaticPropsContext) => {
+export async function getStaticProps({ locale }: GetStaticPropsContext) {
   return {
     props: {
-      ...(await serverSideTranslations(context.locale ?? 'en', ['common'])),
+      ...(await serverSideTranslations(locale ?? 'en', ['common'])),
     },
   };
-};
+}

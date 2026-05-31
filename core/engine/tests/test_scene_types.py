@@ -137,7 +137,7 @@ class TestSceneTypes:
                     'workflow.scene_types.shared.LLM',
                 ],
                 'mermaid': [
-                    'workflow.scene_types.mermaid_diagram.WorkflowLLMAdapter',
+                    'workflow.scene_types.mermaid_diagram.AgentCliLLMAdapter',
                     'workflow.scene_types.mermaid_diagram.generate_svg_from_mermaid',
                     'workflow.scene_types.mermaid_diagram.capture_image',
                     'workflow.scene_types.mermaid_diagram.subprocess.run',
@@ -159,7 +159,7 @@ class TestSceneTypes:
                         elif key == 'llm':
                             started_patch.side_effect = mock_llm_class
                         elif key == 'mermaid':
-                            if target.endswith('WorkflowLLMAdapter'):
+                            if target.endswith('AgentCliLLMAdapter'):
                                 started_patch.side_effect = mock_workflow_llm
                             elif target.endswith('generate_svg_from_mermaid'):
                                 started_patch.side_effect = AsyncMock(return_value='<svg style="background-color: white;"></svg>')
@@ -326,7 +326,7 @@ class TestSceneTypes:
         )
 
         with patch(
-            'workflow.scene_types.mermaid_diagram.WorkflowLLMAdapter',
+            'workflow.scene_types.mermaid_diagram.AgentCliLLMAdapter',
             return_value=mock_llm,
         ), patch(
             'workflow.scene_types.mermaid_diagram.generate_svg_from_mermaid',
@@ -364,7 +364,7 @@ class TestSceneTypes:
         mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content='graph TD\nA --> B'))
 
         with patch(
-            'workflow.scene_types.mermaid_diagram.WorkflowLLMAdapter',
+            'workflow.scene_types.mermaid_diagram.AgentCliLLMAdapter',
             return_value=mock_llm,
         ), patch(
             'workflow.scene_types.mermaid_diagram.generate_svg_from_mermaid',
@@ -490,7 +490,7 @@ mindmap
         mock_render = AsyncMock(return_value='<svg style="background-color: white;"></svg>')
 
         with patch(
-            'workflow.scene_types.mermaid_diagram.WorkflowLLMAdapter',
+            'workflow.scene_types.mermaid_diagram.AgentCliLLMAdapter',
             return_value=mock_llm,
         ), patch(
             'workflow.scene_types.mermaid_diagram.generate_svg_from_mermaid',

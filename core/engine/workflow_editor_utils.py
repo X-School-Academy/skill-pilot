@@ -198,18 +198,18 @@ def validate_workflow_doc(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
                                 [node_id],
                             )
                         )
-                skill = str(data.get("skill") or "").strip()
+                subagent = str(data.get("subagent") or "").strip()
                 responsibility = str(data.get("responsibility") or "").strip()
-                if not skill and not responsibility:
+                if not subagent and not responsibility:
                     errors.append(
                         _err(
                             "AGENT_FIELD",
-                            "Agent requires non-empty `skill` or `responsibility`.",
+                            "Agent requires non-empty `subagent` or `responsibility`.",
                             [node_id],
                         )
                     )
         else:
-            errors.append(_err("NODE_KIND", "Node `type` must be start, subagent, or end.", [node_id]))
+            errors.append(_err("NODE_KIND", "Node `type` must be start, agent, or end.", [node_id]))
 
     if duplicate_node_ids:
         errors.append(_err("NODE_DUPLICATE", "Node ids must be unique.", sorted(duplicate_node_ids)))

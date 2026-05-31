@@ -23,22 +23,11 @@ Login flows, session persistence, OAuth, 2FA, and authenticated browsing.
 
 The fastest way to authenticate is to reuse cookies from a Chrome session you are already logged into.
 
-**Step 1: Start Chrome with remote debugging**
+**Step 1: Enable Chrome remote debugging**
 
-```bash
-# macOS
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222
+Refer to [init.md](init.md) for the platform command to open `chrome://inspect/#remote-debugging`, then ask the user to enable remote debugging in Chrome.
 
-# Linux
-google-chrome --remote-debugging-port=9222
-
-# Windows
-"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
-```
-
-Log in to your target site(s) in this Chrome window as you normally would.
-
-> **Security note:** `--remote-debugging-port` exposes full browser control on localhost. Any local process can connect and read cookies, execute JS, etc. Only use on trusted machines and close Chrome when done.
+Log in to your target site(s) in that Chrome window as you normally would.
 
 **Step 2: Grab the auth state**
 

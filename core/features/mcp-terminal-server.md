@@ -41,7 +41,7 @@ cat core/engine/mcp_servers/terminal/operations.py | head -40
 
 - `core/features/web-terminal-tmux-sessions.md`
 - `core/features/config-settings-mcp-skills.md`
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 
 ## Update Notes
 

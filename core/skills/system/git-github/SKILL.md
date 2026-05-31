@@ -1,8 +1,6 @@
 ---
 name: git-github
-description: Handle Git and GitHub work including commits, conventional commit message drafting, partial file or folder merges, and squash merges. Use when the user asks to commit, draft a commit message, merge branches, selectively merge paths, squash merge, push, or coordinate GitHub-oriented source control tasks.
-metadata:
-  short-description: Manage Git/GitHub commits and merges.
+description: Handle Git and GitHub work including commits, conventional commit message drafting, partial file or folder merges, and squash merges, Github Actions CI/CD with AWS. 
 ---
 
 # AI Builder - Git and GitHub
@@ -38,7 +36,10 @@ Follow these steps in order.
 
 - For commit-message drafting or commit requests, use `references/commit-message.md`.
 - For partial file/folder merges or squash merges, use `references/merge.md`.
+- For GitHub Actions CI/CD and AWS integration (OIDC, CodeBuild, CodePipeline), use `references/github-aws-cicd.md`.
 - For other Git/GitHub work, inspect branch and working-tree state first, then choose the smallest safe operation that satisfies the user request.
+
+> **AWS CLI:** Any AWS CLI command in this skill or its references must be run via the `aws-api` skill — never as a raw shell command.
 
 ### Step 2: Check repository state
 

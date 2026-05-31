@@ -38,7 +38,7 @@ ls output/ 2>/dev/null
 ## Related Features
 
 - `core/features/media-mcp-server.md`
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 
 ## Update Notes
 

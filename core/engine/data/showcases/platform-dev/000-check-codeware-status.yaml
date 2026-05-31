@@ -1,32 +1,14 @@
 id: platform-check-codeware-status
 title: Check Codeware Status
 description: Inspect whether the local codeware branch is up to date with upstream before changing anything.
-thumbnail: null
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/08dcf250-87be-4b85-8e16-9b9cea99763d.png
 video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my Skill Pilot platform inspector.
+  Check whether my local codeware is up to date.
 
-  Goal: Tell me, in one screen, whether the codeware on this checkout is current,
-  ahead, behind, or diverged from upstream — and what would happen if I tried to
-  update.
-
-  Steps:
-  1. Identify the codeware branch (default: `codeware`) and the user branch
-     (current branch).
-  2. `git fetch` (no merge).
-  3. Print:
-     - codeware: ahead/behind/diverged vs origin/codeware (commit counts).
-     - user branch: ahead/behind/diverged vs codeware (commit counts).
-     - Any uncommitted changes in the working tree.
-     - Any pending notices in the codeware update queue (if applicable).
-  4. Render a one-line summary: "Safe to update" / "Update would conflict" /
-     "Working tree dirty — commit or stash first".
-  5. Suggest the next command (do not run it).
-
-  Constraints:
-  - Read-only. No fetch with prune of branches; no merge; no rebase.
+  Report the current branch, local changes, upstream status, pending updates, and any risks to handle before changing files. Do not modify anything.
 workflow: null
 directory: null
 git_tag: null
@@ -35,6 +17,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links: []
 popularity: 70
 level: 2

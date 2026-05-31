@@ -1,36 +1,14 @@
 id: ai-agents-run-a-workflow
 title: Run a Workflow
 description: Execute a workflow JSON, monitor progress, and summarize per-agent output.
-thumbnail: null
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/4b7f628b-68b6-4ed8-bd89-fbf4db462dc9.png
 video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my workflow runner.
+  Run the workflow file I provide and summarize the result.
 
-  Input: a workflow JSON path (or I will give you one of the sample workflows).
-
-  Goal: Execute the workflow end-to-end, stream progress, and produce a final
-  per-agent summary.
-
-  Steps:
-  1. Validate the JSON against the expected schema (nodes, edges, agent specs,
-     IO contracts). Refuse to run if invalid; tell me what's wrong.
-  2. Build a run plan: order of nodes, parallelizable groups, dependencies.
-  3. Execute nodes in order:
-     - For each, print "▶ start", then stream output, then "✓ done" or "✗ fail".
-     - Persist each node's output to `.skillpilot/temp/run-<id>/<node>.out`.
-  4. On failure: stop dependent nodes, mark them skipped, continue independent
-     branches.
-  5. Final report:
-     - Per-agent: input summary, output summary, tokens, duration, status.
-     - Critical-path duration vs wall-clock.
-     - List any skipped nodes with reasons.
-
-  Constraints:
-  - Idempotent run id; re-running with the same id resumes from the first failed
-    node.
-  - Do not invoke external tools the workflow didn't declare.
+  Before running it, check that the referenced files exist and tell me what inputs are required. During the run, keep me updated on progress and save a final summary under `.skillpilot/temp/workflow-run/`.
 workflow: null
 directory: null
 git_tag: null
@@ -39,6 +17,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links: []
 popularity: 70
 level: 4

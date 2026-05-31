@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   IconArrowLeft,
+  IconArrowUp,
   IconChevronDown,
   IconChevronRight,
   IconCopy,
@@ -74,6 +75,16 @@ interface FileManagerInfo {
   projectName: string;
   roots: FileRoot[];
   supportsWorktrees: boolean;
+}
+
+interface FileManagerContentProps {
+  title?: string;
+  scopedRootPath?: string;
+  initialPath?: string;
+  hideDirectoryTree?: boolean;
+  hideStandaloneHeader?: boolean;
+  routePathname?: string;
+  updateRoute?: boolean;
 }
 
 type ClipboardMode = 'copy' | 'cut';
@@ -235,17 +246,29 @@ const iconButtonStyle: React.CSSProperties = {
   padding: 0,
 };
 
-function buildFileManagerTerminalSessionName(): string {
+const SPLIT_HANDLE_SIZE = 12;
+
+function buildFileManagerTerminalSessionName(scope?: string): string {
   if (typeof window === 'undefined') return 'sp-webui-file-manager';
   const port = window.location.port.trim() || 'default';
-  return `sp-webui-file-manager-${port.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const scopeSuffix = scope ? `-${scope.replace(/[^a-zA-Z0-9_-]/g, '-')}` : '';
+  return `sp-webui-file-manager-${port.replace(/[^a-zA-Z0-9_-]/g, '')}${scopeSuffix}`;
 }
 
-export default function FileManagerContent() {
+export default function FileManagerContent({
+  title = 'File Manager',
+  scopedRootPath,
+  initialPath,
+  hideDirectoryTree = false,
+  hideStandaloneHeader = false,
+  routePathname = '/file-manager',
+  updateRoute = true,
+}: FileManagerContentProps = {}) {
   const router = useRouter();
   const isDevMode = process.env.NODE_ENV === 'development';
   const routerRef = useRef(router);
   useEffect(() => { routerRef.current = router; }, [router]);
+  const rawScopedRootPath = scopedRootPath ? normalizePath(scopedRootPath) : null;
 
   const initializedRef = useRef(false);
   const directoryItemsRef = useRef<Record<string, FileEntry[]>>({});
@@ -374,10 +397,39 @@ export default function FileManagerContent() {
     [fileRoots],
   );
 
+  const resolvedScopedRoot = useMemo(() => {
+    if (!rawScopedRootPath) return null;
+    if (rawScopedRootPath === '/') return projectRootId;
+    if (projectRootId !== '/' && !rawScopedRootPath.startsWith(`${projectRootId}/`)) {
+      return normalizePath(`${projectRootId}/${rawScopedRootPath.replace(/^\/+/, '')}`);
+    }
+    return rawScopedRootPath;
+  }, [projectRootId, rawScopedRootPath]);
+
+  const isWithinScopedRoot = useCallback((path: string): boolean => {
+    if (!resolvedScopedRoot) return true;
+    const normalized = normalizePath(path);
+    return normalized === resolvedScopedRoot || normalized.startsWith(`${resolvedScopedRoot}/`);
+  }, [resolvedScopedRoot]);
+
+  const clampToScopedRoot = useCallback((path: string): string => {
+    const normalized = normalizePath(path);
+    if (!resolvedScopedRoot || isWithinScopedRoot(normalized)) return normalized;
+    return resolvedScopedRoot;
+  }, [isWithinScopedRoot, resolvedScopedRoot]);
+
   const createTargetPath = useMemo(
-    () => (supportsWorktrees && currentDir === '/' ? projectRootId : currentDir),
-    [currentDir, projectRootId, supportsWorktrees],
+    () => {
+      if (resolvedScopedRoot) return currentDir;
+      return supportsWorktrees && currentDir === '/' ? projectRootId : currentDir;
+    },
+    [currentDir, projectRootId, resolvedScopedRoot, supportsWorktrees],
   );
+
+  const terminalRootPath = useMemo(() => {
+    if (currentDir === '/') return projectRootId;
+    return rootForPath(currentDir)?.id ?? projectRootId;
+  }, [currentDir, projectRootId, rootForPath]);
 
   const displayNameForPath = useCallback((path: string): string => {
     const normalized = normalizePath(path);
@@ -428,35 +480,51 @@ export default function FileManagerContent() {
   useEffect(() => {
     if (!isTerminalPanelResizing) return undefined;
 
-    const handleMouseMove = (event: MouseEvent) => {
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const handlePointerMove = (event: PointerEvent) => {
       if (!rightPaneRef.current) return;
       const bounds = rightPaneRef.current.getBoundingClientRect();
       if (bounds.height <= 0) return;
-      const offsetY = event.clientY - bounds.top;
-      const nextTopPercent = (offsetY / bounds.height) * 100;
-      const nextBottomPercent = Math.max(24, Math.min(68, 100 - nextTopPercent));
-      setTerminalPanelHeight(nextBottomPercent);
+      event.preventDefault();
+      const availableHeight = Math.max(1, bounds.height - SPLIT_HANDLE_SIZE);
+      const nextTopPixels = Math.max(0, Math.min(availableHeight, event.clientY - bounds.top));
+      setTerminalPanelHeight(100 - ((nextTopPixels / availableHeight) * 100));
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
       setIsTerminalPanelResizing(false);
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
     };
   }, [isTerminalPanelResizing]);
 
+  const startTerminalPanelResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setIsTerminalPanelResizing(true);
+  }, []);
+
   const updateUrlPath = useCallback((path: string) => {
+    if (!updateRoute) return;
     void routerRef.current.replace(
-      { pathname: '/file-manager', query: { path } },
+      { pathname: routePathname, query: { path } },
       undefined,
       { shallow: true },
     );
-  }, []);
+  }, [routePathname, updateRoute]);
 
   const loadDirectory = useCallback(async (
     path: string,
@@ -522,7 +590,7 @@ export default function FileManagerContent() {
     setTerminalPanelOpen(true);
     setTerminalPanelHeight((current) => (current < 24 ? 38 : current));
 
-    const targetPath = normalizePath(currentDir);
+    const targetPath = terminalRootPath;
     setIsStartingTerminal(true);
     try {
       if (terminalSessionName && terminalSessionPath !== targetPath) {
@@ -542,7 +610,7 @@ export default function FileManagerContent() {
           session_type: 'shell',
           path: targetPath,
           path_mode: 'file_manager',
-          session_name: buildFileManagerTerminalSessionName(),
+          session_name: buildFileManagerTerminalSessionName(resolvedScopedRoot ?? undefined),
         }),
       });
       const data = await resp.json().catch(() => ({}));
@@ -566,7 +634,7 @@ export default function FileManagerContent() {
     } finally {
       setIsStartingTerminal(false);
     }
-  }, [currentDir, isStartingTerminal, terminalSessionName, terminalSessionPath]);
+  }, [isStartingTerminal, resolvedScopedRoot, terminalRootPath, terminalSessionName, terminalSessionPath]);
 
   const toggleTerminalPanel = useCallback(() => {
     if (terminalPanelOpen) {
@@ -575,6 +643,24 @@ export default function FileManagerContent() {
     }
     void openTerminalPanel();
   }, [openTerminalPanel, terminalPanelOpen]);
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (!event.data) return;
+      if (event.data.type === 'terminal-session-killed') {
+        const killedSession = event.data.session;
+        if (killedSession && killedSession === terminalSessionName) {
+          setTerminalSessionName(null);
+          setTerminalSessionPath('/');
+          setTerminalPanelOpen(false);
+        }
+      } else if (event.data.type === 'terminal-detached') {
+        setTerminalPanelOpen(false);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [terminalSessionName]);
 
   const saveFileNow = useCallback(async (path: string, content: string) => {
     const normalizedPath = normalizePath(path);
@@ -633,7 +719,11 @@ export default function FileManagerContent() {
 
   const openFileInPanel = useCallback(async (path: string, options?: { updateUrl?: boolean; skipClearNotice?: boolean }) => {
     await flushCurrentFileSave();
-    const normalized = normalizePath(path);
+    const normalized = clampToScopedRoot(path);
+    if (normalizePath(path) !== normalized) {
+      setPanelError('Path is outside this workspace.');
+      return;
+    }
     const kind = fileKind(normalized);
     setPanelError(null);
     if (!options?.skipClearNotice) setRealtimeNotice(null);
@@ -692,14 +782,14 @@ export default function FileManagerContent() {
     } finally {
       setIsLoadingFile(false);
     }
-  }, [flushCurrentFileSave, updateUrlPath]);
+  }, [clampToScopedRoot, flushCurrentFileSave, updateUrlPath]);
 
   const navigateToDirectory = useCallback(async (
     path: string,
     options?: { updateUrl?: boolean; force?: boolean },
   ) => {
     await flushCurrentFileSave();
-    const normalized = normalizePath(path);
+    const normalized = clampToScopedRoot(path);
     setPanelError(null);
     setRealtimeNotice(null);
     setShowAddMenu(false);
@@ -709,7 +799,7 @@ export default function FileManagerContent() {
     await ensureTreePath(normalized);
     await loadDirectory(normalized, { force: options?.force });
     if (options?.updateUrl !== false) updateUrlPath(normalized);
-  }, [ensureTreePath, flushCurrentFileSave, loadDirectory, updateUrlPath]);
+  }, [clampToScopedRoot, ensureTreePath, flushCurrentFileSave, loadDirectory, updateUrlPath]);
 
   const createNewFolder = useCallback(async () => {
     const name = window.prompt('Folder name');
@@ -800,16 +890,26 @@ export default function FileManagerContent() {
     initializedRef.current = true;
 
     void (async () => {
-      const rawQueryPath = typeof router.query.path === 'string' ? router.query.path : null;
+      const rawQueryPath = updateRoute && typeof router.query.path === 'string' ? router.query.path : initialPath || null;
 
       const info = await loadFileManagerInfo();
       if (info) {
         fileManagerInfoSignatureRef.current = buildFileManagerInfoSignature(info);
       }
-      const defaultPath = info?.supportsWorktrees
-        ? info.roots.find((root) => root.kind === 'project')?.id ?? '/'
-        : '/';
-      const requestedPath = normalizePath(rawQueryPath ?? defaultPath);
+      const infoProjectRootId = info?.roots.find((root) => root.kind === 'project')?.id ?? '/';
+      const infoScopedRoot = rawScopedRootPath
+        ? (
+          infoProjectRootId !== '/' && !rawScopedRootPath.startsWith(`${infoProjectRootId}/`)
+            ? normalizePath(`${infoProjectRootId}/${rawScopedRootPath.replace(/^\/+/, '')}`)
+            : rawScopedRootPath
+        )
+        : null;
+      const defaultPath = infoScopedRoot
+        ?? (info?.supportsWorktrees ? infoProjectRootId : '/');
+      const requestedPathRaw = normalizePath(rawQueryPath ?? defaultPath);
+      const requestedPath = infoScopedRoot && !(requestedPathRaw === infoScopedRoot || requestedPathRaw.startsWith(`${infoScopedRoot}/`))
+        ? infoScopedRoot
+        : requestedPathRaw;
       await loadDirectory('/', { quiet: true });
 
       if (requestedPath === '/') {
@@ -830,7 +930,7 @@ export default function FileManagerContent() {
       await loadDirectory(containingDir, { quiet: true });
       await openFileInPanel(requestedPath, { updateUrl: false });
     })();
-  }, [buildFileManagerInfoSignature, ensureTreePath, loadDirectory, loadFileManagerInfo, openFileInPanel, router.isReady, router.query.path]);
+  }, [buildFileManagerInfoSignature, clampToScopedRoot, ensureTreePath, initialPath, loadDirectory, loadFileManagerInfo, openFileInPanel, rawScopedRootPath, router.isReady, router.query.path, updateRoute]);
 
   useEffect(() => {
     const view = editorViewRef.current;
@@ -914,6 +1014,20 @@ export default function FileManagerContent() {
   const hasRootDirectory = Object.prototype.hasOwnProperty.call(directoryItems, '/');
   const fileName = openFile ? pathName(openFile.path) : '';
   const isVirtualWorkspaceRoot = supportsWorktrees && currentDir === '/';
+  const isAtScopedRoot = !!resolvedScopedRoot && currentDir === resolvedScopedRoot;
+  const currentFileRootId = rootForPath(currentDir)?.id ?? projectRootId;
+  const parentNavigationRoot = resolvedScopedRoot ?? currentFileRootId;
+  const parentNavigationPath = parentPath(currentDir);
+  const canNavigateToParent = !openFile
+    && !isVirtualWorkspaceRoot
+    && currentDir !== parentNavigationRoot
+    && (!resolvedScopedRoot || (!isAtScopedRoot && isWithinScopedRoot(parentNavigationPath)))
+    && (
+      !parentNavigationRoot
+      || parentNavigationRoot === '/'
+      || currentDir === parentNavigationRoot
+      || currentDir.startsWith(`${parentNavigationRoot}/`)
+    );
   const realtimeSubscriptionEnabled = hasRootDirectory && !isVirtualWorkspaceRoot;
   const isEditorVisible = !!(
     openFile &&
@@ -1291,7 +1405,9 @@ export default function FileManagerContent() {
   const copyRelativePath = useCallback(async (path: string) => {
     const normalized = normalizePath(path);
     const root = rootForPath(normalized);
-    const relative = root
+    const relative = resolvedScopedRoot && isWithinScopedRoot(normalized)
+      ? normalized.slice(resolvedScopedRoot.length).replace(/^\/+/, '')
+      : root
       ? normalized.slice(root.id.length).replace(/^\/+/, '')
       : normalized === '/' ? '' : normalized.slice(1);
     try {
@@ -1301,9 +1417,13 @@ export default function FileManagerContent() {
     } catch {
       setPanelError('Failed to copy path');
     }
-  }, [rootForPath]);
+  }, [isWithinScopedRoot, resolvedScopedRoot, rootForPath]);
 
-  const canMutatePath = useCallback((path: string) => !isVirtualWorkspaceRoot && !rootEntryById[normalizePath(path)], [isVirtualWorkspaceRoot, rootEntryById]);
+  const canMutatePath = useCallback((path: string) => {
+    const normalized = normalizePath(path);
+    if (resolvedScopedRoot && normalized === resolvedScopedRoot) return false;
+    return !isVirtualWorkspaceRoot && !rootEntryById[normalized] && isWithinScopedRoot(normalized);
+  }, [isVirtualWorkspaceRoot, isWithinScopedRoot, resolvedScopedRoot, rootEntryById]);
 
   const renderTree = useCallback((path: string, depth = 0): React.ReactNode => {
     const folders = (directoryItems[path] ?? []).filter(item => item.type === 'folder');
@@ -1495,116 +1615,119 @@ export default function FileManagerContent() {
         }}
       />
 
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '0 16px',
-        height: 46,
-        flexShrink: 0,
-        borderBottom: isDevMode ? '2px solid #228be6' : '1px solid #e9ecef',
-        background: '#f8f9fa',
-      }}>
-        <a href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }} title="Back to Skill Pilot">
-          <img src="/images/skill-pilot-2.png" alt="Skill Pilot" style={{ height: 28 }} />
-        </a>
-        <div style={{ width: 1, height: 20, background: '#dee2e6' }} />
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#1f2937' }}>File Manager</span>
-        <div style={{ width: 1, height: 20, background: '#dee2e6' }} />
-        <button
-          type="button"
-          onClick={() => {
-            if (window.history.length > 1) router.back();
-            else void router.push('/');
-          }}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            border: 'none',
-            background: 'transparent',
-            color: '#334155',
-            cursor: 'pointer',
-            fontSize: 12,
-            fontWeight: 600,
-            padding: 0,
-            flexShrink: 0,
-          }}
-        >
-          <IconArrowLeft size={16} />
-          Back
-        </button>
-        <span style={{ fontSize: 12, color: '#64748b', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {openFile ? displayPath(openFile.path) : displayPath(currentDir)}
-        </span>
-        {openFile && (openFile.kind === 'text' || openFile.kind === 'markdown') && (
-          <>
-            <span style={{ padding: '2px 8px', borderRadius: 4, background: '#e9ecef', fontSize: 11, color: '#6c757d', flexShrink: 0 }}>
-              {langLabel(fileName)}
-            </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <button
-                type="button"
-                onClick={() => setFileViewMode('edit')}
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: 6,
-                  border: '1px solid #d6dce5',
-                  background: fileViewMode === 'edit' ? '#0f5cc0' : '#fff',
-                  color: fileViewMode === 'edit' ? '#fff' : '#334155',
-                  cursor: 'pointer',
-                  fontSize: 12,
-                }}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void flushCurrentFileSave().finally(() => setFileViewMode('preview'));
-                }}
-                style={{
-                  padding: '4px 10px',
-                  borderRadius: 6,
-                  border: '1px solid #d6dce5',
-                  background: fileViewMode === 'preview' ? '#0f5cc0' : '#fff',
-                  color: fileViewMode === 'preview' ? '#fff' : '#334155',
-                  cursor: 'pointer',
-                  fontSize: 12,
-                }}
-              >
-                Preview
-              </button>
-              <button
-                type="button"
-                onClick={toggleTerminalPanel}
-                title={terminalPanelOpen ? 'Hide terminal panel' : 'Show terminal panel'}
-                style={{
-                  width: 30,
-                  height: 28,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: 6,
-                  border: '1px solid #d6dce5',
-                  background: terminalPanelOpen ? '#0f5cc0' : '#fff',
-                  color: terminalPanelOpen ? '#fff' : '#334155',
-                  cursor: 'pointer',
-                  padding: 0,
-                }}
-              >
-                <IconTerminal2 size={15} />
-              </button>
-            </div>
-            {saveText && (
-              <span style={{ flexShrink: 0, fontSize: 11, color: saveColor }}>{saveText}</span>
-            )}
-          </>
-        )}
-      </div>
+      {!hideStandaloneHeader && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '0 16px',
+          height: 46,
+          flexShrink: 0,
+          borderBottom: isDevMode ? '2px solid #228be6' : '1px solid #e9ecef',
+          background: '#f8f9fa',
+        }}>
+          <a href="/" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }} title="Back to Skill Pilot">
+            <img src="/images/skill-pilot-2.png" alt="Skill Pilot" style={{ height: 28 }} />
+          </a>
+          <div style={{ width: 1, height: 20, background: '#dee2e6' }} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#1f2937' }}>{title}</span>
+          <div style={{ width: 1, height: 20, background: '#dee2e6' }} />
+          <button
+            type="button"
+            onClick={() => {
+              if (window.history.length > 1) router.back();
+              else void router.push('/');
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              border: 'none',
+              background: 'transparent',
+              color: '#334155',
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: 600,
+              padding: 0,
+              flexShrink: 0,
+            }}
+          >
+            <IconArrowLeft size={16} />
+            Back
+          </button>
+          <span style={{ fontSize: 12, color: '#64748b', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {openFile ? displayPath(openFile.path) : displayPath(currentDir)}
+          </span>
+          {openFile && (openFile.kind === 'text' || openFile.kind === 'markdown') && (
+            <>
+              <span style={{ padding: '2px 8px', borderRadius: 4, background: '#e9ecef', fontSize: 11, color: '#6c757d', flexShrink: 0 }}>
+                {langLabel(fileName)}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => setFileViewMode('edit')}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 6,
+                    border: '1px solid #d6dce5',
+                    background: fileViewMode === 'edit' ? '#0f5cc0' : '#fff',
+                    color: fileViewMode === 'edit' ? '#fff' : '#334155',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void flushCurrentFileSave().finally(() => setFileViewMode('preview'));
+                  }}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 6,
+                    border: '1px solid #d6dce5',
+                    background: fileViewMode === 'preview' ? '#0f5cc0' : '#fff',
+                    color: fileViewMode === 'preview' ? '#fff' : '#334155',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                  }}
+                >
+                  Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleTerminalPanel}
+                  title={terminalPanelOpen ? 'Hide terminal panel' : 'Show terminal panel'}
+                  style={{
+                    width: 30,
+                    height: 28,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 6,
+                    border: '1px solid #d6dce5',
+                    background: terminalPanelOpen ? '#0f5cc0' : '#fff',
+                    color: terminalPanelOpen ? '#fff' : '#334155',
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  <IconTerminal2 size={15} />
+                </button>
+              </div>
+              {saveText && (
+                <span style={{ flexShrink: 0, fontSize: 11, color: saveColor }}>{saveText}</span>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
-        <aside style={{
+        {!hideDirectoryTree && (
+          <aside style={{
           width: 320,
           flexShrink: 0,
           borderRight: '1px solid #e9ecef',
@@ -1679,7 +1802,8 @@ export default function FileManagerContent() {
               </>
             )}
           </div>
-        </aside>
+          </aside>
+        )}
 
         <section
           ref={rightPaneRef}
@@ -1687,12 +1811,23 @@ export default function FileManagerContent() {
             flex: 1,
             minWidth: 0,
             display: 'grid',
-            gridTemplateRows: terminalPanelOpen ? `${100 - terminalPanelHeight}fr 12px ${terminalPanelHeight}fr` : '1fr',
+            gridTemplateRows: terminalPanelOpen ? `minmax(0, ${100 - terminalPanelHeight}fr) ${SPLIT_HANDLE_SIZE}px minmax(0, ${terminalPanelHeight}fr)` : '1fr',
             overflow: 'hidden',
             position: 'relative',
             minHeight: 0,
           }}
         >
+          {isTerminalPanelResizing && (
+            <div
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 9999,
+                cursor: 'row-resize',
+                background: 'transparent',
+              }}
+            />
+          )}
           <div style={{ minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
           {isLoadingFile && (
             <div style={{
@@ -1720,6 +1855,22 @@ export default function FileManagerContent() {
           }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
+                {canNavigateToParent && (
+                  <button
+                    type="button"
+                    onClick={() => { void navigateToDirectory(parentNavigationPath); }}
+                    title="Back to parent folder"
+                    style={{
+                      ...iconButtonStyle,
+                      width: 30,
+                      height: 30,
+                      borderRadius: 6,
+                      flexShrink: 0,
+                    }}
+                  >
+                    <IconArrowUp size={16} />
+                  </button>
+                )}
                 <IconFolder size={20} color="#d97706" />
                 {openFile ? fileName : displayNameForPath(currentDir)}
               </div>
@@ -2136,15 +2287,14 @@ export default function FileManagerContent() {
           {terminalPanelOpen && (
             <>
               <div
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  setIsTerminalPanelResizing(true);
-                }}
+                onPointerDown={startTerminalPanelResize}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'row-resize',
+                  touchAction: 'none',
+                  userSelect: 'none',
                   color: '#93a4cc',
                   background: '#fff',
                   borderTop: '1px solid #e9ecef',
@@ -2158,14 +2308,14 @@ export default function FileManagerContent() {
                 <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, borderTop: '1px solid #e9ecef' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 14px', borderBottom: '1px solid #e9ecef', background: '#f8fafc' }}>
                     <div style={{ minWidth: 0, fontSize: 11, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {`Terminal: ${terminalSessionName ?? buildFileManagerTerminalSessionName()}`}
+                      {`Terminal: ${terminalSessionName ?? buildFileManagerTerminalSessionName(resolvedScopedRoot ?? undefined)}`}
                     </div>
                   </div>
                   <div style={{ flex: 1, minHeight: 0, background: '#0b1220' }}>
                     {terminalSessionName ? (
                       <iframe
                         key={terminalSessionName}
-                        src={`/terminal?session=${encodeURIComponent(terminalSessionName)}&compact=1`}
+                        src={`/terminal?session=${encodeURIComponent(terminalSessionName)}&compact=1&allowKill=1`}
                         style={{ width: '100%', height: '100%', border: 'none' }}
                       />
                     ) : (

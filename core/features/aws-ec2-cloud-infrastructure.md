@@ -2,50 +2,47 @@
 
 ## Retrieval Keywords
 
-AWS, EC2, cloud infrastructure, AWS CLI, enable-aws-cli, setup-aws-ec2, openclaw, openclaw-install-on-ec2, openclaw-connect-tunnel, connect-ec2-ssh, SSH tunnel, cloud setup, remote server, EC2 instance, aws-api-call-aws
+AWS, EC2, cloud infrastructure, AWS CLI, cloud-operation, enable-aws-cli, setup-aws-ec2, connect-ec2-ssh, SSH tunnel, cloud setup, remote server, EC2 instance, aws-api-call-aws, RunPod, runpodctl, GPU pod, serverless endpoint
 
 ## Scope
 
-- AWS CLI setup and configuration skill
-- EC2 instance provisioning and SSH connection
-- OpenClaw tunnel setup for remote access
+- AWS credential setup and MCP activation
+- EC2 instance provisioning, SSH connection, and port forwarding
+- RunPod GPU pod and serverless endpoint management
+- EC2 CLI reference (concepts, commands, troubleshooting)
 - Excludes: general SSH terminal (see `mcp-terminal-server.md`), Docker (see extensions/docker)
 
 ## Main Behavior
 
-- `enable-aws-cli` skill configures AWS CLI credentials and profiles
-- `setup-aws-ec2` skill provisions and configures an EC2 instance
-- `connect-ec2-ssh` skill establishes SSH connection to an EC2 instance
-- `openclaw-install-on-ec2` installs OpenClaw on an EC2 instance
-- `openclaw-connect-tunnel` creates a secure tunnel to an EC2 instance
-- AWS operations use the `aws-api-call-aws` skill (not direct CLI)
-- Workflows: `setup-openclaw.json`, `setup-openclaw-2.json`
+- `cloud-operation` skill is the single entry point for all AWS and RunPod cloud tasks
+- Actions are routed via the skill's index table to the appropriate reference file
+- AWS operations use `aws-api-call-aws` skill (never direct `aws` CLI commands)
+- RunPod operations use the `runpodctl` CLI
 
 ## Code Map
 
-- `core/skills/system/enable-aws-cli/` — AWS CLI setup skill
-- `core/skills/system/setup-aws-ec2/` — EC2 setup skill
-- `core/skills/system/connect-ec2-ssh/` — EC2 SSH connection skill
-- `core/skills/system/openclaw-install-on-ec2/` — OpenClaw EC2 installer skill
-- `core/skills/system/openclaw-connect-tunnel/` — OpenClaw tunnel skill
-- `core/workflows/setup-openclaw.json` — OpenClaw setup workflow
-- `core/workflows/setup-openclaw-2.json` — OpenClaw setup workflow v2
+- `core/skills/system/cloud-operation/` — unified cloud operations skill
+  - `SKILL.md` — action index and routing table
+  - `references/aws-enable-cli.md` — AWS credential setup and MCP activation
+  - `references/aws-setup-ec2.md` — EC2 instance provisioning (VPC, subnet, security group)
+  - `references/aws-connect-ec2-ssh.md` — SSH connection via EC2 Instance Connect
+  - `references/aws-ec2-tunnel.md` — SSH port forwarding from EC2 to localhost
+  - `references/aws-ec2-cli.md` — EC2 CLI reference, concepts, and troubleshooting
+  - `references/runpod-manage.md` — RunPod pods, serverless, templates, volumes
 
 ## Search Commands
 
 ```bash
-find core/skills/system/enable-aws-cli/ -type f
-find core/skills/system/setup-aws-ec2/ -type f
-find core/skills/system/connect-ec2-ssh/ -type f
-cat core/workflows/setup-openclaw.json | head -20
+find core/skills/system/cloud-operation/ -type f
+cat core/skills/system/cloud-operation/SKILL.md
 ```
 
 ## Related Features
 
 - `core/features/mcp-terminal-server.md`
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 
 ## Update Notes
 
 - AWS credentials stored in `config/.env`; protected by keys-safe-guard
-- Memory note: always use `aws-api-call-aws` skill for AWS CLI operations, not direct Bash aws commands
+- Always use `aws-api-call-aws` skill for AWS CLI operations, not direct Bash aws commands

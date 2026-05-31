@@ -1,0 +1,65 @@
+{
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "name": "env-read-guard",
+            "type": "command",
+            "command": "core/bin/hook env_guard --agent gemini",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "name": "session-start",
+            "type": "command",
+            "command": "core/bin/hook session_start --agent gemini",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "BeforeAgent": [
+      {
+        "hooks": [
+          {
+            "name": "dialog-user-prompt",
+            "type": "command",
+            "command": "core/bin/hook user_prompt --agent gemini",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "AfterAgent": [
+      {
+        "hooks": [
+          {
+            "name": "dialog-agent-response",
+            "type": "command",
+            "command": "core/bin/hook agent_stop --agent gemini",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "name": "session-end",
+            "type": "command",
+            "command": "core/bin/hook session_end --agent gemini",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}

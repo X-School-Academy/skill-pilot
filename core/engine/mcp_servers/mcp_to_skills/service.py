@@ -23,7 +23,7 @@ import json5_io as json5
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
-from llm_service import build_terminal_command, get_provider, llm_get_text, load_llm_providers
+from llm_service import build_terminal_command, get_background_provider, get_provider, llm_get_text, load_llm_providers
 from safe_dotenv import apply_env_key_values, loaded_env_key_names, safe_env
 from session_agent_store import get_session_agent_meta, set_session_agent_meta
 from settings import get_auth_token, get_runtime_mode, get_service_host_port
@@ -148,6 +148,19 @@ class Bridge:
             "provider": str(provider.get("id") or ""),
             "ratio": ratio,
             "size": size,
+        }
+
+    def _create_audio(self, text: str, output_format: str, voice: str | None = None) -> dict[str, str]:
+        from llm_service import get_tts_provider
+        from tts_service import text_to_speech_file
+
+        provider = get_tts_provider(None)
+        path = text_to_speech_file(text, provider.get("id"), voice=voice, output_format=output_format)
+        return {
+            "path": path,
+            "provider": str(provider.get("id") or ""),
+            "format": output_format,
+            "voice": str(voice or provider.get("voice") or ""),
         }
 
     def _run_tmux(self, args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -618,7 +631,7 @@ class Bridge:
                 raise MCPError("skill_agent_infer requires a non-empty prompt")
             provider_id_raw = payload.get("provider_id")
             requested_provider_id = str(provider_id_raw).strip() if isinstance(provider_id_raw, str) else None
-            provider = get_provider(requested_provider_id)
+            provider = get_background_provider(requested_provider_id)
             provider_id = str(provider.get("id") or "").strip()
             security_flags = self._skill_agent_security(provider_id)
             auto = bool(payload.get("auto")) if "auto" in payload else bool(security_flags["auto"])
@@ -627,7 +640,7 @@ class Bridge:
             text = llm_get_text(
                 messages=[{"role": "user", "content": prompt}],
                 provider_id=provider_id,
-                client_id="skill-agent",
+                client_id="agent-cli",
                 auto_allow=auto,
                 network_allow=network,
                 sandbox_mode=sandbox,
@@ -662,6 +675,17 @@ class Bridge:
                 raise MCPError("create_image requires a non-empty prompt")
             ratio = self._normalize_image_ratio(payload.get("ratio"))
             result = self._create_image(prompt=prompt, ratio=ratio)
+            return {"status": "ok", "result": result}
+        if operation == "create_audio":
+            text = str(payload.get("text") or "").strip()
+            if not text:
+                raise MCPError("create_audio requires non-empty text")
+            output_format = str(payload.get("format") or "mp3").strip().lower()
+            if not output_format:
+                raise MCPError("create_audio requires a non-empty format")
+            voice_raw = payload.get("voice")
+            voice = str(voice_raw).strip() if isinstance(voice_raw, str) and voice_raw.strip() else None
+            result = self._create_audio(text=text, output_format=output_format, voice=voice)
             return {"status": "ok", "result": result}
         if operation == "new_agent_session":
             prompt = str(payload.get("prompt") or "").strip()

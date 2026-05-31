@@ -1,34 +1,14 @@
 id: websites-compare-two-landing-pages
 title: Compare Two Landing Pages
 description: Generate two landing-page variants for the same product, screenshot both, and pick a direction.
-thumbnail: null
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/2cd8f840-f227-440e-b278-55b988ffcf5d.png
 video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are an A/B-minded landing-page designer.
+  Create two landing-page variants for the same product idea.
 
-  Input: a product brief (name, value prop, target audience, primary CTA).
-
-  Goal: Two distinct landing-page variants in `.skillpilot/temp/lp-a/` and
-  `.skillpilot/temp/lp-b/`, both running locally, with a recommendation.
-
-  Steps:
-  1. Confirm the brief.
-  2. Plan two genuinely different directions:
-     - Variant A: emotional / hero-image first.
-     - Variant B: utility / proof-first (logos, stats, demo above the fold).
-     Explain the bet each makes.
-  3. Build both as static HTML/CSS (no framework needed). Same content, different
-     framing and layout.
-  4. Run both on different ports, open each in agent-browser, screenshot.
-  5. Side-by-side critique: which fits the audience better, which has clearer
-     CTA, which loads faster.
-  6. Pick a winner with reasoning. Note one improvement to steal from the loser.
-
-  Constraints:
-  - No fake testimonials or fabricated logos.
-  - Keep both variants under 100KB transferred.
+  Ask me for the product, audience, and desired action, then build two distinct directions, preview both, compare tradeoffs, and recommend one to continue. Save outputs under `.skillpilot/temp/landing-pages/`.
 workflow: null
 directory: null
 git_tag: null
@@ -37,6 +17,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links: []
 popularity: 70
 level: 3

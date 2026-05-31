@@ -1,35 +1,14 @@
 id: mcp-configure-server
 title: Configure MCP Server
 description: Add an external MCP server to Skill Pilot and verify the tools are visible to agents.
-thumbnail: null
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/0d495284-72c2-4ddc-af28-1d4fb3db1f8a.png
 video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my MCP integration assistant.
+  Add the external agent tool server I provide to this workspace.
 
-  Inputs from me:
-  - The MCP server (command + args, or URL for HTTP transport).
-  - Any required env vars / secrets (store via key-safe).
-
-  Goal: After configuration, an agent in Skill Pilot can list and call the
-  server's tools.
-
-  Steps:
-  1. Inspect the server's docs to identify transport (stdio / SSE / HTTP) and
-     required env.
-  2. Add the entry to the appropriate Skill Pilot config (show me exactly what
-     changes and where).
-  3. Restart the engine if needed.
-  4. Verify:
-     - `mcp list` (or equivalent) shows the new server.
-     - Tools from the server appear in the agent tool registry.
-  5. Run a minimal smoke prompt that calls one tool and prints its result.
-  6. Document the rollback step (how to remove the server cleanly).
-
-  Constraints:
-  - Never paste secrets into the config file; reference key-safe entries.
-  - Do not enable a server you cannot identify the publisher of.
+  Ask me for the command, arguments, or URL first. Configure it safely, verify the tools are visible, run one harmless test call, and show me how to disable it.
 workflow: null
 directory: null
 git_tag: null
@@ -38,6 +17,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links: []
 popularity: 68
 level: 3

@@ -38,7 +38,7 @@ find core/skills/system/create-discord-bot/ -type f
 ## Related Features
 
 - `core/features/llm-ai-chat.md`
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 
 ## Update Notes
 

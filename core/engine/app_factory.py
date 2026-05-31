@@ -2,6 +2,7 @@ import asyncio
 from pathlib import Path
 import re
 import secrets
+import socket
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,6 +25,28 @@ _AUTH_BYPASS_PATHS = {
 }
 
 
+def _build_allowed_origin_regex() -> str:
+    hosts = {"localhost", "127.0.0.1"}
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            address = info[4][0]
+            if address and not address.startswith("127."):
+                hosts.add(address)
+    except Exception:
+        pass
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(("8.8.8.8", 80))
+            address = probe.getsockname()[0]
+            if address and not address.startswith("127."):
+                hosts.add(address)
+    except Exception:
+        pass
+
+    host_pattern = "|".join(re.escape(host) for host in sorted(hosts))
+    return rf"^https?://({host_pattern})(:\d+)?$"
+
+
 def _sanitize_single_line_secret(value: str) -> str:
     return re.sub(r"[\r\n]+", "", value).strip()
 
@@ -40,7 +63,7 @@ def create_app():
     app = FastAPI()
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+        allow_origin_regex=_build_allowed_origin_regex(),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

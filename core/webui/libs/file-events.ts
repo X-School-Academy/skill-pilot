@@ -79,8 +79,11 @@ export function useWorkspaceWatcher(opts: WorkspaceWatcherOptions): void {
 
   useEffect(() => {
     const normalizedPrefix = normalizePath(prefix);
-    const prefixMatch = normalizedPrefix === '/' ? '/' : `${normalizedPrefix}/`;
-    const source = createFileEventSource('/');
+    const watchedPrefixes = Array.from(new Set([
+      normalizedPrefix,
+      normalizedPrefix === '/' ? '/' : `/$project${normalizedPrefix}`,
+    ]));
+    const source = createFileEventSource(normalizedPrefix);
     let revision = 0;
     let treeTimer: number | null = null;
     let fileTimer: number | null = null;
@@ -114,11 +117,15 @@ export function useWorkspaceWatcher(opts: WorkspaceWatcherOptions): void {
       }
       const paths = (payload.paths || []).map((p) => normalizePath(p.path));
       if (paths.length === 0) return;
-      const treeHit = paths.some((p) => p === normalizedPrefix || p.startsWith(prefixMatch));
+      const treeHit = paths.some((p) => watchedPrefixes.some((watchedPrefix) => {
+        const prefixMatch = watchedPrefix === '/' ? '/' : `${watchedPrefix}/`;
+        return p === watchedPrefix || p.startsWith(prefixMatch);
+      }));
       if (treeHit) scheduleTree();
       const watchedFile = currentFileRef.current;
       if (watchedFile && onCurrentFileChangeRef.current) {
-        const fileHit = paths.some((p) => p === watchedFile);
+        const projectWatchedFile = watchedFile === '/' ? '/' : `/$project${watchedFile}`;
+        const fileHit = paths.some((p) => p === watchedFile || p === projectWatchedFile);
         if (fileHit) scheduleFile();
       }
     };

@@ -124,14 +124,20 @@ def send_request_with_runtime_fallback(
         try:
             return send_request(json_str, candidate, timeout)
         except Exception as exc:
-            errors.append(f"{candidate.name}: {exc}")
+            errors.append(f"{candidate}: {type(exc).__name__}: {exc}")
 
     runtime_mode = runtime_mode_env()
     if runtime_mode is None:
-        raise EngineNotStartedError("your Skill Pilot Engine (Prod or Dev) is not started")
-    if runtime_mode in {"dev", "development"}:
-        raise EngineNotStartedError("your Skill Pilot Engine (Dev) is not started")
-    raise EngineNotStartedError("your Skill Pilot Engine (Prod) is not started")
+        message = "your Skill Pilot Engine (Prod or Dev) is not started"
+    elif runtime_mode in {"dev", "development"}:
+        message = "your Skill Pilot Engine (Dev) is not started"
+    else:
+        message = "your Skill Pilot Engine (Prod) is not started"
+
+    if errors:
+        detail = "; ".join(errors)
+        message = f"{message}. Socket connection attempts failed: {detail}"
+    raise EngineNotStartedError(message)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -169,7 +175,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Force development mode and use the dev engine socket",
     )
     skill_agent_parser = subparsers.add_parser(
-        "skill-agent",
+        "agent-cli",
         help="Run prompt inference through core engine default LLM provider and print plain text output",
     )
     skill_agent_parser.add_argument("prompt", nargs="+", help="Prompt text")
@@ -209,6 +215,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--prompt",
         required=True,
         help="Detailed image generation prompt.",
+    )
+    create_audio_parser = subparsers.add_parser(
+        "create-audio",
+        help="Create TTS audio through the running engine socket and print the local file path",
+    )
+    create_audio_parser.add_argument(
+        "--text",
+        required=True,
+        help="Plain text to synthesize.",
+    )
+    create_audio_parser.add_argument(
+        "--format",
+        default="mp3",
+        help="Output audio format, for example mp3, wav, opus, aac, flac, or pcm. Defaults to mp3.",
+    )
+    create_audio_parser.add_argument(
+        "--voice",
+        default=None,
+        help="Optional TTS voice id. Uses the configured provider default when omitted.",
     )
     run_workflow_parser = subparsers.add_parser(
         "run-workflow",
@@ -309,9 +334,12 @@ def _resolve_run_workflow_inputs(args: argparse.Namespace) -> tuple[str, str, st
     prompt = prompt_named or prompt_positional
 
     raw_tmux_session = str(getattr(args, "tmux_session", "") or "").strip()
-    normalized_tmux_session = raw_tmux_session or None
-    if normalized_tmux_session and normalized_tmux_session.lower() == "none":
+    if raw_tmux_session.lower() == "none":
         normalized_tmux_session = None
+    elif raw_tmux_session:
+        normalized_tmux_session = raw_tmux_session
+    else:
+        normalized_tmux_session = (os.getenv("TMUX_SESSION_NAME") or "").strip() or None
 
     return workflow, prompt, normalized_tmux_session
 
@@ -429,7 +457,7 @@ def main() -> int:
         print(response_raw)
         return 0
 
-    if args.command == "skill-agent":
+    if args.command == "agent-cli":
         payload = {
             "operation": "skill_agent_infer",
             "prompt": " ".join(args.prompt).strip(),
@@ -454,7 +482,7 @@ def main() -> int:
             print(str(exc), file=sys.stderr)
             return 2
         except Exception as exc:
-            print(f"skill-agent request failed: {exc}", file=sys.stderr)
+            print(f"agent-cli request failed: {exc}", file=sys.stderr)
             return 2
         try:
             response = json.loads(response_raw)
@@ -466,7 +494,7 @@ def main() -> int:
             print(response_raw)
             return 0
         if response.get("status") != "ok":
-            detail = response.get("detail") or "skill-agent request failed"
+            detail = response.get("detail") or "agent-cli request failed"
             print(str(detail), file=sys.stderr)
             return 2
 
@@ -555,6 +583,49 @@ def main() -> int:
             return 0
         if response.get("status") != "ok":
             detail = response.get("detail") or "create-image request failed"
+            print(str(detail), file=sys.stderr)
+            return 2
+
+        result = response.get("result") or {}
+        if isinstance(result, dict):
+            path = result.get("path")
+            if path is not None:
+                print(str(path))
+                return 0
+        print(response_raw)
+        return 0
+
+    if args.command == "create-audio":
+        request_payload = {
+            "operation": "create_audio",
+            "text": str(args.text).strip(),
+            "format": str(args.format).strip().lower(),
+            "voice": str(args.voice).strip() if args.voice is not None else None,
+        }
+        try:
+            response_raw = send_request_with_runtime_fallback(
+                json.dumps(request_payload, ensure_ascii=True),
+                timeout,
+                socket_path,
+                explicit_socket=explicit_socket,
+            )
+        except EngineNotStartedError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        except Exception as exc:
+            print(f"create-audio request failed: {exc}", file=sys.stderr)
+            return 2
+        try:
+            response = json.loads(response_raw)
+        except json.JSONDecodeError:
+            print(response_raw)
+            return 0
+
+        if not isinstance(response, dict):
+            print(response_raw)
+            return 0
+        if response.get("status") != "ok":
+            detail = response.get("detail") or "create-audio request failed"
             print(str(detail), file=sys.stderr)
             return 2
 
@@ -711,15 +782,15 @@ def main() -> int:
             print(f"[run-workflow] infer_response_raw\n{response_raw}", file=sys.stderr)
             response = json.loads(response_raw)
             if not isinstance(response, dict):
-                raise RuntimeError("invalid skill-agent response")
+                raise RuntimeError("invalid agent-cli response")
             if response.get("status") != "ok":
-                raise RuntimeError(str(response.get("detail") or "skill-agent request failed"))
+                raise RuntimeError(str(response.get("detail") or "agent-cli request failed"))
             result = response.get("result") or {}
             if not isinstance(result, dict):
-                raise RuntimeError("invalid skill-agent result payload")
+                raise RuntimeError("invalid agent-cli result payload")
             text = result.get("text")
             if text is None:
-                raise RuntimeError("skill-agent response missing `text`")
+                raise RuntimeError("agent-cli response missing `text`")
             return str(text)
 
         requested_workers = max(1, int(args.max_workers))

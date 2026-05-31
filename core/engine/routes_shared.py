@@ -78,6 +78,7 @@ from settings import (
     COURSES_DIR,
     FEATURES_DIR,
     PROJECT_DIR,
+    MEDIA_DIR,
     RESEARCH_DIR,
     SKILL_PILOT_DEVELOPMENT_DIR,
     TASKS_DIR,
@@ -116,6 +117,7 @@ FILE_MANAGER_WEB_SHELL_SESSION_NAME = "webui-live-sh-file-manager"
 NATIVE_TMUX_SESSION_PREFIX = "native-terminal-"
 WORKFLOW_EXECUTE_SESSION_NAME = "sp-workflow-execute"
 PROTECTED_TMUX_SESSION_PREFIXES = ("sp-engine-", "sp-webui-")
+FILE_MANAGER_TERMINAL_SESSION_PREFIX = "sp-webui-file-manager-"
 TMUX_SESSION_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 SAVED_TERMINAL_HISTORY_ID_RE = re.compile(r"^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{6}-[a-zA-Z0-9_-]+\.md$")
 _last_heartbeat_time: float = time.time()
@@ -125,6 +127,7 @@ _MCP_SERVER_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 _MCP_SKILLS_DIR = _REPO_ROOT / "core" / "skills" / "mcp"
 _SYSTEM_SKILLS_DIR = _REPO_ROOT / "core" / "skills" / "system"
 _DISABLED_SKILLS_PATH = _REPO_ROOT / "config" / "disabled_skills.json5"
+_DISABLED_SUBAGENTS_PATH = _REPO_ROOT / "config" / "disabled_subagents.json5"
 _EXTENSIONS_DIR = _REPO_ROOT / "extensions"
 _SHOWCASES_PATH = _REPO_ROOT / "core" / "engine" / "data" / "showcases.json5"
 _SKILL_CATEGORIES: List[tuple[str, str, Path]] = [
@@ -133,6 +136,10 @@ _SKILL_CATEGORIES: List[tuple[str, str, Path]] = [
     ("mcp", "MCP", _REPO_ROOT / "core" / "skills" / "mcp"),
     ("third-party", "Third Party", _REPO_ROOT / "core" / "skills" / "third-party"),
     ("user", "User", _REPO_ROOT / "core" / "skills" / "user"),
+]
+_SUBAGENT_CATEGORIES: List[tuple[str, str, Path]] = [
+    ("system", "System", _REPO_ROOT / "core" / "subagents" / "system"),
+    ("user", "User", _REPO_ROOT / "core" / "subagents" / "user"),
 ]
 _heartbeat_watcher_started = False
 _last_native_cleanup_time: float = 0.0
@@ -1885,9 +1892,6 @@ def _execute_workflow_in_terminal_thread(
                             _WORKFLOW_EXECUTE_CONTINUE.clear()
                             break
 
-                    if previous_provider is not None:
-                        _maybe_send_exit_session_shortcut_any(session_name, previous_provider)
-                        previous_provider = None
                     if run_is_current():
                         _set_workflow_execute_state(status="running", waiting_for_continue=False)
                 else:
@@ -2087,6 +2091,8 @@ def _task_type_from_path(path: str) -> str:
         return "video"
     if lower.endswith((".md", ".markdown")):
         return "markdown"
+    if lower.endswith((".html", ".htm")):
+        return "html"
     return "text"
 
 

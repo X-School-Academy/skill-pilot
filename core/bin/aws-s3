@@ -1,0 +1,320 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PYTHON_BIN="${REPO_ROOT}/core/bin/python"
+CONFIG_FILE="${REPO_ROOT}/config/s3.json5"
+ENGINE_DIR="${REPO_ROOT}/core/engine"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  core/bin/aws-s3 upload FILE [--folder FOLDER]
+  core/bin/aws-s3 delete KEY_OR_URL [--folder FOLDER]
+  core/bin/aws-s3 --help
+
+Commands:
+  upload    Upload a local file to S3. Non-UUID filenames are renamed to UUIDs.
+  delete    Delete an S3 object by object key, CloudFront URL, or filename with --folder.
+
+Options:
+  --folder FOLDER    S3 subfolder/prefix, such as avatars or users/123/avatar.
+
+Output:
+  upload prints the CloudFront URL for the uploaded object.
+EOF
+}
+
+die() {
+  echo "Error: $*" >&2
+  exit 1
+}
+
+load_config() {
+  [[ -f "${CONFIG_FILE}" ]] || die "Missing config file: ${CONFIG_FILE}"
+  local engine_site_packages=""
+  for site_packages_dir in "${ENGINE_DIR}"/.venv/lib/python*/site-packages; do
+    if [[ -d "${site_packages_dir}" ]]; then
+      engine_site_packages="${site_packages_dir}"
+      break
+    fi
+  done
+  [[ -n "${engine_site_packages}" ]] || die "Missing engine venv site-packages under ${ENGINE_DIR}/.venv"
+
+  eval "$(PYTHONPATH="${ENGINE_DIR}:${engine_site_packages}${PYTHONPATH:+:${PYTHONPATH}}" "${PYTHON_BIN}" - "${CONFIG_FILE}" <<'PY'
+import shlex
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+import json5_io
+
+try:
+    data = json5_io.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"Error: failed to parse {path}: {exc}", file=sys.stderr)
+    raise SystemExit(1)
+
+required = ("AWS_S3_PROFILE", "AWS_S3_BUCKET", "CLOUDFRONT_BASE_URL")
+for key in required:
+    value = data.get(key)
+    if not isinstance(value, str) or not value:
+        print(f"Error: {path} must define non-empty string {key}", file=sys.stderr)
+        raise SystemExit(1)
+    print(f"{key}={shlex.quote(value)}")
+PY
+)"
+  CLOUDFRONT_BASE_URL="${CLOUDFRONT_BASE_URL%/}"
+}
+
+require_aws_cli() {
+  command -v aws >/dev/null 2>&1 || die "AWS CLI is not installed or not on PATH."
+}
+
+generate_uuid() {
+  if command -v uuidgen >/dev/null 2>&1; then
+    uuidgen | tr '[:upper:]' '[:lower:]'
+  else
+    "${PYTHON_BIN}" - <<'PY'
+import uuid
+print(uuid.uuid4())
+PY
+  fi
+}
+
+is_uuid() {
+  [[ "$1" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]
+}
+
+trim_slashes() {
+  local value="$1"
+  value="${value#/}"
+  value="${value%/}"
+  printf '%s\n' "${value}"
+}
+
+validate_key_part() {
+  local label="$1"
+  local value="$2"
+  local safe_key_re='^[A-Za-z0-9._~!$()*+,;=:@/-]+$'
+
+  [[ -n "${value}" ]] || die "${label} cannot be empty."
+  [[ "${value}" != /* ]] || die "${label} must be relative, not absolute: ${value}"
+  [[ "${value}" != *".."* ]] || die "${label} cannot contain '..': ${value}"
+  [[ "${value}" != *"//"* ]] || die "${label} cannot contain empty path segments: ${value}"
+  [[ "${value}" =~ ${safe_key_re} ]] || die "${label} contains unsupported characters: ${value}"
+}
+
+join_key() {
+  local folder="$1"
+  local name="$2"
+
+  folder="$(trim_slashes "${folder}")"
+  name="$(trim_slashes "${name}")"
+
+  if [[ -n "${folder}" ]]; then
+    validate_key_part "Folder" "${folder}"
+    printf '%s/%s\n' "${folder}" "${name}"
+  else
+    printf '%s\n' "${name}"
+  fi
+}
+
+url_encode_key() {
+  "${PYTHON_BIN}" - "$1" <<'PY'
+from urllib.parse import quote
+import sys
+print(quote(sys.argv[1], safe="/"))
+PY
+}
+
+url_decode_key() {
+  "${PYTHON_BIN}" - "$1" <<'PY'
+from urllib.parse import unquote
+import sys
+print(unquote(sys.argv[1]))
+PY
+}
+
+object_key_to_url() {
+  local key="$1"
+  printf '%s/%s\n' "${CLOUDFRONT_BASE_URL}" "$(url_encode_key "${key}")"
+}
+
+content_type_for_file() {
+  local file="$1"
+  local ext="${file##*.}"
+  ext="$(printf '%s\n' "${ext}" | tr '[:upper:]' '[:lower:]')"
+
+  case "${ext}" in
+    mp4) printf '%s\n' "video/mp4" ;;
+    webm) printf '%s\n' "video/webm" ;;
+    mov) printf '%s\n' "video/quicktime" ;;
+    m4v) printf '%s\n' "video/x-m4v" ;;
+    m3u8) printf '%s\n' "application/vnd.apple.mpegurl" ;;
+    ts) printf '%s\n' "video/mp2t" ;;
+    m4s) printf '%s\n' "video/iso.segment" ;;
+    mp3) printf '%s\n' "audio/mpeg" ;;
+    m4a) printf '%s\n' "audio/mp4" ;;
+    wav) printf '%s\n' "audio/wav" ;;
+    ogg) printf '%s\n' "audio/ogg" ;;
+    jpg|jpeg) printf '%s\n' "image/jpeg" ;;
+    png) printf '%s\n' "image/png" ;;
+    gif) printf '%s\n' "image/gif" ;;
+    webp) printf '%s\n' "image/webp" ;;
+    svg) printf '%s\n' "image/svg+xml" ;;
+    pdf) printf '%s\n' "application/pdf" ;;
+    json) printf '%s\n' "application/json" ;;
+    txt) printf '%s\n' "text/plain; charset=utf-8" ;;
+    html) printf '%s\n' "text/html; charset=utf-8" ;;
+    css) printf '%s\n' "text/css; charset=utf-8" ;;
+    js|mjs) printf '%s\n' "text/javascript; charset=utf-8" ;;
+    *) printf '%s\n' "application/octet-stream" ;;
+  esac
+}
+
+normalize_delete_key() {
+  local raw="$1"
+  local folder="$2"
+  local key="${raw}"
+
+  if [[ "${key}" == "${CLOUDFRONT_BASE_URL}/"* ]]; then
+    key="${key#"${CLOUDFRONT_BASE_URL}/"}"
+    key="$(url_decode_key "${key}")"
+  fi
+
+  if [[ -n "${folder}" && "${key}" != */* ]]; then
+    key="$(join_key "${folder}" "${key}")"
+  else
+    key="$(trim_slashes "${key}")"
+  fi
+
+  validate_key_part "Object key" "${key}"
+  printf '%s\n' "${key}"
+}
+
+upload_file() {
+  local file=""
+  local folder=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --folder)
+        [[ $# -ge 2 ]] || die "--folder requires a value."
+        folder="$2"
+        shift 2
+        ;;
+      --folder=*)
+        folder="${1#--folder=}"
+        shift
+        ;;
+      --help|-h)
+        usage
+        exit 0
+        ;;
+      -*)
+        die "Unknown upload option: $1"
+        ;;
+      *)
+        [[ -z "${file}" ]] || die "upload accepts exactly one FILE argument."
+        file="$1"
+        shift
+        ;;
+    esac
+  done
+
+  [[ -n "${file}" ]] || die "upload requires a FILE argument."
+  [[ -f "${file}" ]] || die "File does not exist: ${file}"
+
+  local base stem ext name key
+  base="$(basename "${file}")"
+  stem="${base%.*}"
+  ext=""
+  if [[ "${base}" == *.* && "${base}" != .* ]]; then
+    ext=".${base##*.}"
+  fi
+
+  if is_uuid "${stem}"; then
+    name="${base}"
+  else
+    name="$(generate_uuid)${ext}"
+  fi
+
+  validate_key_part "Filename" "${name}"
+  key="$(join_key "${folder}" "${name}")"
+  validate_key_part "Object key" "${key}"
+
+  aws \
+    --profile "${AWS_S3_PROFILE}" \
+    s3 cp "${file}" "s3://${AWS_S3_BUCKET}/${key}" \
+    --content-type "$(content_type_for_file "${file}")" \
+    --content-disposition inline \
+    >/dev/null
+  object_key_to_url "${key}"
+}
+
+delete_file() {
+  local target=""
+  local folder=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --folder)
+        [[ $# -ge 2 ]] || die "--folder requires a value."
+        folder="$2"
+        shift 2
+        ;;
+      --folder=*)
+        folder="${1#--folder=}"
+        shift
+        ;;
+      --help|-h)
+        usage
+        exit 0
+        ;;
+      -*)
+        die "Unknown delete option: $1"
+        ;;
+      *)
+        [[ -z "${target}" ]] || die "delete accepts exactly one KEY_OR_URL argument."
+        target="$1"
+        shift
+        ;;
+    esac
+  done
+
+  [[ -n "${target}" ]] || die "delete requires a KEY_OR_URL argument."
+
+  local key
+  key="$(normalize_delete_key "${target}" "${folder}")"
+  aws --profile "${AWS_S3_PROFILE}" s3 rm "s3://${AWS_S3_BUCKET}/${key}" >/dev/null
+}
+
+main() {
+  case "${1:-}" in
+    --help|-h|"")
+      usage
+      exit 0
+      ;;
+  esac
+
+  load_config
+  require_aws_cli
+
+  local command="$1"
+  shift
+  case "${command}" in
+    upload)
+      upload_file "$@"
+      ;;
+    delete|rm)
+      delete_file "$@"
+      ;;
+    *)
+      die "Unknown command: ${command}"
+      ;;
+  esac
+}
+
+main "$@"

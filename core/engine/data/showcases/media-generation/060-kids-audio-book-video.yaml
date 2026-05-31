@@ -1,0 +1,95 @@
+id: media-kids-audio-book-video
+title: Kids Audio Book Video
+description: Create a narrated children's audio-book video for The Tortoise and the Hare with generated scenes, voiceover, and FFmpeg assembly.
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/2e13f52b-da41-46f5-b677-769b4065a1bb.png
+video: https://d2ixgzr3ewt3zn.cloudfront.net/video/047adf9f-d10d-44e2-bdb1-723809c2551e.mp4
+tutorial: null
+request: null
+prompt: |
+  Create a kids audio book video about the story of "The Tortoise and the Hare".
+
+  Make the story suitable for young children, with a warm narration style, gentle pacing, colorful storybook scenes, and a clear moral about patience and steady effort. Keep the adaptation original and avoid scary language.
+
+  Before creating the final video, show me the planned scenes so I can review the story flow. Save the finished video and the reusable project files under `.skillpilot/temp/tortoise-hare-audio-book/`.
+workflow: null
+directory: null
+git_tag: null
+use_worktree: false
+in_mode: prod
+skills:
+  - create-slide-show-video
+  - create-image-audio
+tools:
+  - ffmpeg
+  - ffprobe
+  - core/bin/create-image
+  - core/bin/create-audio
+files: []
+goals: |
+  - Produce a complete children's audio-book MP4 from a classic fable.
+  - Learn how AI image generation, TTS narration, and FFmpeg combine into a video pipeline.
+  - Practice planning reusable scene assets that can be regenerated or revised.
+video_prompt: |
+  Create a short demo video that shows an AI agent turning The Tortoise and the Hare into a kids audio-book: scene planning, generated illustrations, TTS narration waveforms, FFmpeg assembly, and a final MP4 preview.
+tutorial_prompt: |
+  Build an interactive tutorial that teaches how to produce a children's audio-book video with generated images, text-to-speech narration, and FFmpeg composition.
+terms:
+  - Agent Skill
+  - ffmpeg
+  - ffprobe
+  - ffmpeg filter
+  - fps
+  - bitrate
+  - mp3
+  - wav
+  - aac
+  - png
+  - jpg
+  - webp
+  - mp4
+  - h264
+  - x264
+  - h264 CRF
+  - yuv420p
+  - webm
+  - shell command
+  - apt-get
+  - brew
+  - bash
+  - bash script
+  - markdown
+  - yaml
+  - json
+  - python
+  - pip
+  - uv
+  - gpt-image-2
+  - gpt-4o-mini-tts
+  - gpt-5.5
+  - acc
+related:
+  - slug: media-html-playwright-image
+    caption: Render custom story-card images with browser automation.
+  - slug: media-burn-in-captions
+    caption: Add readable captions after the audio-book video is rendered.
+  - slug: media-tts-cli
+    caption: Build the narration CLI used by this workflow.
+  - slug: media-image-cli
+    caption: Build the image-generation CLI used by this workflow.
+  - slug: agent-skills-create-slide-show-video
+    caption: Package the slideshow pipeline as a reusable skill.
+  - slug: agent-skills-create-video-with-html
+    caption: Learn a browser-rendered video skill for richer scenes.
+links:
+  - name: Bash, Bash script
+    url: /courses?course=showcases/bash-and-bash-script.md
+    prompt: Create an interactive course that teaches Bash commands and Bash scripts for repeatable AI media workflows.
+  - name: Python, pip vs uv
+    url: /courses?course=showcases/python-pip-vs-uv.md
+    prompt: Create an interactive course that teaches Python execution, pip package installation, and uv project-managed runs for agent tooling.
+  - name: markdown, yaml, json
+    url: /courses?course=showcases/markdown-yaml-json.md
+    prompt: Create an interactive course that teaches when to use Markdown, YAML, and JSON in AI-agent instructions and configuration.
+popularity: 78
+level: 3
+rate: 4.6

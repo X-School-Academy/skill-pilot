@@ -7,6 +7,8 @@ description: Create, update, run, resume, or continue agent workflows. Use when 
 
 Create, update, run, and continue agent workflows while keeping workflow files valid and terminal execution human-in-the-loop aware.
 
+Workflow JSON keeps runnable nodes as `type: "agent"`. Agent node data uses `data.subagent` for a Skill Pilot subagent from `core/subagents/*/*.md`; do not use `data.skill` for workflow nodes.
+
 ## When to Use This Skill
 
 - The user asks to create, update, fix, review, or convert a process into a workflow JSON file.

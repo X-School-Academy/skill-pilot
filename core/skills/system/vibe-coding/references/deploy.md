@@ -12,7 +12,7 @@ Deploy a Vibe Coding project locally as launchable software, and deploy to a rem
 
 ### Step 1: Read the Implementation Context
 
-Read `design-docs/implementation.md` and identify deployment target, runtime, and dependencies.
+Read `implementation.md` and identify deployment target, runtime, and dependencies.
 
 ### Step 2: Determine Local and Remote Targets
 
@@ -59,7 +59,7 @@ If the project lacks safe start/stop scripts, add small project-owned scripts or
 
 Only create dashboard assets during deployment, and only if they do not already exist:
 
-- `workspace/vibe-coding/{project-name}/assets/icon.png`: square raster icon for the WebUI dashboard. Use the `create-image` skill to create it from the project concept when missing.
+- `workspace/vibe-coding/{project-name}/assets/icon.png`: square raster icon for the WebUI dashboard. Use the `create-image-audio` skill to create it from the project concept when missing.
 - `workspace/vibe-coding/{project-name}/assets/info.yaml`: metadata and local deployment commands for the WebUI dashboard.
 
 If `icon.png` already exists, keep it. If `info.yaml` already exists, update only missing or stale deployment fields; preserve user-provided display names and valid custom commands unless they are clearly wrong.
@@ -72,7 +72,7 @@ Remote production deployment is separate from local deployment. Even when the ta
 
 ### Step 6: Update the Deployment Record
 
-Write `design-docs/deployment.md` (overwrite — it is a living doc):
+Write `deployment.md` (overwrite — it is a living doc):
 
 - What was deployed
 - Local deployment commands and launch instructions

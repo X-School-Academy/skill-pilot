@@ -306,6 +306,19 @@ Stop development only:
 ./skillpilot.sh stop --dev
 ```
 
+Test the production WebUI build (Next.js `next start`):
+
+```bash
+./skillpilot.sh start --next-server
+./skillpilot.sh stop  --next-server
+```
+
+`--next-server` is intended for testing the production WebUI bundle only. It
+starts the engine plus a separate `next start` server on the WebUI port
+(default `127.0.0.1:3003`). For normal usage, omit `--next-server` so the
+engine serves the static WebUI export. `--next-server` cannot be combined
+with `--dev`.
+
 ## 10. Using AI Agent CLIs Directly
 
 If you use AI agent CLIs directly, without the Skill Pilot WebUI:

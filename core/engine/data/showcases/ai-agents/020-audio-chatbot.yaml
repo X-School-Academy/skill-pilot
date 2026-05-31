@@ -1,31 +1,14 @@
 id: ai-agents-audio-chatbot
 title: Audio Chatbot
 description: Voice-in, voice-out conversational chatbot using STT + LLM + TTS.
-thumbnail: null
+thumbnail: https://d2ixgzr3ewt3zn.cloudfront.net/image/9dba7bc5-594b-43e2-bb7a-ecbca44aa53e.png
 video: null
 tutorial: null
 request: null
 prompt: |
-  Role: You are my voice-AI engineer.
+  Create a local voice chatbot for spoken conversations.
 
-  Goal: A small app under `.skillpilot/temp/voice-bot/` that holds a spoken
-  conversation: I press to talk, it transcribes, the LLM responds, and the
-  response is spoken back.
-
-  Steps:
-  1. Pick a stack (Python preferred for STT/TTS bindings).
-  2. Push-to-talk loop:
-     a. Capture mic input while a key (e.g., space) is held; save WAV.
-     b. STT the WAV to text.
-     c. Append to conversation, call LLM with streaming.
-     d. Stream TTS of the response back to speakers (chunked for low latency).
-  3. Add a barge-in: pressing space again interrupts current TTS playback.
-  4. Configurable voices and a `--text-only` debug mode.
-  5. Demo a 3-turn conversation. Save the transcript to a file.
-
-  Constraints:
-  - Real STT and TTS. No mocks.
-  - Make microphone permissions explicit; print a clear hint if denied.
+  It should accept recorded speech, respond conversationally, produce spoken replies, keep a transcript, and include a short demo conversation. Save the project under `.skillpilot/temp/voice-bot/`.
 workflow: null
 directory: null
 git_tag: null
@@ -34,6 +17,7 @@ in_mode: prod
 skills: []
 tools: []
 files: []
+related: []
 links: []
 popularity: 76
 level: 4

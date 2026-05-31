@@ -18,6 +18,7 @@ Use this reference when the user asks to create, update, fix, review, or convert
 3. Identify the dependency order between steps.
 4. Convert the dependency order into a directed acyclic graph that starts at Start and ends at End.
 5. Use `sample.json` as a format-only reference when helpful.
+6. When a step should use a reusable persona or role, select an exact subagent name from `core/subagents/*/*.md`.
 
 ### Step 3: Build a Valid Workflow Document
 
@@ -45,7 +46,7 @@ Use these node rules:
    - include numeric `position.x` and `position.y`
    - include `data.title` as a non-empty string
    - include `data.provider_id` as a non-empty string
-   - include at least one non-empty field between `data.skill` and `data.responsibility`
+   - include at least one non-empty field between `data.subagent` and `data.responsibility`
 4. Keep every node id unique.
 
 Use these edge rules:
@@ -84,12 +85,12 @@ Before saving, check all of the following:
 
 If any checks fail, fix the graph before returning the result.
 
-### Step 5: Validate Agent Skill Names
+### Step 5: Validate Agent Subagent Names
 
-1. If an agent node uses `data.skill`, make sure the skill name is the actual skill name, not a descriptive sentence.
-2. Use the exact installed skill name format, for example `agent-skill`, not a title-cased or spaced variant.
-3. If the correct skill name is unclear, keep `data.skill` empty and put the instruction in `data.responsibility` instead of inventing an incorrect skill name.
-4. Do not leave both `data.skill` and `data.responsibility` empty.
+1. If an agent node uses `data.subagent`, make sure the subagent name is the actual name from `core/subagents/*/*.md`, not a descriptive sentence.
+2. Use the exact subagent frontmatter `name` value, for example `code-reviewer`, not a title-cased or spaced variant.
+3. If the correct subagent name is unclear, keep `data.subagent` empty and put the instruction in `data.responsibility` instead of inventing an incorrect subagent name.
+4. Do not leave both `data.subagent` and `data.responsibility` empty.
 
 ### Step 6: Save or Update the File
 
@@ -106,20 +107,20 @@ Before finishing, verify:
 2. The workflow follows the rules in `workflow-validation-rules.md`.
 3. There is no dead loop or cycle.
 4. Start is `0`, End is `-1`, and all agent ids are positive integers.
-5. The agent skill names are valid-looking and consistently formatted.
+5. The agent subagent names are valid-looking and consistently formatted.
 6. All edge relations still match the final node list, with no broken references or stale connections.
 
 ## Expected Output
 
 - A created or updated workflow JSON file.
 - A short note describing the file path and main workflow steps.
-- Any assumption that affected node structure, provider choice, or skill naming.
+- Any assumption that affected node structure, provider choice, or subagent naming.
 
 ## Common Issues
 
 - Start or End node is missing: include exactly one Start (`id: 0`) and one End (`id: -1`) node.
-- Agent node fails validation: ensure every agent node has a positive integer id, a title, a provider id, and at least one of `skill` or `responsibility`.
+- Agent node fails validation: ensure every agent node has a positive integer id, a title, a provider id, and at least one of `subagent` or `responsibility`.
 - Workflow has a dead loop: remove the cycle and make the graph a DAG before saving.
 - Nodes are disconnected: ensure every node is reachable from Start and can reach End.
 - Edge relations are broken after editing nodes: rebuild or update all affected edges.
-- Skill name is not real: use the exact installed skill name, or leave `skill` empty and use `responsibility`.
+- Subagent name is not real: use the exact subagent name from `core/subagents/*/*.md`, or leave `subagent` empty and use `responsibility`.

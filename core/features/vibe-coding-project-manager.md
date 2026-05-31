@@ -47,7 +47,7 @@ rg "vibe.coding" core/webui/pages/ -l
 - `core/features/task-manager.md`
 - `core/features/research-manager.md`
 - `core/features/workflow-runner-editor.md`
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 
 ## Update Notes
 

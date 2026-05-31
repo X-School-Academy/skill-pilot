@@ -297,17 +297,16 @@ def build_node_prompt(
     repo_root = repo_root_from_workflow_file(graph.workflow_file)
     current_node_id = int(current_node["id"])
     data = current_node.get("data") if isinstance(current_node.get("data"), dict) else {}
-    skill = str(data.get("skill") or "").strip()
+    subagent = str(data.get("subagent") or "").strip()
     responsibility = str(data.get("responsibility") or "").strip()
     output_root_text = display_repo_relative(output_root, repo_root)
     current_node_title = node_name(current_node)
 
     lines: list[str] = [
         "You are running as an AI agent node inside a multi-step workflow.",
-        "You need to use the workflow instruction and the agent skill provided for this node to finish the task.",
+        "You need to use the workflow instruction and the Skill Pilot subagent provided for this node to finish the task.",
         "",
         f"Workflow name: {graph.workflow_name}",
-        f"Workflow file: core/workflows/{graph.workflow_relative_path}",
         f"Current AI agent node UID: {current_node_id}",
         f"Current AI agent node name: {current_node_title}",
         "",
@@ -317,11 +316,12 @@ def build_node_prompt(
         "Node-specific instruction (derived from workflow node data):",
     ]
 
-    if skill:
-        lines.append(f"- Skill: {skill}")
+    if subagent:
+        lines.append(f"- Subagent: {subagent}")
+        lines.append(f"- Use Skill Pilot subagent: {subagent}.")
     if responsibility:
         lines.append(f"- Responsibility: {responsibility}")
-    if not skill and not responsibility:
+    if not subagent and not responsibility:
         lines.append("- Follow the workflow node instructions already defined by code.")
 
     if task_workspace:
@@ -343,7 +343,7 @@ def build_node_prompt(
         [
             "",
             "When you finish:",
-            "load agent skill agent-workflow but not use it until explicitly instructed."
+            "After completing this node, inform the user that the current node output is ready for approval. Ask the user to approve this node's work. After the user approves, call the agent-workflow skill's continue-workflow-action so the main process can continue the workflow."
             if start_by_prompt_mode
             else None,
             f"1. Write your final output to {display_repo_relative(node_output_path(output_root, current_node_id, current_node_title), repo_root)}",
@@ -352,6 +352,7 @@ def build_node_prompt(
             "4. Do not return only a bare number, string, or similarly context-free value unless the workflow explicitly requires that exact format",
             "5. If you make assumptions, state them before the final result",
             "6. Do not write output files outside the task workspace or workflow output root unless explicitly required",
+            "7. Do not inspect the workflow JSON or attempt to run any other workflow node",
         ]
     )
     return "\n".join([line for line in lines if line is not None]).strip()

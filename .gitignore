@@ -3,7 +3,7 @@ __pycache__
 
 .next
 node_modules
-
+.pnpm-store
 # typescript
 *.tsbuildinfo
 next-env.d.ts
@@ -13,6 +13,10 @@ next-env.d.ts
 .env
 # local env files
 .env*.local
+
+.antigravitycli
+
+core/webui/public/showcases/videos
 
 skillpilot-ssh-key.pub
 skillpilot-ssh-key

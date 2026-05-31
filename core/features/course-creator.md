@@ -45,7 +45,7 @@ rg "course_manager" core/engine/ -l
 
 - `core/features/assignment-learning-platform.md`
 - `core/features/workflow-runner-editor.md`
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 
 ## Update Notes
 

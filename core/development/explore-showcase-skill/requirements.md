@@ -1,5 +1,5 @@
 > the commit version below is just to indicate the current codebase git log version
-> commit 2a7e5400bd0cbd41e5f5f284075ae1217615eb3f 
+> commit 55dd38966e284110365a58e2cecb0f6f8c10fd81 
 > please keep this commit version as we will use it as checkpoint for reverse engineering learning later
 
 First, we need to update the data structure defined at `core/engine/data/AGENTS.md`
@@ -47,7 +47,7 @@ the template data are at `core/engine/data`, we will put the showcase thumbnails
 10. Develop new features for Skill Pilot AI agents, such as creating new skills, updating UI, and new extensions, bug fixing, etc.
 11. Learning how to build a Skill Pilot AI agent by reverse engineering:
   - remove a feature of agent skill or update existing code to create bugs or issues for users to fix or improve
-  - draft a feature or agent skill `requirements.md` as per `core/development/explore-showcase-skill/reverse-engineering-guide.md` or create file `update.md` or `issue.md` for the bug fixing task or improvement task.
+  - draft a feature or agent skill `requirements.md` as per `core/development/explore-showcase-skill/reverse-engineering-guide.md` or create file `update.md` or `issues.md` for the bug fixing task or improvement task.
   - then ask the users to implement the feature or agent skill by themselves with the `requirements.md` drafted.
 12. Learning how to build a project or game by reverse engineering:
   - provide a project or game git url,
@@ -69,7 +69,7 @@ the template data are at `core/engine/data`, we will put the showcase thumbnails
  - the files will be placed at `workspace/showcases/{showcase_slug_id}/`
    - `requirements.md` if have
    - `update.md` if have
-   - `issue.md` if have
+   - `issues.md` if have
    - `assets/` if have
   - the files can be zip file url, but it will be auto unzipped to `workspace/showcases/{showcase_slug_id}/` when the user starts to ask AI agents to do the task with the prompt string.
   - there will be no `requirements.md` if the content is too short and can be directly included in the prompt string
@@ -83,14 +83,22 @@ the template data are at `core/engine/data`, we will put the showcase thumbnails
  - in_mode:  view the result in skill pilot's which instance: development or production.
    - if in_mode is prod, it will execute in the skill pilot prod instance, and see results in the prod webui, for non skill pilot development related showcases, as the prod instance is more stable for users to do the task. such as vibe coding, creating content, doing research, do some automation tasks, etc.
    - if in_mode is dev, it will execute in the skill pilot prod instance, and see results in the dev webui, most for the skill pilot development, as the webui will be hot reloaded, user can see the changes in real-time. (if user execute the task in the dev instance web terminal, it can be broken easily due to hot reloading, so we will execute the task in the prod web terminal, and monitor the result in the dev instance)
- - directory: the root directory for this showcase. the requirement.md, update.md, issue.md, and assets/ will be copied to this directory from `showcases/{showcase_slug_id}/`, such as `core/development/{new-feature-name}/` or `workspace/vibe-coding/{project-name}/`, etc. if the directory is not specified, it will be default to `workspace/showcases/{showcase_slug_id}/`
+ - directory: the root directory for this showcase. the requirement.md, update.md, issues.md, and assets/ will be copied to this directory from `showcases/{showcase_slug_id}/`, such as `core/development/{new-feature-name}/` or `workspace/vibe-coding/{project-name}/`, etc. if the directory is not specified, it will be default to `workspace/showcases/{showcase_slug_id}/`
 
  **Update system agent skills vibe coding and codeware to copy any requirements.md files to the appropriate directory if the files are not already there**
 --
-This agent skill will follow the user's instructions to update the data at folder `core/engine/data` and create the reference files at `workspace/showcases/{showcase_slug_id}/` for the showcases or create zip file and upload to aws s3, and unzip the file to `workspace/showcases/{showcase_slug_id}/` when the user starts to ask AI agents to do the task.
+This agent skill will follow the user's instructions with steps below:
 
-Agent skills will be used by this system agent skill which need to be mentioned clearly.
+1. create file  `workspace/showcases/{showcase_slug_id}/showcase.yaml` for user to review and approval
 
-when need an image, using the `create-image` agent skill
-when need to create a video using the `multiple-scene-video` agent skill
-when need to create an online interactive tutorial or tutorial video, using the `ccourse-creator` agent skill
+2. Create any image, video, and online tutorial with agent skills
+
+- `create-image` agent skill for creating images
+- `multiple-scene-video` agent skill for creating videos
+- `ccourse-creator` agent skill for creating online interactive tutorials 
+
+and save the created content to `workspace/showcases/{showcase_slug_id}/assets/` folder, and update the `showcase.yaml` file with the created content information, such as the file name, file path, and url if have.
+and maintain a file `files.yaml` to list all the image, video, online tutorial files created related to path `workspace/showcases/{showcase_slug_id}`, which we will use to zip these files later.
+ Then ask user to review and approval.
+
+3. after user approval, update the data at folder`core/engine/data`, and copy the any assets to `core/webui/public/showcases/{showcase_category}/` for final review

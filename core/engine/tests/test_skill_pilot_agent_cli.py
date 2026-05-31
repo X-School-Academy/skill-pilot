@@ -67,7 +67,15 @@ def test_bash_command_allowlist_allows_command(tmp_path):
 
 def test_prompt_requires_bash_for_filesystem_tasks():
     assert _prompt_requires_bash("create a file .skillpilot/temp/count.md")
+    assert _prompt_requires_bash("Read README.md and summarize it.")
+    assert _prompt_requires_bash("Count the files in this directory.")
     assert not _prompt_requires_bash("Reply with exactly OK.")
+    assert not _prompt_requires_bash(
+        "Create a flowchart diagram using Mermaid syntax for Raw Media Files leading to FFmpeg."
+    )
+    assert not _prompt_requires_bash(
+        "Fix the Mermaid code and return only corrected Mermaid code."
+    )
 
 
 def test_agents_md_loading_only_reads_root_file(tmp_path):

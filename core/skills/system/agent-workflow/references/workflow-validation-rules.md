@@ -41,7 +41,7 @@ These rules mirror the backend validation used by `core/engine/workflow_editor_u
 - `data.title` must be a non-empty string.
 - `data.provider_id` must be a non-empty string.
 - At least one of these must be non-empty:
-  - `data.skill`
+  - `data.subagent`
   - `data.responsibility`
 - Every agent node must have:
   - indegree `>= 1`
@@ -68,4 +68,4 @@ These rules mirror the backend validation used by `core/engine/workflow_editor_u
 
 - New workflow filenames should be lowercase kebab-case and end in `.json`.
 - The WebUI launches workflow files from `core/workflows/`.
-- Use exact agent skill names in `data.skill` when known.
+- Use exact subagent names from `core/subagents/*/*.md` in `data.subagent` when known.

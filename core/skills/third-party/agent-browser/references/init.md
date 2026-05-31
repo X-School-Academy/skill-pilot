@@ -86,6 +86,8 @@ If the snapshot succeeds, browser automation is ready.
 
 If the test fails, Chrome may not have remote debugging enabled. Ask the user to enable remote debugging with the platform-appropriate command:
 
+Do not use `--remote-debugging-port` for setup or troubleshooting. Use the platform commands below and the `core/bin/agent-browser` connection options documented in this skill.
+
 Linux:
 
 ```bash
@@ -104,6 +106,8 @@ Windows:
 start chrome chrome://inspect/#remote-debugging
 ```
 
+For other known failures, use [troubleshooting.md](troubleshooting.md).
+
 ### Step 6: Report Result
 
 Output plain text. Example:
@@ -117,10 +121,3 @@ Open web URLs using the command recorded in dev-swarm/user_preferences.md
 ```
 
 If the user requested file output, write the same content to the specified path.
-
-## Common Issues
-
-- `pnpm` not found: install pnpm first, then retry.
-- Chrome not detected: ensure Chrome is running with remote debugging enabled.
-- CDP WebSocket URL not reachable: check that the chrome-devtool-proxy binary is running on the host and firewall allows the connection.
-- `snapshot` returns empty: the page may still be loading; run `core/bin/agent-browser wait --load networkidle` before snapshot.

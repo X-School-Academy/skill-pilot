@@ -61,7 +61,7 @@ find core/skills/system/skill-pilot-extension/ -type f
 ## Related Features
 
 - `core/features/config-settings-mcp-skills.md`
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 - `core/features/media-mcp-server.md`
 
 ## Update Notes

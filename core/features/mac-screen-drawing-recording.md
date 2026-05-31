@@ -43,7 +43,7 @@ cat core/engine/tools/mac_screen_drawing.py | head -30
 ## Related Features
 
 - `core/features/agent-browser-automation.md`
-- `core/features/skill-agent-system.md`
+- `core/features/agent-cli.md`
 
 ## Update Notes
 
