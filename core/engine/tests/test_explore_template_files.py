@@ -113,3 +113,46 @@ def test_normalize_showcase_sample_exposes_zip_files_url():
     )
 
     assert sample["zip-files-url"] == "https://cdn.example.test/sample.zip"
+
+
+def test_normalize_showcase_sample_hides_default_system_skill():
+    sample = routes._normalize_showcase_sample(
+        {
+            "id": "sample",
+            "title": "Sample",
+            "description": "Sample description",
+            "prompt": "Run this.",
+            "skills": ["do-and-learn", "core/skills/system/terminal"],
+            "tools": [],
+            "files": [],
+        },
+        "Category",
+    )
+
+    assert sample["skills"] == ["core/skills/system/terminal"]
+    assert [item["label"] for item in sample["skill_items"]] == ["core/skills/system/terminal"]
+
+
+def test_normalize_showcase_sample_can_disable_system_skill_hiding():
+    sample = routes._normalize_showcase_sample(
+        {
+            "id": "sample",
+            "title": "Sample",
+            "description": "Sample description",
+            "prompt": "Run this.",
+            "system_skills": [],
+            "skills": ["do-and-learn"],
+            "tools": [],
+            "files": [],
+        },
+        "Category",
+    )
+
+    assert sample["skills"] == ["do-and-learn"]
+
+
+def test_build_prompt_target_url_includes_system_skills():
+    url = routes._build_prompt_target_url("", "Run this.", system_skills=["do-and-learn", "terminal"])
+
+    assert "systemSkills=" in url
+    assert "do-and-learn" in url
