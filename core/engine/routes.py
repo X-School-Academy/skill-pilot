@@ -1198,6 +1198,44 @@ def _normalize_showcase_repo_paths(items: Any) -> List[str]:
     return values
 
 
+_DEFAULT_SHOWCASE_SYSTEM_SKILLS = ["do-and-learn"]
+
+
+def _normalize_showcase_system_skills(sample: Dict[str, Any]) -> List[str]:
+    items = sample.get("system_skills", _DEFAULT_SHOWCASE_SYSTEM_SKILLS)
+    if items in (None, ""):
+        return []
+    if not isinstance(items, list):
+        raise ValueError("Showcase system_skills must be an array")
+    values: List[str] = []
+    for item in items:
+        name = str(item or "").strip().strip("/")
+        if name:
+            values.append(name)
+    return values
+
+
+def _showcase_skill_match_keys(value: str) -> Set[str]:
+    normalized = str(value or "").strip().strip("/")
+    if not normalized:
+        return set()
+    last_segment = normalized.split("/")[-1]
+    return {normalized, last_segment}
+
+
+def _filter_visible_showcase_skills(skills: List[str], system_skills: List[str]) -> List[str]:
+    hidden_keys: Set[str] = set()
+    for skill in system_skills:
+        hidden_keys.update(_showcase_skill_match_keys(skill))
+    if not hidden_keys:
+        return skills
+    return [
+        skill
+        for skill in skills
+        if _showcase_skill_match_keys(skill).isdisjoint(hidden_keys)
+    ]
+
+
 def _normalize_showcase_extensions(items: Any) -> List[str]:
     if items in (None, ""):
         return []
@@ -1242,7 +1280,8 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
     zip_files_url = str(sample.get("zip-files-url") or "").strip() or None
     use_worktree = _bool_with_default(sample.get("use_worktree"), False)
 
-    skills = _normalize_showcase_repo_paths(sample.get("skills"))
+    system_skills = _normalize_showcase_system_skills(sample)
+    skills = _filter_visible_showcase_skills(_normalize_showcase_repo_paths(sample.get("skills")), system_skills)
     subagents = _normalize_showcase_repo_paths(sample.get("subagents"))
     tools = _normalize_showcase_repo_paths(sample.get("tools"))
     files = _normalize_showcase_repo_paths(sample.get("files"))
@@ -1306,6 +1345,7 @@ def _normalize_showcase_sample(sample: Any, category_name: str) -> Dict[str, Any
         "in_mode": in_mode,
         "git_tag": git_tag,
         "use_worktree": use_worktree,
+        "system_skills": system_skills,
         "skills": skills,
         "skill_items": skill_items,
         "subagents": subagents,
@@ -1786,6 +1826,7 @@ def _build_prompt_target_url(
     prompt: str,
     path: str | None = None,
     showcase_directory: str | None = None,
+    system_skills: List[str] | None = None,
 ) -> str:
     params = [
         ("new", "true"),
@@ -1798,6 +1839,8 @@ def _build_prompt_target_url(
         file_manager_path = _file_manager_path_for_directory(showcase_directory)
         if file_manager_path:
             params.append(("fileManagerPath", file_manager_path))
+    if system_skills:
+        params.append(("systemSkills", json.dumps(system_skills)))
     query = "&".join(f"{quote(key, safe='')}={quote(str(value), safe='')}" for key, value in params)
     return f"{base_url}/agent-sessions?{query}"
 
@@ -1852,6 +1895,7 @@ def explore_template_start(payload: Dict[str, Any]):
         return JSONResponse(status_code=500, content={"status": "error", "error": str(exc)})
 
     prompt = str(sample.get("prompt") or "")
+    system_skills = _normalize_showcase_system_skills(sample)
     sample_in_mode = _normalize_showcase_in_mode(sample.get("in_mode"))
     runtime_mode = get_runtime_mode()
     current_runtime_root = _REPO_ROOT.resolve()
@@ -1886,6 +1930,7 @@ def explore_template_start(payload: Dict[str, Any]):
                     "",
                     prompt,
                     showcase_directory=_showcase_session_directory(sample, dev_runtime_target_root),
+                    system_skills=system_skills,
                 ),
                 "sample_id": sample_id,
                 "use_worktree": False,
@@ -1897,6 +1942,7 @@ def explore_template_start(payload: Dict[str, Any]):
                 "",
                 prompt,
                 showcase_directory=_showcase_session_directory(sample, dev_runtime_target_root),
+                system_skills=system_skills,
             ),
             "sample_id": sample_id,
             "use_worktree": False,
@@ -1916,6 +1962,7 @@ def explore_template_start(payload: Dict[str, Any]):
                 "",
                 prompt,
                 showcase_directory=_showcase_session_directory(sample, _REPO_ROOT),
+                system_skills=system_skills,
             ),
             "sample_id": sample_id,
             "use_worktree": False,
@@ -1930,6 +1977,7 @@ def explore_template_start(payload: Dict[str, Any]):
             prompt,
             str(worktree_path) if use_worktree else None,
             showcase_directory=_showcase_session_directory(sample, worktree_path),
+            system_skills=system_skills,
         )
 
     current_instance_target_url = build_current_instance_target_url()

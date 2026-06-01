@@ -89,6 +89,7 @@ Each showcase entry contains:
      2. Open each candidate skill's `SKILL.md` and follow its references to nested skills it invokes.
      3. Search `core/skills/` and `dev-swarm/skills/` for partial-name matches when the user mentions a skill by short name.
      4. Add any skill that produces a deliverable named in `goals` or referenced in `tools`.
+   - `system_skills`: optional hidden agent skills used when launching the template. If omitted, the runtime uses `["do-and-learn"]`; if set, the runtime uses the provided list; set `system_skills: []` when no hidden skill prompt should be prepended. Skills listed here are not displayed in WebUI showcase metadata.
    - `subagents`: optional list of Skill Pilot subagents that should be available or intentionally used when the user runs the showcase prompt. Use this for role-specialized reviewers, researchers, writers, implementation agents, or workflow agents that are not agent skills. To compile this list:
      1. Walk through the prompt and expected workflow to identify role-specialized agents the task naturally needs.
      2. Search `core/subagents/system/` and `core/subagents/user/` for partial-name matches when the user mentions a subagent by short name.

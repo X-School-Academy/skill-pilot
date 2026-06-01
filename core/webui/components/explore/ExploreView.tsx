@@ -762,6 +762,19 @@ export default function ExploreView() {
     window.open(link.url, '_blank', 'noopener,noreferrer');
   };
 
+  const navigateToTemplateTarget = async (targetUrl: string) => {
+    try {
+      const url = new URL(targetUrl, window.location.origin);
+      if (url.origin === window.location.origin) {
+        await router.push(`${url.pathname}${url.search}${url.hash}`);
+        return;
+      }
+    } catch {
+      // Fall back to browser navigation for malformed or browser-specific URLs.
+    }
+    window.location.assign(targetUrl);
+  };
+
   const openTemplateSettings = (sample: ShowcaseSample, forceWorktree = false) => {
     setTemplateSample(sample);
     setTemplateUseWorktree(runtimeMode === 'development' ? false : (forceWorktree || sample.use_worktree));
@@ -821,7 +834,7 @@ export default function ExploreView() {
 
   const handleTemplateResponse = async (sample: ShowcaseSample, response: LaunchResponse) => {
     if (response.status === 'launched' && response.target_url) {
-      window.location.assign(response.target_url);
+      await navigateToTemplateTarget(response.target_url);
       return;
     }
     if (response.status === 'relaunching_current_dev' && response.target_url) {
@@ -832,7 +845,7 @@ export default function ExploreView() {
         try {
           const healthRes = await axios.get(`${window.location.origin}/api/health`, { timeout: 1500, withCredentials: true });
           if (healthRes.data?.status === 'ok') {
-            window.location.assign(response.target_url);
+            await navigateToTemplateTarget(response.target_url);
             return;
           }
         } catch {
@@ -871,7 +884,7 @@ export default function ExploreView() {
           const statusRes = await axios.get(`${API_BASE_URL}/explore/template/status`, { params: { launch_id: response.launch_id } });
           const statusPayload = statusRes.data as LaunchResponse;
           if (statusPayload.status === 'launched' && statusPayload.target_url) {
-            window.location.assign(statusPayload.target_url);
+            await navigateToTemplateTarget(statusPayload.target_url);
             return;
           }
           if (statusPayload.status === 'error') {
@@ -1914,7 +1927,7 @@ export default function ExploreView() {
                     >
                       {templateMonitorReady ? 'Launch Dev Instance For Monitoring' : 'Waiting For Dev Instance'}
                     </Button>
-                    <Button size="sm" leftIcon={<IconPlayerPlay size="0.9rem" />} onClick={() => window.location.assign(templateContinueUrl)}>
+                    <Button size="sm" leftIcon={<IconPlayerPlay size="0.9rem" />} onClick={() => void navigateToTemplateTarget(templateContinueUrl)}>
                       Continue In Current Instance
                     </Button>
                   </Group>

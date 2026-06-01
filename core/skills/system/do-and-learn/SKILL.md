@@ -1,6 +1,6 @@
 ---
 name: do-and-learn
-description: Guide users who lack task background through a task-first learning workflow. Use when the user wants the agent to do a project or task while interviewing them deeply, matching their language preference, assessing their skill level, creating learning notes in a project learning folder, and optionally producing an interactive tutorial afterward.
+description: Guide users through task-first learning by doing a practical project while checking their concept awareness, briefly introducing core technologies when needed, matching their language preference, creating learning notes, and optionally preparing resume points, practice courses, or interviews afterward.
 ---
 
 # AI Builder - Do and Learn
@@ -36,7 +36,7 @@ Follow `references/workflow.md` for the detailed workflow.
 
 ### Core Requirements
 
-1. Interview the user before execution until there is shared understanding of the task, the desired result, and the knowledge behind the task.
+1. Interview the user before execution until there is shared understanding of the task, the desired result, and the concept-level knowledge behind the task.
 2. Use the language the user used or explicitly requested for interviews, explanations, learning files, reports, and tutorials; default to English when no language preference is clear.
 3. Assess the user's skill level from the interview and adapt explanations to that level.
 4. Create a `learning/` folder in the project or task directory once the task location is known.

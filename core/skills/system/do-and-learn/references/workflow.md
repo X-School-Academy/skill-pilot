@@ -33,7 +33,38 @@ Cover these areas:
 
 Use teach-back when risk is high: summarize the plan and ask the user to confirm or correct it. Challenge vague or risky requirements with a better option and clear reasoning.
 
-## Step 3: Calibrate the Learning Level
+## Step 3: Run a Short Core Concept Check
+
+Before execution, identify the core technologies, tools, services, formats, and domain concepts the agent will likely use for this task. Ask the user briefly whether they know or understand each concept well enough to follow what the AI will do.
+
+This is not a test and the user does not need to pass it. Do not block execution because the user is unfamiliar with a concept. The purpose is to give the user enough pre-knowledge to understand the AI's actions in the "do first, learn afterwards" workflow, and to make later resume writing, course creation, and interview practice more useful.
+
+Keep the check short:
+
+- Ask about only the concepts that matter for understanding the task outcome and AI/tool choices.
+- Group related concepts into one question when possible.
+- Accept answers such as "I know it", "I don't know", "not sure", or "need intro".
+- If the user knows the concept, move on without lecturing.
+- If the user does not know or asks for an intro, give a brief explanation before execution.
+
+Explain concept-level knowledge, not operational details. The user should understand what the technology or tool is for, why the AI will use it, and what kind of result or tradeoff it affects. Do not teach exact commands, UI steps, flags, syntax, parameters, or implementation procedure unless the user explicitly asks.
+
+Examples:
+
+- For an AWS CloudFront task, make sure the user roughly understands CloudFront and CDN: CloudFront is AWS's content delivery network, used to serve files through edge locations with lower latency and stable public URLs. The user does not need to know the exact AWS CLI commands or console steps before the agent configures it.
+- For a video editing task using FFmpeg, make sure the user understands FFmpeg as a media tool that can cut, convert, combine, compress, inspect, crop, scale, blur, and draw text on audio/video. The user should know that different filters do different transformations, but does not need to remember `-vf`, filter graph syntax, or filter parameters before the agent runs it.
+- For a local database task using SQLite, make sure the user understands SQLite as a file-based database useful for small apps and local metadata. The user should know what a SQL schema is, and that SQL can create tables and insert, update, delete, and query data. The user does not need exact SQL syntax or dialect differences between MySQL, PostgreSQL, and SQLite before the agent builds it.
+
+When giving an intro, keep it practical:
+
+1. What it is
+2. Why this task needs it
+3. What the AI will probably use it for
+4. What the user should watch for or verify at a high level
+
+After the brief intro, continue with the task. Save the concept list and any intro notes in `learning/concepts.md` once the learning folder exists.
+
+## Step 4: Calibrate the Learning Level
 
 Infer the user's level from their answers:
 
@@ -44,7 +75,7 @@ Infer the user's level from their answers:
 
 State the assumed level briefly. Adjust if the user corrects it.
 
-## Step 4: Create the Learning Folder
+## Step 5: Create the Learning Folder
 
 ### Detect the task or project root directory
 
@@ -86,7 +117,7 @@ The README should include:
 
 Keep the README useful as an index. Move detailed explanations into separate files when a section grows beyond a short summary.
 
-## Step 5: Capture Knowledge Notes
+## Step 6: Capture Knowledge Notes
 
 Create additional files under `learning/` only when they add useful structure. Recommended names:
 
@@ -99,6 +130,7 @@ Create additional files under `learning/` only when they add useful structure. R
 
 Each knowledge file should tie explanations to the actual task. Prefer:
 
+- the core concepts checked before execution
 - why this decision was made
 - what alternative was rejected and why
 - what concept the user needs to understand
@@ -107,7 +139,7 @@ Each knowledge file should tie explanations to the actual task. Prefer:
 
 Avoid generic textbook content unless it directly supports the user's task.
 
-## Step 6: Execute the Task
+## Step 7: Execute the Task
 
 Perform the task using the appropriate project skills and tools. Keep the user informed at decision points. If a major decision is needed, explain the tradeoff and ask for approval.
 
@@ -118,7 +150,7 @@ During implementation, update learning files when:
 - an important decision or tradeoff is made
 - verification reveals something the user should understand
 
-## Step 7: Verify and Report
+## Step 8: Verify and Report
 
 Verify the task using the project's normal quality bar. Update `learning/README.md` and any relevant notes with what was verified.
 
@@ -129,7 +161,7 @@ In the final report, include:
 - where the learning folder is
 - any assumptions or remaining risks
 
-## Step 8: Offer Completion Options
+## Step 9: Offer Completion Options
 
 After the task is finished, ask:
 
@@ -153,9 +185,11 @@ If the user chooses option 2:
 1. Use the `course-creator` skill.
 2. Create the interactive course in the task's `learning/` folder.
 3. Base the tutorial on the completed task, the user's level, and the knowledge notes.
-4. Update `learning/README.md` to link to the course file.
-5. Verify the course file exists and is linked.
-6. After the course is complete, offer option 3 again if the user wants to practice the interview.
+4. Keep course outcomes at the practical concept and capability level. Teach what the tool, service, command family, or format can do and how to reason about when to use it. Do not require memorizing exact syntax, flags, filter parameter formats, CLI options, API calls, UI click paths, or vendor-specific dialect differences unless the user explicitly wants that depth.
+5. Use concrete capability examples. For SQL, teach schemas and basic operations such as create, insert, update, delete, and query without testing exact syntax. For FFmpeg, teach that filters can crop, scale, draw text, blur, combine, or transform media without testing `-vf` syntax or parameter order.
+6. Update `learning/README.md` to link to the course file.
+7. Verify the course file exists and is linked.
+8. After the course is complete, offer option 3 again if the user wants to practice the interview.
 
 If the user chooses option 3:
 
@@ -163,6 +197,7 @@ If the user chooses option 3:
 2. Act as the hiring manager interviewing the user as the candidate.
 3. Ask one question at a time, listen to the user's answer, and probe with realistic follow-ups.
 4. Ground questions in the completed task, the learning notes, implementation decisions, verification, and tradeoffs.
-5. Delay detailed scoring until the interview segment ends unless the user asks for immediate feedback.
+5. Keep interview expectations at the same concept and capability level unless the user asks for a syntax-heavy interview. Ask whether the user understands what SQL, FFmpeg, CloudFront, or another tool can do and why it was used; do not require exact commands, flags, filter syntax, parameters, UI steps, or dialect-specific syntax from memory.
+6. Delay detailed scoring until the interview segment ends unless the user asks for immediate feedback.
 
 If the user declines all options, leave the learning folder as the durable learning artifact.
