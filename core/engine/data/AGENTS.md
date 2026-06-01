@@ -39,6 +39,7 @@ Supported sample fields:
 - `use_worktree`: boolean
 - `in_mode`: `dev` or `prod`
 - `skills`: array
+- `system_skills`: optional hidden skill array for template launch. If omitted, runtime uses `["do-and-learn"]`; if set, runtime uses that exact array; set `[]` to disable hidden skill prepending.
 - `subagents`: optional array
 - `extensions`: optional array
 - `tools`: array
