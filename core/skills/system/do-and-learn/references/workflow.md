@@ -47,13 +47,13 @@ Keep the check short:
 - If the user knows the concept, move on without lecturing.
 - If the user does not know or asks for an intro, give a brief explanation before execution.
 
-Explain concept-level knowledge, not operational details. The user should understand what the technology or tool is for, why the AI will use it, and what kind of result or tradeoff it affects. Do not teach exact commands, UI steps, flags, parameters, or implementation procedure unless the user explicitly asks.
+Explain concept-level knowledge, not operational details. The user should understand what the technology or tool is for, why the AI will use it, and what kind of result or tradeoff it affects. Do not teach exact commands, UI steps, flags, syntax, parameters, or implementation procedure unless the user explicitly asks.
 
 Examples:
 
 - For an AWS CloudFront task, make sure the user roughly understands CloudFront and CDN: CloudFront is AWS's content delivery network, used to serve files through edge locations with lower latency and stable public URLs. The user does not need to know the exact AWS CLI commands or console steps before the agent configures it.
-- For a video editing task using FFmpeg, make sure the user understands FFmpeg as a command-line media tool that can cut, convert, combine, compress, and inspect audio/video. The user does not need to know the exact filter graph or encoding parameters before the agent runs it.
-- For a local database task using SQLite, make sure the user understands SQLite as a file-based database useful for small apps and local metadata. The user does not need to know SQL schema details before the agent builds it.
+- For a video editing task using FFmpeg, make sure the user understands FFmpeg as a media tool that can cut, convert, combine, compress, inspect, crop, scale, blur, and draw text on audio/video. The user should know that different filters do different transformations, but does not need to remember `-vf`, filter graph syntax, or filter parameters before the agent runs it.
+- For a local database task using SQLite, make sure the user understands SQLite as a file-based database useful for small apps and local metadata. The user should know what a SQL schema is, and that SQL can create tables and insert, update, delete, and query data. The user does not need exact SQL syntax or dialect differences between MySQL, PostgreSQL, and SQLite before the agent builds it.
 
 When giving an intro, keep it practical:
 
@@ -185,9 +185,11 @@ If the user chooses option 2:
 1. Use the `course-creator` skill.
 2. Create the interactive course in the task's `learning/` folder.
 3. Base the tutorial on the completed task, the user's level, and the knowledge notes.
-4. Update `learning/README.md` to link to the course file.
-5. Verify the course file exists and is linked.
-6. After the course is complete, offer option 3 again if the user wants to practice the interview.
+4. Keep course outcomes at the practical concept and capability level. Teach what the tool, service, command family, or format can do and how to reason about when to use it. Do not require memorizing exact syntax, flags, filter parameter formats, CLI options, API calls, UI click paths, or vendor-specific dialect differences unless the user explicitly wants that depth.
+5. Use concrete capability examples. For SQL, teach schemas and basic operations such as create, insert, update, delete, and query without testing exact syntax. For FFmpeg, teach that filters can crop, scale, draw text, blur, combine, or transform media without testing `-vf` syntax or parameter order.
+6. Update `learning/README.md` to link to the course file.
+7. Verify the course file exists and is linked.
+8. After the course is complete, offer option 3 again if the user wants to practice the interview.
 
 If the user chooses option 3:
 
@@ -195,6 +197,7 @@ If the user chooses option 3:
 2. Act as the hiring manager interviewing the user as the candidate.
 3. Ask one question at a time, listen to the user's answer, and probe with realistic follow-ups.
 4. Ground questions in the completed task, the learning notes, implementation decisions, verification, and tradeoffs.
-5. Delay detailed scoring until the interview segment ends unless the user asks for immediate feedback.
+5. Keep interview expectations at the same concept and capability level unless the user asks for a syntax-heavy interview. Ask whether the user understands what SQL, FFmpeg, CloudFront, or another tool can do and why it was used; do not require exact commands, flags, filter syntax, parameters, UI steps, or dialect-specific syntax from memory.
+6. Delay detailed scoring until the interview segment ends unless the user asks for immediate feedback.
 
 If the user declines all options, leave the learning folder as the durable learning artifact.
