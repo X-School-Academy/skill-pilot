@@ -22,7 +22,7 @@ import {
   Tooltip,
   useMantineTheme,
 } from "@mantine/core";
-import { IconArrowLeft, IconFolder, IconFolderOpen, IconGripHorizontal, IconPlayerPlay, IconPlus, IconRefresh } from "@tabler/icons-react";
+import { IconArrowLeft, IconCircleCheck, IconFolder, IconFolderOpen, IconGripHorizontal, IconPlayerPlay, IconPlus, IconRefresh } from "@tabler/icons-react";
 
 import { apiUrl } from "../../libs/api-base";
 import { resolveSelectedProvider, setSelectedProvider } from "../../libs/llm";
@@ -49,6 +49,8 @@ interface LlmProvider {
 interface AgentSessionSummary {
   id: string;
   file: string;
+  analysis_file?: string;
+  has_analysis?: boolean;
   category: string;
   title: string;
   agent: string;
@@ -67,6 +69,9 @@ interface AgentSessionCategory {
 interface AgentSessionPayload {
   session: AgentSessionSummary;
   markdown: string;
+  analysis_markdown?: string;
+  analysis_file?: string;
+  jsonl_path?: string;
 }
 
 const formatTime = (value: string): string => {
@@ -137,6 +142,7 @@ const AgentSessionsPage = () => {
   const [creatingSession, setCreatingSession] = useState(false);
   const [creatingTerminal, setCreatingTerminal] = useState(false);
   const [newSessionMode, setNewSessionMode] = useState(false);
+  const [detailTab, setDetailTab] = useState<"history" | "analysis">("history");
   const [newSessionPrompt, setNewSessionPrompt] = useState("");
   const [newSessionSandbox, setNewSessionSandbox] = useState(false);
   const [newSessionAuto, setNewSessionAuto] = useState(false);
@@ -171,29 +177,35 @@ const AgentSessionsPage = () => {
     return null;
   }, [categories, payload, selectedId]);
 
-  const fetchSession = useCallback(async (id: string) => {
+  const fetchSession = useCallback(async (id: string, options?: { quiet?: boolean; updateRoute?: boolean }) => {
     if (!id) return;
-    setLoadingSession(true);
+    const quiet = Boolean(options?.quiet);
+    if (!quiet) setLoadingSession(true);
     try {
       const res = await axios.get(`${API_BASE_URL}/agent-sessions/session`, { params: { id } });
       setPayload(res.data);
       setSelectedId(id);
-      setNewSessionMode(false);
-      setLiveSessionName("");
-      setLiveSessionFileManagerPath("");
-      setFileManagerOpen(false);
+      if (!quiet) {
+        setNewSessionMode(false);
+        setDetailTab("history");
+        setLiveSessionName("");
+        setLiveSessionFileManagerPath("");
+        setFileManagerOpen(false);
+      }
       setError("");
-      void router.replace(`/agent-sessions?id=${encodeURIComponent(id)}`, undefined, { shallow: true });
+      if (options?.updateRoute !== false) {
+        void router.replace(`/agent-sessions?id=${encodeURIComponent(id)}`, undefined, { shallow: true });
+      }
     } catch (err: any) {
       const message = err?.response?.data?.error || "Failed to load agent session.";
       setError(String(message));
     } finally {
-      setLoadingSession(false);
+      if (!quiet) setLoadingSession(false);
     }
   }, [router]);
 
-  const fetchSessions = useCallback(async (sessionId = "", loadContent = false) => {
-    setLoadingList(true);
+  const fetchSessions = useCallback(async (sessionId = "", loadContent = false, quiet = false) => {
+    if (!quiet) setLoadingList(true);
     try {
       const res = await axios.get(`${API_BASE_URL}/agent-sessions`);
       const nextCategories: AgentSessionCategory[] = res.data?.categories || [];
@@ -202,7 +214,7 @@ const AgentSessionsPage = () => {
       const nextId = sessionId || firstId;
       setError("");
       if (loadContent && nextId) {
-        await fetchSession(nextId);
+        await fetchSession(nextId, { quiet, updateRoute: !quiet });
       } else if (loadContent) {
         setPayload(null);
         setSelectedId("");
@@ -211,7 +223,7 @@ const AgentSessionsPage = () => {
       const message = err?.response?.data?.error || "Failed to load agent sessions.";
       setError(String(message));
     } finally {
-      setLoadingList(false);
+      if (!quiet) setLoadingList(false);
     }
   }, [fetchSession]);
 
@@ -345,6 +357,28 @@ const AgentSessionsPage = () => {
     }
   }, [creatingTerminal]);
 
+  const startAnalysisSession = useCallback(() => {
+    const session = payload?.session;
+    if (!session) return;
+    const jsonlPath = payload?.jsonl_path || `.skillpilot/agent-sessions/${session.file}`;
+    const prompt = `Analyze the user agent session dialog history to help user the skill to guide ai for work, ref to ${jsonlPath}`;
+    setNewSessionMode(true);
+    setSelectedId("");
+    setPayload(null);
+    setDetailTab("history");
+    setNewSessionPrompt(prompt);
+    setNewSessionPath("");
+    setNewSessionShowcaseDirectory("");
+    setNewSessionShowcaseSlug("");
+    setNewSessionFileManagerPath("");
+    setNewSessionSystemSkills([]);
+    setLiveSessionName("");
+    setLiveSessionFileManagerPath("");
+    setFileManagerOpen(false);
+    setError("");
+    void router.replace(`/agent-sessions?new=true&prompt=${encodeURIComponent(prompt)}`, undefined, { shallow: true });
+  }, [payload, router]);
+
   useEffect(() => {
     if (!router.isReady || initialLoadRef.current) return;
     initialLoadRef.current = true;
@@ -376,6 +410,17 @@ const AgentSessionsPage = () => {
     }
     void fetchSessions(queryId, Boolean(queryId) && router.query.new !== "true");
   }, [fetchSessions, router.isReady, router.query.id]);
+
+  useEffect(() => {
+    if (!router.isReady || liveSessionName) return undefined;
+    const intervalId = window.setInterval(() => {
+      void fetchSessions(selectedId, false, true);
+      if (selectedId && payload && !payload.analysis_markdown) {
+        void fetchSession(selectedId, { quiet: true, updateRoute: false });
+      }
+    }, 5000);
+    return () => window.clearInterval(intervalId);
+  }, [fetchSession, fetchSessions, liveSessionName, payload, router.isReady, selectedId]);
 
   useEffect(() => {
     axios.get(`${API_BASE_URL}/llm/providers`)
@@ -443,6 +488,36 @@ const AgentSessionsPage = () => {
       </Button>
     );
   };
+
+  const renderDetailTabs = () => (
+    <Group spacing={0} noWrap mb="md" position="center">
+      {(["history", "analysis"] as const).map((tab) => {
+        const active = detailTab === tab;
+        return (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setDetailTab(tab)}
+            style={{
+              border: `1px solid ${active ? theme.colors.blue[5] : theme.colors.gray[3]}`,
+              borderLeftWidth: tab === "analysis" ? 0 : 1,
+              borderRadius: tab === "history" ? "8px 0 0 8px" : "0 8px 8px 0",
+              padding: "6px 12px",
+              background: active
+                ? (theme.colorScheme === "dark" ? theme.colors.dark[5] : theme.colors.blue[0])
+                : (theme.colorScheme === "dark" ? theme.colors.dark[6] : "#fff"),
+              color: active ? theme.colors.blue[7] : "inherit",
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 700,
+            }}
+          >
+            {tab === "history" ? "History" : "Analysis"}
+          </button>
+        );
+      })}
+    </Group>
+  );
 
   const renderLiveTerminal = () => (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: "12px 16px 16px" }}>
@@ -672,7 +747,10 @@ const AgentSessionsPage = () => {
                           }}
                         >
                           <Tooltip label={session.title} openDelay={350} multiline width={320} disabled={session.title.length <= 30}>
-                            <Text size="sm" weight={600} truncate>{titlePreview(session.title)}</Text>
+                            <Group spacing={6} noWrap>
+                              {session.has_analysis && <IconCircleCheck size="0.9rem" color={theme.colors.green[6]} />}
+                              <Text size="sm" weight={600} truncate>{titlePreview(session.title)}</Text>
+                            </Group>
                           </Tooltip>
                           <Text size="xs" color="dimmed" truncate>
                             {session.agent || "agent"} · {formatTime(session.time)}
@@ -806,12 +884,37 @@ const AgentSessionsPage = () => {
               </Group>
             ) : payload ? (
               <div style={{ maxWidth: 980, margin: "0 auto", padding: "20px 24px 28px" }}>
-                <div className="doc-markdown" style={{ maxWidth: "none", background: "#fff", padding: 20, borderRadius: 8, border: `1px solid ${theme.colors.gray[3]}` }}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{payload.markdown}</ReactMarkdown>
-                </div>
-                <Group position="right" mt="md">
-                  {renderResumeButton("bottom")}
-                </Group>
+                {detailTab === "history" ? (
+                  <>
+                    <div className="doc-markdown" style={{ maxWidth: "none", background: "#fff", padding: 20, borderRadius: 8, border: `1px solid ${theme.colors.gray[3]}` }}>
+                      {renderDetailTabs()}
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{payload.markdown}</ReactMarkdown>
+                    </div>
+                    <Group position="right" mt="md">
+                      {renderResumeButton("bottom")}
+                    </Group>
+                  </>
+                ) : payload.analysis_markdown ? (
+                  <div className="doc-markdown" style={{ maxWidth: "none", background: "#fff", padding: 20, borderRadius: 8, border: `1px solid ${theme.colors.gray[3]}` }}>
+                    {renderDetailTabs()}
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{payload.analysis_markdown}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <div style={{ background: "#fff", padding: 24, borderRadius: 8, border: `1px solid ${theme.colors.gray[3]}` }}>
+                    <Stack spacing="md" align="center" ta="center">
+                      {renderDetailTabs()}
+                      <div>
+                        <Title order={3} style={{ fontSize: 20 }}>No Analysis Yet</Title>
+                        <Text size="sm" color="dimmed" mt={4}>
+                          Analyze this session to improve how the user guides AI agents for work.
+                        </Text>
+                      </div>
+                      <Button leftIcon={<IconPlayerPlay size="1rem" />} onClick={startAnalysisSession}>
+                        Start to analyze
+                      </Button>
+                    </Stack>
+                  </div>
+                )}
               </div>
             ) : (
               <Text size="sm" color="dimmed" p="lg">Select an agent session.</Text>

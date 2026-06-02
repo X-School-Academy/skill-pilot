@@ -88,13 +88,55 @@ def test_list_and_render_agent_session_without_commit_block(tmp_path):
     assert categories[0]["name"] == "hooks"
     assert categories[0]["sessions"][0]["title"] == "update core/engine/hooks"
     assert categories[0]["sessions"][0]["resume_supported"] is True
+    assert categories[0]["sessions"][0]["has_analysis"] is False
 
     payload = agent_sessions.read_agent_session_payload(path.name, session_dir)
     assert "- agent: codex" in payload["markdown"]
     assert "- model: gpt-5.5" in payload["markdown"]
     assert "- time: 2026-05-26T05:24:00Z" in payload["markdown"]
+    assert "## User Prompt" in payload["markdown"]
+    assert "## Agent Response" in payload["markdown"]
     assert "git checkout" not in payload["markdown"]
     assert "- commit:" not in payload["markdown"]
+
+
+def test_agent_session_analysis_file_is_exposed(tmp_path):
+    session_dir = tmp_path / "agent-sessions"
+    session_dir.mkdir()
+    path = session_dir / "20260526T052351Z-codex-session-1.jsonl"
+    path.write_text(
+        "\n".join(
+            json.dumps(record)
+            for record in [
+                {
+                    "type": "session_start",
+                    "timestamp": "20260526T052351Z",
+                    "agent": "codex",
+                    "session_id": "session-1",
+                },
+                {
+                    "type": "user_prompt",
+                    "timestamp": "20260526T052353Z",
+                    "agent": "codex",
+                    "session_id": "session-1",
+                    "content": "Build the app",
+                },
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    analysis_path = session_dir / "20260526T052351Z-codex-session-1_analysis.md"
+    analysis_path.write_text("# Analysis\n\nUse better tests.\n", encoding="utf-8")
+
+    categories = agent_sessions.list_agent_session_categories(session_dir)
+    assert categories[0]["sessions"][0]["has_analysis"] is True
+    assert categories[0]["sessions"][0]["analysis_file"] == analysis_path.name
+
+    payload = agent_sessions.read_agent_session_payload(path.name, session_dir)
+    assert payload["analysis_file"] == analysis_path.name
+    assert payload["analysis_markdown"] == "# Analysis\n\nUse better tests.\n"
+    assert payload["jsonl_path"] == str(path)
 
 
 def test_agent_session_list_hides_sessions_without_user_prompt(tmp_path):

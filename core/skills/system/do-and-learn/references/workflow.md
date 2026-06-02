@@ -26,6 +26,7 @@ Cover these areas:
 - Outcome: what should exist, change, or be decided when the task is complete
 - Audience: who will use the result and what they need from it
 - Context: why the task matters, current state, constraints, and deadlines
+- Showcase or task id: if the prompt includes a task id, showcase id, or slug, search `core/engine/data/` for the matching showcase YAML and use it to understand the task background, expected files, tools, skills, terms, and target directory
 - Inputs: files, systems, examples, credentials, data, or existing decisions
 - Quality bar: acceptance criteria, verification method, and failure modes
 - Knowledge baseline: what the user already understands and where they feel uncertain
