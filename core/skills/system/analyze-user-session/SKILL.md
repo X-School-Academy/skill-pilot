@@ -7,6 +7,14 @@ description: Analyze recorded AI agent session dialog history to help users impr
 
 Analyze an AI agent session transcript and turn it into practical coaching for using AI agents more effectively.
 
+## Goals
+
+1. Help the user understand what they asked the agent to do and what the agent did or planned to do, so they do not delegate work they cannot basically understand.
+2. Help the user use best practices to guide AI agents, including keeping one agent thread focused on one task.
+3. Help the user supervise the agent like a developer, including planning, documentation, verification, Git workflow, commits, and remote backup when appropriate.
+4. Turn completed work into an after-action review: what happened, what worked, what failed, what the user should ask differently next time, and what reusable checklist or prompt pattern should be kept.
+5. Identify the smallest useful learning step after the task, so the user learns the concepts needed to supervise similar AI work without needing to memorize implementation details.
+
 ## When to Use This Skill
 
 - The user asks to analyze an agent session, agent history, dialog history, or JSONL session record.
@@ -31,7 +39,7 @@ This communication pattern ensures transparency and allows for human-in-the-loop
 
 ## Instructions
 
-Follow `references/session-analysis.md`.
+Follow `references/session-analysis.md`. Use `scripts/extract_session_context.py` to read compact session context from the JSONL file before analyzing; do not read the full JSONL directly unless the script output is insufficient.
 
 ## Expected Output
 
