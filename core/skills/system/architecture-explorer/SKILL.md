@@ -91,6 +91,16 @@ Load `references/modes-and-response.md` for mode-specific output and final respo
 
 Inspect the project inputs, source layout, documentation, package files, configs, tests, deployment files, source directories, entry points, and runtime paths before drawing conclusions.
 
+If the input is a remote repository and the user does not provide a checkout location, clone or extract the source code under:
+
+```text
+.skillpilot/temp/{project}/
+```
+
+Derive `{project}` from the repository or folder name, normalized to a short filesystem-safe slug. Keep this as the temporary working copy for code inspection; do not use the documentation output folder as the source checkout.
+
+If the user provides a requirement, task, or instruction file, use that file as the source of task requirements and use its parent folder as the default documentation output folder unless the user explicitly provides another output path.
+
 Use `references/analysis-method.md` for the full analysis workflow.
 
 ### Step 3: Build the Architecture Model
@@ -117,7 +127,19 @@ Use `references/review-and-evidence.md` for evidence rules, confidence levels, s
 
 Produce the output matching the selected mode. Keep most architecture wording language-independent. The only section where technology-specific details should be central is **Current Tech Stack and Implementation Details**.
 
-If the user asks to save files, write the architecture package to the requested location. Otherwise, provide a concise answer in the conversation.
+If the user asks to save documentation files but does not provide an export location, default to:
+
+```text
+workspace/research/{project}/
+```
+
+Use the same `{project}` slug as the temporary source checkout. If the source is `owner/repo`, use `repo` unless that would be ambiguous. If the user provides an explicit output path, use the user's path.
+
+If a requirement, task, or instruction file was provided, its parent folder overrides the `workspace/research/{project}/` default for documentation output.
+
+For saved architecture packages, include a `README.md` that records the project Git URL or source location and the temporary source checkout location. Also include Mermaid `.mmd` files and an `index.html` viewer that renders the diagrams in a browser. Use `references/output-package.md` for the folder structure and `references/diagrams.md` for diagram and HTML-viewer requirements.
+
+If the user does not ask to save files, provide a concise answer in the conversation.
 
 ## Important Behavior Rules
 

@@ -10,6 +10,10 @@ Use this reference to create architecture diagrams after understanding the proje
 - Do not create diagrams from file names alone.
 - Each diagram should include a short explanation and file evidence.
 - Validate diagrams for Mermaid syntax where possible.
+- When saving an architecture package, write diagrams as `.mmd` files under `workspace/research/{project}/diagrams/` unless the user provided another documentation output path.
+- When saving an architecture package, also create `index.html` at the documentation package root to render Mermaid diagrams in a browser.
+- For the HTML viewer, prefer embedding diagram source strings directly in the page instead of loading `.mmd` files with `fetch`, so opening the file through `file://` works reliably.
+- The HTML viewer should include simple diagram navigation and a visible title; it should not include unrelated product copy.
 
 ## Preferred Diagram Types
 
