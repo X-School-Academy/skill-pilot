@@ -51,6 +51,7 @@ axios.defaults.withCredentials = true;
 
 type FileKind = 'markdown' | 'text' | 'image' | 'audio' | 'video' | 'pdf';
 type ExecuteMode = 'skill' | 'workflow';
+type MediaType = '' | 'create-image-audio' | 'create-slide-show-video' | 'multiple-scene-video' | 'talking-head-video' | 'lipsync-video';
 
 interface FileItem {
   name: string;
@@ -98,6 +99,11 @@ const mediaRelativePath = (projectPath: string): string => {
   return normalized
     .replace(/^\$project\/workspace\/media\/?/, '')
     .replace(/^workspace\/media\/?/, '');
+};
+
+const mediaTypeSkillName = (type: MediaType): string => {
+  if (type === 'talking-head-video' || type === 'lipsync-video') return 'media';
+  return type;
 };
 
 const getAncestorDirectoryPaths = (path: string): string[] => {
@@ -180,6 +186,7 @@ export default function MediaPage() {
   const [mediaModalOpened, setMediaModalOpened] = useState(false);
   const [mediaNameInput, setMediaNameInput] = useState('');
   const [mediaRequirementsInput, setMediaRequirementsInput] = useState('');
+  const [mediaType, setMediaType] = useState<MediaType>('');
   const [creatingMedia, setCreatingMedia] = useState(false);
   const [deletingFile, setDeletingFile] = useState(false);
   const [fileContextMenu, setFileContextMenu] = useState<{ x: number; y: number; item: FileItem } | null>(null);
@@ -399,6 +406,7 @@ export default function MediaPage() {
   const openMediaModal = () => {
     setMediaNameInput(currentMediaFolder || '');
     setMediaRequirementsInput('');
+    setMediaType('');
     setMediaModalOpened(true);
     setEditorError('');
     setNotice('');
@@ -409,10 +417,14 @@ export default function MediaPage() {
     setEditorError('');
     setNotice('');
     try {
+      const skillName = mediaTypeSkillName(mediaType);
+      const requirements = skillName
+        ? `Use agent skill \`${skillName}\` to finish the task:\n\n${mediaRequirementsInput}`.trimEnd()
+        : mediaRequirementsInput;
       const res = await axios.post(`${API_BASE_URL}/media/create`, {
         folder: mediaNameInput,
         file: 'requirements.md',
-        requirements: mediaRequirementsInput,
+        requirements,
       });
       const createdPath = String(res.data.path || '');
       setMediaModalOpened(false);
@@ -459,6 +471,7 @@ export default function MediaPage() {
   };
 
   const createFileInMedia = async (mediaFolderPath: string) => {
+    setFileContextMenu(null);
     const name = window.prompt('File name');
     if (!name) return;
     const parentPath = mediaProjectPath(mediaFolderPath);
@@ -481,6 +494,7 @@ export default function MediaPage() {
   };
 
   const createFolderInMedia = async (mediaFolderPath: string) => {
+    setFileContextMenu(null);
     const name = window.prompt('Folder name');
     if (!name) return;
     setEditorError('');
@@ -499,6 +513,7 @@ export default function MediaPage() {
   };
 
   const openUploadForMedia = (mediaFolderPath: string) => {
+    setFileContextMenu(null);
     uploadTargetRef.current = mediaProjectPath(mediaFolderPath);
     uploadInputRef.current?.click();
   };
@@ -547,6 +562,35 @@ export default function MediaPage() {
     } catch (err: any) {
       console.error('Failed to rename media path:', err);
       setEditorError(err?.response?.data?.error || 'Failed to rename file.');
+    }
+  };
+
+  const deleteMediaFolder = async (item: FileItem) => {
+    const typed = window.prompt(`Deleting ${item.path} will remove this folder and every file inside it. Type delete to confirm.`);
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== 'delete') {
+      setEditorError("Type 'delete' to confirm removing the folder.");
+      return;
+    }
+
+    setEditorError('');
+    setNotice('');
+    setDeletingFile(true);
+    try {
+      await axios.post(apiUrl('/api/files/delete'), {
+        ids: [mediaProjectPath(item.path)],
+      });
+      setFileContextMenu(null);
+      setExpandedFolders((prev) => prev.filter((path) => path !== item.path && !path.startsWith(`${item.path}/`)));
+      await fetchTree();
+      if (currentTask === item.path || currentTask.startsWith(`${item.path}/`)) {
+        router.push('/media', undefined, { shallow: true });
+      }
+    } catch (err: any) {
+      console.error('Failed to delete media folder:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to delete folder.');
+    } finally {
+      setDeletingFile(false);
     }
   };
 
@@ -843,6 +887,11 @@ export default function MediaPage() {
           icon={<IconFolder size="1.2rem" stroke={1.5} color={theme.colors.blue[6]} />}
           childrenOffset={16}
           opened={expandedFolders.includes(item.path)}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setFileContextMenu({ x: event.clientX, y: event.clientY, item });
+          }}
           onChange={(nextOpened) => {
             setExpandedFolders((prev) => (
               nextOpened
@@ -880,11 +929,6 @@ export default function MediaPage() {
   const fileActions = useMemo<MediaAction[]>(() => {
     if (currentFileName !== 'requirements.md' || !currentInstructionPath) return [];
     return [
-      {
-        label: 'Refine',
-        defaultSkill: 'refine-media-requirement',
-        skillPromptSuffix: `to refine the media requirement ${currentInstructionPath}`,
-      },
       {
         label: 'Create',
         defaultSkill: 'create-image-audio',
@@ -1176,9 +1220,80 @@ export default function MediaPage() {
           onPointerDown={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
+          {fileContextMenu.item.type === 'dir' && (
+            <>
+              <button
+                type="button"
+                onClick={() => { void createFileInMedia(fileContextMenu.item.path); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <IconFilePlus size="0.95rem" />
+                Add File
+              </button>
+              <button
+                type="button"
+                onClick={() => { void createFolderInMedia(fileContextMenu.item.path); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <IconFolderPlus size="0.95rem" />
+                Add Folder
+              </button>
+              <button
+                type="button"
+                onClick={() => openUploadForMedia(fileContextMenu.item.path)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <IconFileUpload size="0.95rem" />
+                Upload File
+              </button>
+              <div style={{ height: 1, margin: '6px 4px', background: '#e5e7eb' }} />
+            </>
+          )}
           <button
             type="button"
-            onClick={() => { void deleteMediaFile(fileContextMenu.item); }}
+            onClick={() => {
+              if (fileContextMenu.item.type === 'dir') {
+                void deleteMediaFolder(fileContextMenu.item);
+              } else {
+                void deleteMediaFile(fileContextMenu.item);
+              }
+            }}
             style={{
               width: '100%',
               display: 'flex',
@@ -1244,6 +1359,22 @@ export default function MediaPage() {
             value={mediaNameInput}
             onChange={(e) => setMediaNameInput(e.currentTarget.value)}
             description="A media folder will be created in kebab-case with requirements.md inside. Duplicates get _1, _2, and so on."
+          />
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <Select
+            label="Media Type"
+            value={mediaType}
+            onChange={(value) => setMediaType((value as MediaType) || '')}
+            data={[
+              { value: '', label: 'Auto' },
+              { value: 'create-image-audio', label: 'Image or Audio' },
+              { value: 'create-slide-show-video', label: 'Slide Video' },
+              { value: 'multiple-scene-video', label: 'Multiple Scence Video' },
+              { value: 'talking-head-video', label: 'Talking Head Video' },
+              { value: 'lipsync-video', label: 'Lipsync Video' },
+            ]}
+            clearable={false}
           />
         </div>
         <div style={{ marginTop: 16 }}>
