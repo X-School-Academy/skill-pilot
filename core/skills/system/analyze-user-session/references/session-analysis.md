@@ -11,6 +11,7 @@ Analyze every session through these goals:
 3. Developer workflow: the user should supervise the agent like a developer, including planning, saved docs, verification, code review, Git branches or worktrees, commits, and remote backup when appropriate.
 4. After-action review: the analysis should explain what happened, what worked, what failed or was risky, what the user should ask differently next time, and what reusable checklist or prompt pattern should be kept.
 5. Learn-after-doing: the analysis should identify the smallest useful concept the user should learn after the task, enough to supervise similar AI work without memorizing implementation details.
+6. Durable task context: when the user gave the agent a direct prompt without using a requirements file, task file, issue file, review brief, or similar saved document, point out that a file such as `requirements.md` is usually better practice for AI-assisted work. Saved context is easier to review, reuse, revise, compare against results, and hand off for documentation, code review, bug fixing, and implementation tasks.
 
 ## Step 1: Resolve the Session File
 
@@ -57,6 +58,7 @@ Use the compact output to identify:
 - agent responses
 - session metadata such as agent, model, timestamps, category, `showcase_id`, and `showcase_directory`
 - whether the session appears to be a task, coding project, cloud operation, media task, research task, or learning task
+- whether the user provided durable task context through a referenced requirements, task, issue, design, documentation, or review file, or instead gave the agent only an inline prompt
 
 Focus on coaching the user. Do not reproduce the full transcript.
 
@@ -87,6 +89,7 @@ Look for missed supervision opportunities such as:
 - the user did not ask the agent to make a plan before implementation
 - the user asked for a plan but did not ask the agent to save it to a plan file for later AI or human review
 - the user did not provide enough task details, technology direction, constraints, or expected output
+- the user provided task instructions only as an inline prompt instead of saving them in a durable file such as `requirements.md`, a task brief, issue file, documentation brief, or code review brief
 - for a website or app build, the user did not specify the listen port, framework, coding language, database, or other core stack, but left the agent to make decisions or give options to choose from
 - the user did not provide the right file path, directory, error text, or keywords, causing broad codebase scanning
 - for updates and bug fixes, the user did not ask the agent to create a temporary branch or worktree before changing files
@@ -133,6 +136,7 @@ Prefer examples tied to this exact session. For example:
 - Instead of "ask for tests", say which tests fit this task.
 - Instead of "provide more context", say which missing file path, technology choice, stack, tool, or constraint would have helped.
 - Instead of "ask for a plan", give a short task-specific plan-request sentence the user could reuse.
+- When the user used only an inline prompt, include a task-specific example showing how they could first save the request in a file such as `requirements.md`, `task.md`, `review.md`, or an issue file, then ask the agent to work from that file and update it when requirements change.
 
 ## Step 6: Report
 
