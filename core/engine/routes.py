@@ -1827,6 +1827,7 @@ def _build_prompt_target_url(
     path: str | None = None,
     showcase_directory: str | None = None,
     system_skills: List[str] | None = None,
+    showcase_id: str | None = None,
 ) -> str:
     params = [
         ("new", "true"),
@@ -1839,6 +1840,8 @@ def _build_prompt_target_url(
         file_manager_path = _file_manager_path_for_directory(showcase_directory)
         if file_manager_path:
             params.append(("fileManagerPath", file_manager_path))
+    if showcase_id:
+        params.append(("showcaseSlug", showcase_id))
     if system_skills:
         params.append(("systemSkills", json.dumps(system_skills)))
     query = "&".join(f"{quote(key, safe='')}={quote(str(value), safe='')}" for key, value in params)
@@ -1931,6 +1934,7 @@ def explore_template_start(payload: Dict[str, Any]):
                     prompt,
                     showcase_directory=_showcase_session_directory(sample, dev_runtime_target_root),
                     system_skills=system_skills,
+                    showcase_id=sample_id,
                 ),
                 "sample_id": sample_id,
                 "use_worktree": False,
@@ -1943,6 +1947,7 @@ def explore_template_start(payload: Dict[str, Any]):
                 prompt,
                 showcase_directory=_showcase_session_directory(sample, dev_runtime_target_root),
                 system_skills=system_skills,
+                showcase_id=sample_id,
             ),
             "sample_id": sample_id,
             "use_worktree": False,
@@ -1963,6 +1968,7 @@ def explore_template_start(payload: Dict[str, Any]):
                 prompt,
                 showcase_directory=_showcase_session_directory(sample, _REPO_ROOT),
                 system_skills=system_skills,
+                showcase_id=sample_id,
             ),
             "sample_id": sample_id,
             "use_worktree": False,
@@ -1978,6 +1984,7 @@ def explore_template_start(payload: Dict[str, Any]):
             str(worktree_path) if use_worktree else None,
             showcase_directory=_showcase_session_directory(sample, worktree_path),
             system_skills=system_skills,
+            showcase_id=sample_id,
         )
 
     current_instance_target_url = build_current_instance_target_url()

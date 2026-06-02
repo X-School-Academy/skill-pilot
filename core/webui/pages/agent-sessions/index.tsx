@@ -104,8 +104,9 @@ const parseSystemSkillsQuery = (value: string): string[] => {
   return raw.split(",").map((item) => item.trim()).filter(Boolean);
 };
 
-const buildPromptForAgentCli = (prompt: string, systemSkills: string[]): string => {
-  const body = prompt.trim();
+const buildPromptForAgentCli = (prompt: string, systemSkills: string[], showcaseSlug = ""): string => {
+  const slug = showcaseSlug.trim();
+  const body = slug ? `for task \`${slug}\`:\n${prompt.trim()}` : prompt.trim();
   const skills = systemSkills.map((skill) => skill.trim()).filter(Boolean);
   if (skills.length === 0) return body;
   const skillLabel = skills.length === 1 ? "skill" : "skills";
@@ -143,6 +144,7 @@ const AgentSessionsPage = () => {
   const [newSessionNativeTerminal, setNewSessionNativeTerminal] = useState(false);
   const [newSessionPath, setNewSessionPath] = useState("");
   const [newSessionShowcaseDirectory, setNewSessionShowcaseDirectory] = useState("");
+  const [newSessionShowcaseSlug, setNewSessionShowcaseSlug] = useState("");
   const [newSessionFileManagerPath, setNewSessionFileManagerPath] = useState("");
   const [newSessionSystemSkills, setNewSessionSystemSkills] = useState<string[]>([]);
   const [liveSessionName, setLiveSessionName] = useState("");
@@ -242,6 +244,7 @@ const AgentSessionsPage = () => {
     setPayload(null);
     setNewSessionPath("");
     setNewSessionShowcaseDirectory("");
+    setNewSessionShowcaseSlug("");
     setNewSessionFileManagerPath("");
     setNewSessionSystemSkills([]);
     setLiveSessionName("");
@@ -259,11 +262,14 @@ const AgentSessionsPage = () => {
     if (newSessionShowcaseDirectory) {
       envPairs.push(["SHOWCASE_SESSION_DIRECTORY", newSessionShowcaseDirectory]);
     }
+    if (newSessionShowcaseSlug) {
+      envPairs.push(["SHOWCASE_SESSION_SLUG", newSessionShowcaseSlug]);
+    }
     setCreatingSession(true);
     try {
       const res = await axios.post(`${API_BASE_URL}/terminal/tmux/create`, {
         provider_id: provider,
-        prompt: buildPromptForAgentCli(prompt, newSessionSystemSkills),
+        prompt: buildPromptForAgentCli(prompt, newSessionSystemSkills, newSessionShowcaseSlug),
         path: newSessionPath || undefined,
         sandbox: newSessionSandbox,
         auto: newSessionAuto,
@@ -305,6 +311,7 @@ const AgentSessionsPage = () => {
     newSessionPrompt,
     newSessionSandbox,
     newSessionShowcaseDirectory,
+    newSessionShowcaseSlug,
     newSessionSystemSkills,
     router,
   ]);
@@ -345,6 +352,7 @@ const AgentSessionsPage = () => {
     const queryPrompt = typeof router.query.prompt === "string" ? router.query.prompt : "";
     const queryPath = typeof router.query.path === "string" ? router.query.path : "";
     const queryShowcaseDirectory = typeof router.query.showcaseDirectory === "string" ? router.query.showcaseDirectory : "";
+    const queryShowcaseSlug = typeof router.query.showcaseSlug === "string" ? router.query.showcaseSlug : "";
     const queryFileManagerPath = typeof router.query.fileManagerPath === "string" ? router.query.fileManagerPath : "";
     const querySystemSkills = typeof router.query.systemSkills === "string" ? router.query.systemSkills : "";
     if (queryPrompt) {
@@ -355,6 +363,9 @@ const AgentSessionsPage = () => {
     }
     if (queryShowcaseDirectory) {
       setNewSessionShowcaseDirectory(queryShowcaseDirectory);
+    }
+    if (queryShowcaseSlug) {
+      setNewSessionShowcaseSlug(queryShowcaseSlug);
     }
     if (queryFileManagerPath) {
       setNewSessionFileManagerPath(queryFileManagerPath);
