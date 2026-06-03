@@ -2794,6 +2794,243 @@ def research_static_file(project: str, file_path: str):
     )
 
 
+# ---------------------------------------------------------------------------
+# Social Media routes
+# ---------------------------------------------------------------------------
+
+_SOCIAL_HISTORY_PATH = _REPO_ROOT / ".skillpilot" / "social-marketing-history.json"
+
+
+def _safe_social_path(task_path: str, *, must_exist: bool = True) -> Path:
+    if not task_path:
+        raise ValueError("Missing social media path")
+    candidate = (SOCIAL_MEDIA_DIR / task_path).resolve()
+    if candidate != SOCIAL_MEDIA_DIR and SOCIAL_MEDIA_DIR not in candidate.parents:
+        raise ValueError("Invalid social media path")
+    if must_exist and (not candidate.exists() or not candidate.is_file()):
+        raise FileNotFoundError("Social media file not found")
+    return candidate
+
+
+def _social_history() -> dict:
+    if not _SOCIAL_HISTORY_PATH.exists():
+        return {"posts": [], "next_scheduled": {}}
+    try:
+        return json.loads(_SOCIAL_HISTORY_PATH.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return {"posts": [], "next_scheduled": {}}
+
+
+@router.get("/api/social/tree")
+def social_tree():
+    if not SOCIAL_MEDIA_DIR.exists():
+        return {"items": []}
+    return {"items": build_tree(SOCIAL_MEDIA_DIR, SOCIAL_MEDIA_DIR)}
+
+
+@router.get("/api/social/latest")
+def social_latest():
+    if not SOCIAL_MEDIA_DIR.exists():
+        return {"path": None}
+    latest = find_latest_course(SOCIAL_MEDIA_DIR, SOCIAL_MEDIA_DIR)
+    if not latest:
+        return {"path": None}
+    return {"path": latest[0]}
+
+
+@router.get("/api/social/content")
+def social_content(path: str):
+    try:
+        file_path = _safe_social_path(path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    raw = file_path.read_bytes()
+    if not _is_text_bytes(raw):
+        return JSONResponse(status_code=400, content={"error": "Binary files are not editable"})
+
+    return {
+        "path": path,
+        "kind": _task_type_from_path(path),
+        "content": raw.decode("utf-8", errors="replace"),
+    }
+
+
+@router.post("/api/social/save")
+def social_save(payload: Dict[str, Any]):
+    raw_path = str(payload.get("path") or "").strip()
+    content = payload.get("content")
+    if not raw_path:
+        return JSONResponse(status_code=400, content={"error": "Missing social media path"})
+    if not isinstance(content, str):
+        return JSONResponse(status_code=400, content={"error": "Invalid content"})
+
+    try:
+        file_path = _safe_social_path(raw_path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    file_path.write_text(content, encoding="utf-8")
+    return {"status": "ok"}
+
+
+@router.post("/api/social/create")
+def social_create(payload: Dict[str, Any]):
+    platform = str(payload.get("platform") or "").strip().lower()
+    title = str(payload.get("title") or "draft").strip()
+    if not platform:
+        return JSONResponse(status_code=400, content={"error": "Platform is required"})
+    if platform not in ("linkedin", "x", "xiaohongshu"):
+        return JSONResponse(status_code=400, content={"error": "Invalid platform"})
+
+    SOCIAL_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    platform_dir = SOCIAL_MEDIA_DIR / platform
+    platform_dir.mkdir(parents=True, exist_ok=True)
+
+    safe_name = title.lower().replace(" ", "-")
+    safe_name = "".join(c for c in safe_name if c.isalnum() or c == "-").strip("-") or "draft"
+
+    index = 1
+    while True:
+        file_name = f"{safe_name}-{index:03d}.md"
+        candidate = platform_dir / file_name
+        if not candidate.exists():
+            break
+        index += 1
+
+    candidate.write_text("", encoding="utf-8")
+    return {"status": "ok", "path": str(candidate.relative_to(SOCIAL_MEDIA_DIR))}
+
+
+@router.post("/api/social/delete")
+def social_delete(payload: Dict[str, Any]):
+    raw_path = str(payload.get("path") or "").strip()
+    if not raw_path:
+        return JSONResponse(status_code=400, content={"error": "Missing social media path"})
+
+    try:
+        file_path = _safe_social_path(raw_path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    file_path.unlink()
+    return {"status": "ok", "deleted": raw_path}
+
+
+@router.get("/api/social/history")
+def social_history():
+    return _social_history()
+
+
+# --- Calendar ---
+
+_CALENDAR_PATH = _REPO_ROOT / ".skillpilot" / "content-calendar.json"
+_CALENDAR_PLATFORMS = {"linkedin", "x", "xiaohongshu"}
+_CALENDAR_STATUSES = {"idea", "scheduled", "drafted", "published"}
+
+
+def _read_calendar() -> list[dict]:
+    if not _CALENDAR_PATH.exists():
+        return []
+    try:
+        data = json.loads(_CALENDAR_PATH.read_text(encoding="utf-8"))
+        return data.get("items", []) if isinstance(data, dict) else []
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def _write_calendar(items: list[dict]) -> None:
+    _CALENDAR_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _CALENDAR_PATH.write_text(json.dumps({"items": items}, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _find_calendar_item(items: list[dict], item_id: str) -> tuple[int, dict] | None:
+    for i, item in enumerate(items):
+        if item.get("id") == item_id:
+            return i, item
+    return None
+
+
+@router.get("/api/social/calendar")
+def social_calendar(platform: str | None = Query(None), status: str | None = Query(None)):
+    items = _read_calendar()
+    if platform and platform in _CALENDAR_PLATFORMS:
+        items = [i for i in items if i.get("platform") == platform]
+    if status and status in _CALENDAR_STATUSES:
+        items = [i for i in items if i.get("status") == status]
+    items.sort(key=lambda i: i.get("scheduledDate", ""), reverse=True)
+    return {"items": items}
+
+
+@router.post("/api/social/calendar")
+def social_calendar_create(payload: Dict[str, Any]):
+    topic = (payload.get("topic") or "").strip()
+    platform = (payload.get("platform") or "").strip()
+    if not topic:
+        return JSONResponse(status_code=400, content={"error": "Topic is required"})
+    if platform not in _CALENDAR_PLATFORMS:
+        return JSONResponse(status_code=400, content={"error": f"Invalid platform: {platform}"})
+
+    items = _read_calendar()
+    new_item = {
+        "id": uuid4().hex[:12],
+        "topic": topic,
+        "platform": platform,
+        "status": payload.get("status", "idea"),
+        "scheduledDate": (payload.get("scheduledDate") or "").strip(),
+        "draftPath": (payload.get("draftPath") or "").strip(),
+        "notes": (payload.get("notes") or "").strip(),
+        "createdAt": payload.get("createdAt") or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "publishedAt": None,
+    }
+    if new_item["status"] not in _CALENDAR_STATUSES:
+        new_item["status"] = "idea"
+    items.append(new_item)
+    _write_calendar(items)
+    return {"status": "ok", "item": new_item}
+
+
+@router.patch("/api/social/calendar/{item_id}")
+def social_calendar_update(item_id: str, payload: Dict[str, Any]):
+    items = _read_calendar()
+    result = _find_calendar_item(items, item_id)
+    if result is None:
+        return JSONResponse(status_code=404, content={"error": "Calendar item not found"})
+    i, item = result
+    for key in ("topic", "platform", "status", "scheduledDate", "draftPath", "notes"):
+        if key in payload:
+            val = payload[key]
+            if isinstance(val, str):
+                val = val.strip()
+            if key == "platform" and val not in _CALENDAR_PLATFORMS:
+                return JSONResponse(status_code=400, content={"error": f"Invalid platform: {val}"})
+            if key == "status" and val not in _CALENDAR_STATUSES:
+                return JSONResponse(status_code=400, content={"error": f"Invalid status: {val}"})
+            item[key] = val
+    if payload.get("publishedAt"):
+        item["publishedAt"] = payload["publishedAt"]
+    items[i] = item
+    _write_calendar(items)
+    return {"status": "ok", "item": item}
+
+
+@router.delete("/api/social/calendar/{item_id}")
+def social_calendar_delete(item_id: str):
+    items = _read_calendar()
+    result = _find_calendar_item(items, item_id)
+    if result is None:
+        return JSONResponse(status_code=404, content={"error": "Calendar item not found"})
+    items.pop(result[0])
+    _write_calendar(items)
+    return {"status": "ok", "deleted": item_id}
+
+
 @router.get("/api/skill-pilot-development/features")
 def skill_pilot_development_features():
     return {"items": _skill_pilot_feature_catalog()}

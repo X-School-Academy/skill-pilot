@@ -30,6 +30,7 @@
     "@heroicons/react": "^2.0.17",
     "@lezer/highlight": "^1.2.3",
     "@mantine/core": "^6.0.11",
+    "@mantine/dates": "^6.0.22",
     "@mantine/form": "^6.0.15",
     "@mantine/hooks": "^6.0.11",
     "@mantine/modals": "^6.0.11",
