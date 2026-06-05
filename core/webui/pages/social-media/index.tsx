@@ -210,6 +210,10 @@ export default function SocialMediaPage() {
   const [editorError, setEditorError] = useState('');
   const [notice, setNotice] = useState('');
 
+  // create draft modal (replaces browser prompt())
+  const [createModalOpened, setCreateModalOpened] = useState(false);
+  const [newDraftTitle, setNewDraftTitle] = useState('');
+
   // history
   const [historyData, setHistoryData] = useState<HistoryPost[]>([]);
 
@@ -294,10 +298,16 @@ export default function SocialMediaPage() {
     }
   };
 
-  // create new draft
-  const handleCreate = async () => {
-    const title = prompt('Draft title:')?.trim();
+  // create new draft (via modal, not browser prompt)
+  const handleCreateOpen = () => {
+    setNewDraftTitle('');
+    setCreateModalOpened(true);
+  };
+
+  const handleCreateConfirm = async () => {
+    const title = newDraftTitle.trim();
     if (!title) return;
+    setCreateModalOpened(false);
     try {
       const p = await createDraft(selectedPlatform, title);
       await loadTree();
@@ -385,12 +395,18 @@ export default function SocialMediaPage() {
     const order = ['idea', 'scheduled', 'drafted', 'published'];
     const idx = order.indexOf(item.status);
     const next = order[(idx + 1) % order.length];
+    // optimistic update for instant UI feedback
+    const prevItems = calendarItems;
+    setCalendarItems(prev =>
+      prev.map(i => i.id === item.id ? { ...i, status: next } as CalendarItem : i)
+    );
     try {
       await updateCalendarItem(item.id, { status: next });
-      const items = await fetchCalendar(selectedPlatform);
-      setCalendarItems(items);
     } catch {
-      // ignore
+      // rollback on failure
+      setCalendarItems(prevItems);
+      setNotice('Status update failed');
+      setTimeout(() => setNotice(''), 3000);
     }
   };
 
@@ -426,7 +442,7 @@ export default function SocialMediaPage() {
 
       <Group px="sm" pb="xs" position="apart">
         <Text size="xs" weight={600} color="dimmed">DRAFTS</Text>
-        <ActionIcon size="sm" variant="subtle" onClick={handleCreate} title="New draft">
+        <ActionIcon size="sm" variant="subtle" onClick={handleCreateOpen} title="New draft">
           <IconPlus size="0.9rem" />
         </ActionIcon>
       </Group>
@@ -561,7 +577,7 @@ export default function SocialMediaPage() {
               <Box p="xl" style={{ textAlign: 'center', paddingTop: '20%' }}>
                 <IconFileText size="3rem" color={theme.colors.gray[4]} />
                 <Text color="dimmed" mt="md">Select a draft or create a new one</Text>
-                <Button mt="md" variant="light" onClick={handleCreate}>Create Draft</Button>
+                <Button mt="md" variant="light" onClick={handleCreateOpen}>Create Draft</Button>
               </Box>
             ) : (
               <Box p="md" style={{ height: '100%' }}>
@@ -629,6 +645,23 @@ export default function SocialMediaPage() {
           </Box>
         </Box>
       </AppShell>
+
+      {/* Create draft modal */}
+      <Modal opened={createModalOpened} onClose={() => setCreateModalOpened(false)} title="New Draft" size="sm">
+        <TextInput
+          label="Draft title"
+          value={newDraftTitle}
+          onChange={e => setNewDraftTitle(e.currentTarget.value)}
+          placeholder="Enter a title for your draft"
+          required
+          mb="md"
+          onKeyDown={(e) => { if (e.key === 'Enter') handleCreateConfirm(); }}
+        />
+        <Group position="right">
+          <Button size="sm" variant="subtle" onClick={() => setCreateModalOpened(false)}>Cancel</Button>
+          <Button size="sm" onClick={handleCreateConfirm} disabled={!newDraftTitle.trim()}>Create</Button>
+        </Group>
+      </Modal>
 
       {/* Calendar modal */}
       <Modal opened={calendarModalOpened} onClose={() => setCalendarModalOpened(false)} title={calendarEditItem ? 'Edit Calendar Item' : 'New Calendar Item'} size="md">
