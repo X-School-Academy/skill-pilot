@@ -890,9 +890,9 @@ export default function VibeCodingPage() {
     setNewSessionWorkflowResume(false);
   };
 
-  const openNewProjectWorkflowPanel = () => {
-    setSessionPromptText('Complete the vibe coding project using the `vibe-coding-dev` workflow as the user requirements below. Ask the user clarifying questions before implementation if any requirement is unclear.\n\nRequirements:\n');
-    setNewSessionWorkflow('vibe-coding-dev.json');
+  const openNewProjectSessionPanel = () => {
+    setSessionPromptText('Complete the vibe coding project as the user requirements below. Ask the user clarifying questions before implementation if any requirement is unclear.\n\nRequirements:\n');
+    setNewSessionWorkflow(null);
     setNewSessionNextNodeTrigger('auto_continue');
     setNewSessionWorkflowResumeAvailable(false);
     setNewSessionWorkflowResume(false);
@@ -1668,8 +1668,6 @@ export default function VibeCodingPage() {
                 setNewSessionAuto={setNewSessionAuto}
                 newSessionNetwork={newSessionNetwork}
                 setNewSessionNetwork={setNewSessionNetwork}
-                newSessionNextNodeTrigger={newSessionNextNodeTrigger}
-                setNewSessionNextNodeTrigger={setNewSessionNextNodeTrigger}
                 newSessionWorkflowResumeAvailable={newSessionWorkflowResumeAvailable}
                 newSessionWorkflowResume={newSessionWorkflowResume}
                 setNewSessionWorkflowResume={setNewSessionWorkflowResume}
@@ -1753,7 +1751,7 @@ export default function VibeCodingPage() {
             ))}
             <button
               type="button"
-              onClick={openNewProjectWorkflowPanel}
+              onClick={openNewProjectSessionPanel}
               style={{
                 border: '1px dashed #94a3b8',
                 background: '#f8fafc',
@@ -2209,8 +2207,6 @@ export default function VibeCodingPage() {
                   setNewSessionAuto={setNewSessionAuto}
                   newSessionNetwork={newSessionNetwork}
                   setNewSessionNetwork={setNewSessionNetwork}
-                  newSessionNextNodeTrigger={newSessionNextNodeTrigger}
-                  setNewSessionNextNodeTrigger={setNewSessionNextNodeTrigger}
                   newSessionWorkflowResumeAvailable={newSessionWorkflowResumeAvailable}
                   newSessionWorkflowResume={newSessionWorkflowResume}
                   setNewSessionWorkflowResume={setNewSessionWorkflowResume}

@@ -183,6 +183,7 @@ def test_showcase_directory_env_records_session_category(monkeypatch, tmp_path):
     (repo / "core" / "engine" / "hooks").mkdir(parents=True)
     monkeypatch.setattr(recorder, "REPO_ROOT", repo)
     monkeypatch.setenv("SHOWCASE_SESSION_DIRECTORY", str(showcase_dir))
+    monkeypatch.setenv("SHOWCASE_SESSION_SLUG", "aws-credentials-s3-cloudfront")
     payload = {
         "session_id": "codex-session",
         "hook_event_name": "UserPromptSubmit",
@@ -198,6 +199,8 @@ def test_showcase_directory_env_records_session_category(monkeypatch, tmp_path):
     path = next((tmp_path / "agent-sessions").glob("*.jsonl"))
     records = read_jsonl(path)
     assert records[1]["category"] == "aws-credentials-s3-cloudfront"
+    assert records[1]["showcase_directory"] == str(showcase_dir)
+    assert records[1]["showcase_id"] == "aws-credentials-s3-cloudfront"
 
 
 def test_opencode_sessionless_events_are_ignored(monkeypatch, tmp_path):

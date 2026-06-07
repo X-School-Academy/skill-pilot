@@ -855,6 +855,27 @@ def _safe_research_path(task_path: str, *, must_exist: bool = True) -> Path:
     return candidate
 
 
+def _safe_research_static_path(project: str, file_path: str = "") -> Path:
+    project_name = str(project or "").strip().replace("\\", "/").strip("/")
+    if not project_name or "/" in project_name or project_name in {".", ".."}:
+        raise ValueError("Invalid research project")
+    project_dir = (RESEARCH_DIR / project_name).resolve()
+    if project_dir != RESEARCH_DIR and RESEARCH_DIR not in project_dir.parents:
+        raise ValueError("Invalid research project")
+    if not project_dir.exists() or not project_dir.is_dir():
+        raise FileNotFoundError("Research project not found")
+
+    relative_file = str(file_path or "index.html").strip().replace("\\", "/").lstrip("/")
+    if not relative_file:
+        relative_file = "index.html"
+    candidate = (project_dir / relative_file).resolve()
+    if candidate != project_dir and project_dir not in candidate.parents:
+        raise ValueError("Invalid research static path")
+    if not candidate.exists() or not candidate.is_file():
+        raise FileNotFoundError("Research static file not found")
+    return candidate
+
+
 def _normalize_research_topic_name(value: str) -> str:
     return _normalize_task_slug(value, default="topic")
 
@@ -1827,6 +1848,7 @@ def _build_prompt_target_url(
     path: str | None = None,
     showcase_directory: str | None = None,
     system_skills: List[str] | None = None,
+    showcase_id: str | None = None,
 ) -> str:
     params = [
         ("new", "true"),
@@ -1839,6 +1861,8 @@ def _build_prompt_target_url(
         file_manager_path = _file_manager_path_for_directory(showcase_directory)
         if file_manager_path:
             params.append(("fileManagerPath", file_manager_path))
+    if showcase_id:
+        params.append(("showcaseSlug", showcase_id))
     if system_skills:
         params.append(("systemSkills", json.dumps(system_skills)))
     query = "&".join(f"{quote(key, safe='')}={quote(str(value), safe='')}" for key, value in params)
@@ -1931,6 +1955,7 @@ def explore_template_start(payload: Dict[str, Any]):
                     prompt,
                     showcase_directory=_showcase_session_directory(sample, dev_runtime_target_root),
                     system_skills=system_skills,
+                    showcase_id=sample_id,
                 ),
                 "sample_id": sample_id,
                 "use_worktree": False,
@@ -1943,6 +1968,7 @@ def explore_template_start(payload: Dict[str, Any]):
                 prompt,
                 showcase_directory=_showcase_session_directory(sample, dev_runtime_target_root),
                 system_skills=system_skills,
+                showcase_id=sample_id,
             ),
             "sample_id": sample_id,
             "use_worktree": False,
@@ -1963,6 +1989,7 @@ def explore_template_start(payload: Dict[str, Any]):
                 prompt,
                 showcase_directory=_showcase_session_directory(sample, _REPO_ROOT),
                 system_skills=system_skills,
+                showcase_id=sample_id,
             ),
             "sample_id": sample_id,
             "use_worktree": False,
@@ -1978,6 +2005,7 @@ def explore_template_start(payload: Dict[str, Any]):
             str(worktree_path) if use_worktree else None,
             showcase_directory=_showcase_session_directory(sample, worktree_path),
             system_skills=system_skills,
+            showcase_id=sample_id,
         )
 
     current_instance_target_url = build_current_instance_target_url()
@@ -2742,6 +2770,28 @@ def research_file(path: str):
 
     media_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
     return FileResponse(file_path, media_type=media_type, filename=file_path.name)
+
+
+@router.get("/api/research/static/{project}")
+def research_static_root(project: str):
+    return research_static_file(project, "index.html")
+
+
+@router.get("/api/research/static/{project}/{file_path:path}")
+def research_static_file(project: str, file_path: str):
+    try:
+        resolved = _safe_research_static_path(project, file_path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+    except FileNotFoundError as exc:
+        return JSONResponse(status_code=404, content={"error": str(exc)})
+
+    media_type = mimetypes.guess_type(resolved.name)[0] or "application/octet-stream"
+    return FileResponse(
+        resolved,
+        media_type=media_type,
+        headers={"Cache-Control": "private, no-store, max-age=0"},
+    )
 
 
 @router.get("/api/skill-pilot-development/features")

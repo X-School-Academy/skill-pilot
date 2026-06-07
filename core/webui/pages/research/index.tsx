@@ -14,7 +14,6 @@ import {
   Group,
   Header,
   LoadingOverlay,
-  Menu,
   MediaQuery,
   Modal,
   Navbar,
@@ -50,8 +49,9 @@ import { resolveSelectedProvider, setSelectedProvider } from '../../libs/llm';
 const API_BASE_URL = apiUrl('/api');
 axios.defaults.withCredentials = true;
 
-type FileKind = 'markdown' | 'text' | 'image' | 'audio' | 'video' | 'pdf';
+type FileKind = 'markdown' | 'html' | 'text' | 'image' | 'audio' | 'video' | 'pdf';
 type ExecuteMode = 'skill' | 'workflow';
+type ResearchTopicType = 'deep-research' | 'project-analysis';
 
 interface FileItem {
   name: string;
@@ -75,6 +75,7 @@ interface ResearchAction {
 const detectFileKind = (path: string): FileKind => {
   const lower = (path || '').toLowerCase();
   if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'markdown';
+  if (lower.endsWith('/index.html') || lower === 'index.html') return 'html';
   if (lower.endsWith('.pdf')) return 'pdf';
   if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.gif') || lower.endsWith('.webp') || lower.endsWith('.bmp') || lower.endsWith('.svg')) return 'image';
   if (lower.endsWith('.mp3') || lower.endsWith('.wav') || lower.endsWith('.ogg') || lower.endsWith('.m4a') || lower.endsWith('.aac') || lower.endsWith('.flac')) return 'audio';
@@ -99,6 +100,17 @@ const researchRelativePath = (projectPath: string): string => {
   return normalized
     .replace(/^\$project\/workspace\/research\/?/, '')
     .replace(/^workspace\/research\/?/, '');
+};
+
+const researchStaticUrl = (path: string): string => {
+  const normalized = path.replace(/^\/+/, '');
+  const [project, ...rest] = normalized.split('/').filter(Boolean);
+  if (!project) return '';
+  const staticPath = rest.length > 0 ? rest.join('/') : 'index.html';
+  return `${API_BASE_URL}/research/static/${encodeURIComponent(project)}/${staticPath
+    .split('/')
+    .map((part) => encodeURIComponent(part))
+    .join('/')}`;
 };
 
 const getAncestorDirectoryPaths = (path: string): string[] => {
@@ -181,6 +193,7 @@ export default function ResearchPage() {
   const [topicModalOpened, setTopicModalOpened] = useState(false);
   const [topicNameInput, setTopicNameInput] = useState('');
   const [topicRequirementsInput, setTopicRequirementsInput] = useState('');
+  const [topicType, setTopicType] = useState<ResearchTopicType>('deep-research');
   const [creatingTopic, setCreatingTopic] = useState(false);
   const [deletingFile, setDeletingFile] = useState(false);
   const [fileContextMenu, setFileContextMenu] = useState<{ x: number; y: number; item: FileItem } | null>(null);
@@ -297,7 +310,7 @@ export default function ResearchPage() {
     setEditorError('');
     setNotice('');
     setSelectedKind(nextKind);
-    setMarkdownView('editor');
+    setMarkdownView(nextKind === 'html' ? 'preview' : 'editor');
 
     if (nextKind === 'image' || nextKind === 'audio' || nextKind === 'video' || nextKind === 'pdf') {
       setEditorContent('');
@@ -307,7 +320,7 @@ export default function ResearchPage() {
 
     try {
       const res = await axios.get(`${API_BASE_URL}/research/content`, { params: { path } });
-      setSelectedKind((res.data.kind as FileKind) || nextKind);
+      setSelectedKind(nextKind === 'html' ? 'html' : ((res.data.kind as FileKind) || nextKind));
       const content = String(res.data.content || '');
       setEditorContent(content);
       lastLoadedContentRef.current = content;
@@ -400,9 +413,17 @@ export default function ResearchPage() {
   const openTopicModal = () => {
     setTopicNameInput(currentTopic || '');
     setTopicRequirementsInput('');
+    setTopicType('deep-research');
     setTopicModalOpened(true);
     setEditorError('');
     setNotice('');
+  };
+
+  const topicInstructionLine = (type: ResearchTopicType): string => {
+    if (type === 'project-analysis') {
+      return 'Use agent skill `architecture-explorer` for task below:';
+    }
+    return 'Use agent skill `deep-research` for task below:';
   };
 
   const createTopic = async () => {
@@ -410,9 +431,10 @@ export default function ResearchPage() {
     setEditorError('');
     setNotice('');
     try {
+      const requirements = `${topicInstructionLine(topicType)}\n\n${topicRequirementsInput}`.trimEnd();
       const res = await axios.post(`${API_BASE_URL}/research/create-topic`, {
         topic_name: topicNameInput,
-        requirements: topicRequirementsInput,
+        requirements,
       });
       const createdPath = String(res.data.path || '');
       setTopicModalOpened(false);
@@ -459,6 +481,7 @@ export default function ResearchPage() {
   };
 
   const createFileInTopic = async (topicPath: string) => {
+    setFileContextMenu(null);
     const name = window.prompt('File name');
     if (!name) return;
     const parentPath = researchProjectPath(topicPath);
@@ -481,6 +504,7 @@ export default function ResearchPage() {
   };
 
   const createFolderInTopic = async (topicPath: string) => {
+    setFileContextMenu(null);
     const name = window.prompt('Folder name');
     if (!name) return;
     setEditorError('');
@@ -499,6 +523,7 @@ export default function ResearchPage() {
   };
 
   const openUploadForTopic = (topicPath: string) => {
+    setFileContextMenu(null);
     uploadTargetRef.current = researchProjectPath(topicPath);
     uploadInputRef.current?.click();
   };
@@ -550,6 +575,35 @@ export default function ResearchPage() {
     }
   };
 
+  const deleteResearchFolder = async (item: FileItem) => {
+    const typed = window.prompt(`Deleting ${item.path} will remove this folder and every file inside it. Type delete to confirm.`);
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== 'delete') {
+      setEditorError("Type 'delete' to confirm removing the folder.");
+      return;
+    }
+
+    setEditorError('');
+    setNotice('');
+    setDeletingFile(true);
+    try {
+      await axios.post(apiUrl('/api/files/delete'), {
+        ids: [researchProjectPath(item.path)],
+      });
+      setFileContextMenu(null);
+      setExpandedFolders((prev) => prev.filter((path) => path !== item.path && !path.startsWith(`${item.path}/`)));
+      await fetchTree();
+      if (currentTask === item.path || currentTask.startsWith(`${item.path}/`)) {
+        router.push('/research', undefined, { shallow: true });
+      }
+    } catch (err: any) {
+      console.error('Failed to delete research folder:', err);
+      setEditorError(err?.response?.data?.error || 'Failed to delete folder.');
+    } finally {
+      setDeletingFile(false);
+    }
+  };
+
   const deleteResearchFile = async (item: FileItem) => {
     let confirmText = '';
     if (item.name === 'requirements.md') {
@@ -589,6 +643,16 @@ export default function ResearchPage() {
     } catch {
       setEditorError('Failed to copy path.');
     }
+  };
+
+  const openResearchFileInWindow = (item: FileItem) => {
+    const url = researchStaticUrl(item.path);
+    if (!url) {
+      setEditorError('Failed to open preview.');
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setFileContextMenu(null);
   };
 
   const openExecuteModal = (action: ResearchAction) => {
@@ -750,7 +814,7 @@ export default function ResearchPage() {
     if (
       !currentTask ||
       loading ||
-      (selectedKind !== 'markdown' && selectedKind !== 'text') ||
+      (selectedKind !== 'markdown' && selectedKind !== 'html' && selectedKind !== 'text') ||
       editorContent === lastLoadedContentRef.current
     ) {
       return undefined;
@@ -808,32 +872,6 @@ export default function ResearchPage() {
       const topicLabel = (
         <Group position="apart" spacing={6} noWrap style={{ width: '100%' }}>
           <Text size="sm" truncate>{item.name}</Text>
-          <Menu shadow="md" width={160} withinPortal position="bottom-end">
-            <Menu.Target>
-              <ActionIcon
-                size="sm"
-                variant="subtle"
-                aria-label={`Add to ${item.name}`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-              >
-                <IconPlus size="0.95rem" />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown onClick={(event) => event.stopPropagation()}>
-              <Menu.Item icon={<IconFilePlus size="0.95rem" />} onClick={() => void createFileInTopic(item.path)}>
-                New File
-              </Menu.Item>
-              <Menu.Item icon={<IconFolderPlus size="0.95rem" />} onClick={() => void createFolderInTopic(item.path)}>
-                New Folder
-              </Menu.Item>
-              <Menu.Item icon={<IconFileUpload size="0.95rem" />} onClick={() => openUploadForTopic(item.path)}>
-                Upload File
-              </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
         </Group>
       );
       return (
@@ -843,6 +881,11 @@ export default function ResearchPage() {
           icon={<IconFolder size="1.2rem" stroke={1.5} color={theme.colors.blue[6]} />}
           childrenOffset={16}
           opened={expandedFolders.includes(item.path)}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setFileContextMenu({ x: event.clientX, y: event.clientY, item });
+          }}
           onChange={(nextOpened) => {
             setExpandedFolders((prev) => (
               nextOpened
@@ -879,33 +922,45 @@ export default function ResearchPage() {
   const currentInstructionPath = currentTask ? researchProjectPath(currentTask) : '';
   const fileActions = useMemo<ResearchAction[]>(() => {
     if (currentFileName !== 'requirements.md' || !currentInstructionPath) return [];
+    const instruction = editorContentRef.current;
+    const defaultSkill = instruction.includes('`architecture-explorer`') ? 'architecture-explorer' : 'deep-research';
     return [
       {
-        label: 'Refine',
-        defaultSkill: 'refine-research-requirement',
-        skillPromptSuffix: `to refine the research requirement ${currentInstructionPath}`,
-      },
-      {
         label: 'Research',
-        defaultSkill: 'deep-research',
+        defaultSkill,
         skillPromptSuffix: `to make a research as the requirement file defined at ${currentInstructionPath}`,
       },
     ];
-  }, [currentFileName, currentInstructionPath]);
+  }, [currentFileName, currentInstructionPath, editorContent]);
 
   const mediaUrl = currentTask ? `${API_BASE_URL}/research/file?path=${encodeURIComponent(currentTask)}` : '';
+  const htmlPreviewUrl = currentTask ? researchStaticUrl(currentTask) : '';
   const isMarkdownEditor = selectedKind === 'markdown';
+  const isHtmlEditor = selectedKind === 'html';
   const isTextEditor = selectedKind === 'text';
+  const executeSelectStyles = {
+    input: {
+      backgroundColor: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#ffffff',
+      color: theme.colorScheme === 'dark' ? theme.colors.gray[0] : theme.colors.gray[9],
+    },
+    dropdown: {
+      backgroundColor: theme.colorScheme === 'dark' ? theme.colors.dark[6] : '#ffffff',
+      borderColor: theme.colorScheme === 'dark' ? theme.colors.dark[4] : theme.colors.gray[3],
+    },
+    item: {
+      color: theme.colorScheme === 'dark' ? theme.colors.gray[0] : theme.colors.gray[9],
+    },
+  };
   const renderHeaderActions = () => {
     if (!currentTask) return null;
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flex: '0 0 auto', flexWrap: 'wrap' }}>
-        {(isMarkdownEditor || isTextEditor) && (
+        {(isMarkdownEditor || isHtmlEditor || isTextEditor) && (
           <Text size="xs" color={editorSaving ? 'dimmed' : 'green'}>
             {editorSaving ? 'Saving...' : 'Auto-save on'}
           </Text>
         )}
-        {isMarkdownEditor && (
+        {(isMarkdownEditor || isHtmlEditor) && (
           <>
             <Button size="xs" variant={markdownView === 'editor' ? 'filled' : 'default'} onClick={() => setMarkdownView('editor')}>
               Edit
@@ -1033,7 +1088,7 @@ export default function ResearchPage() {
       );
     }
 
-    if (isMarkdownEditor) {
+    if (isMarkdownEditor || isHtmlEditor) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           {markdownView === 'editor' ? (
@@ -1058,11 +1113,22 @@ export default function ResearchPage() {
             </>
           ) : (
             <>
-              <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '20px 24px' }}>
-                <div className="doc-markdown" style={{ maxWidth: 'none', margin: 0, minHeight: '100%', padding: '18px 20px 24px', border: 'none', borderRadius: 0, boxShadow: 'none', background: '#ffffff' }}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+              {isHtmlEditor ? (
+                <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', background: '#ffffff' }}>
+                  <iframe
+                    title={currentFileName || 'Research preview'}
+                    src={htmlPreviewUrl}
+                    style={{ width: '100%', height: '100%', border: 'none', background: '#ffffff' }}
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
+                  />
                 </div>
-              </div>
+              ) : (
+                <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '20px 24px' }}>
+                  <div className="doc-markdown" style={{ maxWidth: 'none', margin: 0, minHeight: '100%', padding: '18px 20px 24px', border: 'none', borderRadius: 0, boxShadow: 'none', background: '#ffffff' }}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{editorContent}</ReactMarkdown>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -1176,63 +1242,190 @@ export default function ResearchPage() {
           onPointerDown={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
-          <button
-            type="button"
-            onClick={() => { void deleteResearchFile(fileContextMenu.item); }}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 10px',
-              border: 'none',
-              borderRadius: 6,
-              background: 'transparent',
-              color: '#dc2626',
-              cursor: 'pointer',
-              textAlign: 'left',
-            }}
-          >
-            Delete
-          </button>
-          <button
-            type="button"
-            onClick={() => { void renameResearchPath(fileContextMenu.item); }}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 10px',
-              border: 'none',
-              borderRadius: 6,
-              background: 'transparent',
-              color: '#1f2937',
-              cursor: 'pointer',
-              textAlign: 'left',
-            }}
-          >
-            Rename
-          </button>
-          <button
-            type="button"
-            onClick={() => { void copyResearchPath(fileContextMenu.item); }}
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 10px',
-              border: 'none',
-              borderRadius: 6,
-              background: 'transparent',
-              color: '#1f2937',
-              cursor: 'pointer',
-              textAlign: 'left',
-            }}
-          >
-            Copy Path
-          </button>
+          {fileContextMenu.item.type === 'dir' ? (
+            <>
+              <button
+                type="button"
+                onClick={() => { void createFileInTopic(fileContextMenu.item.path); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <IconFilePlus size="0.95rem" />
+                Add File
+              </button>
+              <button
+                type="button"
+                onClick={() => { void createFolderInTopic(fileContextMenu.item.path); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <IconFolderPlus size="0.95rem" />
+                Add Folder
+              </button>
+              <button
+                type="button"
+                onClick={() => openUploadForTopic(fileContextMenu.item.path)}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <IconFileUpload size="0.95rem" />
+                Upload File
+              </button>
+              <div style={{ height: 1, margin: '6px 4px', background: '#e5e7eb' }} />
+              <button
+                type="button"
+                onClick={() => { void renameResearchPath(fileContextMenu.item); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                onClick={() => { void deleteResearchFolder(fileContextMenu.item); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#dc2626',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                Delete
+              </button>
+            </>
+          ) : (
+            <>
+              {detectFileKind(fileContextMenu.item.path) === 'html' && (
+                <button
+                  type="button"
+                  onClick={() => { openResearchFileInWindow(fileContextMenu.item); }}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '8px 10px',
+                    border: 'none',
+                    borderRadius: 6,
+                    background: 'transparent',
+                    color: '#1f2937',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                >
+                  Open in Window
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => { void deleteResearchFile(fileContextMenu.item); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#dc2626',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                onClick={() => { void renameResearchPath(fileContextMenu.item); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                onClick={() => { void copyResearchPath(fileContextMenu.item); }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  color: '#1f2937',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                Copy Path
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -1244,6 +1437,18 @@ export default function ResearchPage() {
             value={topicNameInput}
             onChange={(e) => setTopicNameInput(e.currentTarget.value)}
             description="A topic folder will be created in kebab-case. Duplicates get _1, _2, and so on."
+          />
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <Select
+            label="Research Type"
+            value={topicType}
+            onChange={(value) => setTopicType((value as ResearchTopicType) || 'deep-research')}
+            data={[
+              { value: 'deep-research', label: 'Deep Research' },
+              { value: 'project-analysis', label: 'Project Analysis' },
+            ]}
+            clearable={false}
           />
         </div>
         <div style={{ marginTop: 16 }}>
@@ -1287,6 +1492,7 @@ export default function ResearchPage() {
               data={skillSelectOptions}
               searchable
               clearable={false}
+              styles={executeSelectStyles}
             />
           ) : (
             <Select
@@ -1297,6 +1503,7 @@ export default function ResearchPage() {
               data={workflowSelectOptions}
               searchable
               clearable={false}
+              styles={executeSelectStyles}
             />
           )}
         </div>

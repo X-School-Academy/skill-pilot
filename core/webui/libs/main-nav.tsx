@@ -1,7 +1,7 @@
 import React from 'react';
 import {
+  IconHome2,
   IconTerminal2,
-  IconSparkles,
   IconSchool,
   IconBriefcase,
   IconSearch,
@@ -36,7 +36,7 @@ export interface MainNavItem {
 }
 
 export const MAIN_NAV_ITEMS: MainNavItem[] = [
-  { label: 'Explore', href: '/', view: 'explore', icon: <IconSparkles size="1rem" /> },
+  { label: 'Home', href: '/', view: 'home', icon: <IconHome2 size="1rem" /> },
   { dividerBefore: 'Agent', label: 'Agent Sessions', href: '/agent-sessions', icon: <IconMessages size="1rem" /> },
   { label: 'Session History', href: '/terminal-histories', icon: <IconHistory size="1rem" /> },
   { dividerBefore: 'Workspace', label: 'Learning', href: '/courses', icon: <IconSchool size="1rem" /> },

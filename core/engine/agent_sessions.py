@@ -141,6 +141,17 @@ def iter_records(path: Path) -> list[dict[str, Any]]:
     return records
 
 
+def analysis_path_for_session(path: Path) -> Path:
+    return path.with_name(f"{path.stem}_analysis.md")
+
+
+def read_analysis_markdown(path: Path) -> str:
+    analysis_path = analysis_path_for_session(path)
+    if not analysis_path.is_file():
+        return ""
+    return analysis_path.read_text(encoding="utf-8")
+
+
 def _first_content(records: list[dict[str, Any]], record_type: str) -> str:
     for record in records:
         if record.get("type") == record_type and record.get("content"):
@@ -200,6 +211,8 @@ def summarize_session(path: Path) -> dict[str, Any] | None:
     return {
         "id": path.name,
         "file": path.name,
+        "analysis_file": analysis_path_for_session(path).name,
+        "has_analysis": analysis_path_for_session(path).is_file(),
         "category": category or "/",
         "title": first_prompt,
         "agent": agent,
@@ -262,12 +275,12 @@ def render_session_markdown(path: Path) -> tuple[dict[str, Any], str]:
         rtype = record.get("type")
         content = record.get("content")
         if rtype == "user_prompt" and content:
-            lines.append("## user_prompt")
+            lines.append("## User Prompt")
             lines.append("")
             lines.append(str(content).rstrip())
             lines.append("")
         elif rtype == "agent_response" and content:
-            lines.append("## agent_response")
+            lines.append("## Agent Response")
             lines.append("")
             lines.append(str(content).rstrip())
             lines.append("")
@@ -278,4 +291,11 @@ def render_session_markdown(path: Path) -> tuple[dict[str, Any], str]:
 def read_agent_session_payload(session_id: str, session_dir: Path = SESSION_DIR) -> dict[str, Any]:
     path = resolve_session_path(session_id, session_dir=session_dir)
     summary, markdown = render_session_markdown(path)
-    return {"session": summary, "markdown": markdown}
+    analysis_markdown = read_analysis_markdown(path)
+    return {
+        "session": summary,
+        "markdown": markdown,
+        "analysis_markdown": analysis_markdown,
+        "analysis_file": analysis_path_for_session(path).name,
+        "jsonl_path": str(path),
+    }
