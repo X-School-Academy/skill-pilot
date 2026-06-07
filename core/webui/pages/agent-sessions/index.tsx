@@ -104,8 +104,9 @@ const parseSystemSkillsQuery = (value: string): string[] => {
   return raw.split(",").map((item) => item.trim()).filter(Boolean);
 };
 
-const buildPromptForAgentCli = (prompt: string, systemSkills: string[]): string => {
-  const body = prompt.trim();
+const buildPromptForAgentCli = (prompt: string, systemSkills: string[], showcaseSlug = ""): string => {
+  const slug = showcaseSlug.trim();
+  const body = slug ? `for task \`${slug}\`:\n${prompt.trim()}` : prompt.trim();
   const skills = systemSkills.map((skill) => skill.trim()).filter(Boolean);
   if (skills.length === 0) return body;
   const skillLabel = skills.length === 1 ? "skill" : "skills";
@@ -143,6 +144,7 @@ const AgentSessionsPage = () => {
   const [newSessionNativeTerminal, setNewSessionNativeTerminal] = useState(false);
   const [newSessionPath, setNewSessionPath] = useState("");
   const [newSessionShowcaseDirectory, setNewSessionShowcaseDirectory] = useState("");
+  const [newSessionShowcaseSlug, setNewSessionShowcaseSlug] = useState("");
   const [newSessionFileManagerPath, setNewSessionFileManagerPath] = useState("");
   const [newSessionSystemSkills, setNewSessionSystemSkills] = useState<string[]>([]);
   const [liveSessionName, setLiveSessionName] = useState("");
@@ -169,29 +171,34 @@ const AgentSessionsPage = () => {
     return null;
   }, [categories, payload, selectedId]);
 
-  const fetchSession = useCallback(async (id: string) => {
+  const fetchSession = useCallback(async (id: string, options?: { quiet?: boolean; updateRoute?: boolean }) => {
     if (!id) return;
-    setLoadingSession(true);
+    const quiet = Boolean(options?.quiet);
+    if (!quiet) setLoadingSession(true);
     try {
       const res = await axios.get(`${API_BASE_URL}/agent-sessions/session`, { params: { id } });
       setPayload(res.data);
       setSelectedId(id);
-      setNewSessionMode(false);
-      setLiveSessionName("");
-      setLiveSessionFileManagerPath("");
-      setFileManagerOpen(false);
+      if (!quiet) {
+        setNewSessionMode(false);
+        setLiveSessionName("");
+        setLiveSessionFileManagerPath("");
+        setFileManagerOpen(false);
+      }
       setError("");
-      void router.replace(`/agent-sessions?id=${encodeURIComponent(id)}`, undefined, { shallow: true });
+      if (options?.updateRoute !== false) {
+        void router.replace(`/agent-sessions?id=${encodeURIComponent(id)}`, undefined, { shallow: true });
+      }
     } catch (err: any) {
       const message = err?.response?.data?.error || "Failed to load agent session.";
       setError(String(message));
     } finally {
-      setLoadingSession(false);
+      if (!quiet) setLoadingSession(false);
     }
   }, [router]);
 
-  const fetchSessions = useCallback(async (sessionId = "", loadContent = false) => {
-    setLoadingList(true);
+  const fetchSessions = useCallback(async (sessionId = "", loadContent = false, quiet = false) => {
+    if (!quiet) setLoadingList(true);
     try {
       const res = await axios.get(`${API_BASE_URL}/agent-sessions`);
       const nextCategories: AgentSessionCategory[] = res.data?.categories || [];
@@ -200,7 +207,7 @@ const AgentSessionsPage = () => {
       const nextId = sessionId || firstId;
       setError("");
       if (loadContent && nextId) {
-        await fetchSession(nextId);
+        await fetchSession(nextId, { quiet, updateRoute: !quiet });
       } else if (loadContent) {
         setPayload(null);
         setSelectedId("");
@@ -209,7 +216,7 @@ const AgentSessionsPage = () => {
       const message = err?.response?.data?.error || "Failed to load agent sessions.";
       setError(String(message));
     } finally {
-      setLoadingList(false);
+      if (!quiet) setLoadingList(false);
     }
   }, [fetchSession]);
 
@@ -242,6 +249,7 @@ const AgentSessionsPage = () => {
     setPayload(null);
     setNewSessionPath("");
     setNewSessionShowcaseDirectory("");
+    setNewSessionShowcaseSlug("");
     setNewSessionFileManagerPath("");
     setNewSessionSystemSkills([]);
     setLiveSessionName("");
@@ -259,11 +267,14 @@ const AgentSessionsPage = () => {
     if (newSessionShowcaseDirectory) {
       envPairs.push(["SHOWCASE_SESSION_DIRECTORY", newSessionShowcaseDirectory]);
     }
+    if (newSessionShowcaseSlug) {
+      envPairs.push(["SHOWCASE_SESSION_SLUG", newSessionShowcaseSlug]);
+    }
     setCreatingSession(true);
     try {
       const res = await axios.post(`${API_BASE_URL}/terminal/tmux/create`, {
         provider_id: provider,
-        prompt: buildPromptForAgentCli(prompt, newSessionSystemSkills),
+        prompt: buildPromptForAgentCli(prompt, newSessionSystemSkills, newSessionShowcaseSlug),
         path: newSessionPath || undefined,
         sandbox: newSessionSandbox,
         auto: newSessionAuto,
@@ -305,6 +316,7 @@ const AgentSessionsPage = () => {
     newSessionPrompt,
     newSessionSandbox,
     newSessionShowcaseDirectory,
+    newSessionShowcaseSlug,
     newSessionSystemSkills,
     router,
   ]);
@@ -345,6 +357,7 @@ const AgentSessionsPage = () => {
     const queryPrompt = typeof router.query.prompt === "string" ? router.query.prompt : "";
     const queryPath = typeof router.query.path === "string" ? router.query.path : "";
     const queryShowcaseDirectory = typeof router.query.showcaseDirectory === "string" ? router.query.showcaseDirectory : "";
+    const queryShowcaseSlug = typeof router.query.showcaseSlug === "string" ? router.query.showcaseSlug : "";
     const queryFileManagerPath = typeof router.query.fileManagerPath === "string" ? router.query.fileManagerPath : "";
     const querySystemSkills = typeof router.query.systemSkills === "string" ? router.query.systemSkills : "";
     if (queryPrompt) {
@@ -356,6 +369,9 @@ const AgentSessionsPage = () => {
     if (queryShowcaseDirectory) {
       setNewSessionShowcaseDirectory(queryShowcaseDirectory);
     }
+    if (queryShowcaseSlug) {
+      setNewSessionShowcaseSlug(queryShowcaseSlug);
+    }
     if (queryFileManagerPath) {
       setNewSessionFileManagerPath(queryFileManagerPath);
     }
@@ -365,6 +381,14 @@ const AgentSessionsPage = () => {
     }
     void fetchSessions(queryId, Boolean(queryId) && router.query.new !== "true");
   }, [fetchSessions, router.isReady, router.query.id]);
+
+  useEffect(() => {
+    if (!router.isReady || liveSessionName) return undefined;
+    const intervalId = window.setInterval(() => {
+      void fetchSessions(selectedId, false, true);
+    }, 5000);
+    return () => window.clearInterval(intervalId);
+  }, [fetchSessions, liveSessionName, router.isReady, selectedId]);
 
   useEffect(() => {
     axios.get(`${API_BASE_URL}/llm/providers`)
@@ -661,7 +685,9 @@ const AgentSessionsPage = () => {
                           }}
                         >
                           <Tooltip label={session.title} openDelay={350} multiline width={320} disabled={session.title.length <= 30}>
-                            <Text size="sm" weight={600} truncate>{titlePreview(session.title)}</Text>
+                            <Group spacing={6} noWrap>
+                              <Text size="sm" weight={600} truncate>{titlePreview(session.title)}</Text>
+                            </Group>
                           </Tooltip>
                           <Text size="xs" color="dimmed" truncate>
                             {session.agent || "agent"} · {formatTime(session.time)}

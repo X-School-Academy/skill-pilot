@@ -23,13 +23,16 @@ import {
   Checkbox,
 } from '@mantine/core';
 import {
-  IconPlus,
+  IconArrowRight,
+  IconBook2,
+  IconBriefcase,
+  IconMessages,
+  IconRocket,
 } from '@tabler/icons-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { apiUrl } from '../libs/api-base';
 import { resolveSelectedProvider, setSelectedProvider } from '../libs/llm';
-import ExploreView from '../components/explore/ExploreView';
 import { MAIN_NAV_ITEMS, type MainNavItem } from '../libs/main-nav';
 
 const API_BASE_URL = apiUrl('/api');
@@ -148,7 +151,6 @@ const EMPTY_MCP_FORM: McpFormData = {
 };
 
 type ActiveView =
-  | 'explore'
   | 'home'
   | 'live-terminal'
   | 'learning'
@@ -214,7 +216,7 @@ interface HomePageProps {
   initialView?: ActiveView;
 }
 
-export default function HomePage({ initialView = 'explore' }: HomePageProps) {
+export default function HomePage({ initialView = 'home' }: HomePageProps) {
   const router = useRouter();
   const theme = useMantineTheme();
   const isDevMode = process.env.NODE_ENV === 'development';
@@ -801,7 +803,7 @@ export default function HomePage({ initialView = 'explore' }: HomePageProps) {
 
     if (typeof view === 'string' && view) {
       const validViews: ActiveView[] = [
-        'explore', 'learning', 'projects', 'research', 'tasks',
+        'learning', 'projects', 'research', 'tasks',
         'development', 'processes', 'discord-bot', 'skills', 'subagents', 'mcp-servers',
         'schedule', 'extensions', 'ai-security', 'profile',
       ];
@@ -879,7 +881,7 @@ export default function HomePage({ initialView = 'explore' }: HomePageProps) {
         );
       }
 
-      const isActive = item.active ?? (item.view ? activeView === item.view : false);
+      const isActive = item.active ?? (item.view ? activeView === item.view : router.pathname === item.href);
 
       elements.push(
         <NavLink
@@ -901,127 +903,121 @@ export default function HomePage({ initialView = 'explore' }: HomePageProps) {
     <div style={{
       display: 'flex',
       flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
+      justifyContent: 'space-between',
       height: '100%',
-      padding: '40px 20px',
+      minHeight: 'calc(100vh - 60px)',
+      padding: 'clamp(32px, 6vw, 72px)',
       position: 'relative',
+      overflow: 'hidden',
+      background: theme.colorScheme === 'dark'
+        ? 'linear-gradient(135deg, #101113 0%, #18201c 58%, #111827 100%)'
+        : 'linear-gradient(135deg, #f8fbff 0%, #f2f7f1 56%, #fff7ed 100%)',
     }}>
-      <div style={{ position: 'absolute', top: 20, right: 20 }}>
-        <Button
-          size="sm"
-          variant="subtle"
-          leftIcon={<IconPlus size="1rem" />}
-          onClick={() => void handleStartShellTerminal()}
-          loading={startingSession}
-          aria-label="New terminal"
-        >
-          Terminal
-        </Button>
-      </div>
-      <Stack spacing="md" style={{ width: '100%', maxWidth: 600 }}>
-        <div>
-          <Text size={36} weight={800} mb={8}>Skill Pilot</Text>
-          <Text size="lg" color="dimmed" italic>
-            Do first. Learn as needed.
+      <div style={{ width: '100%', maxWidth: 1180, margin: '0 auto' }}>
+        <div style={{ maxWidth: 860 }}>
+          <Text
+            style={{
+              fontSize: 'clamp(44px, 7vw, 88px)',
+              lineHeight: 1,
+              fontWeight: 900,
+              letterSpacing: 0,
+              color: theme.colorScheme === 'dark' ? '#f8fafc' : '#111827',
+            }}
+          >
+            Your personal AI workspace
+          </Text>
+          <Text
+            mt={18}
+            style={{
+              fontSize: 'clamp(28px, 4.2vw, 52px)',
+              lineHeight: 1.08,
+              fontWeight: 800,
+              letterSpacing: 0,
+              color: theme.colorScheme === 'dark' ? '#b7f7d1' : '#157347',
+            }}
+          >
+            learn, automate, and build from a single idea.
+          </Text>
+          <Text
+            mt={26}
+            style={{
+              maxWidth: 820,
+              fontSize: 'clamp(17px, 2vw, 22px)',
+              lineHeight: 1.55,
+              color: theme.colorScheme === 'dark' ? '#cbd5e1' : '#3f4855',
+            }}
+          >
+            For AI agent learners, builders, job seekers, and business owners — Skill Pilot turns AI from a chat tool into an active worker that gets things done on day one.
+          </Text>
+          <Text
+            mt={28}
+            style={{
+              fontSize: 'clamp(20px, 2.4vw, 30px)',
+              lineHeight: 1.25,
+              fontWeight: 800,
+              color: theme.colorScheme === 'dark' ? '#fde68a' : '#8a4b0f',
+            }}
+          >
+            "Software runs. Codeware grows."
           </Text>
         </div>
-        <Textarea
-          placeholder="What would you like to do?"
-          value={promptText}
-          onChange={(e) => setPromptText(e.currentTarget.value)}
-          onKeyDown={handleKeyDown}
-          autosize
-          minRows={3}
-          maxRows={10}
-          size="md"
-        />
-        {newSessionWorkflow && (
-          <>
-            <Text size="sm" color="dimmed" align="center">
-              Workflow mode: providers are controlled by the workflow nodes for {`core/workflows/${newSessionWorkflow}`}
-            </Text>
-            <Select
-              label="Next Node Trigger"
-              value={newSessionNextNodeTrigger}
-              onChange={(value) => setNewSessionNextNodeTrigger((value as NextNodeTrigger) || 'auto_continue')}
-              data={[
-                { value: 'auto_continue', label: 'Auto continue' },
-                { value: 'start_by_prompt', label: 'Start by prompt' },
-              ]}
-            />
-          </>
-        )}
-        {workflowExecuteStatus && workflowSessionActive && (
-          <Text
-            size="sm"
-            align="center"
-            color={workflowExecuteStatus.status === 'error' || workflowExecuteStatus.status === 'terminated' ? 'red' : 'dimmed'}
+
+        <Group mt={36} spacing="sm">
+          <Button
+            size="md"
+            rightIcon={<IconArrowRight size="1rem" />}
+            onClick={() => void router.push('/agent-sessions?new=true')}
           >
-            Workflow status: {workflowExecuteStatus.status}
-            {workflowExecuteStatus.error ? ` - ${workflowExecuteStatus.error}` : ''}
-          </Text>
-        )}
-        {workflowExecuteStatus && !workflowSessionActive && (workflowExecuteStatus.status === 'finished' || workflowExecuteStatus.status === 'error' || workflowExecuteStatus.status === 'terminated') && (
-          <Text
-            size="sm"
-            align="center"
-            color={workflowExecuteStatus.status === 'finished' ? 'green' : 'red'}
+            Start New Session
+          </Button>
+          <Button
+            size="md"
+            variant="default"
+            onClick={() => void router.push('/agent-sessions')}
           >
-            Workflow {workflowExecuteStatus.status}
-            {workflowExecuteStatus.error ? ` - ${workflowExecuteStatus.error}` : ''}
-          </Text>
-        )}
-        <Group position="center" spacing="lg">
-          <Checkbox
-            label="Sandbox"
-            checked={newSessionSandbox}
-            onChange={(e) => setNewSessionSandbox(e.currentTarget.checked)}
-            size="xs"
-          />
-          <Checkbox
-            label="Auto Run (Yolo)"
-            checked={newSessionAuto}
-            onChange={(e) => setNewSessionAuto(e.currentTarget.checked)}
-            size="xs"
-          />
-          <Checkbox
-            label="Network Access"
-            checked={newSessionNetwork}
-            onChange={(e) => setNewSessionNetwork(e.currentTarget.checked)}
-            size="xs"
-          />
-          <Checkbox
-            label="Native Terminal"
-            checked={newSessionNativeTerminal}
-            onChange={(e) => setNewSessionNativeTerminal(e.currentTarget.checked)}
-            size="xs"
-          />
+            View Sessions
+          </Button>
         </Group>
-        <Group position="center" spacing="md" align="center">
-            <Button size="md" onClick={() => void handleStart()} disabled={!promptText.trim() || startingSession} loading={startingSession}>
-                Start
-            </Button>
-            {newSessionWorkflow && newSessionWorkflowResumeAvailable && (
-              <Checkbox
-                label="Resume Workflow"
-                checked={newSessionWorkflowResume}
-                onChange={(e) => setNewSessionWorkflowResume(e.currentTarget.checked)}
-                size="xs"
-              />
-            )}
-            {workflowSessionActive && workflowExecuteStatus?.waiting_for_continue && (
-              <Button
-                size="md"
-                variant="light"
-                onClick={() => void handleWorkflowContinue()}
-                loading={continuingWorkflow}
-              >
-                Continue Next Node
-              </Button>
-            )}
-        </Group>
-      </Stack>
+      </div>
+
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 1180,
+          margin: '48px auto 0',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+          gap: 14,
+        }}
+      >
+        {[
+          { label: 'Learn', detail: 'Build skill while doing real work.', href: '/courses', icon: <IconBook2 size={22} /> },
+          { label: 'Automate', detail: 'Turn repeatable tasks into agent workflows.', href: '/tasks', icon: <IconMessages size={22} /> },
+          { label: 'Build', detail: 'Create software and codeware from an idea.', href: '/vibe-coding', icon: <IconRocket size={22} /> },
+          { label: 'Grow', detail: 'Prepare projects, portfolios, and business tools.', href: '/research', icon: <IconBriefcase size={22} /> },
+        ].map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            onClick={() => void router.push(item.href)}
+            style={{
+              minHeight: 132,
+              padding: 18,
+              borderRadius: 8,
+              border: `1px solid ${theme.colorScheme === 'dark' ? 'rgba(148, 163, 184, 0.24)' : 'rgba(31, 41, 55, 0.12)'}`,
+              background: theme.colorScheme === 'dark' ? 'rgba(15, 23, 42, 0.72)' : 'rgba(255, 255, 255, 0.78)',
+              color: 'inherit',
+              textAlign: 'left',
+              cursor: 'pointer',
+              boxShadow: theme.colorScheme === 'dark' ? 'none' : '0 16px 34px rgba(17, 24, 39, 0.07)',
+            }}
+          >
+            <div style={{ color: theme.colors.green[6], marginBottom: 12 }}>{item.icon}</div>
+            <Text size="md" weight={800}>{item.label}</Text>
+            <Text size="sm" color="dimmed" mt={6} style={{ lineHeight: 1.45 }}>{item.detail}</Text>
+          </button>
+        ))}
+      </div>
     </div>
   );
 
@@ -4193,8 +4189,6 @@ export default function HomePage({ initialView = 'explore' }: HomePageProps) {
 
   const renderMainContent = () => {
     switch (activeView) {
-      case 'explore':
-        return <ExploreView />;
       case 'home':
         return renderHomeView();
       case 'live-terminal':
@@ -4230,7 +4224,7 @@ export default function HomePage({ initialView = 'explore' }: HomePageProps) {
       case 'profile':
         return renderProfileView();
       default:
-        return <ExploreView />;
+        return renderHomeView();
     }
   };
 

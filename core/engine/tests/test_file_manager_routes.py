@@ -94,12 +94,18 @@ def test_prompt_target_url_includes_showcase_directory_and_file_manager_path(mon
     directory.mkdir(parents=True)
     _set_repo_root(monkeypatch, tmp_path)
 
-    url = routes._build_prompt_target_url("", "do work", showcase_directory=str(directory))
+    url = routes._build_prompt_target_url(
+        "",
+        "do work",
+        showcase_directory=str(directory),
+        showcase_id="aws-credentials-s3-cloudfront",
+    )
     query = parse_qs(urlparse(url).query)
 
     assert query["new"] == ["true"]
     assert query["prompt"] == ["do work"]
     assert query["showcaseDirectory"] == [str(directory)]
+    assert query["showcaseSlug"] == ["aws-credentials-s3-cloudfront"]
     assert query["fileManagerPath"] == ["/workspace/tasks/aws-credentials-s3-cloudfront"]
 
 

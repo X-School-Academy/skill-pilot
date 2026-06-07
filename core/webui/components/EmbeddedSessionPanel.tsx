@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActionIcon, Button, Select, Text, Textarea } from '@mantine/core';
+import { ActionIcon, Button, Text, Textarea } from '@mantine/core';
 import { IconX } from '@tabler/icons-react';
 
 type NextNodeTrigger = 'auto_continue' | 'start_by_prompt';
@@ -23,8 +23,8 @@ interface EmbeddedSessionPanelProps {
   setNewSessionAuto: (value: boolean) => void;
   newSessionNetwork: boolean;
   setNewSessionNetwork: (value: boolean) => void;
-  newSessionNextNodeTrigger: NextNodeTrigger;
-  setNewSessionNextNodeTrigger: (value: NextNodeTrigger) => void;
+  newSessionNextNodeTrigger?: NextNodeTrigger;
+  setNewSessionNextNodeTrigger?: (value: NextNodeTrigger) => void;
   newSessionWorkflowResumeAvailable: boolean;
   newSessionWorkflowResume: boolean;
   setNewSessionWorkflowResume: (value: boolean) => void;
@@ -50,8 +50,6 @@ export default function EmbeddedSessionPanel({
   setNewSessionAuto,
   newSessionNetwork,
   setNewSessionNetwork,
-  newSessionNextNodeTrigger,
-  setNewSessionNextNodeTrigger,
   newSessionWorkflowResumeAvailable,
   newSessionWorkflowResume,
   setNewSessionWorkflowResume,
@@ -194,16 +192,6 @@ export default function EmbeddedSessionPanel({
               </label>
               {newSessionWorkflow && (
                 <>
-                  <Select
-                    value={newSessionNextNodeTrigger}
-                    onChange={(value) => setNewSessionNextNodeTrigger((value as NextNodeTrigger) || 'auto_continue')}
-                    data={[
-                      { value: 'auto_continue', label: 'Auto continue' },
-                      { value: 'start_by_prompt', label: 'Start by prompt' },
-                    ]}
-                    size="xs"
-                    style={{ width: 160 }}
-                  />
                   {newSessionWorkflowResumeAvailable && (
                     <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
                       <input type="checkbox" checked={newSessionWorkflowResume} onChange={(event) => setNewSessionWorkflowResume(event.currentTarget.checked)} />

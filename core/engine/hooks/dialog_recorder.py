@@ -268,20 +268,26 @@ def ensure_session_category_record(
     if has_record_type(path, "session_category"):
         return
     showcase_directory = os.environ.get("SHOWCASE_SESSION_DIRECTORY", "").strip()
+    showcase_slug = os.environ.get("SHOWCASE_SESSION_SLUG", "").strip()
     category = (
         infer_session_category_from_directory(showcase_directory, REPO_ROOT)
         if showcase_directory
         else infer_session_category(prompt, REPO_ROOT)
     )
+    record: dict[str, Any] = {
+        "type": "session_category",
+        "timestamp": format_timestamp(),
+        "agent": agent,
+        "session_id": sid,
+        "category": category,
+    }
+    if showcase_directory:
+        record["showcase_directory"] = showcase_directory
+    if showcase_slug:
+        record["showcase_id"] = showcase_slug
     append_record(
         path,
-        {
-            "type": "session_category",
-            "timestamp": format_timestamp(),
-            "agent": agent,
-            "session_id": sid,
-            "category": category,
-        },
+        record,
     )
 
 
