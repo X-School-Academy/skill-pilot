@@ -80,6 +80,7 @@ RUN uv --directory core/engine sync \
     && ./skillpilot.sh build
 
 COPY --chown=ubuntu:ubuntu entrypoint.sh /usr/local/bin/skill-pilot-entrypoint
+COPY --chown=ubuntu:ubuntu config/ /usr/local/share/skill-pilot-docker-config/
 RUN sudo chmod 0755 /usr/local/bin/skill-pilot-entrypoint
 
 EXPOSE 3000 3001 3002 3003 5000 8000 8080

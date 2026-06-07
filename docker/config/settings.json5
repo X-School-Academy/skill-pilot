@@ -1,0 +1,59 @@
+{
+  // ─── Security policies ───────────────────────────────────────────────────────
+  security: {
+    schedules: { sandbox: true, auto: true, network: true },
+    newSession: { sandbox: false, auto: false, network: true },
+    remoteBot: { sandbox: true, auto: true, network: false },
+    devSwarm: { sandbox: true, auto: true, network: true },
+    skillAgent: { sandbox: true, auto: true, network: true },
+  },
+
+  // ─── Service endpoints ───────────────────────────────────────────────────────
+  services: {
+    // Core engine – FastAPI / uvicorn HTTP+WebSocket API server
+    engine: {
+      host: "0.0.0.0",
+      production: {
+        port: 3001,
+      },
+      development: {
+        port: 3002,
+      },
+    },
+
+    // WebUI – Next.js development server
+    webui: {
+      host: "0.0.0.0",
+      development: {
+        port: 3003,
+      },
+    },
+
+    // Live Avatar – standalone WebRTC streaming server (live_chat.py)
+    // Use ws:// for local connections, wss:// when TLS-terminated upstream.
+    live_avatar: {
+      server_url: "ws://0.0.0.0:8080",
+    },
+    
+    // Chrome DevTools reverse-tunnel bridge.
+    // Engine parks remote tunnels at WS /chrome-proxy?token=<AUTH_TOKEN>
+    // and exposes a local listener on listen_host:listen_port for CDP clients.
+    // See extensions/chrome-devtool-proxy/remote-proxy-plan.md
+    chrome_proxy: {
+      enabled: false,
+      listen_host: "127.0.0.1",
+      listen_port: 9223,
+      wait_tunnel_timeout_s: 10,
+    },
+
+  },
+
+  // ─── TURN server settings ────────────────────────────────────────────────────
+  // Shared by the cameras MCP server and live-avatar.
+  // Override with env vars: TURN_SERVER_URLS, TURN_SERVER_USERNAME, TURN_SERVER_PASSWORD
+  turn: {
+    urls: "",       // comma-separated, e.g. "turn:example.com:3478,turns:example.com:5349"
+    username: "",
+    password: "",
+  },
+}
