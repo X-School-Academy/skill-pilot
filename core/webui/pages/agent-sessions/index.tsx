@@ -22,7 +22,7 @@ import {
   Tooltip,
   useMantineTheme,
 } from "@mantine/core";
-import { IconArrowLeft, IconCircleCheck, IconFolder, IconFolderOpen, IconGripHorizontal, IconPlayerPlay, IconPlus, IconRefresh } from "@tabler/icons-react";
+import { IconArrowLeft, IconFolder, IconFolderOpen, IconGripHorizontal, IconPlayerPlay, IconPlus, IconRefresh } from "@tabler/icons-react";
 
 import { apiUrl } from "../../libs/api-base";
 import { resolveSelectedProvider, setSelectedProvider } from "../../libs/llm";
@@ -49,8 +49,6 @@ interface LlmProvider {
 interface AgentSessionSummary {
   id: string;
   file: string;
-  analysis_file?: string;
-  has_analysis?: boolean;
   category: string;
   title: string;
   agent: string;
@@ -69,9 +67,6 @@ interface AgentSessionCategory {
 interface AgentSessionPayload {
   session: AgentSessionSummary;
   markdown: string;
-  analysis_markdown?: string;
-  analysis_file?: string;
-  jsonl_path?: string;
 }
 
 const formatTime = (value: string): string => {
@@ -142,7 +137,6 @@ const AgentSessionsPage = () => {
   const [creatingSession, setCreatingSession] = useState(false);
   const [creatingTerminal, setCreatingTerminal] = useState(false);
   const [newSessionMode, setNewSessionMode] = useState(false);
-  const [detailTab, setDetailTab] = useState<"history" | "analysis">("history");
   const [newSessionPrompt, setNewSessionPrompt] = useState("");
   const [newSessionSandbox, setNewSessionSandbox] = useState(false);
   const [newSessionAuto, setNewSessionAuto] = useState(false);
@@ -187,7 +181,6 @@ const AgentSessionsPage = () => {
       setSelectedId(id);
       if (!quiet) {
         setNewSessionMode(false);
-        setDetailTab("history");
         setLiveSessionName("");
         setLiveSessionFileManagerPath("");
         setFileManagerOpen(false);
@@ -357,28 +350,6 @@ const AgentSessionsPage = () => {
     }
   }, [creatingTerminal]);
 
-  const startAnalysisSession = useCallback(() => {
-    const session = payload?.session;
-    if (!session) return;
-    const jsonlPath = payload?.jsonl_path || `.skillpilot/agent-sessions/${session.file}`;
-    const prompt = `Analyze the user agent session dialog history to help user the skill to guide ai for work, ref to ${jsonlPath}`;
-    setNewSessionMode(true);
-    setSelectedId("");
-    setPayload(null);
-    setDetailTab("history");
-    setNewSessionPrompt(prompt);
-    setNewSessionPath("");
-    setNewSessionShowcaseDirectory("");
-    setNewSessionShowcaseSlug("");
-    setNewSessionFileManagerPath("");
-    setNewSessionSystemSkills([]);
-    setLiveSessionName("");
-    setLiveSessionFileManagerPath("");
-    setFileManagerOpen(false);
-    setError("");
-    void router.replace(`/agent-sessions?new=true&prompt=${encodeURIComponent(prompt)}`, undefined, { shallow: true });
-  }, [payload, router]);
-
   useEffect(() => {
     if (!router.isReady || initialLoadRef.current) return;
     initialLoadRef.current = true;
@@ -415,12 +386,9 @@ const AgentSessionsPage = () => {
     if (!router.isReady || liveSessionName) return undefined;
     const intervalId = window.setInterval(() => {
       void fetchSessions(selectedId, false, true);
-      if (selectedId && payload && !payload.analysis_markdown) {
-        void fetchSession(selectedId, { quiet: true, updateRoute: false });
-      }
     }, 5000);
     return () => window.clearInterval(intervalId);
-  }, [fetchSession, fetchSessions, liveSessionName, payload, router.isReady, selectedId]);
+  }, [fetchSessions, liveSessionName, router.isReady, selectedId]);
 
   useEffect(() => {
     axios.get(`${API_BASE_URL}/llm/providers`)
@@ -488,36 +456,6 @@ const AgentSessionsPage = () => {
       </Button>
     );
   };
-
-  const renderDetailTabs = () => (
-    <Group spacing={0} noWrap mb="md" position="center">
-      {(["history", "analysis"] as const).map((tab) => {
-        const active = detailTab === tab;
-        return (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setDetailTab(tab)}
-            style={{
-              border: `1px solid ${active ? theme.colors.blue[5] : theme.colors.gray[3]}`,
-              borderLeftWidth: tab === "analysis" ? 0 : 1,
-              borderRadius: tab === "history" ? "8px 0 0 8px" : "0 8px 8px 0",
-              padding: "6px 12px",
-              background: active
-                ? (theme.colorScheme === "dark" ? theme.colors.dark[5] : theme.colors.blue[0])
-                : (theme.colorScheme === "dark" ? theme.colors.dark[6] : "#fff"),
-              color: active ? theme.colors.blue[7] : "inherit",
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: 700,
-            }}
-          >
-            {tab === "history" ? "History" : "Analysis"}
-          </button>
-        );
-      })}
-    </Group>
-  );
 
   const renderLiveTerminal = () => (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: "12px 16px 16px" }}>
@@ -748,7 +686,6 @@ const AgentSessionsPage = () => {
                         >
                           <Tooltip label={session.title} openDelay={350} multiline width={320} disabled={session.title.length <= 30}>
                             <Group spacing={6} noWrap>
-                              {session.has_analysis && <IconCircleCheck size="0.9rem" color={theme.colors.green[6]} />}
                               <Text size="sm" weight={600} truncate>{titlePreview(session.title)}</Text>
                             </Group>
                           </Tooltip>
@@ -884,37 +821,12 @@ const AgentSessionsPage = () => {
               </Group>
             ) : payload ? (
               <div style={{ maxWidth: 980, margin: "0 auto", padding: "20px 24px 28px" }}>
-                {detailTab === "history" ? (
-                  <>
-                    <div className="doc-markdown" style={{ maxWidth: "none", background: "#fff", padding: 20, borderRadius: 8, border: `1px solid ${theme.colors.gray[3]}` }}>
-                      {renderDetailTabs()}
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{payload.markdown}</ReactMarkdown>
-                    </div>
-                    <Group position="right" mt="md">
-                      {renderResumeButton("bottom")}
-                    </Group>
-                  </>
-                ) : payload.analysis_markdown ? (
-                  <div className="doc-markdown" style={{ maxWidth: "none", background: "#fff", padding: 20, borderRadius: 8, border: `1px solid ${theme.colors.gray[3]}` }}>
-                    {renderDetailTabs()}
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{payload.analysis_markdown}</ReactMarkdown>
-                  </div>
-                ) : (
-                  <div style={{ background: "#fff", padding: 24, borderRadius: 8, border: `1px solid ${theme.colors.gray[3]}` }}>
-                    <Stack spacing="md" align="center" ta="center">
-                      {renderDetailTabs()}
-                      <div>
-                        <Title order={3} style={{ fontSize: 20 }}>No Analysis Yet</Title>
-                        <Text size="sm" color="dimmed" mt={4}>
-                          Analyze this session to improve how the user guides AI agents for work.
-                        </Text>
-                      </div>
-                      <Button leftIcon={<IconPlayerPlay size="1rem" />} onClick={startAnalysisSession}>
-                        Start to analyze
-                      </Button>
-                    </Stack>
-                  </div>
-                )}
+                <div className="doc-markdown" style={{ maxWidth: "none", background: "#fff", padding: 20, borderRadius: 8, border: `1px solid ${theme.colors.gray[3]}` }}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{payload.markdown}</ReactMarkdown>
+                </div>
+                <Group position="right" mt="md">
+                  {renderResumeButton("bottom")}
+                </Group>
               </div>
             ) : (
               <Text size="sm" color="dimmed" p="lg">Select an agent session.</Text>
