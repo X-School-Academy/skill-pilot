@@ -2928,6 +2928,49 @@ def social_history():
     return _social_history()
 
 
+@router.post("/api/social/publish")
+def social_publish(payload: Dict[str, Any]):
+    """Publish a draft to a social platform via the automation script (no AI)."""
+    raw_path = str(payload.get("path") or "").strip()
+    raw_platform = str(payload.get("platform") or "").strip().lower()
+
+    if not raw_path:
+        return JSONResponse(status_code=400, content={"error": "Missing path"})
+    if not raw_platform:
+        return JSONResponse(status_code=400, content={"error": "Missing platform"})
+    if raw_platform not in ("linkedin", "x", "xiaohongshu"):
+        return JSONResponse(status_code=400, content={"error": f"Unsupported platform: {raw_platform}"})
+
+    try:
+        _safe_social_path(raw_path)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": str(exc)})
+
+    script = _REPO_ROOT / "core" / "bin" / "social-publish"
+    if not script.is_file():
+        return JSONResponse(status_code=500, content={"error": "Publish script not found"})
+
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script), raw_path, raw_platform],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=str(_REPO_ROOT),
+            env={**os.environ, "AGENT_BROWSER_DEFAULT_TIMEOUT": "30"},
+        )
+        return {
+            "status": "ok" if proc.returncode == 0 else "failed",
+            "stdout": proc.stdout,
+            "stderr": proc.stderr,
+            "returncode": proc.returncode,
+        }
+    except subprocess.TimeoutExpired:
+        return JSONResponse(status_code=504, content={"error": "Publish timed out after 120s"})
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"error": str(exc)})
+
+
 # --- Calendar ---
 
 _CALENDAR_PATH = _REPO_ROOT / ".skillpilot" / "content-calendar.json"

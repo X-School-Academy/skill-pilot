@@ -50,18 +50,29 @@ Generate the content based on the user's topic:
 
 ### Step 3: Execute Publishing Flow
 
+**Primary path (script-based, no AI):** Use `core/bin/social-publish <draft-path> <platform>` to publish. The script handles browser automation, validation, and history recording without consuming AI tokens.
+
+```
+core/bin/social-publish linkedin/my-post.md linkedin
+```
+
+**Fallback path (manual, AI-driven):** If the script fails (e.g., LinkedIn changed its UI), fall back to manual browser automation:
+
 Use `core/bin/agent-browser --headed` to navigate to the platform.
 
 1. **Auth Check**: If not logged in, stop and ask the user to complete login in the headed browser.
 2. **UI Navigation**: Use the specific selectors (input boxes, publish buttons) documented in the respective platform file in `references/`.
 3. **Drafting**: Input the approved text and attach any required assets.
 
+After a successful manual publish, update `core/bin/social-publish` with the new selectors so the script works again for future posts.
+
 ### Step 4: Record and Report
 
-After a successful click of the "Post" button:
+After publishing:
 
-1. Update `.skillpilot/social-marketing-history.json` with the post content, platform, and timestamp.
-2. Output a summary including the platform used and the next recommended posting window.
+1. If using `core/bin/social-publish`, history is updated automatically.
+2. If using the manual fallback, update `.skillpilot/social-marketing-history.json` with the post content, platform, and timestamp.
+3. Output a summary including the platform used and the next recommended posting window.
 
 ## Key Principles
 
