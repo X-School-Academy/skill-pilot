@@ -1,0 +1,676 @@
+#!/usr/bin/env python3
+"""
+Publish social media content via agent-browser automation.
+
+Automates browser-based publishing to social platforms without AI in the loop.
+The AI runs this flow once to capture selectors, then the script handles all
+subsequent publishing. AI's role becomes content writing and evaluation only.
+
+Usage:
+    core/bin/social-publish <draft-path> <platform>
+    core/bin/social-publish linkedin/test-draft-001.md linkedin
+
+Supported platforms: linkedin, x, xiaohongshu
+"""
+
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+AGENT_BROWSER = os.environ.get("AGENT_BROWSER_BIN", str(REPO_ROOT / "core" / "bin" / "agent-browser"))
+WORKSPACE_SOCIAL = REPO_ROOT / "workspace" / "social-media"
+HISTORY_PATH = REPO_ROOT / ".skillpilot" / "social-marketing-history.json"
+
+BROWSER_TIMEOUT = int(os.environ.get("SOCIAL_PUBLISH_TIMEOUT", "60"))
+SNAPSHOT_MAX_OUTPUT = int(os.environ.get("SOCIAL_PUBLISH_MAX_OUTPUT", "80000"))
+CDP_PORT = os.environ.get("SOCIAL_PUBLISH_CDP", "")  # e.g. "9222" to use existing Chrome
+
+PLATFORM_CONFIG = {
+    "linkedin": {
+        "feed_url": "https://www.linkedin.com/feed/",
+        "post_trigger_texts": ["Start a post", "Create a post", "Share an article"],
+        "post_textbox_labels": ["Text editor for creating content", "What do you want to talk about?"],
+        "post_button_texts": ["Post"],
+        "post_confirm_texts": ["Post", "Success", "shared"],
+        "composer_wait_ms": 2000,
+    },
+    "x": {
+        "feed_url": "https://x.com/home",
+        "post_textbox_labels": ["Post text"],
+        "post_button_texts": ["Post"],
+        "post_confirm_texts": ["Post", "sent", "shared"],
+        "composer_wait_ms": 2000,
+        "max_chars": 280,
+    },
+    "xiaohongshu": {
+        "feed_url": "https://creator.xiaohongshu.com/publish/publish",
+        "title_input_labels": ["填写标题"],
+        "post_textbox_labels": [],
+        "post_button_texts": ["发布"],
+        "post_confirm_texts": ["发布", "成功", "published"],
+        "image_upload_texts": ["上传图片"],
+        "composer_wait_ms": 2000,
+    },
+}
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def die(msg: str, code: int = 1) -> None:
+    print(f"\033[31mError:\033[0m {msg}", file=sys.stderr)
+    raise SystemExit(code)
+
+
+def info(msg: str) -> None:
+    print(f"  {msg}")
+
+
+def success(msg: str) -> None:
+    print(f"\033[32m✓\033[0m {msg}")
+
+
+def warn(msg: str) -> None:
+    print(f"\033[33m⚠\033[0m {msg}")
+
+
+def run_browser(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    """Run an agent-browser command. Uses CDP mode if SOCIAL_PUBLISH_CDP is set."""
+    cmd = [AGENT_BROWSER]
+    if CDP_PORT:
+        cmd.extend(["--cdp", CDP_PORT])
+    cmd.extend(args)
+    proc = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=BROWSER_TIMEOUT,
+        env={**os.environ, "AGENT_BROWSER_MAX_OUTPUT": str(SNAPSHOT_MAX_OUTPUT)},
+    )
+    if check and proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        stdout = (proc.stdout or "").strip()
+        detail = stderr or stdout or f"exit code {proc.returncode}"
+        die(f"agent-browser command failed: {' '.join(args)}\n  {detail}")
+    return proc
+
+
+def ensure_browser() -> None:
+    """Ensure the browser is available. Skips daemon start in CDP mode."""
+    if CDP_PORT:
+        return
+    proc = run_browser("snapshot", "-i", check=False)
+    if proc.returncode != 0:
+        info("Starting browser daemon...")
+        run_browser("open", "about:blank")
+
+
+def snapshot_elements() -> str:
+    """Take a snapshot and return the text output with element refs."""
+    proc = run_browser("snapshot", "-i")
+    return proc.stdout
+
+
+def find_ref_by_role_text(snapshot: str, role: str, texts: list[str]) -> str | None:
+    """
+    Find an element ref (@eN) by its ARIA role and text content.
+    Prefers exact label match; falls back to substring match.
+
+    Snapshot format: - button "Start a post" [ref=e53]
+    """
+    pattern = re.compile(
+        r"-\s+" + re.escape(role) + r"\s+\"([^\"]*)\"[^\n]*\[ref=(e\d+)\]",
+        re.IGNORECASE,
+    )
+    # Pass 1: exact match
+    for match in pattern.finditer(snapshot):
+        label = (match.group(1) or "").strip()
+        ref = "@" + match.group(2)
+        for text in texts:
+            if label.lower() == text.lower():
+                return ref
+    # Pass 2: substring match
+    for match in pattern.finditer(snapshot):
+        label = (match.group(1) or "").strip()
+        ref = "@" + match.group(2)
+        for text in texts:
+            if text.lower() in label.lower():
+                return ref
+    return None
+
+
+def find_ref_by_text(snapshot: str, texts: list[str]) -> str | None:
+    """Find any element ref by its text content. Prefers exact match, falls back to substring.
+
+    Snapshot format: - button "Start a post" [ref=e53]
+    """
+    pattern = re.compile(r"-\s+\S+\s+\"([^\"]*)\"[^\n]*\[ref=(e\d+)\]", re.IGNORECASE)
+    # Pass 1: exact match
+    for match in pattern.finditer(snapshot):
+        label = (match.group(1) or "").strip()
+        if not label:
+            continue
+        ref = "@" + match.group(2)
+        for text in texts:
+            if label.lower() == text.lower():
+                return ref
+    # Pass 2: substring match
+    for match in pattern.finditer(snapshot):
+        label = (match.group(1) or "").strip()
+        if not label:
+            continue
+        ref = "@" + match.group(2)
+        for text in texts:
+            if text.lower() in label.lower():
+                return ref
+    return None
+
+
+def read_draft(draft_path: str) -> tuple[str, dict]:
+    """Read draft content and metadata from workspace/social-media/{path}.
+
+    Returns (content, meta) where meta may contain: image, title
+    """
+    full_path = WORKSPACE_SOCIAL / draft_path
+    if not full_path.exists():
+        die(f"Draft file not found: {full_path}")
+
+    raw = full_path.read_text(encoding="utf-8").strip()
+    if not raw:
+        die(f"Draft file is empty: {full_path}")
+
+    meta: dict = {}
+    content = raw
+
+    # Parse YAML frontmatter if present
+    if content.startswith("---"):
+        end = content.find("---", 3)
+        if end != -1:
+            frontmatter = content[3:end].strip()
+            content = content[end + 3 :].strip()
+            for line in frontmatter.splitlines():
+                line = line.strip()
+                if ":" in line:
+                    key, _, val = line.partition(":")
+                    key, val = key.strip(), val.strip().strip("\"'")
+                    meta[key] = val
+
+    if not content:
+        die(f"Draft has no content after frontmatter: {full_path}")
+
+    # Resolve image path relative to draft file if set
+    if meta.get("image"):
+        image_path = full_path.parent / meta["image"]
+        if image_path.exists():
+            meta["image_abs"] = str(image_path.resolve())
+        else:
+            warn(f"Image not found: {image_path}")
+
+    return content, meta
+
+
+def load_history() -> dict:
+    """Load the publishing history."""
+    if not HISTORY_PATH.exists():
+        return {"posts": [], "next_scheduled": {}}
+    try:
+        return json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return {"posts": [], "next_scheduled": {}}
+
+
+def save_history(history: dict) -> None:
+    """Save the publishing history."""
+    HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    HISTORY_PATH.write_text(json.dumps(history, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def check_last_post(platform: str, history: dict) -> None:
+    """Warn if the last post for this platform was less than 24 hours ago."""
+    platform_posts = [p for p in history.get("posts", []) if p.get("platform") == platform]
+    if not platform_posts:
+        return
+
+    last = platform_posts[-1]
+    last_time_str = last.get("published_at", "")
+    try:
+        last_time = datetime.fromisoformat(last_time_str)
+    except (ValueError, TypeError):
+        return
+
+    tz = datetime.now(timezone.utc).astimezone().tzinfo
+    now = datetime.now(tz)
+    if last_time.tzinfo is None:
+        last_time = last_time.replace(tzinfo=tz)
+
+    hours_ago = (now - last_time).total_seconds() / 3600
+    if hours_ago < 24:
+        warn(
+            f"Last {platform} post was {hours_ago:.1f} hours ago "
+            f"({last_time.strftime('%Y-%m-%d %H:%M')}). "
+            f"Consider waiting before posting again."
+        )
+
+
+def record_post(platform: str, draft_path: str, title: str, url: str) -> None:
+    """Append a post to the publishing history."""
+    history = load_history()
+    tz = datetime.now(timezone.utc).astimezone().tzinfo
+    history["posts"].append(
+        {
+            "platform": platform,
+            "draft": draft_path,
+            "title": title,
+            "url": url,
+            "published_at": datetime.now(tz).isoformat(),
+            "status": "published",
+        }
+    )
+    save_history(history)
+    success(f"Recorded post in history ({len(history['posts'])} total)")
+
+
+# ---------------------------------------------------------------------------
+# Platform publishers
+# ---------------------------------------------------------------------------
+
+
+def publish_linkedin(content: str, meta: dict, draft_path: str) -> None:
+    """Publish content to LinkedIn via agent-browser. Fully automatic."""
+    cfg = PLATFORM_CONFIG["linkedin"]
+    title = draft_path.split("/")[-1].replace(".md", "").replace("-", " ").title()
+
+    ensure_browser()
+
+    # Step 1: Navigate to LinkedIn feed
+    info(f"Navigating to {cfg['feed_url']}...")
+    run_browser("open", cfg["feed_url"])
+    run_browser("wait", "--load", "networkidle")
+    time.sleep(2.0)
+
+    # Check for login redirect
+    current_url = run_browser("get", "url").stdout.strip()
+    if "login" in current_url.lower():
+        die(
+            "LinkedIn redirected to login page. You must be logged into LinkedIn.\n"
+            "Open LinkedIn in your headed browser and log in, then re-run the script."
+        )
+
+    # Step 2: Find and click the post trigger button
+    info("Looking for post composer trigger...")
+    snap = snapshot_elements()
+    post_trigger_ref = find_ref_by_role_text(snap, "button", cfg["post_trigger_texts"])
+
+    if post_trigger_ref is None:
+        post_trigger_ref = find_ref_by_text(snap, cfg["post_trigger_texts"])
+
+    if post_trigger_ref is None:
+        die(
+            "Could not find the post trigger button on LinkedIn.\n"
+            "LinkedIn may have changed its UI. Ask your AI agent to update the selectors."
+        )
+
+    info(f"Clicking post trigger ({post_trigger_ref})...")
+    run_browser("click", post_trigger_ref)
+    time.sleep(2.0)
+
+    # Step 3: Find the post textbox (fresh snapshot — refs change after modal opens)
+    info("Looking for post textbox...")
+    snap = snapshot_elements()
+    textbox_ref = find_ref_by_role_text(snap, "textbox", cfg["post_textbox_labels"])
+
+    if textbox_ref is None:
+        die(
+            "Could not find the post textbox on LinkedIn.\n"
+            "LinkedIn may have changed its UI. Ask your AI agent to update the selectors."
+        )
+
+    # Step 4: Fill the post content
+    info("Filling post content...")
+    run_browser("fill", textbox_ref, content)
+    time.sleep(1.5)
+
+    # Step 5: Find and click the Post button (fresh snapshot — refs changed after typing)
+    info("Looking for Post button...")
+    snap = snapshot_elements()
+    post_button_ref = find_ref_by_role_text(snap, "button", cfg["post_button_texts"])
+
+    if post_button_ref is None:
+        die(
+            "Could not find the Post button.\n"
+            "LinkedIn may have changed its UI. Ask your AI agent to update the selectors."
+        )
+
+    # Step 6: Click Post
+    info("Publishing...")
+    run_browser("click", post_button_ref)
+    time.sleep(3.0)
+
+    # Step 7: Verify — modal should be gone, success toast should appear
+    info("Verifying post...")
+    snap = snapshot_elements()
+    if "Post successful" in snap:
+        success(f"Post published to LinkedIn: {title}")
+        record_post("linkedin", draft_path, title, cfg["feed_url"])
+        return
+    # Retry: re-find Post button in the still-open modal and click again
+    info("  Verification failed, retrying click...")
+    for retry in range(3):
+        time.sleep(1.5)
+        snap2 = snapshot_elements()
+        post_btn = find_ref_by_role_text(snap2, "button", cfg["post_button_texts"])
+        if post_btn:
+            info(f"  Retry click {retry + 1}/3 ({post_btn})...")
+            run_browser("click", post_btn)
+            time.sleep(3.0)
+            snap3 = snapshot_elements()
+            if "Post successful" in snap3:
+                success(f"Post published to LinkedIn: {title} (retry {retry + 1})")
+                record_post("linkedin", draft_path, title, cfg["feed_url"])
+                return
+        else:
+            break
+    warn("Post may have been published but could not verify. Check LinkedIn manually.")
+
+    # Record in history
+    record_post("linkedin", draft_path, title, cfg["feed_url"])
+
+
+def publish_x(content: str, meta: dict, draft_path: str) -> None:
+    """Publish content to X/Twitter via agent-browser. Fully automatic."""
+    cfg = PLATFORM_CONFIG["x"]
+    title = draft_path.split("/")[-1].replace(".md", "").replace("-", " ").title()
+
+    ensure_browser()
+
+    # Step 1: Navigate to X home
+    info(f"Navigating to {cfg['feed_url']}...")
+    run_browser("open", cfg["feed_url"])
+    run_browser("wait", "--load", "networkidle")
+    time.sleep(2.0)
+
+    # Check for login redirect or rate limit
+    current_url = run_browser("get", "url").stdout.strip()
+    if "login" in current_url.lower() or "account/access" in current_url.lower():
+        die(
+            "X redirected to login/access page. You must be logged into X.\n"
+            "Open X in your headed browser and log in, then re-run the script."
+        )
+    if "graduated-access" in current_url.lower():
+        warn("X is showing a rate-limit challenge. Waiting 30s before retrying...")
+        time.sleep(30)
+        run_browser("open", cfg["feed_url"])
+        time.sleep(2.0)
+
+    # Step 2: Find the post textbox (on the page directly, no modal)
+    info("Looking for post textbox...")
+    snap = snapshot_elements()
+    textbox_ref = find_ref_by_role_text(snap, "textbox", cfg["post_textbox_labels"])
+
+    if textbox_ref is None:
+        die(
+            "Could not find the post textbox on X.\n"
+            "X may have changed its UI. Ask your AI agent to update the selectors."
+        )
+
+    # Step 3: Fill the post content
+    info("Filling post content...")
+    run_browser("fill", textbox_ref, content)
+    time.sleep(cfg["composer_wait_ms"] / 1000)
+
+    # Step 4: Wait for Post button to enable, then click it
+    info("Looking for Post button...")
+    post_button_ref = None
+    for attempt in range(5):
+        snap = snapshot_elements()
+        # Find an enabled Post button (not disabled)
+        pattern = re.compile(
+            r"-\s+button\s+\"Post\"\s+(?!\[disabled)[^\n]*\[ref=(e\d+)\]",
+            re.IGNORECASE,
+        )
+        match = pattern.search(snap)
+        if match:
+            post_button_ref = "@" + match.group(1)
+            break
+        info(f"  Post button still disabled, waiting... (attempt {attempt + 1}/5)")
+        time.sleep(1.0)
+
+    if post_button_ref is None:
+        die(
+            "Could not find an enabled Post button on X.\n"
+            "X may have changed its UI. Ask your AI agent to update the selectors."
+        )
+
+    # Step 5: Click Post
+    info("Publishing...")
+    run_browser("click", post_button_ref)
+    time.sleep(3.0)
+
+    # Step 6: Verify
+    info("Verifying post...")
+    current_url = run_browser("get", "url").stdout.strip()
+    if "graduated-access" in current_url.lower():
+        warn("X anti-bot challenge triggered. Post was likely blocked.")
+        warn("Wait 60-90s between posts to avoid rate limits.")
+    else:
+        snap = snapshot_elements()
+        if re.search(
+            r"textbox\s+\"Post text\"\s+[^\n]*\[ref=(e\d+)\]:\s*$",
+            snap, re.IGNORECASE | re.MULTILINE,
+        ):
+            success(f"Post published to X: {title}")
+            record_post("x", draft_path, title, cfg["feed_url"])
+            return
+        # Retry: re-find Post button and click again
+        info("  Verification failed, retrying click...")
+        for retry in range(3):
+            time.sleep(1.5)
+            snap2 = snapshot_elements()
+            match2 = re.compile(
+                r"-\s+button\s+\"Post\"\s+(?!\[disabled)[^\n]*\[ref=(e\d+)\]",
+                re.IGNORECASE,
+            ).search(snap2)
+            if match2:
+                retry_ref = "@" + match2.group(1)
+                info(f"  Retry click {retry + 1}/3 ({retry_ref})...")
+                run_browser("click", retry_ref)
+                time.sleep(3.0)
+                snap3 = snapshot_elements()
+                if re.search(
+                    r"textbox\s+\"Post text\"\s+[^\n]*\[ref=(e\d+)\]:\s*$",
+                    snap3, re.IGNORECASE | re.MULTILINE,
+                ):
+                    success(f"Post published to X: {title} (retry {retry + 1})")
+                    record_post("x", draft_path, title, cfg["feed_url"])
+                    return
+            else:
+                break
+        warn("Post may have been published but could not verify. Check X manually.")
+
+    record_post("x", draft_path, title, cfg["feed_url"])
+
+
+def publish_xiaohongshu(content: str, meta: dict, draft_path: str) -> None:
+    """Publish content to Xiaohongshu via agent-browser. Fully automatic."""
+    cfg = PLATFORM_CONFIG["xiaohongshu"]
+    title = meta.get("title", draft_path.split("/")[-1].replace(".md", "").replace("-", " ").title())
+    image_abs = meta.get("image_abs")
+
+    if not image_abs:
+        die(
+            "Xiaohongshu requires an image. Add 'image: filename.png' to the YAML frontmatter\n"
+            "and place the image next to the draft file."
+        )
+
+    ensure_browser()
+
+    # Step 1: Navigate to Xiaohongshu creator page
+    info(f"Navigating to {cfg['feed_url']}...")
+    run_browser("open", cfg["feed_url"])
+    run_browser("wait", "--load", "networkidle")
+    time.sleep(2.0)
+
+    # Check for login redirect
+    current_url = run_browser("get", "url").stdout.strip()
+    if "login" in current_url.lower():
+        die(
+            "Xiaohongshu redirected to login page. You must be logged into Xiaohongshu.\n"
+            "Open Xiaohongshu in your headed browser and log in, then re-run the script."
+        )
+
+    # Step 2: Upload image
+    info(f"Uploading image: {image_abs}...")
+    snap = snapshot_elements()
+    upload_ref = find_ref_by_role_text(snap, "button", cfg["image_upload_texts"])
+
+    if upload_ref is None:
+        upload_ref = find_ref_by_text(snap, cfg["image_upload_texts"])
+
+    if upload_ref is not None:
+        run_browser("click", upload_ref)
+        time.sleep(1.0)
+        # agent-browser handles file upload via fill on the file input
+        run_browser("fill", upload_ref, image_abs)
+        time.sleep(2.0)
+    else:
+        # Fallback: try to find a file input directly
+        warn("Could not find upload button, trying file input fallback...")
+        file_input_ref = _find_ref_by_tag(snap, "input")
+        if file_input_ref:
+            run_browser("fill", file_input_ref, image_abs)
+            time.sleep(2.0)
+        else:
+            die("Could not find image upload element. UI may have changed.")
+
+    # Step 3: Fill title if provided
+    if cfg["title_input_labels"]:
+        info("Filling title...")
+        snap = snapshot_elements()
+        title_ref = find_ref_by_role_text(snap, "textbox", cfg["title_input_labels"])
+        if title_ref is None:
+            title_ref = find_ref_by_text(snap, cfg["title_input_labels"])
+        if title_ref:
+            run_browser("fill", title_ref, title[:20])
+            time.sleep(0.5)
+
+    # Step 4: Fill content (largest textbox on page)
+    info("Filling post content...")
+    snap = snapshot_elements()
+    textbox_ref = _find_largest_textbox(snap)
+    if textbox_ref is None:
+        die(
+            "Could not find the post textbox on Xiaohongshu.\n"
+            "Xiaohongshu may have changed its UI. Ask your AI agent to update the selectors."
+        )
+    run_browser("fill", textbox_ref, content)
+    time.sleep(1.5)
+
+    # Step 5: Find and click Publish button
+    info("Looking for Publish button...")
+    snap = snapshot_elements()
+    publish_ref = find_ref_by_role_text(snap, "button", cfg["post_button_texts"])
+
+    if publish_ref is None:
+        die(
+            "Could not find the Publish button on Xiaohongshu.\n"
+            "Xiaohongshu may have changed its UI. Ask your AI agent to update the selectors."
+        )
+
+    # Step 6: Click Publish
+    info("Publishing...")
+    run_browser("click", publish_ref)
+    time.sleep(3.0)
+
+    # Step 7: Verify (look for success indicator)
+    info("Verifying post...")
+    snap = snapshot_elements()
+    if find_ref_by_text(snap, cfg["post_confirm_texts"]):
+        success(f"Post published to Xiaohongshu: {title}")
+    else:
+        warn("Post may have been published but could not verify. Check Xiaohongshu manually.")
+
+    record_post("xiaohongshu", draft_path, title, cfg["feed_url"])
+
+
+def _find_largest_textbox(snapshot: str) -> str | None:
+    """Find the textbox ref that likely corresponds to the main content area.
+    Returns the last (largest) textbox on the page."""
+    pattern = re.compile(r"-\s+textbox\s+(?:\"([^\"]*)\")?[^\n]*\[ref=(e\d+)\]", re.IGNORECASE)
+    refs = []
+    for match in pattern.finditer(snapshot):
+        refs.append("@" + match.group(2))
+    return refs[-1] if refs else None
+
+
+def _find_ref_by_tag(snapshot: str, tag: str) -> str | None:
+    """Find an element ref by its HTML tag (not ARIA role)."""
+    pattern = re.compile(r"-\s+" + re.escape(tag) + r"\s+[^\n]*\[ref=(e\d+)\]", re.IGNORECASE)
+    match = pattern.search(snapshot)
+    return "@" + match.group(1) if match else None
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    if len(sys.argv) < 3:
+        print(__doc__)
+        die("Missing arguments. Usage: social-publish <draft-path> <platform>")
+
+    draft_path = sys.argv[1]
+    platform = sys.argv[2].lower()
+
+    if platform not in PLATFORM_CONFIG:
+        die(f"Unsupported platform: {platform}. Supported: {', '.join(PLATFORM_CONFIG)}")
+
+    # Validate draft exists
+    content, meta = read_draft(draft_path)
+    info(f"Loaded draft: {draft_path} ({len(content)} chars)")
+
+    # Check platform character limits
+    cfg = PLATFORM_CONFIG[platform]
+    max_chars = cfg.get("max_chars", 0)
+    if max_chars and len(content) > max_chars:
+        die(
+            f"Draft exceeds {platform} character limit: {len(content)}/{max_chars} chars.\n"
+            f"Trim the content and try again."
+        )
+
+    # Check posting frequency
+    history = load_history()
+    check_last_post(platform, history)
+
+    # Publish
+    print(f"\nPublishing to {platform}...")
+    print(f"  Draft: {draft_path}")
+    print(f"  Content preview: {content[:100]}...")
+    if meta:
+        print(f"  Metadata: {meta}")
+    print()
+
+    if platform == "linkedin":
+        publish_linkedin(content, meta, draft_path)
+    elif platform == "x":
+        publish_x(content, meta, draft_path)
+    elif platform == "xiaohongshu":
+        publish_xiaohongshu(content, meta, draft_path)
+    else:
+        die(f"Platform '{platform}' is not yet implemented.")
+
+    print(f"\n{ '=' * 50 }")
+    success("Done. Content published without AI agent involvement.")
+    print(f"{ '=' * 50 }")
+
+
+if __name__ == "__main__":
+    main()

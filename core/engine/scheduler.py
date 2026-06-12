@@ -16,6 +16,7 @@ from settings import logger
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEDULE_CONFIG_PATH = _REPO_ROOT / "config" / "schedule.json5"
+SOCIAL_SCHEDULE_CONFIG_PATH = _REPO_ROOT / "config" / "social-scheduler.json5"
 
 _scheduler: Optional[AsyncIOScheduler] = None
 
@@ -161,6 +162,24 @@ def start_scheduler(schedules: List[Dict[str, Any]]) -> None:
         )
         added += 1
 
+    # Register social media publishing job
+    social_config = _load_social_schedule_config()
+    if social_config.get("enabled", True):
+        social_cron = social_config.get("schedule", "0 9 * * *")
+        try:
+            social_trigger = CronTrigger.from_crontab(social_cron, timezone=tz_obj)
+            _scheduler.add_job(
+                _run_social_publish,
+                trigger=social_trigger,
+                id="social-publish",
+                name="Social Media Publisher",
+                replace_existing=True,
+            )
+            added += 1
+            logger.info("[scheduler] social publish job registered: %s", social_cron)
+        except (ValueError, KeyError) as exc:
+            logger.warning("[scheduler] invalid social scheduler cron %r: %s", social_cron, exc)
+
     _scheduler.start()
     logger.info("[scheduler] started with %d jobs", added)
 
@@ -178,3 +197,122 @@ def stop_scheduler() -> None:
 def reload_scheduler() -> None:
     schedules = load_schedules()
     start_scheduler(schedules)
+
+
+# ---------------------------------------------------------------------------
+# Social media publishing scheduler
+# ---------------------------------------------------------------------------
+
+
+SOCIAL_PUBLISH_SCRIPT = str(_REPO_ROOT / "core" / "bin" / "social-publish")
+CALENDAR_PATH = _REPO_ROOT / ".skillpilot" / "content-calendar.json"
+
+
+def _load_social_schedule_config() -> dict:
+    """Load social-scheduler.json5 config."""
+    if not SOCIAL_SCHEDULE_CONFIG_PATH.is_file():
+        return {}
+    try:
+        data = json5.loads(SOCIAL_SCHEDULE_CONFIG_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return data
+    except Exception as exc:
+        logger.warning("[social-scheduler] Failed to load config: %s", exc)
+    return {}
+
+
+def _run_social_publish() -> None:
+    """Scan content calendar for due items and publish them via the script.
+
+    Called daily by APScheduler. Finds items where:
+    - scheduledDate matches today (in the configured timezone)
+    - draftPath is set (non-empty)
+    - status is not 'published'
+    """
+    import subprocess
+
+    config = _load_social_schedule_config()
+    if not config.get("enabled", True):
+        return
+
+    user_tz = _load_profile_timezone()
+    if user_tz:
+        tz_obj = pytz.timezone(user_tz)
+        today = datetime.now(tz_obj).strftime("%Y-%m-%d")
+    else:
+        today = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d")
+
+    logger.info("[social-scheduler] Scanning calendar for %s", today)
+
+    if not CALENDAR_PATH.is_file():
+        logger.info("[social-scheduler] No content calendar found at %s", CALENDAR_PATH)
+        return
+
+    try:
+        calendar = json5.loads(CALENDAR_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("[social-scheduler] Failed to read calendar: %s", exc)
+        return
+
+    items = calendar.get("items", [])
+    due = [
+        item for item in items
+        if item.get("scheduledDate") == today
+        and item.get("draftPath", "").strip()
+        and item.get("status") != "published"
+    ]
+
+    if not due:
+        logger.info("[social-scheduler] No due items for %s", today)
+        return
+
+    platforms = config.get("platforms", ["linkedin", "x", "xiaohongshu"])
+    published_count = 0
+
+    for item in due:
+        platform = item.get("platform", "").lower()
+        if platform not in platforms:
+            logger.info("[social-scheduler] Skipping %s — platform %s not enabled", item["id"], platform)
+            continue
+
+        # draftPath is stored relative to repo root, convert to script-expected format
+        draft_path = item["draftPath"]
+        prefix = "workspace/social-media/"
+        if draft_path.startswith(prefix):
+            draft_path = draft_path[len(prefix):]
+
+        logger.info("[social-scheduler] Publishing %s to %s: %s", item["id"], platform, draft_path)
+
+        try:
+            proc = subprocess.run(
+                ["python3", SOCIAL_PUBLISH_SCRIPT, draft_path, platform],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                cwd=str(_REPO_ROOT),
+            )
+            if proc.returncode == 0:
+                item["status"] = "published"
+                item["publishedAt"] = datetime.now(timezone.utc).astimezone().isoformat()
+                published_count += 1
+                logger.info("[social-scheduler] Published %s to %s", item["id"], platform)
+            else:
+                logger.error(
+                    "[social-scheduler] Failed to publish %s: %s",
+                    item["id"], (proc.stderr or proc.stdout).strip()[:300],
+                )
+        except subprocess.TimeoutExpired:
+            logger.error("[social-scheduler] Timed out publishing %s", item["id"])
+        except Exception as exc:
+            logger.error("[social-scheduler] Error publishing %s: %s", item["id"], exc)
+
+    # Save updated calendar
+    if published_count > 0:
+        try:
+            CALENDAR_PATH.write_text(
+                json.dumps(calendar, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            logger.info("[social-scheduler] Updated calendar with %d published items", published_count)
+        except Exception as exc:
+            logger.error("[social-scheduler] Failed to save calendar: %s", exc)
