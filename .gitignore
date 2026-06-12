@@ -27,4 +27,12 @@ skillpilot-ssh-key
 ._*
 .pytest_cache
 
+# social-media automation
+social-media/auth/*
+!social-media/auth/.gitkeep
+social-media/logs/*
+social-media/screenshots/*
+social-media/posts/published/*
+social-media/posts/failed/*
+
 output
